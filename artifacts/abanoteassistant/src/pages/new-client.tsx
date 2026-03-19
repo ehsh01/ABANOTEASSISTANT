@@ -92,7 +92,7 @@ function TagSection({
     <div className="bg-white rounded-2xl border border-[#F0E4E1] p-6">
       <div className="flex items-center gap-3 mb-4">
         <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${iconBg}`}>
-          <Icon className={`w-5 h-5 ${iconColor}`} />
+          <Icon className={`w-5 h-5 pop-icon ${iconColor}`} />
         </div>
         <h3 className="font-bold text-[#2D2523] text-base">{title}</h3>
         <span className="ml-auto text-xs text-[#877870] font-medium">{items.length} added</span>
@@ -123,7 +123,7 @@ function TagSection({
           disabled={!draft.trim()}
           className="w-10 h-10 rounded-xl bg-[#C27A8A] text-white flex items-center justify-center hover:bg-[#b06a79] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
         >
-          <Plus className="w-5 h-5" />
+          <Plus className="w-5 h-5 pop-icon-white" />
         </button>
       </div>
     </div>
@@ -147,7 +147,7 @@ function ProgressHeader({
         onClick={onBack}
         className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors font-semibold text-sm"
       >
-        <ChevronLeft className="w-5 h-5" />
+        <ChevronLeft className="w-5 h-5 pop-icon-white" />
         Back
       </button>
       <div className="text-center">
@@ -191,7 +191,7 @@ function Step1({
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         {/* First name */}
         <div>
-          <label className="block text-sm font-semibold text-[#2D2523] mb-2">First Name</label>
+          <label className="block text-sm font-semibold text-[#2D2523] mb-2 pop-text">First Name</label>
           <input
             type="text"
             value={data.firstName}
@@ -203,7 +203,7 @@ function Step1({
 
         {/* Last name */}
         <div>
-          <label className="block text-sm font-semibold text-[#2D2523] mb-2">Last Name</label>
+          <label className="block text-sm font-semibold text-[#2D2523] mb-2 pop-text">Last Name</label>
           <input
             type="text"
             value={data.lastName}
@@ -216,7 +216,7 @@ function Step1({
 
       {/* Date of Birth */}
       <div>
-        <label className="block text-sm font-semibold text-[#2D2523] mb-2">
+        <label className="block text-sm font-semibold text-[#2D2523] mb-2 pop-text">
           Date of Birth
           <span className="ml-2 text-xs font-normal text-[#877870]">mm/dd/yyyy</span>
         </label>
@@ -233,7 +233,7 @@ function Step1({
 
       {/* Gender */}
       <div>
-        <label className="block text-sm font-semibold text-[#2D2523] mb-3">Gender</label>
+        <label className="block text-sm font-semibold text-[#2D2523] mb-3 pop-text">Gender</label>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {genders.map((g) => (
             <button
@@ -317,7 +317,7 @@ function Step2({
           }`}
         >
           <div className="w-14 h-14 rounded-2xl bg-white border border-[#F0E4E1] shadow-sm flex items-center justify-center">
-            <Upload className="w-7 h-7 text-[#C27A8A]" />
+            <Upload className="w-7 h-7 text-[#C27A8A] pop-icon" />
           </div>
           <div className="text-center">
             <p className="font-bold text-[#2D2523] text-base">Drop PDF here or click to browse</p>
@@ -334,7 +334,7 @@ function Step2({
       )}
 
       <p className="text-xs text-[#877870] flex items-center gap-1.5">
-        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 pop-icon" />
         This is optional — you can upload the assessment at any time from the client's profile.
       </p>
     </div>
@@ -533,11 +533,11 @@ export default function NewClient() {
             <>Saving...</>
           ) : step === 3 ? (
             <>
-              <User className="w-4 h-4" /> Save Client
+              <User className="w-4 h-4 pop-icon-white" /> Save Client
             </>
           ) : (
             <>
-              Next <ChevronRight className="w-4 h-4" />
+              Next <ChevronRight className="w-4 h-4 pop-icon-white" />
             </>
           )}
         </button>

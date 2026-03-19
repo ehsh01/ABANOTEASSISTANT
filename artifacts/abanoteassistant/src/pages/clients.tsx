@@ -50,7 +50,7 @@ function ClientCard({ client }: { client: Client }) {
       <div className="flex items-start justify-between mb-5">
         <div className="flex items-center gap-4">
           <div
-            className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white shrink-0 group-hover:scale-105 transition-transform"
+            className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white shrink-0 group-hover:scale-105 transition-transform pop-text-white"
             style={{ background: "linear-gradient(135deg, #C27A8A 0%, #e8c4cc 100%)" }}
           >
             {getInitials(client.firstName, client.lastName)}
@@ -64,14 +64,14 @@ function ClientCard({ client }: { client: Client }) {
             </p>
           </div>
         </div>
-        <ChevronRight className="w-5 h-5 text-[#F0E4E1] group-hover:text-[#C27A8A] group-hover:translate-x-0.5 transition-all" />
+        <ChevronRight className="w-5 h-5 text-[#F0E4E1] group-hover:text-[#C27A8A] group-hover:translate-x-0.5 transition-all pop-icon" />
       </div>
 
       {/* Assessment badge */}
       <span
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border mb-4 ${status.bg} ${status.text} ${status.border}`}
       >
-        <StatusIcon className={`w-3.5 h-3.5 ${client.assessmentStatus === "processing" ? "animate-spin" : ""}`} />
+        <StatusIcon className={`w-3.5 h-3.5 pop-icon ${client.assessmentStatus === "processing" ? "animate-spin" : ""}`} />
         {status.label}
       </span>
 
@@ -115,7 +115,7 @@ function ClientCard({ client }: { client: Client }) {
 
       {/* DOB */}
       <div className="flex items-center gap-1.5 mt-4 pt-4 border-t border-[#F0E4E1] text-xs text-[#877870]">
-        <Clock className="w-3.5 h-3.5" />
+        <Clock className="w-3.5 h-3.5 pop-icon" />
         DOB: {client.dateOfBirth}
       </div>
     </motion.div>
@@ -146,9 +146,9 @@ export default function Clients() {
                   className="absolute inset-0 rounded-lg shadow-[0_4px_10px_rgba(194,122,138,0.25)]"
                   style={{ background: "linear-gradient(135deg, #e6b3c0 0%, #C27A8A 100%)" }}
                 />
-                <Sparkles className="w-4 h-4 text-white relative z-10" />
+                <Sparkles className="w-4 h-4 text-white relative z-10 pop-icon-white" />
               </div>
-              <span className="font-extrabold text-base tracking-widest text-[#2D2523] uppercase">ABANOTEASSISTANT</span>
+              <span className="font-extrabold text-base tracking-widest text-[#2D2523] uppercase pop-text">ABANOTEASSISTANT</span>
             </div>
           </Link>
 
@@ -160,7 +160,7 @@ export default function Clients() {
 
           <Link href="/wizard">
             <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
-              New Note <ChevronRight className="w-4 h-4" />
+              New Note <ChevronRight className="w-4 h-4 pop-icon-white" />
             </button>
           </Link>
         </div>
@@ -175,7 +175,7 @@ export default function Clients() {
           </div>
           <Link href="/clients/new">
             <button className="flex items-center gap-2 bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-3 rounded-xl font-semibold transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:-translate-y-0.5">
-              <UserPlus className="w-5 h-5" />
+              <UserPlus className="w-5 h-5 pop-icon-white" />
               New Client
             </button>
           </Link>
@@ -183,7 +183,7 @@ export default function Clients() {
 
         {/* Search */}
         <div className="relative max-w-md mb-8">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#877870]" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#877870] pop-icon" />
           <input
             type="search"
             placeholder="Search clients..."
@@ -197,7 +197,7 @@ export default function Clients() {
         {filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className="w-16 h-16 rounded-2xl bg-[#FDFAF7] border border-[#F0E4E1] flex items-center justify-center mb-4">
-              <Users className="w-8 h-8 text-[#C27A8A]/50" />
+              <Users className="w-8 h-8 text-[#C27A8A]/50 pop-icon" />
             </div>
             <h3 className="text-lg font-bold text-[#2D2523] mb-1">No clients found</h3>
             <p className="text-[#877870] text-sm mb-6">
@@ -206,7 +206,7 @@ export default function Clients() {
             {!search && (
               <Link href="/clients/new">
                 <button className="flex items-center gap-2 bg-[#C27A8A] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all hover:bg-[#b06a79]">
-                  <UserPlus className="w-4 h-4" />
+                  <UserPlus className="w-4 h-4 pop-icon-white" />
                   Add First Client
                 </button>
               </Link>

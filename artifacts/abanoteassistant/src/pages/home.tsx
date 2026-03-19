@@ -20,9 +20,9 @@ export default function Home() {
                 style={{ background: "linear-gradient(135deg, #e6b3c0 0%, #C27A8A 100%)" }}
               />
               <div className="absolute inset-0 bg-gradient-to-t from-white/20 to-transparent rounded-lg" />
-              <Sparkles className="w-4 h-4 text-white relative z-10" />
+              <Sparkles className="w-4 h-4 text-white relative z-10 pop-icon-white" />
             </div>
-            <span className="font-extrabold text-base tracking-widest text-[#2D2523] uppercase">ABANOTEASSISTANT</span>
+            <span className="font-extrabold text-base tracking-widest text-[#2D2523] uppercase pop-text">ABANOTEASSISTANT</span>
           </div>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-[#877870]">
@@ -33,7 +33,7 @@ export default function Home() {
 
           <Link href="/wizard">
             <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
-              New Note <ChevronRight className="w-4 h-4" />
+              New Note <ChevronRight className="w-4 h-4 pop-icon-white" />
             </button>
           </Link>
         </div>
@@ -58,8 +58,8 @@ export default function Home() {
             transition={{ duration: 0.45 }}
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-8 shadow-lg"
           >
-            <Zap className="w-4 h-4 text-[#FCEEF1]" />
-            <span className="text-white/90 text-sm font-semibold tracking-wide">AI-Powered Documentation</span>
+            <Zap className="w-4 h-4 text-[#FCEEF1] pop-icon-white" />
+            <span className="text-white/90 text-sm font-semibold tracking-wide pop-text-white">AI-Powered Documentation</span>
           </motion.div>
 
           {/* Heading */}
@@ -67,7 +67,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="text-5xl md:text-[64px] leading-[1.08] font-extrabold text-white mb-6 tracking-[-0.03em]"
+            className="text-5xl md:text-[64px] leading-[1.08] font-extrabold text-white mb-6 tracking-[-0.03em] pop-text-white"
           >
             Your notes,{" "}
             <span
@@ -83,7 +83,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="text-lg md:text-xl max-w-2xl font-medium leading-relaxed mb-10"
+            className="text-lg md:text-xl max-w-2xl font-medium leading-relaxed mb-10 pop-text-white"
             style={{ color: "rgba(253,250,247,0.9)" }}
           >
             Guide through a smart checklist and receive complete, professional ABA session notes — instantly generated and ready to submit.
@@ -115,18 +115,18 @@ export default function Home() {
             className="flex flex-wrap items-center justify-center gap-8 text-white/80 text-sm font-medium"
           >
             <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-[#FCEEF1]" />
-              <span>15 min saved</span>
+              <Clock className="w-5 h-5 text-[#FCEEF1] pop-icon-white" />
+              <span className="pop-text-white">15 min saved</span>
             </div>
             <div className="hidden sm:block w-1 h-1 rounded-full bg-white/30" />
             <div className="flex items-center gap-2">
-              <ShieldCheck className="w-5 h-5 text-[#FCEEF1]" />
-              <span>Compliant notes</span>
+              <ShieldCheck className="w-5 h-5 text-[#FCEEF1] pop-icon-white" />
+              <span className="pop-text-white">Compliant notes</span>
             </div>
             <div className="hidden sm:block w-1 h-1 rounded-full bg-white/30" />
             <div className="flex items-center gap-2">
-              <FileCheck2 className="w-5 h-5 text-[#FCEEF1]" />
-              <span>5,000+ notes written</span>
+              <FileCheck2 className="w-5 h-5 text-[#FCEEF1] pop-icon-white" />
+              <span className="pop-text-white">5,000+ notes written</span>
             </div>
           </motion.div>
         </div>
@@ -275,7 +275,7 @@ export default function Home() {
                 className="w-14 h-14 rounded-2xl flex items-center justify-center mb-6 transition-colors duration-300 group-hover:bg-[#C27A8A]"
                 style={{ background: "#FDFAF7" }}
               >
-                <Icon className="w-7 h-7 text-[#C27A8A] group-hover:text-white transition-colors duration-300" />
+                <Icon className="w-7 h-7 text-[#C27A8A] group-hover:text-white transition-colors duration-300 pop-icon" />
               </div>
               <h3 className="text-xl font-bold text-[#2D2523] mb-3 tracking-tight">{title}</h3>
               <p className="text-[#877870] leading-relaxed">{description}</p>

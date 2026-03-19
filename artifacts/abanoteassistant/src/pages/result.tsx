@@ -57,16 +57,16 @@ export default function Result() {
       <header className="bg-primary sticky top-0 z-10 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
           <button onClick={() => setLocation("/")} className="text-white/80 hover:text-white transition-colors p-2 -ml-2 rounded-lg hover:bg-white/15">
-            <ChevronLeft className="w-5 h-5" />
+            <ChevronLeft className="w-5 h-5 pop-icon-white" />
           </button>
-          <h1 className="text-lg font-bold text-white font-display hidden sm:block">Session Note Generated</h1>
+          <h1 className="text-lg font-bold text-white font-display hidden sm:block pop-text-white">Session Note Generated</h1>
         </div>
         <div className="flex items-center gap-3">
           <button 
             onClick={handleCopy}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/15 text-white font-medium hover:bg-white/25 transition-colors"
           >
-            {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
+            {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-300 pop-icon-white" /> : <Copy className="w-4 h-4 pop-icon-white" />}
             <span className="hidden sm:inline">{copied ? "Copied!" : "Copy"}</span>
           </button>
           <button 
@@ -74,7 +74,7 @@ export default function Result() {
             disabled={saveMutation.isPending}
             className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-white/30 text-white font-medium hover:bg-white/15 transition-colors disabled:opacity-50"
           >
-            <Save className="w-4 h-4" />
+            <Save className="w-4 h-4 pop-icon-white" />
             <span className="hidden sm:inline">Save Draft</span>
           </button>
           <button 
@@ -143,21 +143,21 @@ export default function Result() {
             <h3 className="font-display font-bold text-lg border-b border-border/50 pb-2">Session Details</h3>
             <div className="space-y-3">
               <div className="flex items-center gap-3 text-sm">
-                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-muted-foreground"><User className="w-4 h-4" /></div>
+                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-muted-foreground"><User className="w-4 h-4 pop-icon" /></div>
                 <div>
                   <div className="text-xs text-muted-foreground">Client</div>
                   <div className="font-semibold text-foreground">{generatedNote.clientName}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3 text-sm">
-                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-muted-foreground"><Calendar className="w-4 h-4" /></div>
+                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-muted-foreground"><Calendar className="w-4 h-4 pop-icon" /></div>
                 <div>
                   <div className="text-xs text-muted-foreground">Date</div>
                   <div className="font-semibold text-foreground">{displayDate}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3 text-sm">
-                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-muted-foreground"><Clock className="w-4 h-4" /></div>
+                <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-muted-foreground"><Clock className="w-4 h-4 pop-icon" /></div>
                 <div>
                   <div className="text-xs text-muted-foreground">Duration</div>
                   <div className="font-semibold text-foreground">{generatedNote.sessionHours} hours</div>
@@ -169,7 +169,7 @@ export default function Result() {
           {/* AI Notice */}
           <div className="bg-primary/5 rounded-2xl border border-primary/20 p-5">
             <div className="flex items-center gap-2 text-primary font-semibold mb-2">
-              <Wand2 className="w-4 h-4" /> AI Generated
+              <Wand2 className="w-4 h-4 pop-icon" /> AI Generated
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
               This note was generated based on your inputs. Please review carefully and edit as needed to ensure complete clinical accuracy before saving as final.
@@ -182,7 +182,7 @@ export default function Result() {
               onClick={() => setLocation("/wizard")}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-border bg-card text-foreground font-semibold hover:border-primary/50 hover:bg-secondary/30 transition-all hover-elevate"
             >
-              <RotateCcw className="w-4 h-4 text-muted-foreground" />
+              <RotateCcw className="w-4 h-4 text-muted-foreground pop-icon" />
               Regenerate Note
             </button>
             <button 

@@ -19,11 +19,11 @@ const BILLING_CODE_LABELS: Record<string, string> = {
 
 function StatusBadge({ status }: { status: SessionNote["status"] }) {
   return status === "final" ? (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
+    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold pop-text">
       Final
     </span>
   ) : (
-    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold">
+    <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold pop-text">
       Draft
     </span>
   );
@@ -31,7 +31,7 @@ function StatusBadge({ status }: { status: SessionNote["status"] }) {
 
 function TypeBadge({ type }: { type: SessionNote["type"] }) {
   return (
-    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-[#FDFAF7] text-[#2D2523] border border-[#F0E4E1] text-xs font-bold tracking-wide">
+    <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-[#FDFAF7] text-[#2D2523] border border-[#F0E4E1] text-xs font-bold tracking-wide pop-text">
       {type}
     </span>
   );
@@ -52,9 +52,9 @@ export default function Notes() {
                   className="absolute inset-0 rounded-lg shadow-[0_4px_10px_rgba(194,122,138,0.25)]"
                   style={{ background: "linear-gradient(135deg, #e6b3c0 0%, #C27A8A 100%)" }}
                 />
-                <Sparkles className="w-4 h-4 text-white relative z-10" />
+                <Sparkles className="w-4 h-4 text-white relative z-10 pop-icon-white" />
               </div>
-              <span className="font-extrabold text-base tracking-widest text-[#2D2523] uppercase">ABANOTEASSISTANT</span>
+              <span className="font-extrabold text-base tracking-widest text-[#2D2523] uppercase pop-text">ABANOTEASSISTANT</span>
             </div>
           </Link>
 
@@ -66,7 +66,7 @@ export default function Notes() {
 
           <Link href="/wizard">
             <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
-              New Note <ChevronRight className="w-4 h-4" />
+              New Note <ChevronRight className="w-4 h-4 pop-icon-white" />
             </button>
           </Link>
         </div>
@@ -81,7 +81,7 @@ export default function Notes() {
           </div>
           <Link href="/wizard">
             <button className="flex items-center gap-2 bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-3 rounded-xl font-semibold transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:-translate-y-0.5">
-              <Plus className="w-5 h-5" />
+              <Plus className="w-5 h-5 pop-icon-white" />
               Generate Note
             </button>
           </Link>
@@ -95,7 +95,7 @@ export default function Notes() {
             className="flex flex-col items-center justify-center py-32 text-center"
           >
             <div className="w-16 h-16 rounded-2xl bg-[#FDFAF7] border border-[#F0E4E1] flex items-center justify-center mb-4">
-              <FileText className="w-8 h-8 text-[#C27A8A]/50" />
+              <FileText className="w-8 h-8 text-[#C27A8A]/50 pop-icon" />
             </div>
             <h3 className="text-lg font-bold text-[#2D2523] mb-1">No notes yet</h3>
             <p className="text-[#877870] text-sm mb-6 max-w-sm">
@@ -103,7 +103,7 @@ export default function Notes() {
             </p>
             <Link href="/wizard">
               <button className="flex items-center gap-2 bg-[#C27A8A] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all hover:bg-[#b06a79]">
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 pop-icon-white" />
                 Generate First Note
               </button>
             </Link>
@@ -124,7 +124,7 @@ export default function Notes() {
                       (col) => (
                         <th
                           key={col}
-                          className="px-6 py-4 text-left text-xs font-bold text-[#877870] tracking-widest uppercase whitespace-nowrap"
+                          className="px-6 py-4 text-left text-xs font-bold text-[#877870] tracking-widest uppercase whitespace-nowrap pop-text"
                         >
                           {col}
                         </th>
@@ -192,14 +192,14 @@ export default function Notes() {
                                 title="Edit note"
                                 className="w-8 h-8 rounded-lg flex items-center justify-center text-[#877870] hover:text-[#C27A8A] hover:bg-[#FCEEF1] transition-colors"
                               >
-                                <Pencil className="w-4 h-4" />
+                                <Pencil className="w-4 h-4 pop-icon" />
                               </button>
                               <button
                                 title="Delete note"
                                 onClick={() => deleteNote(note.id)}
                                 className="w-8 h-8 rounded-lg flex items-center justify-center text-[#877870] hover:text-rose-600 hover:bg-rose-50 transition-colors"
                               >
-                                <Trash2 className="w-4 h-4" />
+                                <Trash2 className="w-4 h-4 pop-icon" />
                               </button>
                             </div>
                           </td>

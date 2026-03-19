@@ -219,7 +219,7 @@ function Step1Client() {
   const { data: wizardData, updateData } = useWizardStore();
   const { data: clientsRes, isLoading } = useClients();
 
-  if (isLoading) return <div className="py-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  if (isLoading) return <div className="py-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary pop-icon" /></div>;
 
   const clients = clientsRes?.data || [];
 
@@ -277,7 +277,7 @@ function Step1Client() {
       
       {clients.find(c => c.id === wizardData.clientId)?.assessmentStatus === "missing" && (
         <div className="mt-6 p-4 bg-destructive/10 rounded-xl border border-destructive/20 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+          <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5 pop-icon" />
           <div>
             <h4 className="font-semibold text-destructive">Assessment Missing</h4>
             <p className="text-sm text-destructive/80 mt-1">You must upload an assessment for this client before generating notes.</p>
@@ -549,7 +549,7 @@ function Step6Programs() {
   const { data, updateData } = useWizardStore();
   const { data: programsRes, isLoading } = useClientPrograms(data.clientId!);
 
-  if (isLoading) return <div className="py-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
+  if (isLoading) return <div className="py-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary pop-icon" /></div>;
 
   const programs = programsRes?.data || [];
   const minRequired = data.sessionHours || 1; // Fallback to 1 if not set
@@ -756,7 +756,7 @@ export default function Wizard() {
             <div className="relative w-24 h-24 mb-8">
               <div className="absolute inset-0 border-4 border-primary/20 rounded-full"></div>
               <div className="absolute inset-0 border-4 border-primary rounded-full border-t-transparent animate-spin"></div>
-              <Wand2 className="absolute inset-0 m-auto w-8 h-8 text-primary animate-pulse" />
+              <Wand2 className="absolute inset-0 m-auto w-8 h-8 text-primary animate-pulse pop-icon" />
             </div>
             <h2 className="text-2xl font-display font-bold text-foreground mb-2">Generating Session Note...</h2>
             <p className="text-muted-foreground max-w-sm">
@@ -770,7 +770,7 @@ export default function Wizard() {
       <header className="bg-card border-b border-border sticky top-0 z-10 px-4 sm:px-6 lg:px-8 h-16 flex flex-col justify-center">
         <div className="flex items-center justify-between mb-1">
           <button onClick={handleBack} className="text-sm font-semibold text-muted-foreground hover:text-foreground flex items-center">
-            <ChevronLeft className="w-4 h-4 mr-1" /> Back
+            <ChevronLeft className="w-4 h-4 mr-1 pop-icon-white" /> Back
           </button>
           <span className="text-sm font-bold text-foreground font-display">Step {step} of {totalSteps}</span>
           <button onClick={() => setLocation("/")} className="text-sm font-semibold text-muted-foreground hover:text-foreground">
@@ -821,7 +821,7 @@ export default function Wizard() {
               disabled={!canProceed()}
               className="ml-auto flex items-center justify-center px-8 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-primary/20"
             >
-              Continue <ChevronRight className="w-5 h-5 ml-1" />
+              Continue <ChevronRight className="w-5 h-5 ml-1 pop-icon-white" />
             </button>
           ) : (
             <button
@@ -829,7 +829,7 @@ export default function Wizard() {
               disabled={isGenerating}
               className="w-full sm:w-auto flex items-center justify-center px-10 py-4 rounded-xl bg-gradient-to-r from-primary to-accent text-primary-foreground font-bold text-lg hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30 active:translate-y-0 transition-all"
             >
-              <Wand2 className="w-5 h-5 mr-2" />
+              <Wand2 className="w-5 h-5 mr-2 pop-icon-white" />
               Generate Note
             </button>
           )}
