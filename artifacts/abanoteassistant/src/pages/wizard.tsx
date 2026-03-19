@@ -22,74 +22,73 @@ import {
 // ─── Environmental change options ────────────────────────────────────────────
 const ENV_CHANGE_OPTIONS: { group: string; items: string[] }[] = [
   {
-    group: "Life Events",
+    group: "Life Changes",
     items: [
-      "Major global or local events",
       "Moved to a new house",
-      "New analyst",
-      "New BCaBA",
-      "New items in the environment",
-      "New personal items",
-      "New pet",
-    ],
-  },
-  {
-    group: "Social & Family",
-    items: [
-      "Fight with a schoolmate",
-      "Holidays or special events",
-      "House renovations or re-decoration",
-      "Illness or injury",
-      "Introduction of a new behavioral plan",
-      "Loss of a family member or friend",
-      "Loss of a pet",
-    ],
-  },
-  {
-    group: "Schedule & Activities",
-    items: [
-      "Child didn't attend school",
-      "Dentist's visit",
-      "Disruptions due to emergencies or natural disasters",
-      "Doctor's visit",
-      "Family preparing to travel",
-      "Fight with a family member",
-      "Fight with a peer",
-    ],
-  },
-  {
-    group: "Environment & Routine",
-    items: [
-      "Change in technology use or access",
-      "Changes in ambient odor",
-      "Changes in diet",
-      "Changes in parental attention",
-      "Changes in peer group or social dynamics",
-      "Changes in sleep routine",
-      "Changes in weather or seasons",
-    ],
-  },
-  {
-    group: "Transitions",
-    items: [
       "Birth of a sibling",
-      "Change in care provider",
-      "Change in daily routine",
-      "Change in legal custody or living arrangements",
-      "Change in school/teacher",
-      "Change in service area",
-    ],
-  },
-  {
-    group: "Personal Development",
-    items: [
-      "New RBT",
       "New sibling",
       "New stepfather",
       "New stepmother",
-      "Puberty",
+      "Change in legal custody or living arrangements",
       "Returning from vacation",
+      "Family preparing to travel",
+      "Puberty",
+    ],
+  },
+  {
+    group: "Medical & Health",
+    items: [
+      "Illness or injury",
+      "Doctor's visit",
+      "Dentist's visit",
       "Start of a new medication",
+      "Changes in diet",
+      "Changes in sleep routine",
+    ],
+  },
+  {
+    group: "Social & Emotional",
+    items: [
+      "Fight with a schoolmate",
+      "Fight with a peer",
+      "Fight with a family member",
+      "Loss of a family member or friend",
+      "Loss of a pet",
+      "Changes in peer group or social dynamics",
+      "Changes in parental attention",
+    ],
+  },
+  {
+    group: "Environmental & Sensory",
+    items: [
+      "New items in the environment",
+      "New personal items",
+      "Changes in ambient odor",
+      "Changes in weather or seasons",
+      "Change in technology use or access",
+      "Disruptions due to emergencies or natural disasters",
+      "Major global or local events",
+    ],
+  },
+  {
+    group: "School & Services",
+    items: [
+      "Child didn't attend school",
+      "Change in school/teacher",
+      "Change in service area",
+      "Change in care provider",
+      "Introduction of a new behavioral plan",
+      "New analyst",
+      "New BCaBA",
+      "New RBT",
+    ],
+  },
+  {
+    group: "Other",
+    items: [
+      "New pet",
+      "House renovations or re-decoration",
+      "Holidays or special events",
     ],
   },
 ];
