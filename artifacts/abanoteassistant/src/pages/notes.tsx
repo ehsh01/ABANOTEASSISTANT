@@ -147,9 +147,9 @@ export default function Notes() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
                               <Link href="/clients">
-                                <a className="font-semibold text-[#C27A8A] hover:text-[#b06a79] hover:underline transition-colors">
+                                <span className="font-semibold text-[#C27A8A] hover:text-[#b06a79] hover:underline transition-colors cursor-pointer">
                                   {note.clientName}
-                                </a>
+                                </span>
                               </Link>
                               <StatusBadge status={note.status} />
                             </div>
