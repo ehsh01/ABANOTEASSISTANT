@@ -188,12 +188,13 @@ export default function Notes() {
                           {/* ACTIONS */}
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
-                              <button
+                              <Link
+                                href={`/notes/${note.id}`}
                                 title="Edit note"
                                 className="w-8 h-8 rounded-lg flex items-center justify-center text-[#877870] hover:text-[#C27A8A] hover:bg-[#FCEEF1] transition-colors"
                               >
                                 <Pencil className="w-4 h-4 pop-icon" />
-                              </button>
+                              </Link>
                               <button
                                 title="Delete note"
                                 onClick={() => deleteNote(note.id)}
