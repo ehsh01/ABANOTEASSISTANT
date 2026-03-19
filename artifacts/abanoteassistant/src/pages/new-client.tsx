@@ -54,7 +54,7 @@ function Chip({ label, onRemove }: { label: string; onRemove: () => void }) {
         onClick={onRemove}
         className="w-4 h-4 rounded-full flex items-center justify-center text-[#877870] hover:text-[#C27A8A] hover:bg-[#F0E4E1] transition-colors"
       >
-        <X className="w-3 h-3" />
+        <X className="w-3 h-3 pop-icon" />
       </button>
     </span>
   );
@@ -291,7 +291,7 @@ function Step2({
       {data.file ? (
         <div className="flex items-center gap-4 p-5 rounded-2xl bg-emerald-50 border border-emerald-200">
           <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
-            <FileText className="w-6 h-6 text-emerald-600" />
+            <FileText className="w-6 h-6 text-emerald-600 pop-icon" />
           </div>
           <div className="flex-1 min-w-0">
             <p className="font-semibold text-emerald-800 text-sm truncate">{data.file.name}</p>
@@ -301,7 +301,7 @@ function Step2({
             onClick={() => onChange({ file: null })}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-emerald-600 hover:bg-emerald-100 transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4 pop-icon" />
           </button>
         </div>
       ) : (

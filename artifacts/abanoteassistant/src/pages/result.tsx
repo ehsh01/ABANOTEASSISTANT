@@ -97,9 +97,9 @@ export default function Result() {
         >
           {/* Metadata Banner (Mobile) */}
           <div className="lg:hidden flex flex-wrap gap-4 mb-4 p-4 bg-card border border-border rounded-xl">
-             <div className="flex items-center gap-2 text-sm font-medium"><User className="w-4 h-4 text-muted-foreground"/> {generatedNote.clientName}</div>
-             <div className="flex items-center gap-2 text-sm font-medium"><Calendar className="w-4 h-4 text-muted-foreground"/> {displayDate}</div>
-             <div className="flex items-center gap-2 text-sm font-medium"><Clock className="w-4 h-4 text-muted-foreground"/> {generatedNote.sessionHours} hrs</div>
+             <div className="flex items-center gap-2 text-sm font-medium"><User className="w-4 h-4 text-muted-foreground pop-icon"/> {generatedNote.clientName}</div>
+             <div className="flex items-center gap-2 text-sm font-medium"><Calendar className="w-4 h-4 text-muted-foreground pop-icon"/> {displayDate}</div>
+             <div className="flex items-center gap-2 text-sm font-medium"><Clock className="w-4 h-4 text-muted-foreground pop-icon"/> {generatedNote.sessionHours} hrs</div>
           </div>
 
           <div className="relative flex-1 bg-card rounded-2xl shadow-xl shadow-black/5 border border-border/50 overflow-hidden flex flex-col">
@@ -109,7 +109,7 @@ export default function Result() {
                 onClick={() => setIsEditing(!isEditing)}
                 className={cn("text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors", isEditing ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary")}
               >
-                <Edit3 className="w-4 h-4" />
+                <Edit3 className="w-4 h-4 pop-icon" />
                 {isEditing ? "Editing" : "Edit"}
               </button>
             </div>

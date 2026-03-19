@@ -98,7 +98,7 @@ export default function Home() {
           >
             <Link href="/wizard">
               <button className="w-full sm:w-auto px-8 py-4 bg-white text-[#C27A8A] rounded-full font-bold text-lg shadow-[0_10px_30px_rgba(255,255,255,0.2)] hover:shadow-[0_15px_40px_rgba(255,255,255,0.3)] transition-all hover:-translate-y-1 flex items-center justify-center gap-2">
-                <Sparkles className="w-5 h-5" />
+                <Sparkles className="w-5 h-5 pop-icon" />
                 Generate Note
               </button>
             </Link>
@@ -189,7 +189,7 @@ export default function Home() {
                 style={{ background: "#FDFAF7", border: "2px solid #C27A8A" }}
               >
                 <div className="absolute top-4 right-4 text-[#C27A8A]">
-                  <CheckCircle2 className="w-6 h-6" style={{ fill: "#C27A8A", color: "#fff" }} />
+                  <CheckCircle2 className="w-6 h-6 pop-icon" style={{ fill: "#C27A8A", color: "#fff" }} />
                 </div>
                 <div className="flex items-center gap-4 mb-4">
                   <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-[#C27A8A]" style={{ background: "rgba(194,122,138,0.1)" }}>JR</div>
@@ -199,7 +199,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="inline-flex items-center gap-2 text-xs font-medium text-[#C27A8A] bg-white px-3 py-1.5 rounded-lg border border-[#F0E4E1]">
-                  <Clock className="w-3.5 h-3.5" /> Last session: Yesterday
+                  <Clock className="w-3.5 h-3.5 pop-icon" /> Last session: Yesterday
                 </div>
               </div>
 
@@ -215,7 +215,7 @@ export default function Home() {
                   </div>
                 </div>
                 <div className="inline-flex items-center gap-2 text-xs font-medium text-[#877870] bg-gray-50 px-3 py-1.5 rounded-lg">
-                  <Clock className="w-3.5 h-3.5" /> Last session: 3 days ago
+                  <Clock className="w-3.5 h-3.5 pop-icon" /> Last session: 3 days ago
                 </div>
               </div>
             </div>
@@ -228,7 +228,7 @@ export default function Home() {
                   className="text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all hover:-translate-y-0.5"
                   style={{ background: "#C27A8A", boxShadow: "0 8px 20px rgba(194,122,138,0.25)" }}
                 >
-                  Continue <ChevronRight className="w-5 h-5" />
+                  Continue <ChevronRight className="w-5 h-5 pop-icon-white" />
                 </button>
               </Link>
             </div>

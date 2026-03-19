@@ -56,7 +56,7 @@ function ClientCard({ client }: { client: Client }) {
             {getInitials(client.firstName, client.lastName)}
           </div>
           <div>
-            <h3 className="font-bold text-[#2D2523] text-lg leading-tight">
+            <h3 className="font-bold text-[#2D2523] text-lg leading-tight pop-text">
               {client.firstName} {client.lastName}
             </h3>
             <p className="text-[#877870] text-sm mt-0.5">

@@ -145,7 +145,7 @@ function EnvChangeMultiSelect({
                 </span>
               )}
             </span>
-            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground pop-icon" />
           </button>
         </PopoverTrigger>
 
@@ -177,7 +177,7 @@ function EnvChangeMultiSelect({
                             : "border-muted-foreground/40 bg-background"
                         )}
                       >
-                        {isSelected && <Check className="h-3 w-3" />}
+                        {isSelected && <Check className="h-3 w-3 pop-icon-white" />}
                       </div>
                       {item}
                     </CommandItem>
@@ -203,7 +203,7 @@ function EnvChangeMultiSelect({
                 className="hover:text-destructive transition-colors"
                 aria-label={`Remove ${item}`}
               >
-                <X className="h-3 w-3" />
+                <X className="h-3 w-3 pop-icon" />
               </button>
             </span>
           ))}
@@ -248,7 +248,7 @@ function Step1Client() {
             >
               {isSelected && (
                 <div className="absolute top-4 right-4 w-6 h-6 rounded-full bg-primary flex items-center justify-center text-primary-foreground">
-                  <Check className="w-4 h-4" />
+                  <Check className="w-4 h-4 pop-icon-white" />
                 </div>
               )}
               <h3 className="font-bold text-lg text-foreground">{client.name}</h3>
@@ -257,7 +257,7 @@ function Step1Client() {
               <div className="flex items-center gap-2">
                 {isMissing ? (
                   <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-destructive/10 text-destructive border border-destructive/20">
-                    <AlertCircle className="w-3 h-3 mr-1" /> No Assessment
+                    <AlertCircle className="w-3 h-3 mr-1 pop-icon" /> No Assessment
                   </span>
                 ) : (
                   <span className={cn(
@@ -418,7 +418,7 @@ function Step4People() {
           {selected.filter(p => !presets.includes(p)).map(p => (
             <span key={p} className="inline-flex items-center px-4 py-2 rounded-full bg-accent/10 text-accent-foreground font-medium text-sm">
               {p}
-              <button onClick={() => togglePerson(p)} className="ml-2 hover:text-destructive"><X className="w-4 h-4" /></button>
+              <button onClick={() => togglePerson(p)} className="ml-2 hover:text-destructive"><X className="w-4 h-4 pop-icon" /></button>
             </span>
           ))}
         </div>
@@ -603,7 +603,7 @@ function Step6Programs() {
                 "mt-0.5 w-5 h-5 rounded flex-shrink-0 flex items-center justify-center mr-3 border transition-colors",
                 isSelected ? "bg-primary border-primary text-white" : "border-muted-foreground/30 bg-background"
               )}>
-                {isSelected && <Check className="w-3.5 h-3.5" />}
+                {isSelected && <Check className="w-3.5 h-3.5 pop-icon-white" />}
               </div>
               <div>
                 <div className="font-semibold text-foreground text-sm flex items-center gap-2">
