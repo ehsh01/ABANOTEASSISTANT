@@ -1,0 +1,230 @@
+# ABA Note Assistant - Droplet Deployment Guide
+
+## Quick Start
+
+1. **Update `ecosystem.config.js`** with your configuration:
+   - Set `cwd` to your deployment path (e.g., `/var/www/ABANOTEASSISTANT`)
+   - Set `PORT` for production (default: 5002) and staging (default: 5005)
+   - Add your `DATABASE_URL` for both environments
+   - Add your `JWT_SECRET` for both environments
+
+2. **Run the deployment script:**
+   ```bash
+   ./deploy.sh
+   ```
+
+## Manual Deployment Steps
+
+### 1. SSH into Droplet
+
+```bash
+ssh root@YOUR_DROPLET_IP
+```
+
+### 2. Clone/Update Repository
+
+```bash
+cd /var/www  # or your deployment directory
+git clone YOUR_REPO_URL ABANOTEASSISTANT
+cd ABANOTEASSISTANT
+```
+
+### 3. Install Dependencies
+
+```bash
+pnpm install
+```
+
+### 4. Build
+
+```bash
+pnpm run build
+```
+
+### 5. Configure Environment
+
+```bash
+cd artifacts/api-server
+cp .env.example .env
+nano .env  # Set DATABASE_URL and JWT_SECRET
+```
+
+### 6. Update ecosystem.config.js
+
+Edit `ecosystem.config.js` in the project root:
+
+```js
+{
+  name: "abanoteassistant-api",
+  cwd: "/var/www/ABANOTEASSISTANT", // Your actual path
+  env: {
+    PORT: "5002", // Your production port
+    DATABASE_URL: "postgresql://...", // Your production DB
+    JWT_SECRET: "...", // Your JWT secret
+  }
+}
+```
+
+### 7. Run Database Migrations
+
+```bash
+pnpm --filter @workspace/db run push
+```
+
+### 8. Start with PM2
+
+```bash
+pm2 start ecosystem.config.js --only abanoteassistant-api
+pm2 save
+pm2 startup  # Follow instructions
+```
+
+### 9. Verify
+
+```bash
+# Check status
+pm2 list
+
+# Check logs
+pm2 logs abanoteassistant-api
+
+# Test health endpoint
+curl http://localhost:5002/api/healthz
+```
+
+## Port Configuration
+
+Based on your droplet setup:
+- **abaworkspace**: Port 5001 (different app)
+- **abaworkspace-staging**: Port 5004 (different app)
+- **ABA Note Assistant API (Production)**: Port 5002 (configure in ecosystem.config.js)
+- **ABA Note Assistant API (Staging)**: Port 5005 (configure in ecosystem.config.js)
+
+**Important:** Make sure these ports don't conflict with other services!
+
+## Nginx Configuration
+
+If you need to route `abanoteassistant.com` to your API:
+
+```nginx
+# /etc/nginx/sites-available/abanoteassistant
+server {
+    listen 80;
+    server_name abanoteassistant.com;
+
+    location /api {
+        proxy_pass http://localhost:5002;  # Update port if different
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # Frontend static files (if serving from same domain)
+    location / {
+        root /var/www/ABANOTEASSISTANT/artifacts/abanoteassistant/dist/public;
+        try_files $uri $uri/ /index.html;
+    }
+}
+```
+
+Enable and reload:
+```bash
+ln -s /etc/nginx/sites-available/abanoteassistant /etc/nginx/sites-enabled/
+nginx -t
+systemctl reload nginx
+```
+
+## Updating Deployment
+
+When you make code changes:
+
+```bash
+cd /var/www/ABANOTEASSISTANT
+git pull
+pnpm install
+pnpm run build
+pm2 restart abanoteassistant-api
+```
+
+Or use the deployment script:
+```bash
+./deploy.sh
+```
+
+## Troubleshooting
+
+### API Won't Start
+
+1. **Check PM2 logs:**
+   ```bash
+   pm2 logs abanoteassistant-api --lines 50
+   ```
+
+2. **Check environment variables:**
+   ```bash
+   pm2 env abanoteassistant-api
+   ```
+
+3. **Verify port is available:**
+   ```bash
+   ss -tlnp | grep 5002
+   ```
+
+### Database Connection Issues
+
+1. **Test connection:**
+   ```bash
+   psql "$DATABASE_URL" -c "SELECT 1;"
+   ```
+
+2. **Check DATABASE_URL format:**
+   ```
+   postgresql://user:password@host:5432/dbname
+   ```
+
+### 401 Unauthorized
+
+- Verify `JWT_SECRET` matches between environments
+- Check token hasn't expired (default: 7 days)
+- Ensure `Authorization: Bearer <token>` header format
+
+## Environment Variables
+
+Required in `artifacts/api-server/.env`:
+- `DATABASE_URL` - PostgreSQL connection string
+- `JWT_SECRET` - Secret for JWT token signing (min 32 chars)
+
+Generate JWT_SECRET:
+```bash
+openssl rand -base64 32
+```
+
+## PM2 Commands
+
+```bash
+# Start
+pm2 start ecosystem.config.js --only abanoteassistant-api
+
+# Stop
+pm2 stop abanoteassistant-api
+
+# Restart
+pm2 restart abanoteassistant-api
+
+# View logs
+pm2 logs abanoteassistant-api
+
+# Monitor
+pm2 monit
+
+# Delete
+pm2 delete abanoteassistant-api
+
+# Save current processes
+pm2 save
+```
