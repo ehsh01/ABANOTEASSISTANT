@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Outfit:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -68,83 +68,83 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* LIGHT MODE - Calm Clinical Blue/Indigo Theme */
+/* LIGHT MODE — Crystal: Modern Elevated Amethyst */
 :root {
-  --button-outline: rgba(0,0,0, .10);
-  --badge-outline: rgba(0,0,0, .05);
+  --button-outline: rgba(107,63,160, .15);
+  --badge-outline: rgba(107,63,160, .08);
   --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(0,0,0, .03);
-  --elevate-2: rgba(0,0,0, .08);
+  --elevate-1: rgba(107,63,160, .04);
+  --elevate-2: rgba(107,63,160, .09);
 
   /* Backgrounds */
-  --background: 210 33% 98%; /* Very light cool gray/blue */
-  --foreground: 222 47% 11%; /* Deep slate text */
-  --border: 214 32% 91%;
-  
+  --background: 261 59% 97%;      /* #F6F3FC — near-white lavender */
+  --foreground: 240 28% 14%;      /* #1A1A2E — deep charcoal */
+  --border: 258 35% 88%;          /* soft lavender border */
+
   /* Cards */
   --card: 0 0% 100%;
-  --card-foreground: 222 47% 11%;
-  --card-border: 214 32% 91%;
+  --card-foreground: 240 28% 14%;
+  --card-border: 258 35% 88%;
 
   /* Brand Colors */
-  --primary: 226 71% 40%; /* Professional Deep Blue */
-  --primary-foreground: 210 40% 98%;
-  
-  --secondary: 214 32% 91%; /* Light slate */
-  --secondary-foreground: 222 47% 11%;
-  
-  --muted: 210 40% 96%;
-  --muted-foreground: 215 16% 47%;
-  
-  --accent: 217 91% 60%; /* Vibrant friendly blue for accents */
-  --accent-foreground: 210 40% 98%;
-  
+  --primary: 267 43% 44%;         /* #6B3FA0 — deep amethyst */
+  --primary-foreground: 0 0% 100%;
+
+  --secondary: 258 40% 93%;       /* very light lavender for chips/bg */
+  --secondary-foreground: 267 43% 44%;
+
+  --muted: 258 30% 94%;
+  --muted-foreground: 248 15% 42%; /* #5E5A7A */
+
+  --accent: 258 53% 81%;          /* #C4B5E8 — soft lavender */
+  --accent-foreground: 267 43% 44%;
+
   --destructive: 0 84% 60%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive-foreground: 0 0% 100%;
 
   /* UI Elements */
-  --input: 214 32% 91%;
-  --ring: 226 71% 40%;
-  
-  /* Sidebar / Popover (matching card/bg) */
+  --input: 258 35% 88%;
+  --ring: 267 43% 44%;
+
+  /* Sidebar / Popover */
   --sidebar: 0 0% 100%;
-  --sidebar-foreground: 222 47% 11%;
-  --sidebar-border: 214 32% 91%;
-  --sidebar-primary: 226 71% 40%;
-  --sidebar-primary-foreground: 210 40% 98%;
-  --sidebar-accent: 210 40% 96%;
-  --sidebar-accent-foreground: 222 47% 11%;
-  --sidebar-ring: 226 71% 40%;
+  --sidebar-foreground: 240 28% 14%;
+  --sidebar-border: 258 35% 88%;
+  --sidebar-primary: 267 43% 44%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 258 30% 94%;
+  --sidebar-accent-foreground: 240 28% 14%;
+  --sidebar-ring: 267 43% 44%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 222 47% 11%;
-  --popover-border: 214 32% 91%;
+  --popover-foreground: 240 28% 14%;
+  --popover-border: 258 35% 88%;
 
   /* Charts */
-  --chart-1: 226 71% 40%;
-  --chart-2: 217 91% 60%;
-  --chart-3: 199 89% 48%;
+  --chart-1: 267 43% 44%;
+  --chart-2: 258 53% 81%;
+  --chart-3: 280 65% 60%;
   --chart-4: 250 80% 60%;
-  --chart-5: 280 65% 60%;
+  --chart-5: 300 50% 55%;
 
-  /* Fonts & Shadows */
-  --app-font-sans: 'DM Sans', sans-serif;
-  --app-font-display: 'Outfit', sans-serif;
+  /* Fonts & Radius */
+  --app-font-sans: 'Plus Jakarta Sans', sans-serif;
+  --app-font-display: 'Plus Jakarta Sans', sans-serif;
   --app-font-serif: Georgia, serif;
   --app-font-mono: Menlo, monospace;
-  
-  --radius: 0.75rem; /* 12px for softer, friendly clinical feel */
-  
-  --shadow-2xs: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-xs: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
-  --shadow-sm: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-  --shadow-md: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  --shadow-lg: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  --shadow-xl: 0 25px 50px -12px rgb(0 0 0 / 0.25);
-  --shadow-2xl: 0 35px 60px -15px rgb(0 0 0 / 0.3);
 
-  --tracking-normal: 0em;
+  --radius: 0.75rem;
+
+  --shadow-2xs: 0 1px 2px 0 rgb(107 63 160 / 0.04);
+  --shadow-xs: 0 1px 3px 0 rgb(107 63 160 / 0.08), 0 1px 2px -1px rgb(107 63 160 / 0.08);
+  --shadow-sm: 0 4px 6px -1px rgb(107 63 160 / 0.08), 0 2px 4px -2px rgb(107 63 160 / 0.06);
+  --shadow: 0 4px 6px -1px rgb(107 63 160 / 0.1), 0 2px 4px -2px rgb(107 63 160 / 0.08);
+  --shadow-md: 0 10px 15px -3px rgb(107 63 160 / 0.1), 0 4px 6px -4px rgb(107 63 160 / 0.08);
+  --shadow-lg: 0 20px 25px -5px rgb(107 63 160 / 0.12), 0 8px 10px -6px rgb(107 63 160 / 0.08);
+  --shadow-xl: 0 25px 50px -12px rgb(107 63 160 / 0.2);
+  --shadow-2xl: 0 35px 60px -15px rgb(107 63 160 / 0.25);
+
+  --tracking-normal: -0.01em;
   --spacing: 0.25rem;
 
   --sidebar-primary-border: hsl(from hsl(var(--sidebar-primary)) h s calc(l + var(--opaque-button-border-intensity)) / alpha);
@@ -157,56 +157,56 @@
 }
 
 .dark {
-  --button-outline: rgba(255,255,255, .10);
-  --badge-outline: rgba(255,255,255, .05);
+  --button-outline: rgba(196,181,232, .12);
+  --badge-outline: rgba(196,181,232, .06);
   --opaque-button-border-intensity: 9;
-  --elevate-1: rgba(255,255,255, .04);
-  --elevate-2: rgba(255,255,255, .09);
+  --elevate-1: rgba(196,181,232, .04);
+  --elevate-2: rgba(196,181,232, .09);
 
-  --background: 222 47% 11%;
-  --foreground: 210 40% 98%;
-  --border: 217 33% 17%;
-  
-  --card: 222 47% 11%;
-  --card-foreground: 210 40% 98%;
-  --card-border: 217 33% 17%;
+  --background: 256 40% 8%;       /* very deep purple-dark */
+  --foreground: 258 40% 96%;
+  --border: 258 25% 20%;
 
-  --primary: 226 71% 60%;
-  --primary-foreground: 222 47% 11%;
-  
-  --secondary: 217 33% 17%;
-  --secondary-foreground: 210 40% 98%;
-  
-  --muted: 217 33% 17%;
-  --muted-foreground: 215 20% 65%;
-  
-  --accent: 217 91% 60%;
-  --accent-foreground: 222 47% 11%;
-  
+  --card: 256 35% 12%;
+  --card-foreground: 258 40% 96%;
+  --card-border: 258 25% 20%;
+
+  --primary: 267 55% 65%;         /* lighter amethyst for dark mode */
+  --primary-foreground: 256 40% 8%;
+
+  --secondary: 258 25% 20%;
+  --secondary-foreground: 258 40% 96%;
+
+  --muted: 258 25% 18%;
+  --muted-foreground: 248 20% 65%;
+
+  --accent: 258 40% 30%;
+  --accent-foreground: 258 53% 81%;
+
   --destructive: 0 62% 30%;
-  --destructive-foreground: 210 40% 98%;
+  --destructive-foreground: 0 0% 100%;
 
-  --input: 217 33% 17%;
-  --ring: 226 71% 60%;
+  --input: 258 25% 20%;
+  --ring: 267 55% 65%;
 
-  --sidebar: 222 47% 11%;
-  --sidebar-foreground: 210 40% 98%;
-  --sidebar-border: 217 33% 17%;
-  --sidebar-primary: 226 71% 60%;
-  --sidebar-primary-foreground: 222 47% 11%;
-  --sidebar-accent: 217 33% 17%;
-  --sidebar-accent-foreground: 210 40% 98%;
-  --sidebar-ring: 226 71% 60%;
+  --sidebar: 256 35% 10%;
+  --sidebar-foreground: 258 40% 96%;
+  --sidebar-border: 258 25% 20%;
+  --sidebar-primary: 267 55% 65%;
+  --sidebar-primary-foreground: 256 40% 8%;
+  --sidebar-accent: 258 25% 18%;
+  --sidebar-accent-foreground: 258 40% 96%;
+  --sidebar-ring: 267 55% 65%;
 
-  --popover: 222 47% 11%;
-  --popover-foreground: 210 40% 98%;
-  --popover-border: 217 33% 17%;
+  --popover: 256 35% 12%;
+  --popover-foreground: 258 40% 96%;
+  --popover-border: 258 25% 20%;
 
-  --chart-1: 226 71% 60%;
-  --chart-2: 217 91% 60%;
-  --chart-3: 199 89% 48%;
+  --chart-1: 267 55% 65%;
+  --chart-2: 258 53% 81%;
+  --chart-3: 280 65% 60%;
   --chart-4: 250 80% 60%;
-  --chart-5: 280 65% 60%;
+  --chart-5: 300 50% 55%;
 }
 
 @layer base {
@@ -216,6 +216,7 @@
 
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    letter-spacing: -0.01em;
   }
 
   h1, h2, h3, h4, h5, h6 {
@@ -288,5 +289,21 @@
   .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
+  }
+
+  /* Crystal gradient text utility */
+  .crystal-gradient-text {
+    background: linear-gradient(135deg, #ffffff 0%, #C4B5E8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Amethyst glow utility */
+  .amethyst-glow {
+    box-shadow: 0 8px 25px rgba(107, 63, 160, 0.3);
+  }
+  .amethyst-glow:hover {
+    box-shadow: 0 12px 35px rgba(107, 63, 160, 0.4);
   }
 }
