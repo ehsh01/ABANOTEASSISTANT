@@ -129,8 +129,8 @@
 
   /* Fonts & Radius */
   --app-font-sans: 'Plus Jakarta Sans', sans-serif;
-  --app-font-display: 'Playfair Display', Georgia, serif;
-  --app-font-serif: 'Playfair Display', Georgia, serif;
+  --app-font-display: 'Plus Jakarta Sans', sans-serif;
+  --app-font-serif: 'Plus Jakarta Sans', sans-serif;
   --app-font-mono: Menlo, monospace;
 
   --radius: 0.75rem;
