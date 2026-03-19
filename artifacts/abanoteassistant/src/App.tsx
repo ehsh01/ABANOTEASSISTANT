@@ -5,6 +5,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "./pages/home";
 import Wizard from "./pages/wizard";
 import Result from "./pages/result";
+import Clients from "./pages/clients";
+import NewClient from "./pages/new-client";
 import NotFound from "@/pages/not-found";
 
 // Initialize react-query client
@@ -23,6 +25,8 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/wizard" component={Wizard} />
       <Route path="/result" component={Result} />
+      <Route path="/clients" component={Clients} />
+      <Route path="/clients/new" component={NewClient} />
       <Route component={NotFound} />
     </Switch>
   );
