@@ -72,6 +72,8 @@ echo "📁 Creating logs directory..."
 mkdir -p logs
 
 echo "🗄️  Running database migrations..."
+# Export DATABASE_URL for drizzle-kit
+export DATABASE_URL
 pnpm --filter @workspace/db run push
 
 echo "🛑 Stopping existing processes..."
