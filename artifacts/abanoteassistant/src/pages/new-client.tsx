@@ -13,9 +13,13 @@ import {
   AlertTriangle,
   Zap,
   Shield,
+  CalendarIcon,
 } from "lucide-react";
+import { format } from "date-fns";
 import { useClientsStore, type Client } from "@/store/clients-store";
 import { generateId } from "@/lib/utils";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 
 // ── Step 1 data ─────────────────────────────────────────────────────────────
 interface Step1Data {
@@ -185,6 +189,11 @@ function Step1({
   onChange: (d: Step1Data) => void;
 }) {
   const genders = ["Male", "Female", "Non-binary", "Prefer not to say"];
+  const [dobOpen, setDobOpen] = useState(false);
+
+  const selectedDobDate = data.dateOfBirth.length === 10
+    ? (() => { try { const [m, d, y] = data.dateOfBirth.split("/"); return new Date(Number(y), Number(m) - 1, Number(d)); } catch { return undefined; } })()
+    : undefined;
 
   return (
     <div className="space-y-5">
@@ -218,17 +227,38 @@ function Step1({
       <div>
         <label className="block text-sm font-semibold text-[#2D2523] mb-2 pop-text">
           Date of Birth
-          <span className="ml-2 text-xs font-normal text-[#877870]">mm/dd/yyyy</span>
         </label>
-        <input
-          type="text"
-          inputMode="numeric"
-          value={data.dateOfBirth}
-          onChange={(e) => onChange({ ...data, dateOfBirth: formatDOB(e.target.value) })}
-          placeholder="mm/dd/yyyy"
-          maxLength={10}
-          className="w-full px-4 py-3 rounded-xl border border-[#F0E4E1] bg-white text-[#2D2523] placeholder:text-[#877870] text-sm focus:outline-none focus:ring-2 focus:ring-[#C27A8A]/30 focus:border-[#C27A8A] transition-all"
-        />
+        <Popover open={dobOpen} onOpenChange={setDobOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-[#F0E4E1] bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#C27A8A]/30 focus:border-[#C27A8A] transition-all hover:border-[#C27A8A]/50 text-left"
+            >
+              <CalendarIcon className="w-4 h-4 text-[#877870] shrink-0 pop-icon" />
+              <span className={data.dateOfBirth ? "text-[#2D2523]" : "text-[#877870]"}>
+                {data.dateOfBirth || "Select date of birth"}
+              </span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={selectedDobDate}
+              onSelect={(date) => {
+                if (date) {
+                  onChange({ ...data, dateOfBirth: format(date, "MM/dd/yyyy") });
+                  setDobOpen(false);
+                }
+              }}
+              captionLayout="dropdown"
+              defaultMonth={selectedDobDate ?? new Date(2010, 0, 1)}
+              startMonth={new Date(1940, 0)}
+              endMonth={new Date()}
+              toDate={new Date()}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
       </div>
 
       {/* Gender */}
