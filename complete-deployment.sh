@@ -11,11 +11,17 @@ pnpm --filter @workspace/api-server run build
 
 echo "⚙️  Updating ecosystem.config.js with .env values..."
 source artifacts/api-server/.env
+
+# Escape special characters in DATABASE_URL for sed
+DB_URL_ESCAPED=$(echo "$DATABASE_URL" | sed 's/[[\.*^$()+?{|]/\\&/g')
+JWT_ESCAPED=$(echo "$JWT_SECRET" | sed 's/[[\.*^$()+?{|]/\\&/g')
+
+# Use a different delimiter (:) instead of | to avoid conflicts
 sed -i.bak \
-  -e 's|DATABASE_URL: process.env.DATABASE_URL |||g' \
-  -e 's|JWT_SECRET: process.env.JWT_SECRET |||g' \
-  -e "s|\"postgresql://user:password@host:5432/dbname\"|\"$DATABASE_URL\"|g" \
-  -e "s|\"change-me-to-a-long-random-string-minimum-32-characters\"|\"$JWT_SECRET\"|g" \
+  -e "s|DATABASE_URL: process.env.DATABASE_URL |||g" \
+  -e "s|JWT_SECRET: process.env.JWT_SECRET |||g" \
+  -e "s:\"postgresql://user:password@host:5432/dbname\":\"$DATABASE_URL\":g" \
+  -e "s:\"change-me-to-a-long-random-string-minimum-32-characters\":\"$JWT_SECRET\":g" \
   ecosystem.config.js
 
 echo "📁 Creating logs directory..."
