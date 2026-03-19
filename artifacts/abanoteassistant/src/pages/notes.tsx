@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment } from "react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -37,56 +37,8 @@ function TypeBadge({ type }: { type: SessionNote["type"] }) {
   );
 }
 
-function DeleteConfirmRow({
-  note,
-  onConfirm,
-  onCancel,
-}: {
-  note: SessionNote;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <tr className="bg-rose-50 border-y border-rose-200">
-      <td colSpan={7} className="px-6 py-4">
-        <div className="flex items-center justify-between">
-          <p className="text-sm text-rose-700 font-medium">
-            Delete note for <strong>{note.clientName}</strong> on {note.sessionDate}? This cannot be undone.
-          </p>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onCancel}
-              className="px-4 py-1.5 rounded-lg border border-rose-200 text-rose-700 text-sm font-semibold hover:bg-rose-100 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={onConfirm}
-              className="px-4 py-1.5 rounded-lg bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 transition-colors"
-            >
-              Delete
-            </button>
-          </div>
-        </div>
-      </td>
-    </tr>
-  );
-}
-
 export default function Notes() {
   const { notes, deleteNote } = useNotesStore();
-  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
-
-  function handleDeleteClick(id: string) {
-    setPendingDeleteId(id);
-  }
-
-  function handleConfirmDelete() {
-    if (pendingDeleteId) {
-      deleteNote(pendingDeleteId);
-      setPendingDeleteId(null);
-    }
-  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -187,16 +139,18 @@ export default function Notes() {
                         <motion.tr
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
-                          exit={{ opacity: 0, height: 0 }}
+                          exit={{ opacity: 0 }}
                           transition={{ duration: 0.18 }}
-                          className={`hover:bg-[#FDFAF7] transition-colors ${pendingDeleteId === note.id ? "opacity-50" : ""}`}
+                          className="hover:bg-[#FDFAF7] transition-colors"
                         >
                           {/* CLIENT NAME */}
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
-                              <span className="font-semibold text-[#C27A8A] hover:text-[#b06a79] cursor-pointer transition-colors">
-                                {note.clientName}
-                              </span>
+                              <Link href="/clients">
+                                <a className="font-semibold text-[#C27A8A] hover:text-[#b06a79] hover:underline transition-colors">
+                                  {note.clientName}
+                                </a>
+                              </Link>
                               <StatusBadge status={note.status} />
                             </div>
                           </td>
@@ -242,7 +196,7 @@ export default function Notes() {
                               </button>
                               <button
                                 title="Delete note"
-                                onClick={() => handleDeleteClick(note.id)}
+                                onClick={() => deleteNote(note.id)}
                                 className="w-8 h-8 rounded-lg flex items-center justify-center text-[#877870] hover:text-rose-600 hover:bg-rose-50 transition-colors"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -250,15 +204,6 @@ export default function Notes() {
                             </div>
                           </td>
                         </motion.tr>
-
-                        {/* Inline delete confirmation */}
-                        {pendingDeleteId === note.id && (
-                          <DeleteConfirmRow
-                            note={note}
-                            onConfirm={handleConfirmDelete}
-                            onCancel={() => setPendingDeleteId(null)}
-                          />
-                        )}
                       </Fragment>
                     ))}
                   </AnimatePresence>
