@@ -200,7 +200,7 @@ export default function Result() {
       {saveMutation.isSuccess && (
         <div className="fixed bottom-6 right-6 bg-card border border-border shadow-xl rounded-xl p-4 flex items-center gap-3 animate-in slide-in-from-bottom-5">
           <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
-            <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 pop-icon" />
           </div>
           <div>
             <div className="font-semibold text-sm">Note Saved</div>
