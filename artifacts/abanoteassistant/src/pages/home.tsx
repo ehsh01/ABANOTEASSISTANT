@@ -44,10 +44,10 @@ export default function Home() {
         {/* Hero background */}
         <div
           className="absolute inset-0 z-0"
-          style={{ background: "linear-gradient(135deg, #C27A8A 0%, #e8c4cc 100%)" }}
+          style={{ background: "linear-gradient(160deg, #C87585 0%, #C06B80 50%, #B05E74 100%)" }}
         >
-          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#C27A8A] blur-[120px] mix-blend-screen opacity-50" />
-          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#e6b3c0] blur-[120px] mix-blend-screen opacity-40" />
+          <div className="absolute top-[-10%] left-[-10%] w-[50%] h-[50%] rounded-full bg-[#C27A8A] blur-[120px] opacity-15" />
+          <div className="absolute bottom-[-10%] right-[-10%] w-[50%] h-[50%] rounded-full bg-[#a85468] blur-[120px] opacity-10" />
         </div>
 
         <div className="max-w-4xl mx-auto relative z-10 text-center flex flex-col items-center">
