@@ -10,6 +10,7 @@ import {
   Plus,
 } from "lucide-react";
 import { useNotesStore, type SessionNote } from "@/store/notes-store";
+import { formatSessionDate } from "@/lib/utils";
 
 const BILLING_CODE_LABELS: Record<string, string> = {
   "97153": "Adaptive behavior treatment",
@@ -172,7 +173,7 @@ export default function Notes() {
 
                           {/* SESSION DATE */}
                           <td className="px-6 py-4 whitespace-nowrap text-[#2D2523] font-medium">
-                            {note.sessionDate}
+                            {formatSessionDate(note.sessionDate)}
                           </td>
 
                           {/* START TIME */}

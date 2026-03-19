@@ -6,7 +6,7 @@ import { format, parseISO, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { useWizardStore } from "@/store/wizard-store";
 import { useClients, useClientPrograms, useGenerateSessionNote } from "@/hooks/use-aba-api";
-import { cn } from "@/lib/utils";
+import { cn, formatSessionDate } from "@/lib/utils";
 import {
   Popover,
   PopoverContent,
@@ -738,12 +738,12 @@ function Step8Review() {
 
       <div className="bg-card rounded-2xl border border-border shadow-sm p-6 space-y-1">
         <Item label="Client" value={clientName} />
-        <Item label="Session Date" value={data.sessionDate || "Not set"} />
+        <Item label="Session Date" value={formatSessionDate(data.sessionDate)} />
         <Item label="Duration" value={`${data.sessionHours} hours`} />
         <Item label="Present" value={data.presentPeople?.length ? data.presentPeople.join(", ") : "Therapist only"} />
         <Item label="Env Changes" value={data.hasEnvironmentalChanges ? "Yes" : "No"} />
         <Item label="Programs" value={<span className="text-primary">{data.selectedReplacements?.length} selected</span>} />
-        <Item label="Next Session" value={data.nextSessionDate || "Not scheduled"} />
+        <Item label="Next Session" value={formatSessionDate(data.nextSessionDate, "Not scheduled")} />
       </div>
     </div>
   );

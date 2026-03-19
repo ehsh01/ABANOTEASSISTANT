@@ -3,7 +3,7 @@ import { useLocation, useParams } from "wouter";
 import { motion } from "framer-motion";
 import { Copy, CheckCircle2, ChevronLeft, Calendar, Clock, User, Edit3, Save, FileText } from "lucide-react";
 import { useNotesStore } from "@/store/notes-store";
-import { cn } from "@/lib/utils";
+import { cn, formatSessionDate } from "@/lib/utils";
 
 const BILLING_CODE_LABELS: Record<string, string> = {
   "97153": "Adaptive Behavior Treatment by Protocol",
@@ -59,7 +59,7 @@ export default function NoteDetail() {
             <ChevronLeft className="w-5 h-5 pop-icon-white" />
           </button>
           <h1 className="text-lg font-bold text-white hidden sm:block pop-text-white">
-            {note.clientName} — {note.sessionDate}
+            {note.clientName} — {formatSessionDate(note.sessionDate)}
           </h1>
         </div>
         <div className="flex items-center gap-3">
@@ -104,7 +104,7 @@ export default function NoteDetail() {
               <User className="w-4 h-4 text-muted-foreground pop-icon" /> {note.clientName}
             </div>
             <div className="flex items-center gap-2 text-sm font-medium">
-              <Calendar className="w-4 h-4 text-muted-foreground pop-icon" /> {note.sessionDate}
+              <Calendar className="w-4 h-4 text-muted-foreground pop-icon" /> {formatSessionDate(note.sessionDate)}
             </div>
             <div className="flex items-center gap-2 text-sm font-medium">
               <Clock className="w-4 h-4 text-muted-foreground pop-icon" /> {durationHours} hrs
@@ -170,7 +170,7 @@ export default function NoteDetail() {
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">Date</div>
-                  <div className="font-semibold text-foreground">{note.sessionDate}</div>
+                  <div className="font-semibold text-foreground">{formatSessionDate(note.sessionDate)}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3 text-sm">

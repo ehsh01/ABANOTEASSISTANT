@@ -4,8 +4,7 @@ import { motion } from "framer-motion";
 import { Copy, Save, Edit3, RotateCcw, AlertTriangle, CheckCircle2, ChevronLeft, Calendar, Clock, User, Wand2 } from "lucide-react";
 import { useWizardStore } from "@/store/wizard-store";
 import { useSaveSessionNote } from "@/hooks/use-aba-api";
-import { cn } from "@/lib/utils";
-import { format, parseISO } from "date-fns";
+import { cn, formatSessionDate } from "@/lib/utils";
 
 export default function Result() {
   const [, setLocation] = useLocation();
@@ -44,13 +43,7 @@ export default function Result() {
     setLocation("/");
   };
 
-  // Format date nicely if it's a valid ISO string
-  let displayDate = generatedNote.sessionDate;
-  try {
-    displayDate = format(parseISO(generatedNote.sessionDate), "MMMM d, yyyy");
-  } catch (e) {
-    // keep original string if parse fails
-  }
+  const displayDate = formatSessionDate(generatedNote.sessionDate);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
