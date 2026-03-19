@@ -93,11 +93,15 @@ const ENV_CHANGE_OPTIONS: { group: string; items: string[] }[] = [
   },
 ];
 
-// ─── Multi-select dropdown component ─────────────────────────────────────────
+// ─── Per-category multi-select dropdown ──────────────────────────────────────
 function EnvChangeMultiSelect({
+  label,
+  items,
   selected,
   onChange,
 }: {
+  label: string;
+  items: string[];
   selected: string[];
   onChange: (items: string[]) => void;
 }) {
@@ -118,7 +122,7 @@ function EnvChangeMultiSelect({
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-2">
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
@@ -127,77 +131,76 @@ function EnvChangeMultiSelect({
             role="combobox"
             aria-expanded={open}
             className={cn(
-              "w-full flex items-center justify-between px-4 py-3 rounded-xl bg-background border-2 text-sm font-medium transition-all",
+              "w-full flex items-center justify-between px-3 py-2.5 rounded-xl bg-background border-2 text-sm font-medium transition-all text-left",
               open
                 ? "border-primary ring-4 ring-primary/10"
-                : "border-border hover:border-primary/50",
-              "text-left"
+                : "border-border hover:border-primary/50"
             )}
           >
-            <span className={selected.length === 0 ? "text-muted-foreground" : "text-foreground"}>
-              {selected.length === 0
-                ? "Select changes from the list…"
-                : `${selected.length} change${selected.length > 1 ? "s" : ""} selected`}
+            <span className="flex items-center gap-2 min-w-0">
+              <span className="font-semibold text-foreground truncate">{label}</span>
+              {selected.length > 0 && (
+                <span className="shrink-0 inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
+                  {selected.length}
+                </span>
+              )}
             </span>
             <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
           </button>
         </PopoverTrigger>
 
         <PopoverContent
-          className="p-0 w-[var(--radix-popover-trigger-width)] max-w-none"
+          className="p-0 max-w-none"
           align="start"
-          sideOffset={6}
+          sideOffset={4}
           style={{ width: triggerRef.current?.offsetWidth }}
         >
           <Command>
-            <CommandInput placeholder="Search changes…" />
-            <CommandList className="max-h-72">
+            <CommandInput placeholder={`Search ${label.toLowerCase()}…`} />
+            <CommandList className="max-h-56">
               <CommandEmpty>No results found.</CommandEmpty>
-              {ENV_CHANGE_OPTIONS.map((group) => (
-                <CommandGroup key={group.group} heading={group.group}>
-                  {group.items.map((item) => {
-                    const isSelected = selected.includes(item);
-                    return (
-                      <CommandItem
-                        key={item}
-                        value={item}
-                        onSelect={() => toggle(item)}
-                        className="cursor-pointer"
+              <CommandGroup>
+                {items.map((item) => {
+                  const isSelected = selected.includes(item);
+                  return (
+                    <CommandItem
+                      key={item}
+                      value={item}
+                      onSelect={() => toggle(item)}
+                      className="cursor-pointer"
+                    >
+                      <div
+                        className={cn(
+                          "mr-2 flex h-4 w-4 items-center justify-center rounded border transition-colors shrink-0",
+                          isSelected
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "border-muted-foreground/40 bg-background"
+                        )}
                       >
-                        <div
-                          className={cn(
-                            "mr-2 flex h-4 w-4 items-center justify-center rounded border transition-colors",
-                            isSelected
-                              ? "bg-primary border-primary text-primary-foreground"
-                              : "border-muted-foreground/40 bg-background"
-                          )}
-                        >
-                          {isSelected && <Check className="h-3 w-3" />}
-                        </div>
-                        {item}
-                      </CommandItem>
-                    );
-                  })}
-                </CommandGroup>
-              ))}
+                        {isSelected && <Check className="h-3 w-3" />}
+                      </div>
+                      {item}
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
             </CommandList>
           </Command>
         </PopoverContent>
       </Popover>
 
-      {/* Selected chips */}
       {selected.length > 0 && (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-1.5">
           {selected.map((item) => (
             <span
               key={item}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20"
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20"
             >
               {item}
               <button
                 type="button"
                 onClick={(e) => remove(item, e)}
-                className="hover:text-destructive transition-colors ml-0.5"
+                className="hover:text-destructive transition-colors"
                 aria-label={`Remove ${item}`}
               >
                 <X className="h-3 w-3" />
@@ -437,10 +440,13 @@ function Step5Env() {
     return fullText.slice(prefix.length).replace(/^\n+/, "");
   };
 
-  const handleDropdownChange = (newItems: string[]) => {
+  const handleCategoryChange = (groupItems: string[], newCategorySelection: string[]) => {
+    // Replace only this category's items in the global selection; preserve all others.
+    const otherItems = selectedEnvChanges.filter((s) => !groupItems.includes(s));
+    const newAll = [...otherItems, ...newCategorySelection];
     const manualSuffix = extractManualSuffix(data.environmentalChanges ?? "", selectedEnvChanges);
-    setSelectedEnvChanges(newItems);
-    updateData({ environmentalChanges: buildTextareaValue(newItems, manualSuffix) });
+    setSelectedEnvChanges(newAll);
+    updateData({ environmentalChanges: buildTextareaValue(newAll, manualSuffix) });
   };
 
   const handleTextareaChange = (text: string) => {
@@ -497,15 +503,22 @@ function Step5Env() {
             className="overflow-hidden"
           >
             <div className="bg-card p-6 rounded-2xl border border-border shadow-sm space-y-5">
-              {/* Dropdown multi-select */}
+              {/* Per-category dropdowns in a 2-column grid */}
               <div>
-                <label className="block text-sm font-semibold text-foreground mb-2">
-                  Select from common changes
-                </label>
-                <EnvChangeMultiSelect
-                  selected={selectedEnvChanges}
-                  onChange={handleDropdownChange}
-                />
+                <p className="text-sm text-muted-foreground mb-3">
+                  Select from each category — selected items appear in the description below.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {ENV_CHANGE_OPTIONS.map((group) => (
+                    <EnvChangeMultiSelect
+                      key={group.group}
+                      label={group.group}
+                      items={group.items}
+                      selected={selectedEnvChanges.filter((s) => group.items.includes(s))}
+                      onChange={(categoryItems) => handleCategoryChange(group.items, categoryItems)}
+                    />
+                  ))}
+                </div>
               </div>
 
               {/* Free-text area — pre-filled with dropdown selections, fully editable */}
@@ -516,16 +529,11 @@ function Step5Env() {
                 </label>
                 <p className="text-xs text-muted-foreground mb-2">
                   Selections above are pre-filled here. Add context, reorder, or edit as needed.
-                  {selectedEnvChanges.length > 0 && (
-                    <span className="block mt-0.5 text-amber-600">
-                      Tip: keep the selected items at the start of the text so re-selecting updates them cleanly.
-                    </span>
-                  )}
                 </p>
                 <textarea
                   value={data.environmentalChanges ?? ""}
                   onChange={(e) => handleTextareaChange(e.target.value)}
-                  placeholder="Select changes above or describe them here…"
+                  placeholder="Select from categories above or describe changes here…"
                   className="w-full px-4 py-3 rounded-xl bg-background border-2 border-border text-foreground min-h-[100px] resize-y focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
                 />
               </div>
