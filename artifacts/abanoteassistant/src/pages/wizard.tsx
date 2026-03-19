@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon } from "lucide-react";
+import { format, parseISO, isValid } from "date-fns";
+import { Calendar } from "@/components/ui/calendar";
 import { useWizardStore } from "@/store/wizard-store";
 import { useClients, useClientPrograms, useGenerateSessionNote } from "@/hooks/use-aba-api";
 import { cn } from "@/lib/utils";
@@ -330,7 +332,11 @@ function Step2Hours() {
 
 function Step3Date() {
   const { data, updateData } = useWizardStore();
-  
+  const [open, setOpen] = useState(false);
+
+  const parsed = data.sessionDate ? parseISO(data.sessionDate) : undefined;
+  const selected = parsed && isValid(parsed) ? parsed : undefined;
+
   return (
     <div className="space-y-8 max-w-md mx-auto">
       <div className="text-center mb-8">
@@ -340,12 +346,37 @@ function Step3Date() {
 
       <div className="bg-card p-6 rounded-2xl border border-border shadow-sm">
         <label className="block text-sm font-semibold text-foreground mb-2">Select Date</label>
-        <input 
-          type="date" 
-          value={data.sessionDate || ""}
-          onChange={(e) => updateData({ sessionDate: e.target.value })}
-          className="w-full px-4 py-4 rounded-xl bg-background border-2 border-border text-foreground font-medium focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
-        />
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className="w-full flex items-center gap-3 px-4 py-4 rounded-xl bg-background border-2 border-border text-foreground font-medium focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all hover:border-primary/50 text-left"
+            >
+              <CalendarIcon className="w-5 h-5 text-muted-foreground shrink-0 pop-icon" />
+              <span className={selected ? "text-foreground" : "text-muted-foreground"}>
+                {selected ? format(selected, "MMMM d, yyyy") : "Select session date"}
+              </span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={selected}
+              onSelect={(date) => {
+                if (date) {
+                  updateData({ sessionDate: format(date, "yyyy-MM-dd") });
+                  setOpen(false);
+                }
+              }}
+              captionLayout="dropdown"
+              defaultMonth={selected ?? new Date()}
+              startMonth={new Date(2000, 0)}
+              endMonth={new Date()}
+              toDate={new Date()}
+              initialFocus
+            />
+          </PopoverContent>
+        </Popover>
       </div>
     </div>
   );
@@ -626,7 +657,11 @@ function Step6Programs() {
 
 function Step7NextDate() {
   const { data, updateData } = useWizardStore();
-  
+  const [open, setOpen] = useState(false);
+
+  const parsed = data.nextSessionDate ? parseISO(data.nextSessionDate) : undefined;
+  const selected = parsed && isValid(parsed) ? parsed : undefined;
+
   return (
     <div className="space-y-8 max-w-md mx-auto">
       <div className="text-center mb-8">
@@ -637,12 +672,36 @@ function Step7NextDate() {
       <div className="bg-card p-6 rounded-2xl border border-border shadow-sm space-y-4">
         <div>
           <label className="block text-sm font-semibold text-foreground mb-2">Select Date</label>
-          <input 
-            type="date" 
-            value={data.nextSessionDate || ""}
-            onChange={(e) => updateData({ nextSessionDate: e.target.value })}
-            className="w-full px-4 py-4 rounded-xl bg-background border-2 border-border text-foreground font-medium focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
-          />
+          <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="w-full flex items-center gap-3 px-4 py-4 rounded-xl bg-background border-2 border-border text-foreground font-medium focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all hover:border-primary/50 text-left"
+              >
+                <CalendarIcon className="w-5 h-5 text-muted-foreground shrink-0 pop-icon" />
+                <span className={selected ? "text-foreground" : "text-muted-foreground"}>
+                  {selected ? format(selected, "MMMM d, yyyy") : "Select next session date"}
+                </span>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="start">
+              <Calendar
+                mode="single"
+                selected={selected}
+                onSelect={(date) => {
+                  if (date) {
+                    updateData({ nextSessionDate: format(date, "yyyy-MM-dd") });
+                    setOpen(false);
+                  }
+                }}
+                captionLayout="dropdown"
+                defaultMonth={selected ?? new Date()}
+                startMonth={new Date(2000, 0)}
+                endMonth={new Date(2030, 11)}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
         </div>
         
         <div className="text-center pt-4">
