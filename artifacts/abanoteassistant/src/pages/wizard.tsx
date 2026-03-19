@@ -428,14 +428,9 @@ function Step4People() {
 function Step5Env() {
   const { data, updateData, selectedEnvChanges, setSelectedEnvChanges } = useWizardStore();
 
-  // Build the textarea value from dropdown items (comma-joined) + any manual
-  // text the user typed after them. Dropdown items are always the "prefix" of
-  // the textarea, separated from extra notes by a blank line.
   const buildTextareaValue = (items: string[], extra: string): string =>
     [items.length > 0 ? items.join(", ") : "", extra.trim()].filter(Boolean).join("\n\n");
 
-  // Extract the manual text that lives after the dropdown-driven prefix.
-  // Uses the STORE's selectedEnvChanges so the old prefix is always known exactly.
   const extractManualSuffix = (fullText: string, prevItems: string[]): string => {
     if (prevItems.length === 0) return fullText;
     const prefix = prevItems.join(", ");
@@ -444,13 +439,11 @@ function Step5Env() {
   };
 
   const handleDropdownChange = (newItems: string[]) => {
-    // Keep whatever the user manually typed after the old prefix.
     const manualSuffix = extractManualSuffix(data.environmentalChanges ?? "", selectedEnvChanges);
     setSelectedEnvChanges(newItems);
     updateData({ environmentalChanges: buildTextareaValue(newItems, manualSuffix) });
   };
 
-  // Textarea is fully editable — user can type freely anywhere in it.
   const handleTextareaChange = (text: string) => {
     updateData({ environmentalChanges: text });
   };
@@ -516,14 +509,19 @@ function Step5Env() {
                 />
               </div>
 
-              {/* Free-text area — pre-filled with dropdown selections, freely editable */}
+              {/* Free-text area — pre-filled with dropdown selections, fully editable */}
               <div>
                 <label className="block text-sm font-semibold text-foreground mb-1">
                   Description{" "}
                   <span className="font-normal text-muted-foreground">(edit freely)</span>
                 </label>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Selections above are inserted here automatically. Add more context or edit as needed.
+                  Selections above are pre-filled here. Add context, reorder, or edit as needed.
+                  {selectedEnvChanges.length > 0 && (
+                    <span className="block mt-0.5 text-amber-600">
+                      Tip: keep the selected items at the start of the text so re-selecting updates them cleanly.
+                    </span>
+                  )}
                 </p>
                 <textarea
                   value={data.environmentalChanges ?? ""}
