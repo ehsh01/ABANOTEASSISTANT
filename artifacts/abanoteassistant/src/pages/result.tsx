@@ -54,25 +54,25 @@ export default function Result() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="bg-card border-b border-border sticky top-0 z-10 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between shadow-sm">
+      <header className="bg-primary sticky top-0 z-10 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
-          <button onClick={() => setLocation("/")} className="text-muted-foreground hover:text-foreground transition-colors p-2 -ml-2 rounded-lg hover:bg-secondary">
+          <button onClick={() => setLocation("/")} className="text-white/80 hover:text-white transition-colors p-2 -ml-2 rounded-lg hover:bg-white/15">
             <ChevronLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-lg font-bold text-foreground font-display hidden sm:block">Session Note Generated</h1>
+          <h1 className="text-lg font-bold text-white font-display hidden sm:block">Session Note Generated</h1>
         </div>
         <div className="flex items-center gap-3">
           <button 
             onClick={handleCopy}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary text-secondary-foreground font-medium hover:bg-secondary/80 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/15 text-white font-medium hover:bg-white/25 transition-colors"
           >
-            {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+            {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-300" /> : <Copy className="w-4 h-4" />}
             <span className="hidden sm:inline">{copied ? "Copied!" : "Copy"}</span>
           </button>
           <button 
             onClick={() => handleSave("draft")}
             disabled={saveMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-border font-medium hover:border-primary/50 transition-colors disabled:opacity-50"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-white/30 text-white font-medium hover:bg-white/15 transition-colors disabled:opacity-50"
           >
             <Save className="w-4 h-4" />
             <span className="hidden sm:inline">Save Draft</span>
@@ -80,7 +80,7 @@ export default function Result() {
           <button 
             onClick={() => handleSave("final")}
             disabled={saveMutation.isPending}
-            className="flex items-center gap-2 px-6 py-2 rounded-lg bg-primary text-primary-foreground font-semibold shadow-md shadow-primary/20 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none"
+            className="flex items-center gap-2 px-6 py-2 rounded-lg bg-white text-primary font-semibold shadow-md shadow-black/10 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none"
           >
             {saveMutation.isPending ? "Saving..." : "Save Final"}
           </button>
