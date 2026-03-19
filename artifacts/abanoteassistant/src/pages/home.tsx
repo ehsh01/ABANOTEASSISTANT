@@ -102,9 +102,11 @@ export default function Home() {
                 Generate Note
               </button>
             </Link>
-            <button className="w-full sm:w-auto px-8 py-4 bg-transparent border border-white/30 text-white rounded-full font-bold text-lg hover:bg-white/10 backdrop-blur-sm transition-all flex items-center justify-center gap-2">
-              View Past Notes
-            </button>
+            <Link to="/notes">
+              <button className="w-full sm:w-auto px-8 py-4 bg-transparent border border-white/30 text-white rounded-full font-bold text-lg hover:bg-white/10 backdrop-blur-sm transition-all flex items-center justify-center gap-2">
+                View Past Notes
+              </button>
+            </Link>
           </motion.div>
 
           {/* Trust badges */}
