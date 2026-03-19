@@ -428,27 +428,23 @@ function Step4People() {
 function Step5Env() {
   const { data, updateData } = useWizardStore();
 
-  // Track which items were selected via the dropdown so we can keep
-  // the dropdown selection in sync without stomping manual edits.
+  // Dropdown selections and manual notes are tracked independently.
+  // `environmentalChanges` is always derived from both — never read back
+  // from the store to infer either piece (avoids all sync ambiguity).
   const [dropdownSelected, setDropdownSelected] = useState<string[]>([]);
+  const [manualText, setManualText] = useState("");
+
+  const buildEnvChanges = (items: string[], manual: string): string =>
+    [items.join(", "), manual.trim()].filter(Boolean).join("\n\n");
 
   const handleDropdownChange = (items: string[]) => {
     setDropdownSelected(items);
-    // Build a text representation of the selected items, then append
-    // any manual text the user may have added after a separator line.
-    const manual = extractManualText(data.environmentalChanges || "", dropdownSelected);
-    const fromDropdown = items.length > 0 ? items.join(", ") : "";
-    const combined = [fromDropdown, manual].filter(Boolean).join("\n\n");
-    updateData({ environmentalChanges: combined });
+    updateData({ environmentalChanges: buildEnvChanges(items, manualText) });
   };
 
-  // Extract any free-text the user typed beyond the dropdown-driven portion
-  const extractManualText = (full: string, prevSelected: string[]) => {
-    if (prevSelected.length === 0) return full.trim();
-    const prefix = prevSelected.join(", ");
-    const after = full.startsWith(prefix) ? full.slice(prefix.length).trimStart() : full;
-    // Strip a leading blank line separator
-    return after.startsWith("\n") ? after.replace(/^\n+/, "") : after;
+  const handleManualChange = (text: string) => {
+    setManualText(text);
+    updateData({ environmentalChanges: buildEnvChanges(dropdownSelected, text) });
   };
 
   const handleToggleYes = () => {
@@ -457,6 +453,7 @@ function Step5Env() {
 
   const handleToggleNo = () => {
     setDropdownSelected([]);
+    setManualText("");
     updateData({ hasEnvironmentalChanges: false, environmentalChanges: "" });
   };
 
@@ -512,19 +509,19 @@ function Step5Env() {
                 />
               </div>
 
-              {/* Free-text area */}
+              {/* Free-text area — completely independent from dropdown */}
               <div>
                 <label className="block text-sm font-semibold text-foreground mb-1">
                   Additional notes{" "}
                   <span className="font-normal text-muted-foreground">(optional)</span>
                 </label>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Selections above are pre-filled here. Edit freely or add extra context.
+                  Add any context beyond the selections above. Both will be included in the note.
                 </p>
                 <textarea
-                  value={data.environmentalChanges || ""}
-                  onChange={(e) => updateData({ environmentalChanges: e.target.value })}
-                  placeholder="e.g., Client moved to a new house, new medication started…"
+                  value={manualText}
+                  onChange={(e) => handleManualChange(e.target.value)}
+                  placeholder="e.g., Client appeared unsettled at session start…"
                   className="w-full px-4 py-3 rounded-xl bg-background border-2 border-border text-foreground min-h-[100px] resize-y focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
                 />
               </div>
