@@ -148,7 +148,7 @@ export default function Clients() {
                 />
                 <Sparkles className="w-4 h-4 text-white relative z-10" />
               </div>
-              <span className="font-bold text-xl tracking-tight text-[#2D2523]">ABA Note Assistant</span>
+              <span className="font-extrabold text-base tracking-widest text-[#2D2523] uppercase">ABANOTEASSISTANT</span>
             </div>
           </Link>
 

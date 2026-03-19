@@ -22,7 +22,7 @@ export default function Home() {
               <div className="absolute inset-0 bg-gradient-to-t from-white/20 to-transparent rounded-lg" />
               <Sparkles className="w-4 h-4 text-white relative z-10" />
             </div>
-            <span className="font-bold text-xl tracking-tight text-[#2D2523]">ABA Note Assistant</span>
+            <span className="font-extrabold text-base tracking-widest text-[#2D2523] uppercase">ABANOTEASSISTANT</span>
           </div>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-[#877870]">
