@@ -151,3 +151,38 @@ echo "  2. Monitor: pm2 monit"
 echo "  3. Verify port: ss -tlnp | grep $PROD_PORT"
 echo "  4. Update nginx config if needed (see DEPLOYMENT.md)"
 echo ""
+
+# Step 5.5: Update ecosystem.config.js with actual values from .env
+echo "🔧 Step 5.5: Injecting environment variables into ecosystem.config.js..."
+if [ -f "artifacts/api-server/.env" ]; then
+  # Read DATABASE_URL and JWT_SECRET from .env
+  source artifacts/api-server/.env
+  
+  # Create a temporary ecosystem config with actual values
+  if [ -n "$DATABASE_URL" ] && [ -n "$JWT_SECRET" ]; then
+    # Use sed to replace placeholders in ecosystem.config.js
+    # This is safer than using process.env in PM2 config
+    sed -i.bak \
+      -e "s|DATABASE_URL: process.env.DATABASE_URL |||g" \
+      -e "s|DATABASE_URL: process.env.DATABASE_URL_STAGING |||g" \
+      -e "s|JWT_SECRET: process.env.JWT_SECRET |||g" \
+      -e "s|JWT_SECRET: process.env.JWT_SECRET_STAGING |||g" \
+      -e "s|\"postgresql://user:password@host:5432/dbname\"|\"$DATABASE_URL\"|g" \
+      -e "s|\"change-me-to-a-long-random-string-minimum-32-characters\"|\"$JWT_SECRET\"|g" \
+      ecosystem.config.js
+    
+    # For staging, use same values (or create separate .env.staging if needed)
+    sed -i.bak \
+      -e "s|DATABASE_URL_STAGING |||g" \
+      -e "s|JWT_SECRET_STAGING |||g" \
+      ecosystem.config.js || true
+    
+    echo "   ✅ Environment variables injected from .env"
+  else
+    echo "   ⚠️  DATABASE_URL or JWT_SECRET not found in .env"
+  fi
+else
+  echo "   ⚠️  .env file not found - using placeholder values"
+  echo "      Update ecosystem.config.js manually with actual values"
+fi
+echo ""
