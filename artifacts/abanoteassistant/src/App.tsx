@@ -8,6 +8,7 @@ import Result from "./pages/result";
 import Clients from "./pages/clients";
 import NewClient from "./pages/new-client";
 import Notes from "./pages/notes";
+import NoteDetail from "./pages/note-detail";
 import NotFound from "@/pages/not-found";
 
 // Initialize react-query client
@@ -29,6 +30,7 @@ function Router() {
       <Route path="/clients" component={Clients} />
       <Route path="/clients/new" component={NewClient} />
       <Route path="/notes" component={Notes} />
+      <Route path="/notes/:id" component={NoteDetail} />
       <Route component={NotFound} />
     </Switch>
   );
