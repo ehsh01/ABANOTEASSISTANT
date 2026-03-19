@@ -27,7 +27,7 @@ export default function Home() {
 
           <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-[#877870]">
             <span className="text-[#C27A8A]">Dashboard</span>
-            <span className="hover:text-[#2D2523] transition-colors cursor-pointer">Notes</span>
+            <Link href="/notes"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Notes</span></Link>
             <Link href="/clients"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Clients</span></Link>
           </div>
 
