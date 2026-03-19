@@ -21,7 +21,8 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 ```text
 artifacts-monorepo/
 ├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
+│   ├── api-server/         # Express API server
+│   └── abanoteassistant/   # ABA Note Assistant React frontend
 ├── lib/                    # Shared libraries
 │   ├── api-spec/           # OpenAPI spec + Orval codegen config
 │   ├── api-client-react/   # Generated React Query hooks
@@ -34,6 +35,46 @@ artifacts-monorepo/
 ├── tsconfig.json           # Root TS project references
 └── package.json            # Root package with hoisted devDeps
 ```
+
+## Applications
+
+### ABA Note Assistant (`artifacts/abanoteassistant`)
+
+A React + Vite web app for ABA (Applied Behavior Analysis) therapists to auto-generate session notes.
+
+**Pages / Routes:**
+- `/` — Home page with "Create Note with AI" CTA
+- `/wizard` — 8-step multi-step note generation wizard
+- `/result` — Generated note result screen with edit/save/copy actions
+
+**Wizard Steps:**
+1. Select Client (with assessment status checks)
+2. Session Length (1-8 hours)
+3. Session Date (date picker)
+4. Who Was Present (multi-select + custom tags)
+5. Environmental Changes (toggle + textarea)
+6. Replacement Programs (multi-select, primary vs supplemental)
+7. Next Session Date (optional)
+8. Review & Generate
+
+**Key Features:**
+- Full-screen loading overlay during generation (with 4-minute timeout support)
+- Inline editing of generated note
+- Copy to clipboard, Save Draft, Save Final actions
+- Warnings banner for API warnings
+- Error states: generic, structured, 409 conflict, network
+- Mobile-responsive with sticky footer navigation
+- Zustand state management for wizard flow
+- Mock API calls via `use-aba-api.ts` hooks (ready to wire to real backend)
+
+**API Fields collected (for backend):**
+- `clientId`, `sessionHours`, `sessionDate`, `presentPeople[]`
+- `hasEnvironmentalChanges`, `environmentalChanges`
+- `selectedReplacements[]`, `nextSessionDate`
+
+**State management:** `src/store/wizard-store.ts` (Zustand)
+**API hooks:** `src/hooks/use-aba-api.ts` (mock, ready for real API wiring)
+**Frontend packages:** zustand, framer-motion, lucide-react, date-fns, clsx, tailwind-merge
 
 ## TypeScript & Composite Projects
 
@@ -56,7 +97,10 @@ Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` 
 
 - Entry: `src/index.ts` — reads `PORT`, starts Express
 - App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
+- Routes: `src/routes/index.ts` mounts sub-routers
+  - `health.ts` — `GET /api/healthz`
+  - `clients.ts` — `GET /api/clients`, `GET /api/clients/:id`, `GET /api/clients/:id/programs`
+  - `notes.ts` — `POST /api/notes/generate`, `POST /api/notes/:id/save`
 - Depends on: `@workspace/db`, `@workspace/api-zod`
 - `pnpm --filter @workspace/api-server run dev` — run the dev server
 - `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
@@ -68,7 +112,6 @@ Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client insta
 
 - `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
 - `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
 - `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
 - Exports: `.` (pool, db, schema), `./schema` (schema only)
 
@@ -85,12 +128,23 @@ Run codegen: `pnpm --filter @workspace/api-spec run codegen`
 
 ### `lib/api-zod` (`@workspace/api-zod`)
 
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
+Generated Zod schemas from the OpenAPI spec. Used by `api-server` for response validation.
 
 ### `lib/api-client-react` (`@workspace/api-client-react`)
 
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
+Generated React Query hooks and fetch client from the OpenAPI spec.
 
 ### `scripts` (`@workspace/scripts`)
 
 Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+
+## API Contract (OpenAPI)
+
+All endpoints follow the pattern: `{ success: boolean, data: ..., error: string | null }`
+
+Key endpoints:
+- `GET /api/clients` — list all clients
+- `GET /api/clients/:id` — client detail
+- `GET /api/clients/:id/programs` — replacement programs for a client
+- `POST /api/notes/generate` — generate a session note (accepts `GenerateNoteRequest`)
+- `POST /api/notes/:id/save` — save a note as draft or final

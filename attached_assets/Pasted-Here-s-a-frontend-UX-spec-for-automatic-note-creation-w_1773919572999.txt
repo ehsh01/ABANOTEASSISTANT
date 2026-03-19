@@ -1,0 +1,66 @@
+Here’s a frontend / UX spec for automatic note creation—what Replit should design and build in the UI. Backend can stay in Cursor later.
+
+1. Entry & navigation
+Way to start “Create note with AI” / “Auto-generate note” from:
+Notes area (primary CTA or menu item), and/or
+Client profile (“Generate session note” for this client).
+Prerequisites surfaced in UI (copy only; backend will enforce):
+Client must exist.
+Assessment uploaded/processed (or clear empty state: “Upload assessment first”).
+Enough behaviors, interventions, and replacement programs for the chosen session length (or show requirements: e.g. “Need at least N of each for N hours”).
+2. Multi-step wizard (or equivalent)
+Design a clear flow with progress (steps 1→N) and Back / Next. Typical steps:
+
+Step	Purpose
+1. Client	Select client (search/select). Show client name, maybe age band.
+2. Session length	Whole number session hours (e.g. 1–8). Short help: “One ABC block per hour.”
+3. Session date	Date picker for session date.
+4. Who was present	Multi-select / tags: caregiver roles (Mother, Father, etc.) + ability to add custom names. Exclude or handle “who’s present” vs clinical narrative rules in copy if needed.
+5. Environment	Toggle: Environmental changes? If yes, text area for description; if no, clear “no changes” path.
+6. Replacement programs	Multi-select from client’s programs (or “select all / minimum for session”). Explain: primary vs supplemental if fewer programs than hours (supplemental = practiced but no client outcome in note—short tooltip).
+7. Next session	Optional next session date (for closing line of the note).
+8. Generate	Primary button: Generate note. Show that this may take up to a few minutes (loading state).
+(Step order can be adjusted for design; keep the data fields above.)
+
+3. Generate action & loading
+Long-running action: full-screen or prominent spinner / progress (“Generating note…”), disable double-submit.
+Optional: Cancel (if you support abort).
+Timeout messaging (client-side): if request exceeds ~4 minutes, show friendly timeout copy.
+4. Result: success
+Large text area or rich read view for the generated narrative (full session note).
+Actions:
+Copy to clipboard
+Edit (inline or navigate to editor)
+Save as draft / Save note (if product has drafts—your app does)
+Regenerate (optional second CTA; may hit limits—design “regenerate” vs “start over”)
+If API returns warnings (validation passed with warnings): non-blocking banner listing warnings.
+Optional: show metadata (session date, hours, client) in a sidebar or header.
+5. Result: errors
+Inline / toast / modal for failure:
+Generic: “Generation failed” + short reason.
+Structured errors: if server returns a list (e.g. pairing failed, validation), show bulleted list of messages.
+Auth: “Session expired — log in again.”
+Quota / billing (if applicable): dedicated message.
+409 / conflict style: “Couldn’t vary enough from recent notes — try again later” (design calm, actionable copy).
+6. Empty, loading, and edge states
+No client selected: disable Generate or prompt to select.
+No assessment: dedicated empty state with CTA to upload assessment.
+Insufficient programs/behaviors/interventions: show requirement text and link to client setup.
+Offline / network error: retry button.
+7. Settings the UI must collect (API-shaped)
+So Replit’s forms match what you’ll wire later:
+
+clientId
+sessionHours (number)
+sessionDate (string, ISO or mm/dd/yyyy as you prefer)
+presentPeople (string[])
+hasEnvironmentalChanges (boolean)
+environmentalChanges (string)
+selectedReplacements (string[] — program names)
+nextSessionDate (string)
+8. Optional but valuable UI
+Preview of “locked” session structure (advanced): after backend exists, “Session will include N scenarios” — not required for v1 design.
+Link to “Note rules” / Help (modal or page) summarizing: no invented behaviors, assessment-based, etc.—marketing/trust only.
+Mobile: wizard steps should work on small screens (stacked, sticky footer for Next/Generate).
+9. What NOT to put on Replit’s plate (backend later)
+OpenAI calls, pairing agent, validation engine, PDF extraction, DB, auth sessions, org billing, PM2, etc.

@@ -1,15 +1,18 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: ABA Note Assistant API specification
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: clients
+    description: Client operations
+  - name: notes
+    description: Note generation operations
 paths:
   /healthz:
     get:
@@ -24,6 +27,132 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /clients:
+    get:
+      operationId: listClients
+      tags: [clients]
+      summary: List all clients
+      responses:
+        "200":
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientListResponse"
+
+  /clients/{clientId}:
+    get:
+      operationId: getClient
+      tags: [clients]
+      summary: Get client by ID
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Client details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientDetailResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clients/{clientId}/programs:
+    get:
+      operationId: listClientPrograms
+      tags: [clients]
+      summary: List replacement programs for a client
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: List of programs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProgramListResponse"
+
+  /notes/generate:
+    post:
+      operationId: generateNote
+      tags: [notes]
+      summary: Generate a session note
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateNoteRequest"
+      responses:
+        "200":
+          description: Successfully generated note
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateNoteResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Conflict - could not vary enough from recent notes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Generation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /notes/{noteId}/save:
+    post:
+      operationId: saveNote
+      tags: [notes]
+      summary: Save a generated note as draft or final
+      parameters:
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveNoteRequest"
+      responses:
+        "200":
+          description: Note saved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SaveNoteResponse"
+        "404":
+          description: Note not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +163,214 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        error:
+          type: string
+        messages:
+          type: array
+          items:
+            type: string
+      required:
+        - success
+        - error
+
+    Client:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        ageBand:
+          type: string
+        hasAssessment:
+          type: boolean
+        assessmentStatus:
+          type: string
+          enum: [uploaded, processing, ready, missing]
+      required:
+        - id
+        - name
+        - hasAssessment
+        - assessmentStatus
+
+    ClientListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Client"
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    ClientDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/Client"
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    Program:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [primary, supplemental]
+        description:
+          type: string
+      required:
+        - id
+        - name
+        - type
+
+    ProgramListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Program"
+        minimumRequired:
+          type: integer
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+        - minimumRequired
+
+    GenerateNoteRequest:
+      type: object
+      properties:
+        clientId:
+          type: string
+        sessionHours:
+          type: integer
+          minimum: 1
+          maximum: 8
+        sessionDate:
+          type: string
+        presentPeople:
+          type: array
+          items:
+            type: string
+        hasEnvironmentalChanges:
+          type: boolean
+        environmentalChanges:
+          type: string
+        selectedReplacements:
+          type: array
+          items:
+            type: string
+        nextSessionDate:
+          type: string
+      required:
+        - clientId
+        - sessionHours
+        - sessionDate
+        - presentPeople
+        - hasEnvironmentalChanges
+        - selectedReplacements
+
+    GenerateNoteResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/GeneratedNote"
+        warnings:
+          type: array
+          items:
+            type: string
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    GeneratedNote:
+      type: object
+      properties:
+        noteId:
+          type: string
+        content:
+          type: string
+        clientId:
+          type: string
+        clientName:
+          type: string
+        sessionDate:
+          type: string
+        sessionHours:
+          type: integer
+        generatedAt:
+          type: string
+      required:
+        - noteId
+        - content
+        - clientId
+        - clientName
+        - sessionDate
+        - sessionHours
+        - generatedAt
+
+    SaveNoteRequest:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [draft, final]
+        content:
+          type: string
+      required:
+        - status
+        - content
+
+    SaveNoteResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            noteId:
+              type: string
+            status:
+              type: string
+          required:
+            - noteId
+            - status
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data

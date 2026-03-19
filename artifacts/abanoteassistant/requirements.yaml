@@ -1,0 +1,16 @@
+packages:
+  "framer-motion": "For smooth wizard step transitions and premium loading states"
+  "zustand": "For managing the complex 8-step wizard state seamlessly across components"
+  "date-fns": "For formatting dates in the result screen and review step"
+  "clsx": "For conditional class merging"
+  "tailwind-merge": "For merging tailwind classes safely"
+  "lucide-react": "For beautiful consistent iconography"
+
+images:
+  - path: "artifacts/abanoteassistant/public/images/auth-bg.png"
+    description: "Soft abstract gradient background in calm clinical blues and indigos, subtle geometric shapes, professional medical feel, light and airy"
+    aspect_ratio: "16:9"
+
+notes:
+  - Mocking API responses directly in wrapper hooks to guarantee functional UI as per instructions, simulating network delays.
+  - Using Zustand for global wizard state to avoid massive prop drilling across 8 steps.
