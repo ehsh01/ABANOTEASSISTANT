@@ -80,8 +80,7 @@ export default function Result() {
           <button 
             onClick={() => handleSave("final")}
             disabled={saveMutation.isPending}
-            className="flex items-center gap-2 px-6 py-2 rounded-lg bg-primary text-primary-foreground font-semibold shadow-md shadow-primary/30 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none"
-            style={{ background: "#9e5a6b" }}
+            className="flex items-center gap-2 px-6 py-2 rounded-lg bg-primary text-primary-foreground font-semibold ring-2 ring-white/50 shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none"
           >
             {saveMutation.isPending ? "Saving..." : "Save Final"}
           </button>
