@@ -12,17 +12,61 @@ pnpm --filter @workspace/api-server run build
 echo "⚙️  Updating ecosystem.config.js with .env values..."
 source artifacts/api-server/.env
 
-# Escape special characters in DATABASE_URL for sed
-DB_URL_ESCAPED=$(echo "$DATABASE_URL" | sed 's/[[\.*^$()+?{|]/\\&/g')
-JWT_ESCAPED=$(echo "$JWT_SECRET" | sed 's/[[\.*^$()+?{|]/\\&/g')
+# Use Node.js to properly update the config file (handles all special characters)
+node << 'NODE_SCRIPT'
+const fs = require('fs');
+const path = require('path');
 
-# Use a different delimiter (:) instead of | to avoid conflicts
-sed -i.bak \
-  -e "s|DATABASE_URL: process.env.DATABASE_URL |||g" \
-  -e "s|JWT_SECRET: process.env.JWT_SECRET |||g" \
-  -e "s:\"postgresql://user:password@host:5432/dbname\":\"$DATABASE_URL\":g" \
-  -e "s:\"change-me-to-a-long-random-string-minimum-32-characters\":\"$JWT_SECRET\":g" \
-  ecosystem.config.js
+// Read .env file
+const envPath = path.join(__dirname, 'artifacts/api-server/.env');
+const envContent = fs.readFileSync(envPath, 'utf8');
+const envVars = {};
+envContent.split('\n').forEach(line => {
+  const match = line.match(/^([^#=]+)=(.*)$/);
+  if (match) {
+    envVars[match[1].trim()] = match[2].trim();
+  }
+});
+
+// Read ecosystem.config.js
+const configPath = path.join(__dirname, 'ecosystem.config.js');
+let configContent = fs.readFileSync(configPath, 'utf8');
+
+// Replace placeholders
+const dbUrl = envVars.DATABASE_URL || '';
+const jwtSecret = envVars.JWT_SECRET || '';
+
+configContent = configContent.replace(
+  /DATABASE_URL: process\.env\.DATABASE_URL \|\| /g,
+  'DATABASE_URL: '
+);
+configContent = configContent.replace(
+  /JWT_SECRET: process\.env\.JWT_SECRET \|\| /g,
+  'JWT_SECRET: '
+);
+configContent = configContent.replace(
+  /"postgresql:\/\/user:password@host:5432\/dbname"/g,
+  `"${dbUrl}"`
+);
+configContent = configContent.replace(
+  /"change-me-to-a-long-random-string-minimum-32-characters"/g,
+  `"${jwtSecret}"`
+);
+
+// Also handle staging
+configContent = configContent.replace(
+  /DATABASE_URL: process\.env\.DATABASE_URL_STAGING \|\| process\.env\.DATABASE_URL \|\| /g,
+  'DATABASE_URL: '
+);
+configContent = configContent.replace(
+  /JWT_SECRET: process\.env\.JWT_SECRET_STAGING \|\| process\.env\.JWT_SECRET \|\| /g,
+  'JWT_SECRET: '
+);
+
+// Write back
+fs.writeFileSync(configPath, configContent);
+console.log('✅ Updated ecosystem.config.js');
+NODE_SCRIPT
 
 echo "📁 Creating logs directory..."
 mkdir -p logs
