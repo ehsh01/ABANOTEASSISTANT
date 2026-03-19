@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600;1,700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @plugin "@tailwindcss/typography";
@@ -68,81 +68,81 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* LIGHT MODE — Crystal: Modern Elevated Amethyst */
+/* LIGHT MODE — Bloom: Warm & Organic */
 :root {
-  --button-outline: rgba(107,63,160, .15);
-  --badge-outline: rgba(107,63,160, .08);
+  --button-outline: rgba(194,122,138, .15);
+  --badge-outline: rgba(194,122,138, .08);
   --opaque-button-border-intensity: -8;
-  --elevate-1: rgba(107,63,160, .04);
-  --elevate-2: rgba(107,63,160, .09);
+  --elevate-1: rgba(194,122,138, .04);
+  --elevate-2: rgba(194,122,138, .09);
 
   /* Backgrounds */
-  --background: 261 59% 97%;      /* #F6F3FC — near-white lavender */
-  --foreground: 240 28% 14%;      /* #1A1A2E — deep charcoal */
-  --border: 258 35% 88%;          /* soft lavender border */
+  --background: 30 60% 98%;       /* #FDFAF7 — warm cream */
+  --foreground: 12 12% 16%;       /* #2D2523 — warm charcoal */
+  --border: 12 34% 91%;           /* #F0E4E1 — soft blush */
 
   /* Cards */
   --card: 0 0% 100%;
-  --card-foreground: 240 28% 14%;
-  --card-border: 258 35% 88%;
+  --card-foreground: 12 12% 16%;
+  --card-border: 12 34% 91%;
 
   /* Brand Colors */
-  --primary: 267 43% 44%;         /* #6B3FA0 — deep amethyst */
+  --primary: 347 37% 62%;         /* #C27A8A — dusty rose */
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 258 40% 93%;       /* very light lavender for chips/bg */
-  --secondary-foreground: 267 43% 44%;
+  --secondary: 120 20% 93%;       /* very light sage tint for chips/bg */
+  --secondary-foreground: 120 20% 30%;
 
-  --muted: 258 30% 94%;
-  --muted-foreground: 248 15% 42%; /* #5E5A7A */
+  --muted: 30 40% 95%;            /* warm light cream */
+  --muted-foreground: 21 9% 48%;  /* #877870 — warm gray */
 
-  --accent: 258 53% 81%;          /* #C4B5E8 — soft lavender */
-  --accent-foreground: 267 43% 44%;
+  --accent: 120 16% 56%;          /* #7BA07B — sage green */
+  --accent-foreground: 0 0% 100%;
 
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 100%;
 
   /* UI Elements */
-  --input: 258 35% 88%;
-  --ring: 267 43% 44%;
+  --input: 12 34% 91%;
+  --ring: 347 37% 62%;
 
   /* Sidebar / Popover */
   --sidebar: 0 0% 100%;
-  --sidebar-foreground: 240 28% 14%;
-  --sidebar-border: 258 35% 88%;
-  --sidebar-primary: 267 43% 44%;
+  --sidebar-foreground: 12 12% 16%;
+  --sidebar-border: 12 34% 91%;
+  --sidebar-primary: 347 37% 62%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 258 30% 94%;
-  --sidebar-accent-foreground: 240 28% 14%;
-  --sidebar-ring: 267 43% 44%;
+  --sidebar-accent: 30 40% 95%;
+  --sidebar-accent-foreground: 12 12% 16%;
+  --sidebar-ring: 347 37% 62%;
 
   --popover: 0 0% 100%;
-  --popover-foreground: 240 28% 14%;
-  --popover-border: 258 35% 88%;
+  --popover-foreground: 12 12% 16%;
+  --popover-border: 12 34% 91%;
 
   /* Charts */
-  --chart-1: 267 43% 44%;
-  --chart-2: 258 53% 81%;
-  --chart-3: 280 65% 60%;
-  --chart-4: 250 80% 60%;
-  --chart-5: 300 50% 55%;
+  --chart-1: 347 37% 62%;
+  --chart-2: 120 16% 56%;
+  --chart-3: 12 34% 75%;
+  --chart-4: 30 50% 70%;
+  --chart-5: 347 25% 78%;
 
   /* Fonts & Radius */
   --app-font-sans: 'Plus Jakarta Sans', sans-serif;
-  --app-font-display: 'Plus Jakarta Sans', sans-serif;
-  --app-font-serif: Georgia, serif;
+  --app-font-display: 'Playfair Display', Georgia, serif;
+  --app-font-serif: 'Playfair Display', Georgia, serif;
   --app-font-mono: Menlo, monospace;
 
   --radius: 0.75rem;
 
-  --shadow-2xs: 0 1px 2px 0 rgb(107 63 160 / 0.04);
-  --shadow-xs: 0 1px 3px 0 rgb(107 63 160 / 0.08), 0 1px 2px -1px rgb(107 63 160 / 0.08);
-  --shadow-sm: 0 4px 6px -1px rgb(107 63 160 / 0.08), 0 2px 4px -2px rgb(107 63 160 / 0.06);
-  --shadow: 0 4px 6px -1px rgb(107 63 160 / 0.1), 0 2px 4px -2px rgb(107 63 160 / 0.08);
-  --shadow-md: 0 10px 15px -3px rgb(107 63 160 / 0.1), 0 4px 6px -4px rgb(107 63 160 / 0.08);
-  --shadow-lg: 0 20px 25px -5px rgb(107 63 160 / 0.12), 0 8px 10px -6px rgb(107 63 160 / 0.08);
-  --shadow-xl: 0 25px 50px -12px rgb(107 63 160 / 0.2);
-  --shadow-2xl: 0 35px 60px -15px rgb(107 63 160 / 0.25);
+  --shadow-2xs: 0 1px 2px 0 rgb(194 122 138 / 0.04);
+  --shadow-xs: 0 1px 3px 0 rgb(194 122 138 / 0.08), 0 1px 2px -1px rgb(194 122 138 / 0.06);
+  --shadow-sm: 0 4px 6px -1px rgb(194 122 138 / 0.08), 0 2px 4px -2px rgb(194 122 138 / 0.05);
+  --shadow: 0 4px 6px -1px rgb(194 122 138 / 0.1), 0 2px 4px -2px rgb(194 122 138 / 0.07);
+  --shadow-md: 0 10px 15px -3px rgb(194 122 138 / 0.1), 0 4px 6px -4px rgb(194 122 138 / 0.07);
+  --shadow-lg: 0 20px 25px -5px rgb(194 122 138 / 0.12), 0 8px 10px -6px rgb(194 122 138 / 0.06);
+  --shadow-xl: 0 25px 50px -12px rgb(194 122 138 / 0.18);
+  --shadow-2xl: 0 35px 60px -15px rgb(194 122 138 / 0.22);
 
   --tracking-normal: -0.01em;
   --spacing: 0.25rem;
@@ -157,56 +157,56 @@
 }
 
 .dark {
-  --button-outline: rgba(196,181,232, .12);
-  --badge-outline: rgba(196,181,232, .06);
+  --button-outline: rgba(240,228,225, .12);
+  --badge-outline: rgba(240,228,225, .06);
   --opaque-button-border-intensity: 9;
-  --elevate-1: rgba(196,181,232, .04);
-  --elevate-2: rgba(196,181,232, .09);
+  --elevate-1: rgba(240,228,225, .04);
+  --elevate-2: rgba(240,228,225, .09);
 
-  --background: 256 40% 8%;       /* very deep purple-dark */
-  --foreground: 258 40% 96%;
-  --border: 258 25% 20%;
+  --background: 12 15% 10%;       /* deep warm dark */
+  --foreground: 30 40% 94%;
+  --border: 12 15% 22%;
 
-  --card: 256 35% 12%;
-  --card-foreground: 258 40% 96%;
-  --card-border: 258 25% 20%;
+  --card: 12 12% 14%;
+  --card-foreground: 30 40% 94%;
+  --card-border: 12 15% 22%;
 
-  --primary: 267 55% 65%;         /* lighter amethyst for dark mode */
-  --primary-foreground: 256 40% 8%;
+  --primary: 347 40% 70%;         /* lighter dusty rose for dark mode */
+  --primary-foreground: 12 15% 10%;
 
-  --secondary: 258 25% 20%;
-  --secondary-foreground: 258 40% 96%;
+  --secondary: 12 10% 20%;
+  --secondary-foreground: 30 40% 94%;
 
-  --muted: 258 25% 18%;
-  --muted-foreground: 248 20% 65%;
+  --muted: 12 10% 18%;
+  --muted-foreground: 21 12% 62%;
 
-  --accent: 258 40% 30%;
-  --accent-foreground: 258 53% 81%;
+  --accent: 120 18% 45%;
+  --accent-foreground: 30 40% 94%;
 
   --destructive: 0 62% 30%;
   --destructive-foreground: 0 0% 100%;
 
-  --input: 258 25% 20%;
-  --ring: 267 55% 65%;
+  --input: 12 15% 22%;
+  --ring: 347 40% 70%;
 
-  --sidebar: 256 35% 10%;
-  --sidebar-foreground: 258 40% 96%;
-  --sidebar-border: 258 25% 20%;
-  --sidebar-primary: 267 55% 65%;
-  --sidebar-primary-foreground: 256 40% 8%;
-  --sidebar-accent: 258 25% 18%;
-  --sidebar-accent-foreground: 258 40% 96%;
-  --sidebar-ring: 267 55% 65%;
+  --sidebar: 12 12% 12%;
+  --sidebar-foreground: 30 40% 94%;
+  --sidebar-border: 12 15% 22%;
+  --sidebar-primary: 347 40% 70%;
+  --sidebar-primary-foreground: 12 15% 10%;
+  --sidebar-accent: 12 10% 18%;
+  --sidebar-accent-foreground: 30 40% 94%;
+  --sidebar-ring: 347 40% 70%;
 
-  --popover: 256 35% 12%;
-  --popover-foreground: 258 40% 96%;
-  --popover-border: 258 25% 20%;
+  --popover: 12 12% 14%;
+  --popover-foreground: 30 40% 94%;
+  --popover-border: 12 15% 22%;
 
-  --chart-1: 267 55% 65%;
-  --chart-2: 258 53% 81%;
-  --chart-3: 280 65% 60%;
-  --chart-4: 250 80% 60%;
-  --chart-5: 300 50% 55%;
+  --chart-1: 347 40% 70%;
+  --chart-2: 120 18% 55%;
+  --chart-3: 12 34% 65%;
+  --chart-4: 30 45% 65%;
+  --chart-5: 347 25% 75%;
 }
 
 @layer base {
@@ -291,19 +291,19 @@
     inset: -1px;
   }
 
-  /* Crystal gradient text utility */
-  .crystal-gradient-text {
-    background: linear-gradient(135deg, #ffffff 0%, #C4B5E8 100%);
+  /* Bloom gradient text utility */
+  .bloom-gradient-text {
+    background: linear-gradient(135deg, #ffffff 0%, #F0E4E1 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
 
-  /* Amethyst glow utility */
-  .amethyst-glow {
-    box-shadow: 0 8px 25px rgba(107, 63, 160, 0.3);
+  /* Dusty rose glow utility */
+  .rose-glow {
+    box-shadow: 0 8px 25px rgba(194, 122, 138, 0.3);
   }
-  .amethyst-glow:hover {
-    box-shadow: 0 12px 35px rgba(107, 63, 160, 0.4);
+  .rose-glow:hover {
+    box-shadow: 0 12px 35px rgba(194, 122, 138, 0.4);
   }
 }
