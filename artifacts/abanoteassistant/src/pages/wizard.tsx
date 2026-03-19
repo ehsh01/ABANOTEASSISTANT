@@ -426,25 +426,33 @@ function Step4People() {
 }
 
 function Step5Env() {
-  const { data, updateData } = useWizardStore();
+  const { data, updateData, selectedEnvChanges, setSelectedEnvChanges } = useWizardStore();
 
-  // Dropdown selections and manual notes are tracked independently.
-  // `environmentalChanges` is always derived from both — never read back
-  // from the store to infer either piece (avoids all sync ambiguity).
-  const [dropdownSelected, setDropdownSelected] = useState<string[]>([]);
-  const [manualText, setManualText] = useState("");
+  // Build the textarea value from dropdown items (comma-joined) + any manual
+  // text the user typed after them. Dropdown items are always the "prefix" of
+  // the textarea, separated from extra notes by a blank line.
+  const buildTextareaValue = (items: string[], extra: string): string =>
+    [items.length > 0 ? items.join(", ") : "", extra.trim()].filter(Boolean).join("\n\n");
 
-  const buildEnvChanges = (items: string[], manual: string): string =>
-    [items.join(", "), manual.trim()].filter(Boolean).join("\n\n");
-
-  const handleDropdownChange = (items: string[]) => {
-    setDropdownSelected(items);
-    updateData({ environmentalChanges: buildEnvChanges(items, manualText) });
+  // Extract the manual text that lives after the dropdown-driven prefix.
+  // Uses the STORE's selectedEnvChanges so the old prefix is always known exactly.
+  const extractManualSuffix = (fullText: string, prevItems: string[]): string => {
+    if (prevItems.length === 0) return fullText;
+    const prefix = prevItems.join(", ");
+    if (!fullText.startsWith(prefix)) return fullText;
+    return fullText.slice(prefix.length).replace(/^\n+/, "");
   };
 
-  const handleManualChange = (text: string) => {
-    setManualText(text);
-    updateData({ environmentalChanges: buildEnvChanges(dropdownSelected, text) });
+  const handleDropdownChange = (newItems: string[]) => {
+    // Keep whatever the user manually typed after the old prefix.
+    const manualSuffix = extractManualSuffix(data.environmentalChanges ?? "", selectedEnvChanges);
+    setSelectedEnvChanges(newItems);
+    updateData({ environmentalChanges: buildTextareaValue(newItems, manualSuffix) });
+  };
+
+  // Textarea is fully editable — user can type freely anywhere in it.
+  const handleTextareaChange = (text: string) => {
+    updateData({ environmentalChanges: text });
   };
 
   const handleToggleYes = () => {
@@ -452,8 +460,7 @@ function Step5Env() {
   };
 
   const handleToggleNo = () => {
-    setDropdownSelected([]);
-    setManualText("");
+    setSelectedEnvChanges([]);
     updateData({ hasEnvironmentalChanges: false, environmentalChanges: "" });
   };
 
@@ -504,24 +511,24 @@ function Step5Env() {
                   Select from common changes
                 </label>
                 <EnvChangeMultiSelect
-                  selected={dropdownSelected}
+                  selected={selectedEnvChanges}
                   onChange={handleDropdownChange}
                 />
               </div>
 
-              {/* Free-text area — completely independent from dropdown */}
+              {/* Free-text area — pre-filled with dropdown selections, freely editable */}
               <div>
                 <label className="block text-sm font-semibold text-foreground mb-1">
-                  Additional notes{" "}
-                  <span className="font-normal text-muted-foreground">(optional)</span>
+                  Description{" "}
+                  <span className="font-normal text-muted-foreground">(edit freely)</span>
                 </label>
                 <p className="text-xs text-muted-foreground mb-2">
-                  Add any context beyond the selections above. Both will be included in the note.
+                  Selections above are inserted here automatically. Add more context or edit as needed.
                 </p>
                 <textarea
-                  value={manualText}
-                  onChange={(e) => handleManualChange(e.target.value)}
-                  placeholder="e.g., Client appeared unsettled at session start…"
+                  value={data.environmentalChanges ?? ""}
+                  onChange={(e) => handleTextareaChange(e.target.value)}
+                  placeholder="Select changes above or describe them here…"
                   className="w-full px-4 py-3 rounded-xl bg-background border-2 border-border text-foreground min-h-[100px] resize-y focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
                 />
               </div>
