@@ -770,7 +770,7 @@ export default function Wizard() {
       <header className="bg-card border-b border-border sticky top-0 z-10 px-4 sm:px-6 lg:px-8 h-16 flex flex-col justify-center">
         <div className="flex items-center justify-between mb-1">
           <button onClick={handleBack} className="text-sm font-semibold text-muted-foreground hover:text-foreground flex items-center">
-            <ChevronLeft className="w-4 h-4 mr-1 pop-icon-white" /> Back
+            <ChevronLeft className="w-4 h-4 mr-1 pop-icon" /> Back
           </button>
           <span className="text-sm font-bold text-foreground font-display">Step {step} of {totalSteps}</span>
           <button onClick={() => setLocation("/")} className="text-sm font-semibold text-muted-foreground hover:text-foreground">
