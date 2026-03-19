@@ -1,10 +1,215 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown } from "lucide-react";
 import { useWizardStore } from "@/store/wizard-store";
 import { useClients, useClientPrograms, useGenerateSessionNote } from "@/hooks/use-aba-api";
 import { cn } from "@/lib/utils";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+
+// ─── Environmental change options ────────────────────────────────────────────
+const ENV_CHANGE_OPTIONS: { group: string; items: string[] }[] = [
+  {
+    group: "Life Events",
+    items: [
+      "Major global or local events",
+      "Moved to a new house",
+      "New analyst",
+      "New BCaBA",
+      "New items in the environment",
+      "New personal items",
+      "New pet",
+    ],
+  },
+  {
+    group: "Social & Family",
+    items: [
+      "Fight with a schoolmate",
+      "Holidays or special events",
+      "House renovations or re-decoration",
+      "Illness or injury",
+      "Introduction of a new behavioral plan",
+      "Loss of a family member or friend",
+      "Loss of a pet",
+    ],
+  },
+  {
+    group: "Schedule & Activities",
+    items: [
+      "Child didn't attend school",
+      "Dentist's visit",
+      "Disruptions due to emergencies or natural disasters",
+      "Doctor's visit",
+      "Family preparing to travel",
+      "Fight with a family member",
+      "Fight with a peer",
+    ],
+  },
+  {
+    group: "Environment & Routine",
+    items: [
+      "Change in technology use or access",
+      "Changes in ambient odor",
+      "Changes in diet",
+      "Changes in parental attention",
+      "Changes in peer group or social dynamics",
+      "Changes in sleep routine",
+      "Changes in weather or seasons",
+    ],
+  },
+  {
+    group: "Transitions",
+    items: [
+      "Birth of a sibling",
+      "Change in care provider",
+      "Change in daily routine",
+      "Change in legal custody or living arrangements",
+      "Change in school/teacher",
+      "Change in service area",
+    ],
+  },
+  {
+    group: "Personal Development",
+    items: [
+      "New RBT",
+      "New sibling",
+      "New stepfather",
+      "New stepmother",
+      "Puberty",
+      "Returning from vacation",
+      "Start of a new medication",
+    ],
+  },
+];
+
+// ─── Multi-select dropdown component ─────────────────────────────────────────
+function EnvChangeMultiSelect({
+  selected,
+  onChange,
+}: {
+  selected: string[];
+  onChange: (items: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  const toggle = (item: string) => {
+    if (selected.includes(item)) {
+      onChange(selected.filter((s) => s !== item));
+    } else {
+      onChange([...selected, item]);
+    }
+  };
+
+  const remove = (item: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onChange(selected.filter((s) => s !== item));
+  };
+
+  return (
+    <div className="space-y-3">
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            ref={triggerRef}
+            type="button"
+            role="combobox"
+            aria-expanded={open}
+            className={cn(
+              "w-full flex items-center justify-between px-4 py-3 rounded-xl bg-background border-2 text-sm font-medium transition-all",
+              open
+                ? "border-primary ring-4 ring-primary/10"
+                : "border-border hover:border-primary/50",
+              "text-left"
+            )}
+          >
+            <span className={selected.length === 0 ? "text-muted-foreground" : "text-foreground"}>
+              {selected.length === 0
+                ? "Select changes from the list…"
+                : `${selected.length} change${selected.length > 1 ? "s" : ""} selected`}
+            </span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground" />
+          </button>
+        </PopoverTrigger>
+
+        <PopoverContent
+          className="p-0 w-[var(--radix-popover-trigger-width)] max-w-none"
+          align="start"
+          sideOffset={6}
+          style={{ width: triggerRef.current?.offsetWidth }}
+        >
+          <Command>
+            <CommandInput placeholder="Search changes…" />
+            <CommandList className="max-h-72">
+              <CommandEmpty>No results found.</CommandEmpty>
+              {ENV_CHANGE_OPTIONS.map((group) => (
+                <CommandGroup key={group.group} heading={group.group}>
+                  {group.items.map((item) => {
+                    const isSelected = selected.includes(item);
+                    return (
+                      <CommandItem
+                        key={item}
+                        value={item}
+                        onSelect={() => toggle(item)}
+                        className="cursor-pointer"
+                      >
+                        <div
+                          className={cn(
+                            "mr-2 flex h-4 w-4 items-center justify-center rounded border transition-colors",
+                            isSelected
+                              ? "bg-primary border-primary text-primary-foreground"
+                              : "border-muted-foreground/40 bg-background"
+                          )}
+                        >
+                          {isSelected && <Check className="h-3 w-3" />}
+                        </div>
+                        {item}
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              ))}
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+
+      {/* Selected chips */}
+      {selected.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {selected.map((item) => (
+            <span
+              key={item}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20"
+            >
+              {item}
+              <button
+                type="button"
+                onClick={(e) => remove(item, e)}
+                className="hover:text-destructive transition-colors ml-0.5"
+                aria-label={`Remove ${item}`}
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // --- WIZARD STEPS COMPONENTS ---
 
@@ -223,16 +428,48 @@ function Step4People() {
 function Step5Env() {
   const { data, updateData } = useWizardStore();
 
+  // Track which items were selected via the dropdown so we can keep
+  // the dropdown selection in sync without stomping manual edits.
+  const [dropdownSelected, setDropdownSelected] = useState<string[]>([]);
+
+  const handleDropdownChange = (items: string[]) => {
+    setDropdownSelected(items);
+    // Build a text representation of the selected items, then append
+    // any manual text the user may have added after a separator line.
+    const manual = extractManualText(data.environmentalChanges || "", dropdownSelected);
+    const fromDropdown = items.length > 0 ? items.join(", ") : "";
+    const combined = [fromDropdown, manual].filter(Boolean).join("\n\n");
+    updateData({ environmentalChanges: combined });
+  };
+
+  // Extract any free-text the user typed beyond the dropdown-driven portion
+  const extractManualText = (full: string, prevSelected: string[]) => {
+    if (prevSelected.length === 0) return full.trim();
+    const prefix = prevSelected.join(", ");
+    const after = full.startsWith(prefix) ? full.slice(prefix.length).trimStart() : full;
+    // Strip a leading blank line separator
+    return after.startsWith("\n") ? after.replace(/^\n+/, "") : after;
+  };
+
+  const handleToggleYes = () => {
+    updateData({ hasEnvironmentalChanges: true });
+  };
+
+  const handleToggleNo = () => {
+    setDropdownSelected([]);
+    updateData({ hasEnvironmentalChanges: false, environmentalChanges: "" });
+  };
+
   return (
     <div className="space-y-8 max-w-2xl mx-auto">
       <div className="text-center mb-8">
         <h2 className="text-3xl font-display font-bold text-foreground">Environmental Changes</h2>
-        <p className="text-muted-foreground mt-2">Were there any changes in the environment?</p>
+        <p className="text-muted-foreground mt-2">Were there any changes in the environment during this session?</p>
       </div>
 
       <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
         <button
-          onClick={() => updateData({ hasEnvironmentalChanges: false, environmentalChanges: "" })}
+          onClick={handleToggleNo}
           className={cn(
             "p-6 rounded-2xl border-2 font-semibold text-lg transition-all hover-elevate",
             data.hasEnvironmentalChanges === false
@@ -243,7 +480,7 @@ function Step5Env() {
           No
         </button>
         <button
-          onClick={() => updateData({ hasEnvironmentalChanges: true })}
+          onClick={handleToggleYes}
           className={cn(
             "p-6 rounded-2xl border-2 font-semibold text-lg transition-all hover-elevate",
             data.hasEnvironmentalChanges === true
@@ -263,14 +500,34 @@ function Step5Env() {
             exit={{ opacity: 0, height: 0, marginTop: 0 }}
             className="overflow-hidden"
           >
-            <div className="bg-card p-6 rounded-2xl border border-border shadow-sm">
-              <label className="block text-sm font-semibold text-foreground mb-2">Describe the changes</label>
-              <textarea
-                value={data.environmentalChanges || ""}
-                onChange={(e) => updateData({ environmentalChanges: e.target.value })}
-                placeholder="e.g., Client moved to a new house, new medication started, etc."
-                className="w-full px-4 py-3 rounded-xl bg-background border-2 border-border text-foreground min-h-[120px] resize-y focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
-              />
+            <div className="bg-card p-6 rounded-2xl border border-border shadow-sm space-y-5">
+              {/* Dropdown multi-select */}
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-2">
+                  Select from common changes
+                </label>
+                <EnvChangeMultiSelect
+                  selected={dropdownSelected}
+                  onChange={handleDropdownChange}
+                />
+              </div>
+
+              {/* Free-text area */}
+              <div>
+                <label className="block text-sm font-semibold text-foreground mb-1">
+                  Additional notes{" "}
+                  <span className="font-normal text-muted-foreground">(optional)</span>
+                </label>
+                <p className="text-xs text-muted-foreground mb-2">
+                  Selections above are pre-filled here. Edit freely or add extra context.
+                </p>
+                <textarea
+                  value={data.environmentalChanges || ""}
+                  onChange={(e) => updateData({ environmentalChanges: e.target.value })}
+                  placeholder="e.g., Client moved to a new house, new medication started…"
+                  className="w-full px-4 py-3 rounded-xl bg-background border-2 border-border text-foreground min-h-[100px] resize-y focus:outline-none focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all"
+                />
+              </div>
             </div>
           </motion.div>
         )}
