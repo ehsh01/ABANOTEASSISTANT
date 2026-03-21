@@ -9,6 +9,7 @@ import Clients from "./pages/clients";
 import NewClient, { EditClientPage } from "./pages/new-client";
 import Notes from "./pages/notes";
 import NoteDetail from "./pages/note-detail";
+import ClientDetail from "./pages/client-detail";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
@@ -51,6 +52,7 @@ function AuthenticatedRoutes() {
           <Route path="/result" component={Result} />
           <Route path="/clients/edit/:clientId" component={EditClientPage} />
           <Route path="/clients/new" component={NewClient} />
+          <Route path="/clients/:clientId" component={ClientDetail} />
           <Route path="/clients" component={Clients} />
           <Route path="/new-client" component={NewClient} />
           <Route path="/notes" component={Notes} />

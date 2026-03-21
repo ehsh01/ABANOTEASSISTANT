@@ -197,15 +197,26 @@ function ClientCard({ client }: { client: Client }) {
           <Clock className="w-3.5 h-3.5 pop-icon" />
           DOB: {d.dateOfBirth || "—"}
         </div>
-        <Link href={`/wizard?clientId=${client.id}`}>
-          <button
-            type="button"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#C27A8A] hover:bg-[#C27A8A] hover:text-white hover:border-[#C27A8A] transition-all"
-          >
-            <FileText className="w-3.5 h-3.5" />
-            Add Note
-          </button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href={`/clients/${client.id}`}>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#877870] hover:border-[#C27A8A] hover:text-[#C27A8A] transition-all"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+              View
+            </button>
+          </Link>
+          <Link href={`/wizard?clientId=${client.id}`}>
+            <button
+              type="button"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#C27A8A] hover:bg-[#C27A8A] hover:text-white hover:border-[#C27A8A] transition-all"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              Add Note
+            </button>
+          </Link>
+        </div>
       </div>
     </motion.div>
   );
