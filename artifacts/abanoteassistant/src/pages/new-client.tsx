@@ -910,39 +910,39 @@ function NewClientForm({
                   <Step3SingleSection section={editSection} data={step3} onChange={setStep3} />
                 </div>
               )}
+
+              <div className="mt-8 flex flex-col gap-2">
+                {saveError && (
+                  <p className="text-sm text-rose-600 font-medium">{saveError}</p>
+                )}
+                <div className="flex items-center gap-4">
+                  <button
+                    type="button"
+                    onClick={handleSectionSave}
+                    disabled={!canSaveSection() || saving}
+                    className="flex items-center gap-2 px-7 py-3 rounded-xl font-bold text-white transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
+                    style={{ background: "#C27A8A", boxShadow: "0 8px 20px rgba(194,122,138,0.25)" }}
+                  >
+                    {saving ? (
+                      "Saving…"
+                    ) : (
+                      <>
+                        <User className="w-4 h-4 pop-icon-white" /> Save changes
+                      </>
+                    )}
+                  </button>
+                  <span className="text-sm text-[#877870] font-medium">
+                    {editSection === "personal"
+                      ? canSaveSection()
+                        ? "Looking good!"
+                        : "Fill in all fields to save"
+                      : "Press Enter or + to add each item"}
+                  </span>
+                </div>
+              </div>
             </motion.div>
           </AnimatePresence>
         </main>
-
-        <div className="sticky bottom-0 bg-white/95 backdrop-blur border-t border-[#F0E4E1] px-4 sm:px-6 py-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          {saveError && (
-            <p className="text-sm text-rose-600 font-medium order-first sm:order-none sm:flex-1 sm:min-w-0 sm:mr-4">
-              {saveError}
-            </p>
-          )}
-          <span className="text-sm text-[#877870] font-medium">
-            {editSection === "personal"
-              ? canSaveSection()
-                ? "Looking good!"
-                : "Fill in all fields to save"
-              : "Press Enter or + to add each item"}
-          </span>
-          <button
-            type="button"
-            onClick={handleSectionSave}
-            disabled={!canSaveSection() || saving}
-            className="flex items-center gap-2 px-7 py-3 rounded-xl font-bold text-white transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
-            style={{ background: "#C27A8A", boxShadow: "0 8px 20px rgba(194,122,138,0.25)" }}
-          >
-            {saving ? (
-              "Saving…"
-            ) : (
-              <>
-                <User className="w-4 h-4 pop-icon-white" /> Save changes
-              </>
-            )}
-          </button>
-        </div>
       </div>
     );
   }
@@ -1020,45 +1020,44 @@ function NewClientForm({
               />
             )}
             {step === 3 && <Step3 data={step3} onChange={setStep3} />}
+
+            <div className="mt-8 flex flex-col gap-2">
+              {saveError && (
+                <p className="text-sm text-rose-600 font-medium">{saveError}</p>
+              )}
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={handleNext}
+                  disabled={!canContinue() || saving}
+                  className="flex items-center gap-2 px-7 py-3 rounded-xl font-bold text-white transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
+                  style={{ background: "#C27A8A", boxShadow: "0 8px 20px rgba(194,122,138,0.25)" }}
+                >
+                  {saving ? (
+                    <>Saving...</>
+                  ) : step === 3 ? (
+                    <>
+                      <User className="w-4 h-4 pop-icon-white" /> {isEdit ? "Save changes" : "Save Client"}
+                    </>
+                  ) : (
+                    <>
+                      Next <ChevronRight className="w-4 h-4 pop-icon-white" />
+                    </>
+                  )}
+                </button>
+                <span className="text-sm text-[#877870] font-medium">
+                  {step === 2 &&
+                    !step2.file &&
+                    (priorAssessmentFileName
+                      ? "Keeping current PDF unless you upload a new one"
+                      : "You can skip this step")}
+                  {step === 3 && "Press Enter or + to add each item"}
+                  {step === 1 && (canContinue() ? "Looking good!" : "Fill in all fields to continue")}
+                </span>
+              </div>
+            </div>
           </motion.div>
         </AnimatePresence>
       </main>
-
-      {/* Bottom action bar */}
-      <div className="sticky bottom-0 bg-white/95 backdrop-blur border-t border-[#F0E4E1] px-4 sm:px-6 py-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        {saveError && (
-          <p className="text-sm text-rose-600 font-medium order-first sm:order-none sm:flex-1 sm:min-w-0 sm:mr-4">
-            {saveError}
-          </p>
-        )}
-        <span className="text-sm text-[#877870] font-medium">
-          {step === 2 &&
-            !step2.file &&
-            (priorAssessmentFileName
-              ? "Keeping current PDF unless you upload a new one"
-              : "You can skip this step")}
-          {step === 3 && "Press Enter or + to add each item"}
-          {step === 1 && (canContinue() ? "Looking good!" : "Fill in all fields to continue")}
-        </span>
-        <button
-          onClick={handleNext}
-          disabled={!canContinue() || saving}
-          className="flex items-center gap-2 px-7 py-3 rounded-xl font-bold text-white transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
-          style={{ background: "#C27A8A", boxShadow: "0 8px 20px rgba(194,122,138,0.25)" }}
-        >
-          {saving ? (
-            <>Saving...</>
-          ) : step === 3 ? (
-            <>
-              <User className="w-4 h-4 pop-icon-white" /> {isEdit ? "Save changes" : "Save Client"}
-            </>
-          ) : (
-            <>
-              Next <ChevronRight className="w-4 h-4 pop-icon-white" />
-            </>
-          )}
-        </button>
-      </div>
     </div>
   );
 }
