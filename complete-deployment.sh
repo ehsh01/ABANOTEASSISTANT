@@ -24,10 +24,32 @@ if [ -d "$BCRYPT_DIR" ] && [ ! -f "$BCRYPT_DIR/lib/binding/napi-v3/bcrypt_lib.no
 fi
 
 echo "🗄️  Database schema (drizzle push)..."
-set -a
-# shellcheck source=/dev/null
-source artifacts/api-server/.env
-set +a
+# Load only DATABASE_URL by scanning lines — avoids `source .env` failing when another
+# line has a bash syntax issue (e.g. unclosed quote, stray newline).
+ENV_FILE="artifacts/api-server/.env"
+if [ ! -f "$ENV_FILE" ]; then
+  echo "❌ Missing $ENV_FILE"
+  exit 1
+fi
+DATABASE_URL=""
+while IFS= read -r line || [ -n "$line" ]; do
+  [[ "$line" =~ ^[[:space:]]*# ]] && continue
+  [[ -z "${line// }" ]] && continue
+  if [[ "$line" =~ ^[[:space:]]*DATABASE_URL[[:space:]]*= ]]; then
+    DATABASE_URL="${line#*=}"
+    DATABASE_URL="${DATABASE_URL#"${DATABASE_URL%%[![:space:]]*}"}"
+    DATABASE_URL="${DATABASE_URL%"${DATABASE_URL##*[![:space:]]}"}"
+    DATABASE_URL="${DATABASE_URL#\"}"
+    DATABASE_URL="${DATABASE_URL%\"}"
+    DATABASE_URL="${DATABASE_URL#\'}"
+    DATABASE_URL="${DATABASE_URL%\'}"
+    break
+  fi
+done < "$ENV_FILE"
+if [ -z "$DATABASE_URL" ]; then
+  echo "❌ DATABASE_URL not found in $ENV_FILE"
+  exit 1
+fi
 export DATABASE_URL
 pnpm --filter @workspace/db run push
 
