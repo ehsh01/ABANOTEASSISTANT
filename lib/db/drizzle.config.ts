@@ -5,14 +5,21 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL, ensure the database is provisioned");
 }
 
-// Parse DATABASE_URL to remove sslmode if present (we'll use ssl config instead)
-const dbUrl = process.env.DATABASE_URL.replace(/[?&]sslmode=[^&]*/g, '');
+/**
+ * drizzle-kit builds `pg.Pool({ connectionString })` only when `url` is set — it does
+ * not merge `ssl` into that pool. Keep TLS via the connection string (DigitalOcean, etc.).
+ */
+function ensureSslModeInUrl(url: string): string {
+  if (/[?&]sslmode=/.test(url)) {
+    return url;
+  }
+  return url.includes("?") ? `${url}&sslmode=require` : `${url}?sslmode=require`;
+}
 
 export default defineConfig({
   schema: path.join(__dirname, "./src/schema/index.ts"),
   dialect: "postgresql",
   dbCredentials: {
-    url: dbUrl,
-    ssl: { rejectUnauthorized: false },
+    url: ensureSslModeInUrl(process.env.DATABASE_URL),
   },
 });

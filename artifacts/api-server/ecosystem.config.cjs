@@ -4,9 +4,11 @@
  * Loads `artifacts/api-server/.env` so PM2 does not inherit unrelated shell/PM2 globals.
  * Production listens on 5002, staging on 5005 (override via API_PORT_PROD / API_PORT_STAGING in .env).
  *
+ * Must be `.cjs` because `artifacts/api-server/package.json` has `"type": "module"`.
+ *
  * Usage (from repo root):
- *   pm2 start artifacts/api-server/ecosystem.config.js --only abanoteassistant-api
- *   pm2 start artifacts/api-server/ecosystem.config.js --only abanoteassistant-api-staging
+ *   pm2 start artifacts/api-server/ecosystem.config.cjs --only abanoteassistant-api
+ *   pm2 start artifacts/api-server/ecosystem.config.cjs --only abanoteassistant-api-staging
  */
 
 const fs = require("fs");

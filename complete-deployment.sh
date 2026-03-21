@@ -45,10 +45,10 @@ echo "🛑 Replacing PM2 processes..."
 pm2 delete abanoteassistant-api 2>/dev/null || true
 pm2 delete abanoteassistant-api-staging 2>/dev/null || true
 
-echo "🚀 Starting PM2 (reads artifacts/api-server/.env via ecosystem.config.js)..."
-pm2 start artifacts/api-server/ecosystem.config.js --only abanoteassistant-api
+echo "🚀 Starting PM2 (reads artifacts/api-server/.env via ecosystem.config.cjs)..."
+pm2 start artifacts/api-server/ecosystem.config.cjs --only abanoteassistant-api
 # Uncomment if you use staging:
-# pm2 start artifacts/api-server/ecosystem.config.js --only abanoteassistant-api-staging
+# pm2 start artifacts/api-server/ecosystem.config.cjs --only abanoteassistant-api-staging
 
 pm2 save
 
