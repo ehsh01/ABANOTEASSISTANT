@@ -6,7 +6,7 @@ import Home from "./pages/home";
 import Wizard from "./pages/wizard";
 import Result from "./pages/result";
 import Clients from "./pages/clients";
-import NewClient from "./pages/new-client";
+import NewClient, { EditClientPage } from "./pages/new-client";
 import Notes from "./pages/notes";
 import NoteDetail from "./pages/note-detail";
 import NotFound from "@/pages/not-found";
@@ -38,8 +38,11 @@ function AuthenticatedRoutes() {
       <Route path="/admin" component={AdminPage} />
       <Route path="/wizard" component={Wizard} />
       <Route path="/result" component={Result} />
-      <Route path="/clients" component={Clients} />
+      <Route path="/clients/edit/:clientId" component={EditClientPage} />
       <Route path="/clients/new" component={NewClient} />
+      <Route path="/clients" component={Clients} />
+      {/* Wizard links here; keep in sync with /clients/new */}
+      <Route path="/new-client" component={NewClient} />
       <Route path="/notes" component={Notes} />
       <Route path="/notes/:id" component={NoteDetail} />
       <Route component={NotFound} />

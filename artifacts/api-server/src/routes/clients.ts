@@ -4,13 +4,60 @@ import {
   ListClientsResponse,
   GetClientParams,
   GetClientResponse,
+  CreateClientBody,
+  UpdateClientParams,
+  UpdateClientBody,
   ListClientProgramsParams,
   ListClientProgramsResponse,
 } from "@workspace/api-zod";
 import { db } from "@workspace/db";
-import { clientsTable, programsTable, clientProgramsTable } from "@workspace/db/schema";
+import {
+  clientsTable,
+  programsTable,
+  clientProgramsTable,
+  type ClientProfileRow,
+} from "@workspace/db/schema";
 
 const router: IRouter = Router();
+
+type AssessmentStatus = "uploaded" | "processing" | "ready" | "missing";
+
+function profileFromNameFallback(name: string): ClientProfileRow {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] ?? "",
+    lastName: parts.slice(1).join(" "),
+    dateOfBirth: "",
+    gender: "",
+    maladaptiveBehaviors: [],
+    replacementPrograms: [],
+    interventions: [],
+  };
+}
+
+function rowToApiData(c: typeof clientsTable.$inferSelect) {
+  const profile = (c.profile as ClientProfileRow | null | undefined) ?? null;
+  return {
+    id: c.id,
+    companyId: c.companyId,
+    name: c.name,
+    ageBand: c.ageBand ?? undefined,
+    hasAssessment: c.hasAssessment,
+    assessmentStatus: c.assessmentStatus as AssessmentStatus,
+    profile: profile
+      ? {
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          dateOfBirth: profile.dateOfBirth,
+          gender: profile.gender,
+          maladaptiveBehaviors: profile.maladaptiveBehaviors,
+          replacementPrograms: profile.replacementPrograms,
+          interventions: profile.interventions,
+          assessmentFileName: profile.assessmentFileName ?? null,
+        }
+      : null,
+  };
+}
 
 router.get("/clients", async (req, res) => {
   const companyId = req.companyId;
@@ -23,53 +70,62 @@ router.get("/clients", async (req, res) => {
 
   const data = ListClientsResponse.parse({
     success: true,
-    data: rows.map((c) => ({
-      id: c.id,
-      companyId: c.companyId,
-      name: c.name,
-      ageBand: c.ageBand ?? undefined,
-      hasAssessment: c.hasAssessment,
-      assessmentStatus: c.assessmentStatus as "uploaded" | "processing" | "ready" | "missing",
-    })),
+    data: rows.map(rowToApiData),
     error: null,
   });
 
   res.json(data);
 });
 
-router.get("/clients/:clientId", async (req, res) => {
+router.post("/clients", async (req, res) => {
   const companyId = req.companyId;
   if (companyId === undefined) {
     res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
     return;
   }
 
-  const params = GetClientParams.parse(req.params);
+  let body;
+  try {
+    body = CreateClientBody.parse(req.body);
+  } catch {
+    res.status(400).json({ success: false, error: "Invalid request body", messages: [] });
+    return;
+  }
 
-  const [client] = await db
-    .select()
-    .from(clientsTable)
-    .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)))
-    .limit(1);
+  const profile: ClientProfileRow = {
+    firstName: body.firstName.trim(),
+    lastName: body.lastName.trim(),
+    dateOfBirth: body.dateOfBirth,
+    gender: body.gender,
+    maladaptiveBehaviors: body.maladaptiveBehaviors,
+    replacementPrograms: body.replacementPrograms,
+    interventions: body.interventions,
+    assessmentFileName: body.assessmentFileName ?? undefined,
+  };
+  const name = `${profile.firstName} ${profile.lastName}`.trim() || "Client";
 
-  if (!client) {
-    res.status(404).json({ success: false, error: "Client not found", messages: [] });
+  const [row] = await db
+    .insert(clientsTable)
+    .values({
+      companyId,
+      name,
+      ageBand: body.ageBand?.trim() || null,
+      hasAssessment: body.hasAssessment,
+      assessmentStatus: body.assessmentStatus,
+      profile,
+    })
+    .returning();
+
+  if (!row) {
+    res.status(500).json({ success: false, error: "Failed to create client", messages: [] });
     return;
   }
 
   const data = GetClientResponse.parse({
     success: true,
-    data: {
-      id: client.id,
-      companyId: client.companyId,
-      name: client.name,
-      ageBand: client.ageBand ?? undefined,
-      hasAssessment: client.hasAssessment,
-      assessmentStatus: client.assessmentStatus as "uploaded" | "processing" | "ready" | "missing",
-    },
+    data: rowToApiData(row),
     error: null,
   });
-
   res.json(data);
 });
 
@@ -126,6 +182,112 @@ router.get("/clients/:clientId/programs", async (req, res) => {
     error: null,
   });
 
+  res.json(data);
+});
+
+router.get("/clients/:clientId", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const params = GetClientParams.parse(req.params);
+
+  const [client] = await db
+    .select()
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)))
+    .limit(1);
+
+  if (!client) {
+    res.status(404).json({ success: false, error: "Client not found", messages: [] });
+    return;
+  }
+
+  const data = GetClientResponse.parse({
+    success: true,
+    data: rowToApiData(client),
+    error: null,
+  });
+
+  res.json(data);
+});
+
+router.patch("/clients/:clientId", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const params = UpdateClientParams.parse(req.params);
+
+  let body;
+  try {
+    body = UpdateClientBody.parse(req.body);
+  } catch {
+    res.status(400).json({ success: false, error: "Invalid request body", messages: [] });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)))
+    .limit(1);
+
+  if (!existing) {
+    res.status(404).json({ success: false, error: "Client not found", messages: [] });
+    return;
+  }
+
+  const stored = (existing.profile as ClientProfileRow | null | undefined) ?? null;
+  const base: ClientProfileRow = stored ?? profileFromNameFallback(existing.name);
+
+  let assessmentFileName: string | undefined = base.assessmentFileName;
+  if (body.assessmentFileName !== undefined) {
+    assessmentFileName =
+      body.assessmentFileName === null ? undefined : body.assessmentFileName;
+  }
+
+  const nextProfile: ClientProfileRow = {
+    firstName: body.firstName?.trim() ?? base.firstName,
+    lastName: body.lastName?.trim() ?? base.lastName,
+    dateOfBirth: body.dateOfBirth ?? base.dateOfBirth,
+    gender: body.gender ?? base.gender,
+    maladaptiveBehaviors: body.maladaptiveBehaviors ?? base.maladaptiveBehaviors,
+    replacementPrograms: body.replacementPrograms ?? base.replacementPrograms,
+    interventions: body.interventions ?? base.interventions,
+    assessmentFileName,
+  };
+
+  const name =
+    `${nextProfile.firstName} ${nextProfile.lastName}`.trim() || existing.name;
+
+  const [updated] = await db
+    .update(clientsTable)
+    .set({
+      name,
+      ageBand: body.ageBand !== undefined ? body.ageBand?.trim() || null : existing.ageBand,
+      hasAssessment: body.hasAssessment ?? existing.hasAssessment,
+      assessmentStatus: (body.assessmentStatus ?? existing.assessmentStatus) as AssessmentStatus,
+      profile: nextProfile,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)))
+    .returning();
+
+  if (!updated) {
+    res.status(500).json({ success: false, error: "Failed to update client", messages: [] });
+    return;
+  }
+
+  const data = GetClientResponse.parse({
+    success: true,
+    data: rowToApiData(updated),
+    error: null,
+  });
   res.json(data);
 });
 

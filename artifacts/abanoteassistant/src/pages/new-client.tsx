@@ -1,5 +1,5 @@
-import { useState, useRef, useCallback } from "react";
-import { useLocation } from "wouter";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useLocation, useParams, Redirect } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
@@ -14,12 +14,30 @@ import {
   Zap,
   Shield,
   CalendarIcon,
+  ChevronsUpDown,
+  Loader2,
 } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { useClientsStore, type Client } from "@/store/clients-store";
-import { generateId } from "@/lib/utils";
+import { useWizardStore } from "@/store/wizard-store";
+import { useClients, useClient } from "@/hooks/use-aba-api";
+import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
+import {
+  createClient,
+  updateClient,
+  type Client as ApiClient,
+  type UpdateClientRequest,
+} from "@workspace/api-client-react";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 
 // ── Step 1 data ─────────────────────────────────────────────────────────────
 interface Step1Data {
@@ -139,10 +157,12 @@ function ProgressHeader({
   step,
   onBack,
   onCancel,
+  mode,
 }: {
   step: number;
   onBack: () => void;
   onCancel: () => void;
+  mode: "create" | "edit";
 }) {
   const labels = ["Personal Info", "Assessment", "Programs & Behaviors"];
   return (
@@ -156,7 +176,9 @@ function ProgressHeader({
       </button>
       <div className="text-center">
         <div className="text-white font-bold text-sm">{labels[step - 1]}</div>
-        <div className="text-white/60 text-xs mt-0.5">Step {step} of 3</div>
+        <div className="text-white/60 text-xs mt-0.5">
+          {mode === "edit" ? "Edit client · " : ""}Step {step} of 3
+        </div>
       </div>
       <button
         onClick={onCancel}
@@ -288,9 +310,12 @@ function Step1({
 function Step2({
   data,
   onChange,
+  priorAssessmentFileName,
 }: {
   data: Step2Data;
   onChange: (d: Step2Data) => void;
+  /** Shown when editing and a PDF was saved previously (File can’t be restored). */
+  priorAssessmentFileName?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -317,6 +342,17 @@ function Step2({
       <p className="text-[#877870] text-sm leading-relaxed">
         Upload the client's Functional Behavior Assessment (FBA) or Behavior Intervention Plan (BIP) as a PDF. You can skip this step and add it later.
       </p>
+
+      {!data.file && priorAssessmentFileName ? (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm">
+          <FileText className="w-5 h-5 text-amber-700 shrink-0 pop-icon" />
+          <div>
+            <p className="font-semibold text-amber-900">Assessment on file</p>
+            <p className="text-amber-800/90 truncate">{priorAssessmentFileName}</p>
+            <p className="text-xs text-amber-700/80 mt-1">Upload a new PDF below to replace it.</p>
+          </div>
+        </div>
+      ) : null}
 
       {data.file ? (
         <div className="flex items-center gap-4 p-5 rounded-2xl bg-emerald-50 border border-emerald-200">
@@ -429,12 +465,110 @@ function Step3({
   );
 }
 
+/** When adding a client from the note wizard: pick an existing server client and go back. */
+function WizardExistingClientPicker({ onChosen }: { onChosen: () => void }) {
+  const [open, setOpen] = useState(false);
+  const { updateData } = useWizardStore();
+  const { data: clientsRes, isLoading } = useClients();
+  const clients: ApiClient[] = clientsRes?.data ?? [];
+
+  const pick = (client: ApiClient) => {
+    if (client.assessmentStatus === "missing") return;
+    updateData({ clientId: client.id });
+    setOpen(false);
+    onChosen();
+  };
+
+  return (
+    <div className="rounded-2xl border border-[#F0E4E1] bg-[#FDFAF7] p-5 mb-8">
+      <p className="text-sm font-semibold text-[#2D2523] mb-1">Already have this client?</p>
+      <p className="text-xs text-[#877870] mb-3">
+        Search your existing clients and continue the note wizard — no need to add them again.
+      </p>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-6 text-[#877870] gap-2 text-sm">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          Loading clients…
+        </div>
+      ) : clients.length === 0 ? (
+        <p className="text-sm text-[#877870]">No clients yet. Use the form below to add one.</p>
+      ) : (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              role="combobox"
+              aria-expanded={open}
+              className={cn(
+                "w-full flex items-center justify-between px-4 py-3 rounded-xl bg-white border-2 border-[#F0E4E1] text-sm font-medium text-left transition-all",
+                open && "border-[#C27A8A] ring-4 ring-[#C27A8A]/15"
+              )}
+            >
+              <span className="text-[#877870]">Select an existing client…</span>
+              <ChevronsUpDown className="h-4 w-4 shrink-0 text-[#877870]" />
+            </button>
+          </PopoverTrigger>
+          <PopoverContent
+            className="p-0 w-[var(--radix-popover-trigger-width)] max-w-[min(100vw-2rem,28rem)]"
+            align="start"
+            sideOffset={4}
+          >
+            <Command>
+              <CommandInput placeholder="Search by name…" />
+              <CommandList className="max-h-64">
+                <CommandEmpty>No clients match.</CommandEmpty>
+                <CommandGroup>
+                  {clients.map((c) => {
+                    const blocked = c.assessmentStatus === "missing";
+                    return (
+                      <CommandItem
+                        key={c.id}
+                        value={`${c.name} ${c.ageBand ?? ""}`}
+                        disabled={blocked}
+                        onSelect={() => pick(c)}
+                        className={cn(blocked && "opacity-50 cursor-not-allowed")}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="font-medium truncate">{c.name}</div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {blocked
+                              ? "Upload assessment first (can’t generate notes)"
+                              : `${c.ageBand ? `${c.ageBand} · ` : ""}Assessment: ${c.assessmentStatus}`}
+                          </div>
+                        </div>
+                      </CommandItem>
+                    );
+                  })}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        </Popover>
+      )}
+    </div>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
-export default function NewClient() {
+function NewClientForm({ editClientId }: { editClientId?: string }) {
   const [, setLocation] = useLocation();
-  const { addClient } = useClientsStore();
+  const queryClient = useQueryClient();
+  const numericId =
+    editClientId !== undefined && editClientId !== ""
+      ? Number.parseInt(editClientId, 10)
+      : NaN;
+  const isEdit = Number.isFinite(numericId) && numericId > 0;
+
+  const {
+    data: detailRes,
+    isLoading: detailLoading,
+    isError: detailError,
+  } = useClient(isEdit ? numericId : undefined);
+
+  const [hydrated, setHydrated] = useState(!isEdit);
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   // Detect return destination from query param (?returnTo=wizard)
   const returnTo = new URLSearchParams(window.location.search).get("returnTo");
@@ -454,8 +588,42 @@ export default function NewClient() {
     interventions: [],
   });
 
+  useEffect(() => {
+    if (!isEdit) {
+      setHydrated(true);
+      return;
+    }
+    if (detailLoading) return;
+    if (detailError || !detailRes?.data) {
+      setLocation("/clients");
+      return;
+    }
+    const c = detailRes.data;
+    const p = c.profile;
+    const nameParts = c.name.trim().split(/\s+/).filter(Boolean);
+    setStep1({
+      firstName: p?.firstName ?? nameParts[0] ?? "",
+      lastName: p?.lastName ?? nameParts.slice(1).join(" ") ?? "",
+      dateOfBirth: p?.dateOfBirth ?? "",
+      gender: p?.gender ?? "",
+    });
+    setStep2({ file: null });
+    setStep3({
+      maladaptiveBehaviors: [...(p?.maladaptiveBehaviors ?? [])],
+      replacementPrograms: [...(p?.replacementPrograms ?? [])],
+      interventions: [...(p?.interventions ?? [])],
+    });
+    setStep(1);
+    setHydrated(true);
+  }, [isEdit, detailLoading, detailError, detailRes, setLocation]);
+
+  function cancelDestination() {
+    if (isEdit) return "/clients";
+    return returnTo === "wizard" ? "/wizard" : "/clients";
+  }
+
   function goBack() {
-    if (step === 1) setLocation(returnTo === "wizard" ? "/wizard" : "/clients");
+    if (step === 1) setLocation(cancelDestination());
     else setStep(step - 1);
   }
 
@@ -473,34 +641,77 @@ export default function NewClient() {
 
   async function handleNext() {
     if (step < 3) {
+      setSaveError(null);
       setStep(step + 1);
       return;
     }
-    // Save
     setSaving(true);
-    await new Promise((r) => setTimeout(r, 700)); // mock delay
-    const newClient: Client = {
-      id: `c_${generateId()}`,
-      firstName: step1.firstName.trim(),
-      lastName: step1.lastName.trim(),
-      dateOfBirth: step1.dateOfBirth,
-      gender: step1.gender,
-      hasAssessment: !!step2.file,
-      assessmentStatus: step2.file ? "uploaded" : "missing",
-      assessmentFileName: step2.file?.name,
-      maladaptiveBehaviors: step3.maladaptiveBehaviors,
-      replacementPrograms: step3.replacementPrograms,
-      interventions: step3.interventions,
-      createdAt: new Date().toISOString(),
-    };
-    addClient(newClient);
-    setSaving(false);
-    setLocation(returnTo === "wizard" ? "/wizard" : "/clients");
+    setSaveError(null);
+    try {
+      if (isEdit) {
+        const payload: UpdateClientRequest = {
+          firstName: step1.firstName.trim(),
+          lastName: step1.lastName.trim(),
+          dateOfBirth: step1.dateOfBirth,
+          gender: step1.gender,
+          maladaptiveBehaviors: step3.maladaptiveBehaviors,
+          replacementPrograms: step3.replacementPrograms,
+          interventions: step3.interventions,
+        };
+        if (step2.file) {
+          payload.hasAssessment = true;
+          payload.assessmentStatus = "uploaded";
+          payload.assessmentFileName = step2.file.name;
+        }
+        await updateClient(numericId, payload);
+      } else {
+        await createClient({
+          firstName: step1.firstName.trim(),
+          lastName: step1.lastName.trim(),
+          dateOfBirth: step1.dateOfBirth,
+          gender: step1.gender,
+          hasAssessment: !!step2.file,
+          assessmentStatus: step2.file ? "uploaded" : "missing",
+          assessmentFileName: step2.file?.name ?? null,
+          maladaptiveBehaviors: step3.maladaptiveBehaviors,
+          replacementPrograms: step3.replacementPrograms,
+          interventions: step3.interventions,
+        });
+      }
+      await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      if (isEdit) {
+        await queryClient.invalidateQueries({ queryKey: ["/api/clients", numericId] });
+      }
+      setSaving(false);
+      setLocation(returnTo === "wizard" && !isEdit ? "/wizard" : "/clients");
+    } catch (e) {
+      setSaving(false);
+      setSaveError(e instanceof Error ? e.message : "Save failed. Try again.");
+    }
   }
+
+  if (isEdit && !hydrated) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-3">
+        <Loader2 className="h-8 w-8 animate-spin text-[#C27A8A]" />
+        <p className="text-sm text-[#877870]">Loading client…</p>
+      </div>
+    );
+  }
+
+  const priorAssessmentFileName =
+    isEdit && !step2.file && detailRes?.data?.profile?.assessmentFileName
+      ? (detailRes.data.profile.assessmentFileName ?? undefined)
+      : undefined;
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <ProgressHeader step={step} onBack={goBack} onCancel={() => setLocation(returnTo === "wizard" ? "/wizard" : "/clients")} />
+      <ProgressHeader
+        step={step}
+        onBack={goBack}
+        onCancel={() => setLocation(cancelDestination())}
+        mode={isEdit ? "edit" : "create"}
+      />
       <StepBar step={step} />
 
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 py-10">
@@ -531,28 +742,56 @@ export default function NewClient() {
           >
             <div className="mb-8">
               <h2 className="text-2xl font-bold text-[#2D2523] tracking-tight">
-                {step === 1 && "Client Information"}
+                {step === 1 && (isEdit ? "Update client" : "Client Information")}
                 {step === 2 && "Assessment PDF"}
                 {step === 3 && "Programs & Behaviors"}
               </h2>
               <p className="text-[#877870] mt-1">
-                {step === 1 && "Enter the client's basic information."}
-                {step === 2 && "Upload their behavior assessment document."}
-                {step === 3 && "Add their treatment targets and strategies."}
+                {step === 1 &&
+                  (isEdit
+                    ? "Update name, date of birth, or gender."
+                    : "Enter the client's basic information.")}
+                {step === 2 &&
+                  (isEdit
+                    ? "Replace the assessment PDF or keep the current file."
+                    : "Upload their behavior assessment document.")}
+                {step === 3 &&
+                  (isEdit
+                    ? "Update behaviors, programs, and interventions."
+                    : "Add their treatment targets and strategies.")}
               </p>
             </div>
 
+            {step === 1 && returnTo === "wizard" && !isEdit && (
+              <WizardExistingClientPicker onChosen={() => setLocation("/wizard")} />
+            )}
+
             {step === 1 && <Step1 data={step1} onChange={setStep1} />}
-            {step === 2 && <Step2 data={step2} onChange={setStep2} />}
+            {step === 2 && (
+              <Step2
+                data={step2}
+                onChange={setStep2}
+                priorAssessmentFileName={priorAssessmentFileName}
+              />
+            )}
             {step === 3 && <Step3 data={step3} onChange={setStep3} />}
           </motion.div>
         </AnimatePresence>
       </main>
 
       {/* Bottom action bar */}
-      <div className="sticky bottom-0 bg-white/95 backdrop-blur border-t border-[#F0E4E1] px-4 sm:px-6 py-4 flex items-center justify-between">
+      <div className="sticky bottom-0 bg-white/95 backdrop-blur border-t border-[#F0E4E1] px-4 sm:px-6 py-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        {saveError && (
+          <p className="text-sm text-rose-600 font-medium order-first sm:order-none sm:flex-1 sm:min-w-0 sm:mr-4">
+            {saveError}
+          </p>
+        )}
         <span className="text-sm text-[#877870] font-medium">
-          {step === 2 && !step2.file && "You can skip this step"}
+          {step === 2 &&
+            !step2.file &&
+            (priorAssessmentFileName
+              ? "Keeping current PDF unless you upload a new one"
+              : "You can skip this step")}
           {step === 3 && "Press Enter or + to add each item"}
           {step === 1 && (canContinue() ? "Looking good!" : "Fill in all fields to continue")}
         </span>
@@ -566,7 +805,7 @@ export default function NewClient() {
             <>Saving...</>
           ) : step === 3 ? (
             <>
-              <User className="w-4 h-4 pop-icon-white" /> Save Client
+              <User className="w-4 h-4 pop-icon-white" /> {isEdit ? "Save changes" : "Save Client"}
             </>
           ) : (
             <>
@@ -577,4 +816,17 @@ export default function NewClient() {
       </div>
     </div>
   );
+}
+
+/** Edit flow: `/clients/edit/:clientId` */
+export function EditClientPage() {
+  const { clientId } = useParams<{ clientId: string }>();
+  if (!clientId) return <Redirect to="/clients" />;
+  const n = Number.parseInt(clientId, 10);
+  if (!Number.isFinite(n) || n <= 0) return <Redirect to="/clients" />;
+  return <NewClientForm editClientId={clientId} />;
+}
+
+export default function NewClient() {
+  return <NewClientForm />;
 }

@@ -12,8 +12,33 @@ import {
   AlertCircle,
   Loader2,
   Users,
+  Pencil,
 } from "lucide-react";
-import { useClientsStore, type Client } from "@/store/clients-store";
+import type { Client } from "@workspace/api-client-react";
+import { useClients } from "@/hooks/use-aba-api";
+
+function displayNames(client: Client) {
+  const p = client.profile;
+  if (p) {
+    return {
+      firstName: p.firstName,
+      lastName: p.lastName,
+      dateOfBirth: p.dateOfBirth,
+      gender: p.gender,
+      maladaptiveBehaviors: p.maladaptiveBehaviors,
+      replacementPrograms: p.replacementPrograms,
+    };
+  }
+  const parts = client.name.trim().split(/\s+/).filter(Boolean);
+  return {
+    firstName: parts[0] ?? client.name,
+    lastName: parts.slice(1).join(" "),
+    dateOfBirth: "",
+    gender: "—",
+    maladaptiveBehaviors: [] as string[],
+    replacementPrograms: [] as string[],
+  };
+}
 
 function getInitials(firstName: string, lastName: string) {
   return `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
@@ -38,6 +63,7 @@ const STATUS_CONFIG = {
 };
 
 function ClientCard({ client }: { client: Client }) {
+  const d = displayNames(client);
   const status = STATUS_CONFIG[client.assessmentStatus];
   const StatusIcon = status.icon;
 
@@ -45,26 +71,41 @@ function ClientCard({ client }: { client: Client }) {
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-2xl p-6 border border-[#F0E4E1] hover:shadow-[0_8px_32px_rgba(194,122,138,0.1)] hover:-translate-y-0.5 transition-all cursor-pointer group"
+      className="bg-white rounded-2xl p-6 border border-[#F0E4E1] hover:shadow-[0_8px_32px_rgba(194,122,138,0.1)] hover:-translate-y-0.5 transition-all group"
     >
-      <div className="flex items-start justify-between mb-5">
-        <div className="flex items-center gap-4">
+      <div className="flex items-start justify-between mb-5 gap-3">
+        <div className="flex items-center gap-4 min-w-0">
           <div
             className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white shrink-0 group-hover:scale-105 transition-transform pop-text-white"
             style={{ background: "linear-gradient(135deg, #C27A8A 0%, #e8c4cc 100%)" }}
           >
-            {getInitials(client.firstName, client.lastName)}
+            {getInitials(d.firstName, d.lastName)}
           </div>
-          <div>
-            <h3 className="font-bold text-[#2D2523] text-lg leading-tight pop-text">
-              {client.firstName} {client.lastName}
+          <div className="min-w-0">
+            <h3 className="font-bold text-[#2D2523] text-lg leading-tight pop-text truncate">
+              {d.firstName} {d.lastName}
             </h3>
             <p className="text-[#877870] text-sm mt-0.5">
-              {calcAge(client.dateOfBirth)} · {client.gender}
+              {d.dateOfBirth ? `${calcAge(d.dateOfBirth)} · ` : ""}
+              {d.gender}
             </p>
           </div>
         </div>
-        <ChevronRight className="w-5 h-5 text-[#F0E4E1] group-hover:text-[#C27A8A] group-hover:translate-x-0.5 transition-all pop-icon" />
+        <div className="flex items-center gap-1 shrink-0">
+          <Link href={`/clients/edit/${client.id}`}>
+            <button
+              type="button"
+              className="p-2.5 rounded-xl border border-[#F0E4E1] text-[#877870] hover:text-[#C27A8A] hover:border-[#C27A8A]/40 hover:bg-[#FDFAF7] transition-colors"
+              title="Edit client"
+              aria-label={`Edit ${d.firstName} ${d.lastName}`}
+            >
+              <Pencil className="w-4 h-4 pop-icon" />
+            </button>
+          </Link>
+          <div className="p-2 text-[#F0E4E1] group-hover:text-[#C27A8A] transition-colors" aria-hidden>
+            <ChevronRight className="w-5 h-5 pop-icon" />
+          </div>
+        </div>
       </div>
 
       {/* Assessment badge */}
@@ -77,35 +118,35 @@ function ClientCard({ client }: { client: Client }) {
 
       {/* Chips summary */}
       <div className="space-y-2 text-sm">
-        {client.maladaptiveBehaviors.length > 0 && (
+        {d.maladaptiveBehaviors.length > 0 && (
           <div className="flex items-start gap-2">
             <span className="text-[#877870] whitespace-nowrap pt-0.5">Behaviors:</span>
             <div className="flex flex-wrap gap-1">
-              {client.maladaptiveBehaviors.slice(0, 2).map((b) => (
+              {d.maladaptiveBehaviors.slice(0, 2).map((b) => (
                 <span key={b} className="px-2 py-0.5 rounded-md bg-[#FDFAF7] border border-[#F0E4E1] text-[#2D2523] text-xs">
                   {b}
                 </span>
               ))}
-              {client.maladaptiveBehaviors.length > 2 && (
+              {d.maladaptiveBehaviors.length > 2 && (
                 <span className="px-2 py-0.5 rounded-md bg-[#FDFAF7] border border-[#F0E4E1] text-[#877870] text-xs">
-                  +{client.maladaptiveBehaviors.length - 2}
+                  +{d.maladaptiveBehaviors.length - 2}
                 </span>
               )}
             </div>
           </div>
         )}
-        {client.replacementPrograms.length > 0 && (
+        {d.replacementPrograms.length > 0 && (
           <div className="flex items-start gap-2">
             <span className="text-[#877870] whitespace-nowrap pt-0.5">Programs:</span>
             <div className="flex flex-wrap gap-1">
-              {client.replacementPrograms.slice(0, 2).map((p) => (
+              {d.replacementPrograms.slice(0, 2).map((p) => (
                 <span key={p} className="px-2 py-0.5 rounded-md bg-[#FDFAF7] border border-[#F0E4E1] text-[#2D2523] text-xs">
                   {p}
                 </span>
               ))}
-              {client.replacementPrograms.length > 2 && (
+              {d.replacementPrograms.length > 2 && (
                 <span className="px-2 py-0.5 rounded-md bg-[#FDFAF7] border border-[#F0E4E1] text-[#877870] text-xs">
-                  +{client.replacementPrograms.length - 2}
+                  +{d.replacementPrograms.length - 2}
                 </span>
               )}
             </div>
@@ -116,21 +157,24 @@ function ClientCard({ client }: { client: Client }) {
       {/* DOB */}
       <div className="flex items-center gap-1.5 mt-4 pt-4 border-t border-[#F0E4E1] text-xs text-[#877870]">
         <Clock className="w-3.5 h-3.5 pop-icon" />
-        DOB: {client.dateOfBirth}
+        DOB: {d.dateOfBirth || "—"}
       </div>
     </motion.div>
   );
 }
 
 export default function Clients() {
-  const { clients } = useClientsStore();
+  const { data: clientsRes, isLoading, isError } = useClients();
   const [search, setSearch] = useState("");
 
+  const clients = clientsRes?.data ?? [];
   const filtered = clients.filter((c) => {
     const q = search.toLowerCase();
+    const d = displayNames(c);
     return (
-      c.firstName.toLowerCase().includes(q) ||
-      c.lastName.toLowerCase().includes(q)
+      c.name.toLowerCase().includes(q) ||
+      d.firstName.toLowerCase().includes(q) ||
+      d.lastName.toLowerCase().includes(q)
     );
   });
 
@@ -171,7 +215,9 @@ export default function Clients() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-bold text-[#2D2523] tracking-tight">Clients</h1>
-            <p className="text-[#877870] mt-1">{clients.length} total clients</p>
+            <p className="text-[#877870] mt-1">
+              {isLoading ? "Loading…" : `${clients.length} total clients`}
+            </p>
           </div>
           <Link href="/clients/new">
             <button className="flex items-center gap-2 bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-3 rounded-xl font-semibold transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:-translate-y-0.5">
@@ -193,8 +239,17 @@ export default function Clients() {
           />
         </div>
 
+        {isLoading && (
+          <div className="flex justify-center py-20">
+            <Loader2 className="w-10 h-10 animate-spin text-[#C27A8A]" />
+          </div>
+        )}
+        {isError && (
+          <p className="text-center text-rose-600 py-12">Could not load clients. Try again.</p>
+        )}
+
         {/* Grid */}
-        {filtered.length === 0 ? (
+        {!isLoading && !isError && filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-24 text-center">
             <div className="w-16 h-16 rounded-2xl bg-[#FDFAF7] border border-[#F0E4E1] flex items-center justify-center mb-4">
               <Users className="w-8 h-8 text-[#C27A8A]/50 pop-icon" />
@@ -212,13 +267,13 @@ export default function Clients() {
               </Link>
             )}
           </div>
-        ) : (
+        ) : !isLoading && !isError ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 pb-16">
             {filtered.map((client) => (
               <ClientCard key={client.id} client={client} />
             ))}
           </div>
-        )}
+        ) : null}
       </div>
     </div>
   );

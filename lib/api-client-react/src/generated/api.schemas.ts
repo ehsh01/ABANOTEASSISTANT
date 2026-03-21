@@ -153,6 +153,65 @@ export interface LoginResponse {
   error?: string | null;
 }
 
+export interface ClientProfile {
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  gender: string;
+  maladaptiveBehaviors: string[];
+  replacementPrograms: string[];
+  interventions: string[];
+  assessmentFileName?: string | null;
+}
+
+export type CreateClientRequestAssessmentStatus =
+  (typeof CreateClientRequestAssessmentStatus)[keyof typeof CreateClientRequestAssessmentStatus];
+
+export const CreateClientRequestAssessmentStatus = {
+  uploaded: "uploaded",
+  processing: "processing",
+  ready: "ready",
+  missing: "missing",
+} as const;
+
+export interface CreateClientRequest {
+  firstName: string;
+  lastName: string;
+  dateOfBirth: string;
+  gender: string;
+  ageBand?: string;
+  hasAssessment: boolean;
+  assessmentStatus: CreateClientRequestAssessmentStatus;
+  assessmentFileName?: string | null;
+  maladaptiveBehaviors: string[];
+  replacementPrograms: string[];
+  interventions: string[];
+}
+
+export type UpdateClientRequestAssessmentStatus =
+  (typeof UpdateClientRequestAssessmentStatus)[keyof typeof UpdateClientRequestAssessmentStatus];
+
+export const UpdateClientRequestAssessmentStatus = {
+  uploaded: "uploaded",
+  processing: "processing",
+  ready: "ready",
+  missing: "missing",
+} as const;
+
+export interface UpdateClientRequest {
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string;
+  gender?: string;
+  ageBand?: string;
+  hasAssessment?: boolean;
+  assessmentStatus?: UpdateClientRequestAssessmentStatus;
+  assessmentFileName?: string | null;
+  maladaptiveBehaviors?: string[];
+  replacementPrograms?: string[];
+  interventions?: string[];
+}
+
 export type ClientAssessmentStatus =
   (typeof ClientAssessmentStatus)[keyof typeof ClientAssessmentStatus];
 
@@ -170,6 +229,7 @@ export interface Client {
   ageBand?: string;
   hasAssessment: boolean;
   assessmentStatus: ClientAssessmentStatus;
+  profile?: ClientProfile | null;
 }
 
 export interface ClientListResponse {

@@ -207,8 +207,62 @@ export const ListClientsResponse = zod.object({
         "ready",
         "missing",
       ]),
+      profile: zod
+        .object({
+          firstName: zod.string(),
+          lastName: zod.string(),
+          dateOfBirth: zod.string(),
+          gender: zod.string(),
+          maladaptiveBehaviors: zod.array(zod.string()),
+          replacementPrograms: zod.array(zod.string()),
+          interventions: zod.array(zod.string()),
+          assessmentFileName: zod.string().nullish(),
+        })
+        .nullish(),
     }),
   ),
+  error: zod.string().nullish(),
+});
+
+/**
+ * @summary Create a client
+ */
+export const CreateClientBody = zod.object({
+  firstName: zod.string(),
+  lastName: zod.string(),
+  dateOfBirth: zod.string(),
+  gender: zod.string(),
+  ageBand: zod.string().optional(),
+  hasAssessment: zod.boolean(),
+  assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+  assessmentFileName: zod.string().nullish(),
+  maladaptiveBehaviors: zod.array(zod.string()),
+  replacementPrograms: zod.array(zod.string()),
+  interventions: zod.array(zod.string()),
+});
+
+export const CreateClientResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    id: zod.number(),
+    companyId: zod.number(),
+    name: zod.string(),
+    ageBand: zod.string().optional(),
+    hasAssessment: zod.boolean(),
+    assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    profile: zod
+      .object({
+        firstName: zod.string(),
+        lastName: zod.string(),
+        dateOfBirth: zod.string(),
+        gender: zod.string(),
+        maladaptiveBehaviors: zod.array(zod.string()),
+        replacementPrograms: zod.array(zod.string()),
+        interventions: zod.array(zod.string()),
+        assessmentFileName: zod.string().nullish(),
+      })
+      .nullish(),
+  }),
   error: zod.string().nullish(),
 });
 
@@ -228,6 +282,66 @@ export const GetClientResponse = zod.object({
     ageBand: zod.string().optional(),
     hasAssessment: zod.boolean(),
     assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    profile: zod
+      .object({
+        firstName: zod.string(),
+        lastName: zod.string(),
+        dateOfBirth: zod.string(),
+        gender: zod.string(),
+        maladaptiveBehaviors: zod.array(zod.string()),
+        replacementPrograms: zod.array(zod.string()),
+        interventions: zod.array(zod.string()),
+        assessmentFileName: zod.string().nullish(),
+      })
+      .nullish(),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * @summary Update a client
+ */
+export const UpdateClientParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const UpdateClientBody = zod.object({
+  firstName: zod.string().optional(),
+  lastName: zod.string().optional(),
+  dateOfBirth: zod.string().optional(),
+  gender: zod.string().optional(),
+  ageBand: zod.string().optional(),
+  hasAssessment: zod.boolean().optional(),
+  assessmentStatus: zod
+    .enum(["uploaded", "processing", "ready", "missing"])
+    .optional(),
+  assessmentFileName: zod.string().nullish(),
+  maladaptiveBehaviors: zod.array(zod.string()).optional(),
+  replacementPrograms: zod.array(zod.string()).optional(),
+  interventions: zod.array(zod.string()).optional(),
+});
+
+export const UpdateClientResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    id: zod.number(),
+    companyId: zod.number(),
+    name: zod.string(),
+    ageBand: zod.string().optional(),
+    hasAssessment: zod.boolean(),
+    assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    profile: zod
+      .object({
+        firstName: zod.string(),
+        lastName: zod.string(),
+        dateOfBirth: zod.string(),
+        gender: zod.string(),
+        maladaptiveBehaviors: zod.array(zod.string()),
+        replacementPrograms: zod.array(zod.string()),
+        interventions: zod.array(zod.string()),
+        assessmentFileName: zod.string().nullish(),
+      })
+      .nullish(),
   }),
   error: zod.string().nullish(),
 });

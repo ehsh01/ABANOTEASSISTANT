@@ -272,6 +272,37 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    post:
+      operationId: createClient
+      tags: [clients]
+      summary: Create a client
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateClientRequest"
+      responses:
+        "200":
+          description: Created client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientDetailResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /clients/{clientId}:
     get:
@@ -293,6 +324,49 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientDetailResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      operationId: updateClient
+      tags: [clients]
+      summary: Update a client
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateClientRequest"
+      responses:
+        "200":
+          description: Updated client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientDetailResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Unauthorized
           content:
@@ -741,6 +815,119 @@ components:
         - success
         - data
 
+    ClientProfile:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        dateOfBirth:
+          type: string
+        gender:
+          type: string
+        maladaptiveBehaviors:
+          type: array
+          items:
+            type: string
+        replacementPrograms:
+          type: array
+          items:
+            type: string
+        interventions:
+          type: array
+          items:
+            type: string
+        assessmentFileName:
+          type: string
+          nullable: true
+      required:
+        - firstName
+        - lastName
+        - dateOfBirth
+        - gender
+        - maladaptiveBehaviors
+        - replacementPrograms
+        - interventions
+
+    CreateClientRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        dateOfBirth:
+          type: string
+        gender:
+          type: string
+        ageBand:
+          type: string
+        hasAssessment:
+          type: boolean
+        assessmentStatus:
+          type: string
+          enum: [uploaded, processing, ready, missing]
+        assessmentFileName:
+          type: string
+          nullable: true
+        maladaptiveBehaviors:
+          type: array
+          items:
+            type: string
+        replacementPrograms:
+          type: array
+          items:
+            type: string
+        interventions:
+          type: array
+          items:
+            type: string
+      required:
+        - firstName
+        - lastName
+        - dateOfBirth
+        - gender
+        - hasAssessment
+        - assessmentStatus
+        - maladaptiveBehaviors
+        - replacementPrograms
+        - interventions
+
+    UpdateClientRequest:
+      type: object
+      properties:
+        firstName:
+          type: string
+        lastName:
+          type: string
+        dateOfBirth:
+          type: string
+        gender:
+          type: string
+        ageBand:
+          type: string
+        hasAssessment:
+          type: boolean
+        assessmentStatus:
+          type: string
+          enum: [uploaded, processing, ready, missing]
+        assessmentFileName:
+          type: string
+          nullable: true
+        maladaptiveBehaviors:
+          type: array
+          items:
+            type: string
+        replacementPrograms:
+          type: array
+          items:
+            type: string
+        interventions:
+          type: array
+          items:
+            type: string
+
     Client:
       type: object
       properties:
@@ -757,6 +944,9 @@ components:
         assessmentStatus:
           type: string
           enum: [uploaded, processing, ready, missing]
+        profile:
+          $ref: "#/components/schemas/ClientProfile"
+          nullable: true
       required:
         - id
         - companyId

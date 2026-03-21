@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon, UserPlus, Clock } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon, UserPlus } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
+import type { Client as ApiClient } from "@workspace/api-client-react";
 import { useWizardStore } from "@/store/wizard-store";
 import { useClients, useClientPrograms, useGenerateSessionNote } from "@/hooks/use-aba-api";
-import { useClientsStore } from "@/store/clients-store";
 import { cn, formatSessionDate } from "@/lib/utils";
 import {
   Popover,
@@ -218,12 +218,110 @@ function EnvChangeMultiSelect({
 
 // --- WIZARD STEPS COMPONENTS ---
 
+/** Searchable dropdown to pick a client (same rules as cards: no assessment = not selectable). */
+function ClientSelectCombobox({
+  clients,
+  selectedId,
+  onSelect,
+}: {
+  clients: ApiClient[];
+  selectedId?: number;
+  onSelect: (id: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const selected = clients.find((c) => c.id === selectedId);
+
+  return (
+    <div className="max-w-xl mx-auto mb-6">
+      <p className="text-sm font-medium text-muted-foreground mb-2 text-center">
+        Or search and select a client
+      </p>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            ref={triggerRef}
+            type="button"
+            role="combobox"
+            aria-expanded={open}
+            className={cn(
+              "w-full flex items-center justify-between px-4 py-3 rounded-xl bg-card border-2 text-sm font-medium transition-all text-left",
+              open ? "border-primary ring-4 ring-primary/10" : "border-border hover:border-primary/50"
+            )}
+          >
+            <span className="truncate text-foreground">
+              {selected ? (
+                <>
+                  <span className="font-semibold">{selected.name}</span>
+                  {selected.ageBand ? (
+                    <span className="text-muted-foreground font-normal"> · {selected.ageBand}</span>
+                  ) : null}
+                </>
+              ) : (
+                <span className="text-muted-foreground">Type to search clients…</span>
+              )}
+            </span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground pop-icon" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="p-0 w-[var(--radix-popover-trigger-width)] max-w-[min(100vw-2rem,28rem)]"
+          align="center"
+          sideOffset={4}
+        >
+          <Command>
+            <CommandInput placeholder="Search by name…" />
+            <CommandList className="max-h-64">
+              <CommandEmpty>No clients match.</CommandEmpty>
+              <CommandGroup>
+                {clients.map((client) => {
+                  const blocked = client.assessmentStatus === "missing";
+                  return (
+                    <CommandItem
+                      key={client.id}
+                      value={`${client.name} ${client.ageBand ?? ""}`}
+                      disabled={blocked}
+                      onSelect={() => {
+                        if (blocked) return;
+                        onSelect(client.id);
+                        setOpen(false);
+                      }}
+                      className={cn("cursor-pointer", blocked && "opacity-50 cursor-not-allowed")}
+                    >
+                      <div
+                        className={cn(
+                          "mr-2 flex h-4 w-4 items-center justify-center rounded border shrink-0",
+                          selectedId === client.id
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "border-muted-foreground/40"
+                        )}
+                      >
+                        {selectedId === client.id && <Check className="h-3 w-3 pop-icon-white" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate">{client.name}</div>
+                        <div className="text-xs text-muted-foreground truncate">
+                          {blocked
+                            ? "Assessment required before note generation"
+                            : `Assessment: ${client.assessmentStatus}`}
+                        </div>
+                      </div>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 function Step1Client() {
   const [, setLocation] = useLocation();
   const { data: wizardData, updateData } = useWizardStore();
   const { data: clientsRes, isLoading } = useClients();
-  const { clients: localClients } = useClientsStore();
-
   if (isLoading) return <div className="py-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary pop-icon" /></div>;
 
   const apiClients = clientsRes?.data || [];
@@ -234,6 +332,14 @@ function Step1Client() {
         <h2 className="text-3xl font-display font-bold text-foreground">Select Client</h2>
         <p className="text-muted-foreground mt-2">Who was this session with?</p>
       </div>
+
+      {apiClients.length > 0 && (
+        <ClientSelectCombobox
+          clients={apiClients}
+          selectedId={wizardData.clientId}
+          onSelect={(id) => updateData({ clientId: id })}
+        />
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* API clients */}
@@ -279,23 +385,6 @@ function Step1Client() {
             </button>
           );
         })}
-
-        {/* Locally-created clients (pending backend sync) */}
-        {localClients.map(client => (
-          <div
-            key={client.id}
-            className="relative text-left p-6 rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/50 opacity-80"
-          >
-            <div className="absolute top-4 right-4">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 text-[10px] font-semibold uppercase tracking-wide">
-                <Clock className="w-3 h-3 pop-icon" /> Pending sync
-              </span>
-            </div>
-            <h3 className="font-bold text-lg text-foreground pr-24">{client.firstName} {client.lastName}</h3>
-            <p className="text-sm text-muted-foreground mb-4">Added locally — awaiting backend setup</p>
-            <p className="text-xs text-amber-700">This client needs to be saved to the server before notes can be generated.</p>
-          </div>
-        ))}
 
         {/* New Client card */}
         <button

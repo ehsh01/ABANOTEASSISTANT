@@ -1,30 +1,13 @@
 import { create } from "zustand";
 
-export interface Client {
-  id: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  gender: string;
-  hasAssessment: boolean;
-  assessmentStatus: "ready" | "processing" | "uploaded" | "missing";
-  assessmentFileName?: string;
-  maladaptiveBehaviors: string[];
-  replacementPrograms: string[];
-  interventions: string[];
-  createdAt: string;
-}
-
+/**
+ * Legacy hook: clients now live in Postgres via `/api/clients`.
+ * `reset` remains so logout can clear any future client-side caches.
+ */
 interface ClientsState {
-  clients: Client[];
-  addClient: (client: Client) => void;
-  /** Clear local client list (e.g. on logout). */
   reset: () => void;
 }
 
-export const useClientsStore = create<ClientsState>((set) => ({
-  clients: [],
-  addClient: (client) =>
-    set((state) => ({ clients: [client, ...state.clients] })),
-  reset: () => set({ clients: [] }),
+export const useClientsStore = create<ClientsState>(() => ({
+  reset: () => {},
 }));
