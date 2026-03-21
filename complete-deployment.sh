@@ -1,94 +1,62 @@
 #!/bin/bash
 # Complete the ABA Note Assistant deployment
-# Run this on the droplet: bash complete-deployment.sh
+# Run on the droplet from repo root: bash complete-deployment.sh
+#
+# Prerequisites:
+# - artifacts/api-server/.env with DATABASE_URL, JWT_SECRET (and optional staging vars)
+# - DigitalOcean managed Postgres: append ?sslmode=require (or &sslmode=require) to DATABASE_URL
+#   or drizzle-kit push will fail with "no encryption".
 
 set -e
 
-cd /var/www/ABANOTEASSISTANT
+REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$REPO_ROOT"
+
+echo "📦 Installing dependencies..."
+command -v pnpm >/dev/null || (corepack enable && corepack prepare pnpm@9 --activate)
+pnpm install --frozen-lockfile 2>/dev/null || pnpm install
+
+echo "🔧 Ensuring bcrypt native binding (first deploy / new Node)..."
+BCRYPT_DIR="$REPO_ROOT/node_modules/.pnpm/bcrypt@5.1.1/node_modules/bcrypt"
+if [ -d "$BCRYPT_DIR" ] && [ ! -f "$BCRYPT_DIR/lib/binding/napi-v3/bcrypt_lib.node" ]; then
+  (cd "$BCRYPT_DIR" && npm run install)
+fi
+
+echo "🗄️  Database schema (drizzle push)..."
+set -a
+# shellcheck source=/dev/null
+source artifacts/api-server/.env
+set +a
+export DATABASE_URL
+pnpm --filter @workspace/db run push
 
 echo "🔨 Building API server..."
 pnpm --filter @workspace/api-server run build
 
-echo "⚙️  Updating ecosystem.config.js with .env values..."
-source artifacts/api-server/.env
-
-# Use Node.js to properly update the config file (handles all special characters)
-node << 'NODE_SCRIPT'
-const fs = require('fs');
-const path = require('path');
-
-// Read .env file
-const envPath = path.join(__dirname, 'artifacts/api-server/.env');
-const envContent = fs.readFileSync(envPath, 'utf8');
-const envVars = {};
-envContent.split('\n').forEach(line => {
-  const match = line.match(/^([^#=]+)=(.*)$/);
-  if (match) {
-    envVars[match[1].trim()] = match[2].trim();
-  }
-});
-
-// Read ecosystem.config.js
-const configPath = path.join(__dirname, 'ecosystem.config.js');
-let configContent = fs.readFileSync(configPath, 'utf8');
-
-// Replace placeholders
-const dbUrl = envVars.DATABASE_URL || '';
-const jwtSecret = envVars.JWT_SECRET || '';
-
-configContent = configContent.replace(
-  /DATABASE_URL: process\.env\.DATABASE_URL \|\| /g,
-  'DATABASE_URL: '
-);
-configContent = configContent.replace(
-  /JWT_SECRET: process\.env\.JWT_SECRET \|\| /g,
-  'JWT_SECRET: '
-);
-configContent = configContent.replace(
-  /"postgresql:\/\/user:password@host:5432\/dbname"/g,
-  `"${dbUrl}"`
-);
-configContent = configContent.replace(
-  /"change-me-to-a-long-random-string-minimum-32-characters"/g,
-  `"${jwtSecret}"`
-);
-
-// Also handle staging
-configContent = configContent.replace(
-  /DATABASE_URL: process\.env\.DATABASE_URL_STAGING \|\| process\.env\.DATABASE_URL \|\| /g,
-  'DATABASE_URL: '
-);
-configContent = configContent.replace(
-  /JWT_SECRET: process\.env\.JWT_SECRET_STAGING \|\| process\.env\.JWT_SECRET \|\| /g,
-  'JWT_SECRET: '
-);
-
-// Write back
-fs.writeFileSync(configPath, configContent);
-console.log('✅ Updated ecosystem.config.js');
-NODE_SCRIPT
+echo "🌐 Building frontend (adjust PORT/BASE_PATH if needed)..."
+export PORT="${FRONTEND_BUILD_PORT:-5000}"
+export BASE_PATH="${FRONTEND_BASE_PATH:-/}"
+pnpm --filter @workspace/abanoteassistant run build
 
 echo "📁 Creating logs directory..."
 mkdir -p logs
 
-echo "🗄️  Running database migrations..."
-# Export DATABASE_URL for drizzle-kit
-export DATABASE_URL
-pnpm --filter @workspace/db run push
-
-echo "🛑 Stopping existing processes..."
+echo "🛑 Replacing PM2 processes..."
 pm2 delete abanoteassistant-api 2>/dev/null || true
 pm2 delete abanoteassistant-api-staging 2>/dev/null || true
 
-echo "🚀 Starting PM2..."
-pm2 start ecosystem.config.js --only abanoteassistant-api
+echo "🚀 Starting PM2 (reads artifacts/api-server/.env via ecosystem.config.js)..."
+pm2 start artifacts/api-server/ecosystem.config.js --only abanoteassistant-api
+# Uncomment if you use staging:
+# pm2 start artifacts/api-server/ecosystem.config.js --only abanoteassistant-api-staging
+
 pm2 save
 
 echo "✅ Deployment complete!"
 echo ""
 echo "Status:"
-pm2 list | grep abanoteassistant
+pm2 list | grep abanoteassistant || true
 echo ""
-echo "Testing health endpoint..."
+echo "Testing health endpoint (production port 5002)..."
 sleep 2
-curl -s http://localhost:5002/api/healthz && echo ""
+curl -sS "http://127.0.0.1:${API_PORT_PROD:-5002}/api/healthz" && echo ""
