@@ -37,7 +37,8 @@ if (Number.isNaN(port)) {
 const useTls =
   Boolean(parsed.host) &&
   parsed.host !== "localhost" &&
-  parsed.host !== "127.0.0.1";
+  parsed.host !== "127.0.0.1" &&
+  parsed.host !== "helium";
 
 export const pool = new Pool({
   host: parsed.host,
