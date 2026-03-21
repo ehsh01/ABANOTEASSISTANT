@@ -1,9 +1,10 @@
-import { pgTable, serial, text, integer, timestamp } from "drizzle-orm/pg-core";
+import { serial, text, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { abanote } from "./abanote";
 import { companiesTable } from "./companies";
 
-export const usersTable = pgTable("users", {
+export const usersTable = abanote.table("users", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),

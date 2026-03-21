@@ -4,8 +4,9 @@
 #
 # Prerequisites:
 # - artifacts/api-server/.env with DATABASE_URL, JWT_SECRET (and optional staging vars)
-# - DigitalOcean managed Postgres: append ?sslmode=require (or &sslmode=require) to DATABASE_URL
-#   or drizzle-kit push will fail with "no encryption".
+# - Tables live in Postgres schema `abanote` (see lib/db/src/schema) so this app can share a
+#   cluster with other products that use `public.*`.
+# - drizzle.config.ts parses DATABASE_URL and sets ssl.rejectUnauthorized=false (managed PG).
 
 set -e
 

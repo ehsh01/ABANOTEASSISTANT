@@ -1,10 +1,11 @@
-import { pgTable, serial, integer, unique } from "drizzle-orm/pg-core";
+import { serial, integer, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { abanote } from "./abanote";
 import { clientsTable } from "./clients";
 import { programsTable } from "./programs";
 
-export const clientProgramsTable = pgTable(
+export const clientProgramsTable = abanote.table(
   "client_programs",
   {
     id: serial("id").primaryKey(),
