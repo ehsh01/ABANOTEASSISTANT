@@ -191,10 +191,21 @@ function ClientCard({ client }: { client: Client }) {
         )}
       </div>
 
-      {/* DOB */}
-      <div className="flex items-center gap-1.5 mt-4 pt-4 border-t border-[#F0E4E1] text-xs text-[#877870]">
-        <Clock className="w-3.5 h-3.5 pop-icon" />
-        DOB: {d.dateOfBirth || "—"}
+      {/* Footer: DOB + quick actions */}
+      <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#F0E4E1] gap-3">
+        <div className="flex items-center gap-1.5 text-xs text-[#877870]">
+          <Clock className="w-3.5 h-3.5 pop-icon" />
+          DOB: {d.dateOfBirth || "—"}
+        </div>
+        <Link href={`/wizard?clientId=${client.id}`}>
+          <button
+            type="button"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#C27A8A] hover:bg-[#C27A8A] hover:text-white hover:border-[#C27A8A] transition-all"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            Add Note
+          </button>
+        </Link>
       </div>
     </motion.div>
   );

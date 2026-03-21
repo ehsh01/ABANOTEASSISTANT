@@ -42,8 +42,7 @@ function AuthenticatedRoutes() {
     <div className="flex min-h-screen">
       {showSidebar && <AppSidebar />}
       <main
-        className="flex-1 min-h-screen overflow-auto"
-        style={{ marginLeft: showSidebar ? SIDEBAR_WIDTH : 0 }}
+        className={`flex-1 min-h-screen overflow-auto ${showSidebar ? "md:ml-[220px] pb-16 md:pb-0" : ""}`}
       >
         <Switch>
           <Route path="/" component={Home} />
