@@ -15,7 +15,7 @@ const router: IRouter = Router();
 
 router.use(requireSuperAdmin);
 
-router.get("/admin/users", async (_req, res) => {
+router.get("/users", async (_req, res) => {
   const rows = await db
     .select({
       id: usersTable.id,
@@ -46,7 +46,7 @@ router.get("/admin/users", async (_req, res) => {
   res.json(data);
 });
 
-router.get("/admin/companies", async (_req, res) => {
+router.get("/companies", async (_req, res) => {
   const companies = await db.select().from(companiesTable);
 
   const userCounts = await db
@@ -74,7 +74,7 @@ router.get("/admin/companies", async (_req, res) => {
   res.json(data);
 });
 
-router.patch("/admin/companies/:companyId", async (req, res) => {
+router.patch("/companies/:companyId", async (req, res) => {
   const { companyId } = PatchAdminCompanyParams.parse(req.params);
   const body = PatchAdminCompanyBody.parse(req.body);
 

@@ -11,7 +11,9 @@ const router: IRouter = Router();
 router.use(healthRouter);
 router.use(authRouter);
 router.use(requireAuth);
-router.use(adminRouter);
+// Mount at /admin only — do not use `router.use(adminRouter)` or `requireSuperAdmin`
+// runs on every authenticated route (403 for normal users on /clients, /notes, etc.).
+router.use("/admin", adminRouter);
 router.use(rejectSuperAdminFromTenantData, clientsRouter);
 router.use(rejectSuperAdminFromTenantData, notesRouter);
 
