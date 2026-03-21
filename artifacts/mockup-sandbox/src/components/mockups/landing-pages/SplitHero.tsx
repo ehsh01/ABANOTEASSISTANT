@@ -30,17 +30,21 @@ export function SplitHero() {
   }, []);
 
   useEffect(() => {
-    if (wizardStep === STEPS.length - 1) {
-      setNoteChars(0);
-      setGenerating(true);
-      let i = 0;
-      const t = setInterval(() => {
-        i += 4;
-        setNoteChars(i);
-        if (i >= NOTE_TEXT.length) { clearInterval(t); setGenerating(false); }
-      }, 28);
-      return () => clearInterval(t);
+    if (wizardStep !== STEPS.length - 1) {
+      return undefined;
     }
+    setNoteChars(0);
+    setGenerating(true);
+    let i = 0;
+    const t = setInterval(() => {
+      i += 4;
+      setNoteChars(i);
+      if (i >= NOTE_TEXT.length) {
+        clearInterval(t);
+        setGenerating(false);
+      }
+    }, 28);
+    return () => clearInterval(t);
   }, [wizardStep]);
 
   return (

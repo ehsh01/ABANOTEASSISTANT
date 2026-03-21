@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocation } from "wouter";
 import {
   useListAdminCompanies,
@@ -14,8 +15,9 @@ import { Sparkles, Building2, Users, ShieldCheck, ChevronRight, LogOut, LayoutDa
 export default function AdminPage() {
   const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
   const [, setLocation] = useLocation();
+  const logout = useAuthStore((s) => s.logout);
+  const queryClient = useQueryClient();
   const { toast } = useToast();
 
   const usersQuery = useListAdminUsers({
@@ -58,7 +60,7 @@ export default function AdminPage() {
     <div className="min-h-screen bg-[#FDFAF7]">
 
       {/* ── Nav ── */}
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4">
+      <nav className="sticky top-11 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4 sm:top-12">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="relative w-9 h-9 flex items-center justify-center">
@@ -84,7 +86,11 @@ export default function AdminPage() {
             </button>
             <button
               type="button"
-              onClick={() => logout()}
+              onClick={() => {
+                queryClient.clear();
+                logout();
+                setLocation("/login");
+              }}
               className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#C27A8A] hover:bg-[#b06a79] text-white text-sm font-semibold transition-all shadow-[0_4px_12px_rgba(194,122,138,0.25)]"
             >
               <LogOut className="w-4 h-4 pop-icon-white" />

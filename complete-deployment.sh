@@ -46,10 +46,9 @@ echo "🛑 Replacing PM2 processes..."
 pm2 delete abanoteassistant-api 2>/dev/null || true
 pm2 delete abanoteassistant-api-staging 2>/dev/null || true
 
-echo "🚀 Starting PM2 (reads artifacts/api-server/.env via ecosystem.config.cjs)..."
+echo "🚀 Starting PM2 — production + staging (reads artifacts/api-server/.env via ecosystem.config.cjs)..."
 pm2 start artifacts/api-server/ecosystem.config.cjs --only abanoteassistant-api
-# Uncomment if you use staging:
-# pm2 start artifacts/api-server/ecosystem.config.cjs --only abanoteassistant-api-staging
+pm2 start artifacts/api-server/ecosystem.config.cjs --only abanoteassistant-api-staging
 
 pm2 save
 
@@ -58,6 +57,9 @@ echo ""
 echo "Status:"
 pm2 list | grep abanoteassistant || true
 echo ""
-echo "Testing health endpoint (production port 5002)..."
+echo "Testing health endpoints..."
 sleep 2
-curl -sS "http://127.0.0.1:${API_PORT_PROD:-5002}/api/healthz" && echo ""
+echo -n "  Production (${API_PORT_PROD:-5002}): "
+curl -sS "http://127.0.0.1:${API_PORT_PROD:-5002}/api/healthz" && echo "" || echo "(failed)"
+echo -n "  Staging (${API_PORT_STAGING:-5007}): "
+curl -sS "http://127.0.0.1:${API_PORT_STAGING:-5007}/api/healthz" && echo "" || echo "(failed)"

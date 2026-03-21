@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useLocation, useParams, Redirect } from "wouter";
+import { useLocation, useParams, Redirect, useSearch } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
@@ -58,6 +58,28 @@ interface Step3Data {
   replacementPrograms: string[];
   interventions: string[];
 }
+
+/** URL `?section=` when editing a client from the clients list dropdown */
+const EDIT_SECTIONS = ["personal", "behaviors", "programs", "interventions"] as const;
+export type EditSection = (typeof EDIT_SECTIONS)[number];
+
+function isEditSection(s: string | null): s is EditSection {
+  return s !== null && (EDIT_SECTIONS as readonly string[]).includes(s);
+}
+
+const SECTION_EDIT_LABELS: Record<EditSection, string> = {
+  personal: "Edit name & gender",
+  behaviors: "Edit behaviors",
+  programs: "Edit programs",
+  interventions: "Edit interventions",
+};
+
+const SECTION_EDIT_SUBTITLES: Record<EditSection, string> = {
+  personal: "Update name, date of birth, and gender.",
+  behaviors: "Update documented maladaptive behaviors.",
+  programs: "Update replacement programs and goals.",
+  interventions: "Update intervention strategies.",
+};
 
 // ── DOB formatter ────────────────────────────────────────────────────────────
 function formatDOB(raw: string): string {
@@ -166,7 +188,7 @@ function ProgressHeader({
 }) {
   const labels = ["Personal Info", "Assessment", "Programs & Behaviors"];
   return (
-    <header className="bg-primary sticky top-0 z-50 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <header className="bg-primary sticky top-11 z-50 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between sm:top-12">
       <button
         onClick={onBack}
         className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors font-semibold text-sm"
@@ -183,6 +205,41 @@ function ProgressHeader({
       <button
         onClick={onCancel}
         className="text-white/80 hover:text-white transition-colors font-semibold text-sm"
+      >
+        Cancel
+      </button>
+    </header>
+  );
+}
+
+/** Header when editing a single section (dropdown from clients list) */
+function SectionEditHeader({
+  title,
+  onBack,
+  onCancel,
+}: {
+  title: string;
+  onBack: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <header className="bg-primary sticky top-11 z-50 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between sm:top-12">
+      <button
+        type="button"
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors font-semibold text-sm"
+      >
+        <ChevronLeft className="w-5 h-5 pop-icon-white" />
+        Back
+      </button>
+      <div className="text-center px-2 min-w-0">
+        <div className="text-white font-bold text-sm truncate">{title}</div>
+        <div className="text-white/60 text-xs mt-0.5">Edit client</div>
+      </div>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="text-white/80 hover:text-white transition-colors font-semibold text-sm shrink-0"
       >
         Cancel
       </button>
@@ -465,6 +522,65 @@ function Step3({
   );
 }
 
+/** One tag panel for section-only edit (behaviors / programs / interventions) */
+function Step3SingleSection({
+  section,
+  data,
+  onChange,
+}: {
+  section: Exclude<EditSection, "personal">;
+  data: Step3Data;
+  onChange: (d: Step3Data) => void;
+}) {
+  function addTo(key: keyof Step3Data, val: string) {
+    onChange({ ...data, [key]: [...data[key], val] });
+  }
+  function removeFrom(key: keyof Step3Data, i: number) {
+    onChange({ ...data, [key]: data[key].filter((_, idx) => idx !== i) });
+  }
+
+  if (section === "behaviors") {
+    return (
+      <TagSection
+        title="Maladaptive Behaviors"
+        icon={AlertTriangle}
+        iconColor="text-rose-600"
+        iconBg="bg-rose-50"
+        placeholder="e.g. Aggression, Self-injurious behavior..."
+        items={data.maladaptiveBehaviors}
+        onAdd={(v) => addTo("maladaptiveBehaviors", v)}
+        onRemove={(i) => removeFrom("maladaptiveBehaviors", i)}
+      />
+    );
+  }
+  if (section === "programs") {
+    return (
+      <TagSection
+        title="Replacement Programs"
+        icon={Zap}
+        iconColor="text-[#C27A8A]"
+        iconBg="bg-[#FCEEF1]"
+        placeholder="e.g. Mand for desired items, Functional Play..."
+        items={data.replacementPrograms}
+        onAdd={(v) => addTo("replacementPrograms", v)}
+        onRemove={(i) => removeFrom("replacementPrograms", i)}
+      />
+    );
+  }
+  return (
+    <TagSection
+      title="Interventions"
+      icon={Shield}
+      iconColor="text-emerald-600"
+      iconBg="bg-emerald-50"
+      placeholder="e.g. Token economy, Redirection, DRI..."
+      items={data.interventions}
+      onAdd={(v) => addTo("interventions", v)}
+      onRemove={(i) => removeFrom("interventions", i)}
+    />
+  );
+}
+
 /** When adding a client from the note wizard: pick an existing server client and go back. */
 function WizardExistingClientPicker({ onChosen }: { onChosen: () => void }) {
   const [open, setOpen] = useState(false);
@@ -550,7 +666,13 @@ function WizardExistingClientPicker({ onChosen }: { onChosen: () => void }) {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-function NewClientForm({ editClientId }: { editClientId?: string }) {
+function NewClientForm({
+  editClientId,
+  editSection,
+}: {
+  editClientId?: string;
+  editSection?: EditSection;
+}) {
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const numericId =
@@ -558,6 +680,7 @@ function NewClientForm({ editClientId }: { editClientId?: string }) {
       ? Number.parseInt(editClientId, 10)
       : NaN;
   const isEdit = Number.isFinite(numericId) && numericId > 0;
+  const isSectionEdit = isEdit && editSection !== undefined;
 
   const {
     data: detailRes,
@@ -623,6 +746,10 @@ function NewClientForm({ editClientId }: { editClientId?: string }) {
   }
 
   function goBack() {
+    if (isSectionEdit) {
+      setLocation("/clients");
+      return;
+    }
     if (step === 1) setLocation(cancelDestination());
     else setStep(step - 1);
   }
@@ -639,7 +766,52 @@ function NewClientForm({ editClientId }: { editClientId?: string }) {
     return true;
   }
 
+  function canSaveSection(): boolean {
+    if (!editSection) return false;
+    if (editSection === "personal") {
+      return (
+        step1.firstName.trim() !== "" &&
+        step1.lastName.trim() !== "" &&
+        step1.dateOfBirth.length === 10 &&
+        step1.gender !== ""
+      );
+    }
+    return true;
+  }
+
+  async function handleSectionSave() {
+    if (!isSectionEdit || !editSection) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      let payload: UpdateClientRequest = {};
+      if (editSection === "personal") {
+        payload = {
+          firstName: step1.firstName.trim(),
+          lastName: step1.lastName.trim(),
+          dateOfBirth: step1.dateOfBirth,
+          gender: step1.gender,
+        };
+      } else if (editSection === "behaviors") {
+        payload = { maladaptiveBehaviors: step3.maladaptiveBehaviors };
+      } else if (editSection === "programs") {
+        payload = { replacementPrograms: step3.replacementPrograms };
+      } else {
+        payload = { interventions: step3.interventions };
+      }
+      await updateClient(numericId, payload);
+      await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/clients", numericId] });
+      setSaving(false);
+      setLocation("/clients");
+    } catch (e) {
+      setSaving(false);
+      setSaveError(e instanceof Error ? e.message : "Save failed. Try again.");
+    }
+  }
+
   async function handleNext() {
+    if (isSectionEdit) return;
     if (step < 3) {
       setSaveError(null);
       setStep(step + 1);
@@ -648,7 +820,7 @@ function NewClientForm({ editClientId }: { editClientId?: string }) {
     setSaving(true);
     setSaveError(null);
     try {
-      if (isEdit) {
+      if (isEdit && !isSectionEdit) {
         const payload: UpdateClientRequest = {
           firstName: step1.firstName.trim(),
           lastName: step1.lastName.trim(),
@@ -679,7 +851,7 @@ function NewClientForm({ editClientId }: { editClientId?: string }) {
         });
       }
       await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
-      if (isEdit) {
+      if (isEdit && !isSectionEdit) {
         await queryClient.invalidateQueries({ queryKey: ["/api/clients", numericId] });
       }
       setSaving(false);
@@ -704,6 +876,77 @@ function NewClientForm({ editClientId }: { editClientId?: string }) {
       ? (detailRes.data.profile.assessmentFileName ?? undefined)
       : undefined;
 
+  if (isSectionEdit && editSection) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <SectionEditHeader
+          title={SECTION_EDIT_LABELS[editSection]}
+          onBack={() => setLocation("/clients")}
+          onCancel={() => setLocation("/clients")}
+        />
+
+        <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 py-10">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={editSection}
+              initial={{ opacity: 0, x: 12 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -12 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="mb-8">
+                <h2 className="text-2xl font-bold text-[#2D2523] tracking-tight">
+                  {SECTION_EDIT_LABELS[editSection]}
+                </h2>
+                <p className="text-[#877870] mt-1">{SECTION_EDIT_SUBTITLES[editSection]}</p>
+              </div>
+
+              {editSection === "personal" && <Step1 data={step1} onChange={setStep1} />}
+              {editSection !== "personal" && (
+                <div className="space-y-5">
+                  <p className="text-[#877870] text-sm leading-relaxed">
+                    These details are used when generating session notes.
+                  </p>
+                  <Step3SingleSection section={editSection} data={step3} onChange={setStep3} />
+                </div>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </main>
+
+        <div className="sticky bottom-0 bg-white/95 backdrop-blur border-t border-[#F0E4E1] px-4 sm:px-6 py-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          {saveError && (
+            <p className="text-sm text-rose-600 font-medium order-first sm:order-none sm:flex-1 sm:min-w-0 sm:mr-4">
+              {saveError}
+            </p>
+          )}
+          <span className="text-sm text-[#877870] font-medium">
+            {editSection === "personal"
+              ? canSaveSection()
+                ? "Looking good!"
+                : "Fill in all fields to save"
+              : "Press Enter or + to add each item"}
+          </span>
+          <button
+            type="button"
+            onClick={handleSectionSave}
+            disabled={!canSaveSection() || saving}
+            className="flex items-center gap-2 px-7 py-3 rounded-xl font-bold text-white transition-all hover:-translate-y-0.5 disabled:opacity-40 disabled:cursor-not-allowed disabled:transform-none"
+            style={{ background: "#C27A8A", boxShadow: "0 8px 20px rgba(194,122,138,0.25)" }}
+          >
+            {saving ? (
+              "Saving…"
+            ) : (
+              <>
+                <User className="w-4 h-4 pop-icon-white" /> Save changes
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <ProgressHeader
@@ -712,24 +955,26 @@ function NewClientForm({ editClientId }: { editClientId?: string }) {
         onCancel={() => setLocation(cancelDestination())}
         mode={isEdit ? "edit" : "create"}
       />
-      <StepBar step={step} />
+      {!isSectionEdit && <StepBar step={step} />}
 
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 py-10">
-        {/* Step indicator dots */}
-        <div className="flex items-center justify-center gap-3 mb-8">
-          {[1, 2, 3].map((n) => (
-            <div
-              key={n}
-              className={`rounded-full transition-all duration-300 ${
-                n < step
-                  ? "w-6 h-2 bg-[#C27A8A]"
-                  : n === step
-                  ? "w-8 h-2 bg-[#C27A8A]"
-                  : "w-2 h-2 bg-[#F0E4E1]"
-              }`}
-            />
-          ))}
-        </div>
+        {/* Step indicator dots — full wizard only (not section edit) */}
+        {!isSectionEdit && (
+          <div className="flex items-center justify-center gap-3 mb-8">
+            {[1, 2, 3].map((n) => (
+              <div
+                key={n}
+                className={`rounded-full transition-all duration-300 ${
+                  n < step
+                    ? "w-6 h-2 bg-[#C27A8A]"
+                    : n === step
+                    ? "w-8 h-2 bg-[#C27A8A]"
+                    : "w-2 h-2 bg-[#F0E4E1]"
+                }`}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Step heading */}
         <AnimatePresence mode="wait">
@@ -818,13 +1063,20 @@ function NewClientForm({ editClientId }: { editClientId?: string }) {
   );
 }
 
-/** Edit flow: `/clients/edit/:clientId` */
+/** Edit flow: `/clients/edit/:clientId?section=personal|behaviors|programs|interventions` */
 export function EditClientPage() {
   const { clientId } = useParams<{ clientId: string }>();
+  const search = useSearch();
   if (!clientId) return <Redirect to="/clients" />;
   const n = Number.parseInt(clientId, 10);
   if (!Number.isFinite(n) || n <= 0) return <Redirect to="/clients" />;
-  return <NewClientForm editClientId={clientId} />;
+
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const sectionRaw = params.get("section");
+  if (!isEditSection(sectionRaw)) {
+    return <Redirect to={`/clients/edit/${clientId}?section=personal`} />;
+  }
+  return <NewClientForm editClientId={clientId} editSection={sectionRaw} />;
 }
 
 export default function NewClient() {

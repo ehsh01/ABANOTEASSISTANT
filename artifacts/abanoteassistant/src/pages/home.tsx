@@ -4,9 +4,7 @@ import { Sparkles, Clock, ShieldCheck, FileCheck2, LayoutTemplate, ChevronRight,
 import { useAuthStore } from "@/store/auth-store";
 
 export default function Home() {
-  const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
   return (
     <div className="min-h-screen w-full relative overflow-hidden bg-background">
 
@@ -15,7 +13,7 @@ export default function Home() {
       <div className="absolute top-72 right-16 w-24 h-24 bg-gradient-to-br from-[#d9a3b0]/20 to-[#b06a79]/20 rounded-3xl rotate-12 blur-md pointer-events-none z-0" />
 
       {/* ── Navigation ── */}
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4">
+      <nav className="sticky top-11 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4 sm:top-12">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="relative w-9 h-9 flex items-center justify-center">
@@ -36,20 +34,6 @@ export default function Home() {
             {user?.role === "super_admin" ? (
               <Link href="/admin"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Admin</span></Link>
             ) : null}
-            {token ? (
-              <button
-                type="button"
-                onClick={() => logout()}
-                className="hover:text-[#2D2523] transition-colors cursor-pointer bg-transparent border-0 p-0 font-semibold"
-              >
-                Sign out
-              </button>
-            ) : (
-              <>
-                <Link href="/login"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Sign in</span></Link>
-                <Link href="/register"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Register</span></Link>
-              </>
-            )}
           </div>
 
           <Link href="/wizard">

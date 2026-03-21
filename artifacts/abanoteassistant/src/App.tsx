@@ -15,6 +15,10 @@ import RegisterPage from "@/pages/register";
 import VerifyEmailPage from "@/pages/verify-email";
 import AdminPage from "@/pages/admin";
 import { useAuthStore } from "@/store/auth-store";
+import {
+  AuthenticatedSessionBar,
+  AUTH_SESSION_BAR_OFFSET_CLASS,
+} from "@/components/authenticated-session-bar";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,20 +37,25 @@ function AuthenticatedRoutes() {
   }
 
   return (
-    <Switch>
-      <Route path="/" component={Home} />
-      <Route path="/admin" component={AdminPage} />
-      <Route path="/wizard" component={Wizard} />
-      <Route path="/result" component={Result} />
-      <Route path="/clients/edit/:clientId" component={EditClientPage} />
-      <Route path="/clients/new" component={NewClient} />
-      <Route path="/clients" component={Clients} />
-      {/* Wizard links here; keep in sync with /clients/new */}
-      <Route path="/new-client" component={NewClient} />
-      <Route path="/notes" component={Notes} />
-      <Route path="/notes/:id" component={NoteDetail} />
-      <Route component={NotFound} />
-    </Switch>
+    <>
+      <AuthenticatedSessionBar />
+      <div className={AUTH_SESSION_BAR_OFFSET_CLASS}>
+        <Switch>
+          <Route path="/" component={Home} />
+          <Route path="/admin" component={AdminPage} />
+          <Route path="/wizard" component={Wizard} />
+          <Route path="/result" component={Result} />
+          <Route path="/clients/edit/:clientId" component={EditClientPage} />
+          <Route path="/clients/new" component={NewClient} />
+          <Route path="/clients" component={Clients} />
+          {/* Wizard links here; keep in sync with /clients/new */}
+          <Route path="/new-client" component={NewClient} />
+          <Route path="/notes" component={Notes} />
+          <Route path="/notes/:id" component={NoteDetail} />
+          <Route component={NotFound} />
+        </Switch>
+      </div>
+    </>
   );
 }
 

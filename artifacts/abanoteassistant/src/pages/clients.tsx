@@ -1,5 +1,11 @@
 import { useState } from "react";
 import { Link } from "wouter";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { motion } from "framer-motion";
 import {
   Sparkles,
@@ -92,16 +98,47 @@ function ClientCard({ client }: { client: Client }) {
           </div>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Link href={`/clients/edit/${client.id}`}>
-            <button
-              type="button"
-              className="p-2.5 rounded-xl border border-[#F0E4E1] text-[#877870] hover:text-[#C27A8A] hover:border-[#C27A8A]/40 hover:bg-[#FDFAF7] transition-colors"
-              title="Edit client"
-              aria-label={`Edit ${d.firstName} ${d.lastName}`}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                className="p-2.5 rounded-xl border border-[#F0E4E1] text-[#877870] hover:text-[#C27A8A] hover:border-[#C27A8A]/40 hover:bg-[#FDFAF7] transition-colors"
+                title="Edit client"
+                aria-label={`Edit ${d.firstName} ${d.lastName}`}
+              >
+                <Pencil className="w-4 h-4 pop-icon" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="min-w-[14rem] rounded-xl border border-slate-700/80 bg-[#141b2d] p-1.5 text-white shadow-xl shadow-black/40"
             >
-              <Pencil className="w-4 h-4 pop-icon" />
-            </button>
-          </Link>
+              <DropdownMenuItem
+                asChild
+                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:bg-white/10 focus:text-white data-[highlighted]:bg-white/10 data-[highlighted]:text-white"
+              >
+                <Link href={`/clients/edit/${client.id}?section=personal`}>Edit name & gender</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                asChild
+                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:bg-white/10 focus:text-white data-[highlighted]:bg-white/10 data-[highlighted]:text-white"
+              >
+                <Link href={`/clients/edit/${client.id}?section=behaviors`}>Edit behaviors</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                asChild
+                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:bg-white/10 focus:text-white data-[highlighted]:bg-white/10 data-[highlighted]:text-white"
+              >
+                <Link href={`/clients/edit/${client.id}?section=programs`}>Edit programs</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                asChild
+                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:bg-white/10 focus:text-white data-[highlighted]:bg-white/10 data-[highlighted]:text-white"
+              >
+                <Link href={`/clients/edit/${client.id}?section=interventions`}>Edit interventions</Link>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <div className="p-2 text-[#F0E4E1] group-hover:text-[#C27A8A] transition-colors" aria-hidden>
             <ChevronRight className="w-5 h-5 pop-icon" />
           </div>
@@ -181,7 +218,7 @@ export default function Clients() {
   return (
     <div className="min-h-screen bg-background">
       {/* Nav */}
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4">
+      <nav className="sticky top-11 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4 sm:top-12">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link href="/">
             <div className="flex items-center gap-3 cursor-pointer">

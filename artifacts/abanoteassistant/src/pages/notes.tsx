@@ -44,7 +44,7 @@ export default function Notes() {
   return (
     <div className="min-h-screen bg-background">
       {/* ── Nav ── */}
-      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4">
+      <nav className="sticky top-11 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4 sm:top-12">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link href="/">
             <div className="flex items-center gap-3 cursor-pointer">
