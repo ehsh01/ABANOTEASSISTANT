@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -26,17 +26,25 @@ const queryClient = new QueryClient({
   },
 });
 
+const NO_SIDEBAR_ROUTES = ["/"];
+
 function AuthenticatedRoutes() {
   const token = useAuthStore((s) => s.token);
+  const [location] = useLocation();
 
   if (!token) {
     return <Redirect to="/login" />;
   }
 
+  const showSidebar = !NO_SIDEBAR_ROUTES.includes(location);
+
   return (
     <div className="flex min-h-screen">
-      <AppSidebar />
-      <main className="flex-1 min-h-screen overflow-auto" style={{ marginLeft: SIDEBAR_WIDTH }}>
+      {showSidebar && <AppSidebar />}
+      <main
+        className="flex-1 min-h-screen overflow-auto"
+        style={{ marginLeft: showSidebar ? SIDEBAR_WIDTH : 0 }}
+      >
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/admin" component={AdminPage} />
