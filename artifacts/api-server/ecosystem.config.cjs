@@ -2,7 +2,7 @@
  * PM2 Ecosystem Configuration for ABA Note Assistant
  *
  * Loads `artifacts/api-server/.env` so PM2 does not inherit unrelated shell/PM2 globals.
- * Production listens on 5002, staging on 5005 (override via API_PORT_PROD / API_PORT_STAGING in .env).
+ * Production listens on 5002, staging on 5007 by default (override via API_PORT_PROD / API_PORT_STAGING in .env).
  *
  * Must be `.cjs` because `artifacts/api-server/package.json` has `"type": "module"`.
  *
@@ -76,7 +76,7 @@ function prodEnv() {
 function stagingEnv() {
   const e = {
     NODE_ENV: "staging",
-    PORT: env("API_PORT_STAGING") || "5005",
+    PORT: env("API_PORT_STAGING") || "5007",
   };
   const db = env("DATABASE_URL_STAGING") || env("DATABASE_URL");
   const jwt = env("JWT_SECRET_STAGING") || env("JWT_SECRET");
