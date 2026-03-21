@@ -62,6 +62,57 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Email delivery not configured (production requires Resend)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/verify-email:
+    post:
+      operationId: verifyEmail
+      tags: [auth]
+      summary: Confirm email address with token from registration email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyEmailRequest"
+      responses:
+        "200":
+          description: Email verified (or already verified)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VerifyEmailResponse"
+        "400":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/resend-verification:
+    post:
+      operationId: resendVerification
+      tags: [auth]
+      summary: Resend verification email
+      description: Always returns a generic success message to avoid email enumeration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResendVerificationRequest"
+      responses:
+        "200":
+          description: Request accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResendVerificationResponse"
 
   /auth/login:
     post:
@@ -89,6 +140,12 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Email not verified yet
           content:
             application/json:
               schema:
@@ -513,13 +570,84 @@ components:
         - user
         - company
 
+    RegisterData:
+      type: object
+      description: >
+        If pendingEmailVerification is true, the user must open the link in their email before signing in;
+        token, user, and company are omitted. If false, the client is signed in immediately (e.g. local dev without Resend).
+      properties:
+        pendingEmailVerification:
+          type: boolean
+        message:
+          type: string
+        token:
+          type: string
+          nullable: true
+        user:
+          allOf:
+            - $ref: "#/components/schemas/AuthUser"
+          nullable: true
+        company:
+          allOf:
+            - $ref: "#/components/schemas/AuthCompany"
+          nullable: true
+      required:
+        - pendingEmailVerification
+        - message
+
+    VerifyEmailRequest:
+      type: object
+      properties:
+        token:
+          type: string
+          minLength: 16
+      required:
+        - token
+
+    VerifyEmailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - message
+
+    ResendVerificationRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+      required:
+        - email
+
+    ResendVerificationResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        message:
+          type: string
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - message
+
     RegisterResponse:
       type: object
       properties:
         success:
           type: boolean
         data:
-          $ref: "#/components/schemas/AuthPayload"
+          $ref: "#/components/schemas/RegisterData"
         error:
           type: string
           nullable: true

@@ -12,6 +12,7 @@ import NoteDetail from "./pages/note-detail";
 import NotFound from "@/pages/not-found";
 import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
+import VerifyEmailPage from "@/pages/verify-email";
 import AdminPage from "@/pages/admin";
 import { useAuthStore } from "@/store/auth-store";
 
@@ -49,6 +50,7 @@ function Router() {
     <Switch>
       <Route path="/login" component={LoginPage} />
       <Route path="/register" component={RegisterPage} />
+      <Route path="/verify-email" component={VerifyEmailPage} />
       <Route path="/admin" component={AdminPage} />
       <Route component={AuthenticatedRoutes} />
     </Switch>

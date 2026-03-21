@@ -31,27 +31,66 @@ export const RegisterBody = zod.object({
 
 export const RegisterResponse = zod.object({
   success: zod.boolean(),
-  data: zod.object({
-    token: zod.string(),
-    user: zod.object({
-      id: zod.number(),
-      email: zod.string(),
-      companyId: zod.number(),
-      role: zod.enum(["user", "super_admin"]),
-    }),
-    company: zod.object({
-      id: zod.number(),
-      name: zod.string(),
-      address: zod.string().optional(),
-      phone: zod.string().optional(),
-      email: zod.string().optional(),
-      freeUsage: zod
-        .boolean()
-        .describe(
-          "When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server).",
-        ),
-    }),
-  }),
+  data: zod
+    .object({
+      pendingEmailVerification: zod.boolean(),
+      message: zod.string(),
+      token: zod.string().nullish(),
+      user: zod
+        .object({
+          id: zod.number(),
+          email: zod.string(),
+          companyId: zod.number(),
+          role: zod.enum(["user", "super_admin"]),
+        })
+        .nullish(),
+      company: zod
+        .object({
+          id: zod.number(),
+          name: zod.string(),
+          address: zod.string().optional(),
+          phone: zod.string().optional(),
+          email: zod.string().optional(),
+          freeUsage: zod
+            .boolean()
+            .describe(
+              "When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server).",
+            ),
+        })
+        .nullish(),
+    })
+    .describe(
+      "If pendingEmailVerification is true, the user must open the link in their email before signing in; token, user, and company are omitted. If false, the client is signed in immediately (e.g. local dev without Resend).\n",
+    ),
+  error: zod.string().nullish(),
+});
+
+/**
+ * @summary Confirm email address with token from registration email
+ */
+export const verifyEmailBodyTokenMin = 16;
+
+export const VerifyEmailBody = zod.object({
+  token: zod.string().min(verifyEmailBodyTokenMin),
+});
+
+export const VerifyEmailResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string(),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Always returns a generic success message to avoid email enumeration.
+ * @summary Resend verification email
+ */
+export const ResendVerificationBody = zod.object({
+  email: zod.string().email(),
+});
+
+export const ResendVerificationResponse = zod.object({
+  success: zod.boolean(),
+  message: zod.string(),
   error: zod.string().nullish(),
 });
 

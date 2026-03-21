@@ -84,9 +84,42 @@ export interface AuthPayload {
   company: AuthCompany;
 }
 
+/**
+ * If pendingEmailVerification is true, the user must open the link in their email before signing in; token, user, and company are omitted. If false, the client is signed in immediately (e.g. local dev without Resend).
+
+ */
+export interface RegisterData {
+  pendingEmailVerification: boolean;
+  message: string;
+  token?: string | null;
+  user?: AuthUser | null;
+  company?: AuthCompany | null;
+}
+
+export interface VerifyEmailRequest {
+  /** @minLength 16 */
+  token: string;
+}
+
+export interface VerifyEmailResponse {
+  success: boolean;
+  message: string;
+  error?: string | null;
+}
+
+export interface ResendVerificationRequest {
+  email: string;
+}
+
+export interface ResendVerificationResponse {
+  success: boolean;
+  message: string;
+  error?: string | null;
+}
+
 export interface RegisterResponse {
   success: boolean;
-  data: AuthPayload;
+  data: RegisterData;
   error?: string | null;
 }
 
