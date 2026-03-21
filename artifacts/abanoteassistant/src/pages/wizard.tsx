@@ -950,7 +950,7 @@ export default function Wizard() {
       </AnimatePresence>
 
       {/* Header & Progress */}
-      <header className="bg-card border-b border-border sticky top-11 z-10 px-4 sm:px-6 lg:px-8 h-16 flex flex-col justify-center sm:top-12">
+      <header className="bg-card border-b border-border sticky top-0 z-10 px-4 sm:px-6 lg:px-8 h-16 flex flex-col justify-center">
         <div className="flex items-center justify-between mb-1">
           <button onClick={handleBack} className="text-sm font-semibold text-muted-foreground hover:text-foreground flex items-center">
             <ChevronLeft className="w-4 h-4 mr-1 pop-icon" /> Back

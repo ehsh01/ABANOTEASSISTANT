@@ -60,7 +60,7 @@ export default function AdminPage() {
     <div className="min-h-screen bg-[#FDFAF7]">
 
       {/* ── Nav ── */}
-      <nav className="sticky top-11 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4 sm:top-12">
+      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="relative w-9 h-9 flex items-center justify-center">

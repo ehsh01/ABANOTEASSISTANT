@@ -13,7 +13,7 @@ export default function Home() {
       <div className="absolute top-72 right-16 w-24 h-24 bg-gradient-to-br from-[#d9a3b0]/20 to-[#b06a79]/20 rounded-3xl rotate-12 blur-md pointer-events-none z-0" />
 
       {/* ── Navigation ── */}
-      <nav className="sticky top-11 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4 sm:top-12">
+      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="relative w-9 h-9 flex items-center justify-center">

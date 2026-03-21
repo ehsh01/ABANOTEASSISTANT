@@ -188,7 +188,7 @@ function ProgressHeader({
 }) {
   const labels = ["Personal Info", "Assessment", "Programs & Behaviors"];
   return (
-    <header className="bg-primary sticky top-11 z-50 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between sm:top-12">
+    <header className="bg-primary sticky top-0 z-50 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <button
         onClick={onBack}
         className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors font-semibold text-sm"
@@ -223,7 +223,7 @@ function SectionEditHeader({
   onCancel: () => void;
 }) {
   return (
-    <header className="bg-primary sticky top-11 z-50 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between sm:top-12">
+    <header className="bg-primary sticky top-0 z-50 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <button
         type="button"
         onClick={onBack}

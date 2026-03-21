@@ -15,10 +15,7 @@ import RegisterPage from "@/pages/register";
 import VerifyEmailPage from "@/pages/verify-email";
 import AdminPage from "@/pages/admin";
 import { useAuthStore } from "@/store/auth-store";
-import {
-  AuthenticatedSessionBar,
-  AUTH_SESSION_BAR_OFFSET_CLASS,
-} from "@/components/authenticated-session-bar";
+import { AppSidebar, SIDEBAR_WIDTH } from "@/components/app-sidebar";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -37,9 +34,9 @@ function AuthenticatedRoutes() {
   }
 
   return (
-    <>
-      <AuthenticatedSessionBar />
-      <div className={AUTH_SESSION_BAR_OFFSET_CLASS}>
+    <div className="flex min-h-screen">
+      <AppSidebar />
+      <main className="flex-1 min-h-screen overflow-auto" style={{ marginLeft: SIDEBAR_WIDTH }}>
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/admin" component={AdminPage} />
@@ -48,14 +45,13 @@ function AuthenticatedRoutes() {
           <Route path="/clients/edit/:clientId" component={EditClientPage} />
           <Route path="/clients/new" component={NewClient} />
           <Route path="/clients" component={Clients} />
-          {/* Wizard links here; keep in sync with /clients/new */}
           <Route path="/new-client" component={NewClient} />
           <Route path="/notes" component={Notes} />
           <Route path="/notes/:id" component={NoteDetail} />
           <Route component={NotFound} />
         </Switch>
-      </div>
-    </>
+      </main>
+    </div>
   );
 }
 

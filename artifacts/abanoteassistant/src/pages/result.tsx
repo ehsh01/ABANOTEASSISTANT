@@ -47,7 +47,7 @@ export default function Result() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <header className="bg-primary sticky top-11 z-10 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between shadow-sm sm:top-12">
+      <header className="bg-primary sticky top-0 z-10 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
           <button onClick={() => setLocation("/")} className="text-white/80 hover:text-white transition-colors p-2 -ml-2 rounded-lg hover:bg-white/15">
             <ChevronLeft className="w-5 h-5 pop-icon-white" />
