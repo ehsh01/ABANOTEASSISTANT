@@ -23,7 +23,7 @@ export default function DarkSidebar() {
     <div style={{ fontFamily: "'Plus Jakarta Sans', sans-serif", background: "#FDFAF7", minHeight: "100vh", display: "flex" }}>
 
       {/* Dark sidebar */}
-      <div style={{ width: 220, background: "#2D1F1A", flexShrink: 0, display: "flex", flexDirection: "column", padding: "24px 0" }}>
+      <div style={{ width: 220, background: "#3D1F28", flexShrink: 0, display: "flex", flexDirection: "column", padding: "24px 0" }}>
         <div style={{ padding: "0 20px 28px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <div style={{ fontWeight: 800, letterSpacing: "0.1em", fontSize: 10, color: "#C27A8A", textTransform: "uppercase", marginBottom: 4 }}>ABANOTEASSISTANT</div>
           <div style={{ width: 36, height: 2, background: "linear-gradient(90deg,#C27A8A,transparent)", borderRadius: 2 }} />
