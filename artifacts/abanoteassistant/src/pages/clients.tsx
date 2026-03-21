@@ -111,29 +111,29 @@ function ClientCard({ client }: { client: Client }) {
             </DropdownMenuTrigger>
             <DropdownMenuContent
               align="end"
-              className="min-w-[14rem] rounded-xl border border-slate-700/80 bg-[#141b2d] p-1.5 text-white shadow-xl shadow-black/40"
+              className="min-w-[14rem] rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] p-1.5 shadow-lg shadow-[#C27A8A]/10"
             >
               <DropdownMenuItem
                 asChild
-                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:bg-white/10 focus:text-white data-[highlighted]:bg-white/10 data-[highlighted]:text-white"
+                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-[#2D2523] focus:bg-[#F0E4E1] focus:text-[#C27A8A] data-[highlighted]:bg-[#F0E4E1] data-[highlighted]:text-[#C27A8A]"
               >
                 <Link href={`/clients/edit/${client.id}?section=personal`}>Edit name & gender</Link>
               </DropdownMenuItem>
               <DropdownMenuItem
                 asChild
-                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:bg-white/10 focus:text-white data-[highlighted]:bg-white/10 data-[highlighted]:text-white"
+                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-[#2D2523] focus:bg-[#F0E4E1] focus:text-[#C27A8A] data-[highlighted]:bg-[#F0E4E1] data-[highlighted]:text-[#C27A8A]"
               >
                 <Link href={`/clients/edit/${client.id}?section=behaviors`}>Edit behaviors</Link>
               </DropdownMenuItem>
               <DropdownMenuItem
                 asChild
-                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:bg-white/10 focus:text-white data-[highlighted]:bg-white/10 data-[highlighted]:text-white"
+                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-[#2D2523] focus:bg-[#F0E4E1] focus:text-[#C27A8A] data-[highlighted]:bg-[#F0E4E1] data-[highlighted]:text-[#C27A8A]"
               >
                 <Link href={`/clients/edit/${client.id}?section=programs`}>Edit programs</Link>
               </DropdownMenuItem>
               <DropdownMenuItem
                 asChild
-                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-white focus:bg-white/10 focus:text-white data-[highlighted]:bg-white/10 data-[highlighted]:text-white"
+                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-[#2D2523] focus:bg-[#F0E4E1] focus:text-[#C27A8A] data-[highlighted]:bg-[#F0E4E1] data-[highlighted]:text-[#C27A8A]"
               >
                 <Link href={`/clients/edit/${client.id}?section=interventions`}>Edit interventions</Link>
               </DropdownMenuItem>
