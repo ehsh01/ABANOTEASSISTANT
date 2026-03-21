@@ -23,35 +23,49 @@ if [ -d "$BCRYPT_DIR" ] && [ ! -f "$BCRYPT_DIR/lib/binding/napi-v3/bcrypt_lib.no
   (cd "$BCRYPT_DIR" && npm run install)
 fi
 
-echo "🗄️  Database schema (drizzle push)..."
-# Load only DATABASE_URL by scanning lines — avoids `source .env` failing when another
-# line has a bash syntax issue (e.g. unclosed quote, stray newline).
-ENV_FILE="artifacts/api-server/.env"
-if [ ! -f "$ENV_FILE" ]; then
-  echo "❌ Missing $ENV_FILE"
-  exit 1
-fi
-DATABASE_URL=""
-while IFS= read -r line || [ -n "$line" ]; do
-  [[ "$line" =~ ^[[:space:]]*# ]] && continue
-  [[ -z "${line// }" ]] && continue
-  if [[ "$line" =~ ^[[:space:]]*DATABASE_URL[[:space:]]*= ]]; then
-    DATABASE_URL="${line#*=}"
-    DATABASE_URL="${DATABASE_URL#"${DATABASE_URL%%[![:space:]]*}"}"
-    DATABASE_URL="${DATABASE_URL%"${DATABASE_URL##*[![:space:]]}"}"
-    DATABASE_URL="${DATABASE_URL#\"}"
-    DATABASE_URL="${DATABASE_URL%\"}"
-    DATABASE_URL="${DATABASE_URL#\'}"
-    DATABASE_URL="${DATABASE_URL%\'}"
-    break
+# Optional schema sync — off by default so non-interactive deploys never hang on drizzle
+# prompts (e.g. “data loss” when DB and code drift). For first-time DB setup:
+#   RUN_DRIZZLE_PUSH=1 bash complete-deployment.sh
+# Destructive auto-approve (dangerous): FORCE_DRIZZLE_PUSH=1 RUN_DRIZZLE_PUSH=1 bash ...
+load_database_url_for_push() {
+  ENV_FILE="artifacts/api-server/.env"
+  if [ ! -f "$ENV_FILE" ]; then
+    echo "❌ Missing $ENV_FILE"
+    exit 1
   fi
-done < "$ENV_FILE"
-if [ -z "$DATABASE_URL" ]; then
-  echo "❌ DATABASE_URL not found in $ENV_FILE"
-  exit 1
+  DATABASE_URL=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ -z "${line// }" ]] && continue
+    if [[ "$line" =~ ^[[:space:]]*DATABASE_URL[[:space:]]*= ]]; then
+      DATABASE_URL="${line#*=}"
+      DATABASE_URL="${DATABASE_URL#"${DATABASE_URL%%[![:space:]]*}"}"
+      DATABASE_URL="${DATABASE_URL%"${DATABASE_URL##*[![:space:]]}"}"
+      DATABASE_URL="${DATABASE_URL#\"}"
+      DATABASE_URL="${DATABASE_URL%\"}"
+      DATABASE_URL="${DATABASE_URL#\'}"
+      DATABASE_URL="${DATABASE_URL%\'}"
+      break
+    fi
+  done < "$ENV_FILE"
+  if [ -z "$DATABASE_URL" ]; then
+    echo "❌ DATABASE_URL not found in $ENV_FILE"
+    exit 1
+  fi
+  export DATABASE_URL
+}
+
+if [ "${RUN_DRIZZLE_PUSH:-0}" = "1" ]; then
+  echo "🗄️  Database schema (drizzle push)..."
+  load_database_url_for_push
+  if [ "${FORCE_DRIZZLE_PUSH:-0}" = "1" ]; then
+    pnpm --filter @workspace/db run push-force
+  else
+    pnpm --filter @workspace/db run push
+  fi
+else
+  echo "⏭️  Skipping drizzle push (set RUN_DRIZZLE_PUSH=1 when you need schema sync)"
 fi
-export DATABASE_URL
-pnpm --filter @workspace/db run push
 
 echo "🔨 Building API server..."
 pnpm --filter @workspace/api-server run build
