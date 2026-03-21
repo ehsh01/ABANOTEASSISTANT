@@ -31,12 +31,8 @@ export default function Home() {
 
           <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-[#877870]">
             <span className="text-[#C27A8A]">Dashboard</span>
-            {user?.role !== "super_admin" ? (
-              <>
-                <Link href="/notes"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Notes</span></Link>
-                <Link href="/clients"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Clients</span></Link>
-              </>
-            ) : null}
+            <Link href="/notes"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Notes</span></Link>
+            <Link href="/clients"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Clients</span></Link>
             {user?.role === "super_admin" ? (
               <Link href="/admin"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Admin</span></Link>
             ) : null}
@@ -56,19 +52,11 @@ export default function Home() {
             )}
           </div>
 
-          {user?.role !== "super_admin" ? (
-            <Link href="/wizard">
-              <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
-                New Note <ChevronRight className="w-4 h-4 pop-icon-white" />
-              </button>
-            </Link>
-          ) : (
-            <Link href="/admin">
-              <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
-                Admin console <ChevronRight className="w-4 h-4 pop-icon-white" />
-              </button>
-            </Link>
-          )}
+          <Link href="/wizard">
+            <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
+              New Note <ChevronRight className="w-4 h-4 pop-icon-white" />
+            </button>
+          </Link>
         </div>
       </nav>
 
@@ -129,27 +117,19 @@ export default function Home() {
             transition={{ duration: 0.5, delay: 0.15 }}
             className="flex flex-col sm:flex-row items-center gap-4 mb-16"
           >
-            {user?.role !== "super_admin" ? (
-              <>
-                <Link href="/wizard">
-                  <button className="w-full sm:w-auto px-8 py-4 bg-white text-[#C27A8A] rounded-full font-bold text-lg shadow-[0_10px_30px_rgba(255,255,255,0.2)] hover:shadow-[0_15px_40px_rgba(255,255,255,0.3)] transition-all hover:-translate-y-1 flex items-center justify-center gap-2">
-                    <Sparkles className="w-5 h-5 pop-icon" />
-                    Generate Note
-                  </button>
-                </Link>
-                <Link to="/notes">
-                  <button className="w-full sm:w-auto px-8 py-4 bg-transparent border border-white/30 text-white rounded-full font-bold text-lg hover:bg-white/10 backdrop-blur-sm transition-all flex items-center justify-center gap-2">
-                    View Past Notes
-                  </button>
-                </Link>
-              </>
-            ) : (
-              <Link href="/admin">
+            <>
+              <Link href="/wizard">
                 <button className="w-full sm:w-auto px-8 py-4 bg-white text-[#C27A8A] rounded-full font-bold text-lg shadow-[0_10px_30px_rgba(255,255,255,0.2)] hover:shadow-[0_15px_40px_rgba(255,255,255,0.3)] transition-all hover:-translate-y-1 flex items-center justify-center gap-2">
-                  Open admin console
+                  <Sparkles className="w-5 h-5 pop-icon" />
+                  Generate Note
                 </button>
               </Link>
-            )}
+              <Link to="/notes">
+                <button className="w-full sm:w-auto px-8 py-4 bg-transparent border border-white/30 text-white rounded-full font-bold text-lg hover:bg-white/10 backdrop-blur-sm transition-all flex items-center justify-center gap-2">
+                  View Past Notes
+                </button>
+              </Link>
+            </>
           </motion.div>
 
           {/* Trust badges */}
