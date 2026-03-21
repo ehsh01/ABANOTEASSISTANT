@@ -4,7 +4,7 @@ import authRouter from "./auth";
 import adminRouter from "./admin";
 import clientsRouter from "./clients";
 import notesRouter from "./notes";
-import { requireAuth } from "../middleware/auth";
+import { requireAuth, rejectSuperAdminFromTenantData } from "../middleware/auth";
 
 const router: IRouter = Router();
 
@@ -12,7 +12,7 @@ router.use(healthRouter);
 router.use(authRouter);
 router.use(requireAuth);
 router.use(adminRouter);
-router.use(clientsRouter);
-router.use(notesRouter);
+router.use(rejectSuperAdminFromTenantData, clientsRouter);
+router.use(rejectSuperAdminFromTenantData, notesRouter);
 
 export default router;

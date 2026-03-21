@@ -77,3 +77,23 @@ export function requireSuperAdmin(req: Request, res: Response, next: NextFunctio
   }
   next();
 }
+
+/**
+ * Super admins manage companies and user accounts only — not clinical data (clients, notes).
+ */
+export function rejectSuperAdminFromTenantData(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  if (req.role === "super_admin") {
+    res.status(403).json({
+      success: false,
+      error:
+        "Super admins cannot access clients or notes. Sign in as a company user, or use the Admin console for companies and accounts.",
+      messages: [],
+    });
+    return;
+  }
+  next();
+}

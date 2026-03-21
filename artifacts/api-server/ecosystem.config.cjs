@@ -58,7 +58,10 @@ function env(key) {
 const repoRoot = path.resolve(__dirname, "../..");
 
 function prodEnv() {
+  // Spread `.env` so Resend, APP_ORIGIN, etc. reach the Node process (previously only
+  // DATABASE_URL + JWT_SECRET were passed, so RESEND_API_KEY in .env was ignored).
   const e = {
+    ...fileEnv,
     NODE_ENV: "production",
     PORT: env("API_PORT_PROD") || "5002",
   };
@@ -75,6 +78,7 @@ function prodEnv() {
 
 function stagingEnv() {
   const e = {
+    ...fileEnv,
     NODE_ENV: "staging",
     PORT: env("API_PORT_STAGING") || "5007",
   };

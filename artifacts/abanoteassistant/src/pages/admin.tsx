@@ -1,8 +1,10 @@
-import { Link, Redirect } from "wouter";
+import { Redirect } from "wouter";
 import {
   useListAdminCompanies,
+  useListAdminUsers,
   usePatchAdminCompany,
   type AdminCompany,
+  type AdminUserAccount,
 } from "@workspace/api-client-react";
 import { useAuthStore } from "@/store/auth-store";
 import { Button } from "@/components/ui/button";
@@ -21,7 +23,15 @@ import { useToast } from "@/hooks/use-toast";
 export default function AdminPage() {
   const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
   const { toast } = useToast();
+
+  const usersQuery = useListAdminUsers({
+    query: {
+      enabled: !!token && user?.role === "super_admin",
+      queryKey: ["/api/admin/users", token, user?.role],
+    },
+  });
 
   const listQuery = useListAdminCompanies({
     query: {
@@ -60,14 +70,60 @@ export default function AdminPage() {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold">Super admin</h1>
-            <p className="text-muted-foreground text-sm">All companies and complimentary access</p>
+            <p className="text-muted-foreground text-sm">
+              Companies, user accounts, and complimentary access. Client and note data stay with each
+              company and are not visible here.
+            </p>
           </div>
-          <Link href="/">
-            <Button variant="outline" type="button">
-              Back to app
-            </Button>
-          </Link>
+          <Button
+            variant="outline"
+            type="button"
+            onClick={() => {
+              logout();
+            }}
+          >
+            Sign out
+          </Button>
         </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>User accounts</CardTitle>
+            <CardDescription>Every registered user and their organization (no client PHI).</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {usersQuery.isLoading ? (
+              <p className="text-sm text-muted-foreground">Loading…</p>
+            ) : usersQuery.isError ? (
+              <p className="text-sm text-destructive">Could not load accounts.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>ID</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Company</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Verified</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {usersQuery.data?.data.map((u: AdminUserAccount) => (
+                    <TableRow key={u.id}>
+                      <TableCell>{u.id}</TableCell>
+                      <TableCell>{u.email}</TableCell>
+                      <TableCell>
+                        #{u.companyId} — {u.companyName}
+                      </TableCell>
+                      <TableCell>{u.role}</TableCell>
+                      <TableCell>{u.emailVerified ? "Yes" : "No"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>

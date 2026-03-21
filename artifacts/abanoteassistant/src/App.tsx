@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -27,8 +27,23 @@ const queryClient = new QueryClient({
 
 function AuthenticatedRoutes() {
   const token = useAuthStore((s) => s.token);
+  const user = useAuthStore((s) => s.user);
+  const [loc] = useLocation();
+
   if (!token) {
     return <Redirect to="/login" />;
+  }
+
+  if (user?.role === "super_admin") {
+    const isTenantRoute =
+      loc === "/" ||
+      loc.startsWith("/wizard") ||
+      loc.startsWith("/clients") ||
+      loc.startsWith("/notes") ||
+      loc.startsWith("/result");
+    if (isTenantRoute) {
+      return <Redirect to="/admin" />;
+    }
   }
 
   return (

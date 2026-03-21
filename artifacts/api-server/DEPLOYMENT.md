@@ -67,17 +67,33 @@ Edit `ecosystem.config.js` in the project root:
 
 ### 7. Run Database Migrations
 
+Tables live in the PostgreSQL schema **`abanote`** (see `lib/db/drizzle.config.ts`: `schemaFilter: ["abanote"]`). If `drizzle-kit push` reports “No changes” while the API errors on missing `abanote.*` relations, the filter was missing or the wrong DB was targeted.
+
 ```bash
-pnpm --filter @workspace/db run push
+# From repo root, with DATABASE_URL set (or loaded from artifacts/api-server/.env):
+export DATABASE_URL="postgresql://..."
+
+# First time only, if the schema does not exist:
+psql "$DATABASE_URL" -c 'CREATE SCHEMA IF NOT EXISTS abanote;'
+
+cd lib/db
+pnpm exec drizzle-kit push --config ./drizzle.config.ts --force
 ```
+
+**DigitalOcean / managed Postgres + Node `pg`:** URLs often use `?sslmode=require`. Older API builds passed that string straight into `pg.Pool`, which can fail TLS verification and surface as a generic “Failed query” on registration. Prefer deploying the current `@workspace/db` pool (parses `DATABASE_URL` like Drizzle Kit), or use `sslmode=no-verify` in the URL until then. After a `.env` change, reload PM2 from `ecosystem.config.cjs` so the app picks up the new URL (`pm2 delete …` + `pm2 start …`, or equivalent).
 
 ### 8. Start with PM2
 
+Use **`artifacts/api-server/ecosystem.config.cjs`** (it loads `artifacts/api-server/.env` and passes those variables into the process, including `RESEND_API_KEY`, `EMAIL_FROM`, and `APP_ORIGIN`).
+
 ```bash
-pm2 start ecosystem.config.js --only abanoteassistant-api
+cd /path/to/repo
+pm2 start artifacts/api-server/ecosystem.config.cjs --only abanoteassistant-api
 pm2 save
 pm2 startup  # Follow instructions
 ```
+
+After changing `.env`, reload the app from that config (e.g. `pm2 delete abanoteassistant-api && pm2 start artifacts/api-server/ecosystem.config.cjs --only abanoteassistant-api`) so new keys are picked up.
 
 ### 9. Verify
 

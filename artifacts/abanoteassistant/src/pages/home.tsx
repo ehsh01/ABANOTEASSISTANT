@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { Sparkles, Clock, ShieldCheck, FileCheck2, LayoutTemplate, ChevronRight, CheckCircle2, Zap } from "lucide-react";
+import { Sparkles, Clock, ShieldCheck, FileCheck2, LayoutTemplate, ChevronRight, Zap } from "lucide-react";
 import { useAuthStore } from "@/store/auth-store";
 
 export default function Home() {
@@ -31,8 +31,12 @@ export default function Home() {
 
           <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-[#877870]">
             <span className="text-[#C27A8A]">Dashboard</span>
-            <Link href="/notes"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Notes</span></Link>
-            <Link href="/clients"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Clients</span></Link>
+            {user?.role !== "super_admin" ? (
+              <>
+                <Link href="/notes"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Notes</span></Link>
+                <Link href="/clients"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Clients</span></Link>
+              </>
+            ) : null}
             {user?.role === "super_admin" ? (
               <Link href="/admin"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Admin</span></Link>
             ) : null}
@@ -52,11 +56,19 @@ export default function Home() {
             )}
           </div>
 
-          <Link href="/wizard">
-            <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
-              New Note <ChevronRight className="w-4 h-4 pop-icon-white" />
-            </button>
-          </Link>
+          {user?.role !== "super_admin" ? (
+            <Link href="/wizard">
+              <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
+                New Note <ChevronRight className="w-4 h-4 pop-icon-white" />
+              </button>
+            </Link>
+          ) : (
+            <Link href="/admin">
+              <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
+                Admin console <ChevronRight className="w-4 h-4 pop-icon-white" />
+              </button>
+            </Link>
+          )}
         </div>
       </nav>
 
@@ -117,17 +129,27 @@ export default function Home() {
             transition={{ duration: 0.5, delay: 0.15 }}
             className="flex flex-col sm:flex-row items-center gap-4 mb-16"
           >
-            <Link href="/wizard">
-              <button className="w-full sm:w-auto px-8 py-4 bg-white text-[#C27A8A] rounded-full font-bold text-lg shadow-[0_10px_30px_rgba(255,255,255,0.2)] hover:shadow-[0_15px_40px_rgba(255,255,255,0.3)] transition-all hover:-translate-y-1 flex items-center justify-center gap-2">
-                <Sparkles className="w-5 h-5 pop-icon" />
-                Generate Note
-              </button>
-            </Link>
-            <Link to="/notes">
-              <button className="w-full sm:w-auto px-8 py-4 bg-transparent border border-white/30 text-white rounded-full font-bold text-lg hover:bg-white/10 backdrop-blur-sm transition-all flex items-center justify-center gap-2">
-                View Past Notes
-              </button>
-            </Link>
+            {user?.role !== "super_admin" ? (
+              <>
+                <Link href="/wizard">
+                  <button className="w-full sm:w-auto px-8 py-4 bg-white text-[#C27A8A] rounded-full font-bold text-lg shadow-[0_10px_30px_rgba(255,255,255,0.2)] hover:shadow-[0_15px_40px_rgba(255,255,255,0.3)] transition-all hover:-translate-y-1 flex items-center justify-center gap-2">
+                    <Sparkles className="w-5 h-5 pop-icon" />
+                    Generate Note
+                  </button>
+                </Link>
+                <Link to="/notes">
+                  <button className="w-full sm:w-auto px-8 py-4 bg-transparent border border-white/30 text-white rounded-full font-bold text-lg hover:bg-white/10 backdrop-blur-sm transition-all flex items-center justify-center gap-2">
+                    View Past Notes
+                  </button>
+                </Link>
+              </>
+            ) : (
+              <Link href="/admin">
+                <button className="w-full sm:w-auto px-8 py-4 bg-white text-[#C27A8A] rounded-full font-bold text-lg shadow-[0_10px_30px_rgba(255,255,255,0.2)] hover:shadow-[0_15px_40px_rgba(255,255,255,0.3)] transition-all hover:-translate-y-1 flex items-center justify-center gap-2">
+                  Open admin console
+                </button>
+              </Link>
+            )}
           </motion.div>
 
           {/* Trust badges */}
@@ -205,42 +227,29 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Client cards */}
+            {/* Client step preview — no sample PHI; real clients live under Clients after you add them */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
               <div
-                className="rounded-2xl p-6 cursor-pointer relative transition-all"
-                style={{ background: "#FDFAF7", border: "2px solid #C27A8A" }}
+                className="rounded-2xl p-6 relative transition-all"
+                style={{ background: "#FDFAF7", border: "2px solid rgba(240,228,225,0.8)" }}
               >
-                <div className="absolute top-4 right-4 text-[#C27A8A]">
-                  <CheckCircle2 className="w-6 h-6 pop-icon" style={{ fill: "#C27A8A", color: "#fff" }} />
-                </div>
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-[#C27A8A]" style={{ background: "rgba(194,122,138,0.1)" }}>JR</div>
-                  <div>
-                    <h3 className="font-bold text-[#2D2523] text-lg">James R.</h3>
-                    <p className="text-[#877870] text-sm">7 yrs • Clinic Session</p>
-                  </div>
-                </div>
-                <div className="inline-flex items-center gap-2 text-xs font-medium text-[#C27A8A] bg-white px-3 py-1.5 rounded-lg border border-[#F0E4E1]">
-                  <Clock className="w-3.5 h-3.5 pop-icon" /> Last session: Yesterday
-                </div>
+                <p className="text-[#877870] text-sm leading-relaxed">
+                  After you add clients under <strong className="text-[#2D2523]">Clients</strong>, they
+                  appear here in the wizard so you can generate notes. Data is private to your company.
+                </p>
               </div>
-
-              <div
-                className="rounded-2xl p-6 cursor-pointer hover:shadow-sm transition-all"
-                style={{ background: "#fff", border: "2px solid rgba(240,228,225,0.6)" }}
-              >
-                <div className="flex items-center gap-4 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center font-bold text-lg text-[#877870]">SM</div>
-                  <div>
-                    <h3 className="font-bold text-[#2D2523] text-lg">Sophia M.</h3>
-                    <p className="text-[#877870] text-sm">4 yrs • Home Session</p>
-                  </div>
+              <Link href="/clients" className="block">
+                <div
+                  className="rounded-2xl p-6 h-full flex flex-col justify-center cursor-pointer hover:shadow-sm transition-all"
+                  style={{ background: "#fff", border: "2px solid #C27A8A" }}
+                >
+                  <h3 className="font-bold text-[#2D2523] text-lg mb-2">Your clients</h3>
+                  <p className="text-[#877870] text-sm mb-4">Add and manage clients for your organization only.</p>
+                  <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#C27A8A]">
+                    Go to Clients <ChevronRight className="w-4 h-4 pop-icon" />
+                  </span>
                 </div>
-                <div className="inline-flex items-center gap-2 text-xs font-medium text-[#877870] bg-gray-50 px-3 py-1.5 rounded-lg">
-                  <Clock className="w-3.5 h-3.5 pop-icon" /> Last session: 3 days ago
-                </div>
-              </div>
+              </Link>
             </div>
 
             {/* Action bar */}

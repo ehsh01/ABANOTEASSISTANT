@@ -78,6 +78,30 @@ export interface AdminCompanyPatchResponse {
   error?: string | null;
 }
 
+export type AdminUserAccountRole =
+  (typeof AdminUserAccountRole)[keyof typeof AdminUserAccountRole];
+
+export const AdminUserAccountRole = {
+  user: "user",
+  super_admin: "super_admin",
+} as const;
+
+export interface AdminUserAccount {
+  id: number;
+  email: string;
+  companyId: number;
+  companyName: string;
+  role: AdminUserAccountRole;
+  emailVerified: boolean;
+  createdAt: string;
+}
+
+export interface AdminUserListResponse {
+  success: boolean;
+  data: AdminUserAccount[];
+  error?: string | null;
+}
+
 export interface AuthPayload {
   token: string;
   user: AuthUser;

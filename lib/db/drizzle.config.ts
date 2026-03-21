@@ -31,6 +31,8 @@ if (Number.isNaN(port)) {
 export default defineConfig({
   schema: path.join(__dirname, "./src/schema/index.ts"),
   dialect: "postgresql",
+  // drizzle-kit push/pull default to `public` only; our app lives in `abanote` (pgSchema).
+  schemaFilter: ["abanote"],
   dbCredentials: {
     host: parsed.host,
     port,

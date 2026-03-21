@@ -223,6 +223,35 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /admin/users:
+    get:
+      operationId: listAdminUsers
+      tags: [admin]
+      summary: List all user accounts (super admin)
+      description: >
+        Returns every user (email, company, role). Does not include client/clinical data.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User accounts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUserListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — not a super admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /clients:
     get:
       operationId: listClients
@@ -549,6 +578,49 @@ components:
           type: boolean
         data:
           $ref: "#/components/schemas/AdminCompany"
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    AdminUserAccount:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        companyId:
+          type: integer
+        companyName:
+          type: string
+        role:
+          type: string
+          enum: [user, super_admin]
+        emailVerified:
+          type: boolean
+        createdAt:
+          type: string
+      required:
+        - id
+        - email
+        - companyId
+        - companyName
+        - role
+        - emailVerified
+        - createdAt
+
+    AdminUserListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminUserAccount"
         error:
           type: string
           nullable: true

@@ -1,5 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { useClientsStore } from "./clients-store";
+import { useNotesStore } from "./notes-store";
 
 export type SessionUser = {
   id: number;
@@ -32,7 +34,11 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       company: null,
       setSession: (token, user, company) => set({ token, user, company }),
-      logout: () => set({ token: null, user: null, company: null }),
+      logout: () => {
+        useClientsStore.getState().reset();
+        useNotesStore.getState().reset();
+        set({ token: null, user: null, company: null });
+      },
     }),
     { name: "aba-note-auth-v1" },
   ),

@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import { count, eq } from "drizzle-orm";
 import {
   ListAdminCompaniesResponse,
+  ListAdminUsersResponse,
   PatchAdminCompanyParams,
   PatchAdminCompanyBody,
   PatchAdminCompanyResponse,
@@ -13,6 +14,37 @@ import { requireSuperAdmin } from "../middleware/auth";
 const router: IRouter = Router();
 
 router.use(requireSuperAdmin);
+
+router.get("/admin/users", async (_req, res) => {
+  const rows = await db
+    .select({
+      id: usersTable.id,
+      email: usersTable.email,
+      companyId: usersTable.companyId,
+      companyName: companiesTable.name,
+      role: usersTable.role,
+      emailVerified: usersTable.emailVerified,
+      createdAt: usersTable.createdAt,
+    })
+    .from(usersTable)
+    .innerJoin(companiesTable, eq(usersTable.companyId, companiesTable.id));
+
+  const data = ListAdminUsersResponse.parse({
+    success: true,
+    data: rows.map((r) => ({
+      id: r.id,
+      email: r.email,
+      companyId: r.companyId,
+      companyName: r.companyName,
+      role: r.role === "super_admin" ? ("super_admin" as const) : ("user" as const),
+      emailVerified: r.emailVerified,
+      createdAt: r.createdAt.toISOString(),
+    })),
+    error: null,
+  });
+
+  res.json(data);
+});
 
 router.get("/admin/companies", async (_req, res) => {
   const companies = await db.select().from(companiesTable);

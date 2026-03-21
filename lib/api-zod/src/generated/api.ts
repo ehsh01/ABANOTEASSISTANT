@@ -169,6 +169,27 @@ export const PatchAdminCompanyResponse = zod.object({
 });
 
 /**
+ * Returns every user (email, company, role). Does not include client/clinical data.
+
+ * @summary List all user accounts (super admin)
+ */
+export const ListAdminUsersResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.array(
+    zod.object({
+      id: zod.number(),
+      email: zod.string(),
+      companyId: zod.number(),
+      companyName: zod.string(),
+      role: zod.enum(["user", "super_admin"]),
+      emailVerified: zod.boolean(),
+      createdAt: zod.string(),
+    }),
+  ),
+  error: zod.string().nullish(),
+});
+
+/**
  * @summary List all clients
  */
 export const ListClientsResponse = zod.object({
