@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon, UserPlus, Clock } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { useWizardStore } from "@/store/wizard-store";
 import { useClients, useClientPrograms, useGenerateSessionNote } from "@/hooks/use-aba-api";
+import { useClientsStore } from "@/store/clients-store";
 import { cn, formatSessionDate } from "@/lib/utils";
 import {
   Popover,
@@ -218,12 +219,14 @@ function EnvChangeMultiSelect({
 // --- WIZARD STEPS COMPONENTS ---
 
 function Step1Client() {
+  const [, setLocation] = useLocation();
   const { data: wizardData, updateData } = useWizardStore();
   const { data: clientsRes, isLoading } = useClients();
+  const { clients: localClients } = useClientsStore();
 
   if (isLoading) return <div className="py-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary pop-icon" /></div>;
 
-  const clients = clientsRes?.data || [];
+  const apiClients = clientsRes?.data || [];
 
   return (
     <div className="space-y-6">
@@ -233,10 +236,11 @@ function Step1Client() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {clients.map(client => {
+        {/* API clients */}
+        {apiClients.map(client => {
           const isSelected = wizardData.clientId === client.id;
           const isMissing = client.assessmentStatus === "missing";
-          
+
           return (
             <button
               key={client.id}
@@ -255,7 +259,7 @@ function Step1Client() {
               )}
               <h3 className="font-bold text-lg text-foreground">{client.name}</h3>
               <p className="text-sm text-muted-foreground mb-4">{client.ageBand}</p>
-              
+
               <div className="flex items-center gap-2">
                 {isMissing ? (
                   <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium bg-destructive/10 text-destructive border border-destructive/20">
@@ -275,9 +279,40 @@ function Step1Client() {
             </button>
           );
         })}
+
+        {/* Locally-created clients (pending backend sync) */}
+        {localClients.map(client => (
+          <div
+            key={client.id}
+            className="relative text-left p-6 rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/50 opacity-80"
+          >
+            <div className="absolute top-4 right-4">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200 text-[10px] font-semibold uppercase tracking-wide">
+                <Clock className="w-3 h-3 pop-icon" /> Pending sync
+              </span>
+            </div>
+            <h3 className="font-bold text-lg text-foreground pr-24">{client.firstName} {client.lastName}</h3>
+            <p className="text-sm text-muted-foreground mb-4">Added locally — awaiting backend setup</p>
+            <p className="text-xs text-amber-700">This client needs to be saved to the server before notes can be generated.</p>
+          </div>
+        ))}
+
+        {/* New Client card */}
+        <button
+          onClick={() => setLocation("/new-client?returnTo=wizard")}
+          className="flex flex-col items-center justify-center gap-3 p-6 rounded-2xl border-2 border-dashed border-border bg-card hover:border-primary/50 hover:bg-primary/3 transition-all duration-200 group min-h-[120px]"
+        >
+          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+            <UserPlus className="w-5 h-5 text-primary pop-icon" />
+          </div>
+          <div className="text-center">
+            <p className="font-semibold text-foreground group-hover:text-primary transition-colors">New Client</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Add a client to the system</p>
+          </div>
+        </button>
       </div>
-      
-      {clients.find(c => c.id === wizardData.clientId)?.assessmentStatus === "missing" && (
+
+      {apiClients.find(c => c.id === wizardData.clientId)?.assessmentStatus === "missing" && (
         <div className="mt-6 p-4 bg-destructive/10 rounded-xl border border-destructive/20 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5 pop-icon" />
           <div>

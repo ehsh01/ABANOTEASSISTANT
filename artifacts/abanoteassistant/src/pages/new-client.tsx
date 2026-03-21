@@ -436,6 +436,9 @@ export default function NewClient() {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
 
+  // Detect return destination from query param (?returnTo=wizard)
+  const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+
   const [step1, setStep1] = useState<Step1Data>({
     firstName: "",
     lastName: "",
@@ -452,7 +455,7 @@ export default function NewClient() {
   });
 
   function goBack() {
-    if (step === 1) setLocation("/clients");
+    if (step === 1) setLocation(returnTo === "wizard" ? "/wizard" : "/clients");
     else setStep(step - 1);
   }
 
@@ -492,12 +495,12 @@ export default function NewClient() {
     };
     addClient(newClient);
     setSaving(false);
-    setLocation("/clients");
+    setLocation(returnTo === "wizard" ? "/wizard" : "/clients");
   }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <ProgressHeader step={step} onBack={goBack} onCancel={() => setLocation("/clients")} />
+      <ProgressHeader step={step} onBack={goBack} onCancel={() => setLocation(returnTo === "wizard" ? "/wizard" : "/clients")} />
       <StepBar step={step} />
 
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 py-10">
