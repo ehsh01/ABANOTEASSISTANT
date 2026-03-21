@@ -1,3 +1,13 @@
-<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="180" height="180" rx="36" fill="#FF3C00"/>
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="112" fill="#C27A8A"/>
+  <rect width="512" height="512" rx="112" fill="url(#grad)" opacity="0.4"/>
+  <!-- Sparkle / star icon -->
+  <path d="M256 120 C256 120 272 196 300 220 C324 244 400 256 400 256 C400 256 324 268 300 292 C272 316 256 392 256 392 C256 392 240 316 212 292 C188 268 112 256 112 256 C112 256 188 244 212 220 C240 196 256 120 256 120Z" fill="white" opacity="0.95"/>
+  <path d="M390 140 C390 140 397 170 410 180 C420 190 450 196 450 196 C450 196 420 202 410 212 C397 222 390 252 390 252 C390 252 383 222 370 212 C360 202 330 196 330 196 C330 196 360 190 370 180 C383 170 390 140 390 140Z" fill="white" opacity="0.7"/>
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#e8a0b0"/>
+      <stop offset="100%" stop-color="#9a4a60"/>
+    </linearGradient>
+  </defs>
 </svg>
