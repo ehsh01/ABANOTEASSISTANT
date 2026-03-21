@@ -48,11 +48,15 @@ async function buildAll() {
     ...Object.keys(pkg.dependencies || {}),
     ...Object.keys(pkg.devDependencies || {}),
   ];
-  const externals = allDeps.filter(
-    (dep) =>
-      !allowlist.includes(dep) &&
-      !(pkg.dependencies?.[dep]?.startsWith("workspace:")),
-  );
+  // bcrypt is native + pulls node-pre-gyp; must not be bundled.
+  const externals = [
+    "bcrypt",
+    ...allDeps.filter(
+      (dep) =>
+        !allowlist.includes(dep) &&
+        !(pkg.dependencies?.[dep]?.startsWith("workspace:")),
+    ),
+  ];
 
   await esbuild({
     entryPoints: [path.resolve(__dirname, "src/index.ts")],

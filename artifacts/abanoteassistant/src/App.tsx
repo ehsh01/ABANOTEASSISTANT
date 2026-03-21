@@ -1,4 +1,4 @@
-import { Switch, Route, Router as WouterRouter } from "wouter";
+import { Switch, Route, Router as WouterRouter, Redirect } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -10,8 +10,11 @@ import NewClient from "./pages/new-client";
 import Notes from "./pages/notes";
 import NoteDetail from "./pages/note-detail";
 import NotFound from "@/pages/not-found";
+import LoginPage from "@/pages/login";
+import RegisterPage from "@/pages/register";
+import AdminPage from "@/pages/admin";
+import { useAuthStore } from "@/store/auth-store";
 
-// Initialize react-query client
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -21,7 +24,12 @@ const queryClient = new QueryClient({
   },
 });
 
-function Router() {
+function AuthenticatedRoutes() {
+  const token = useAuthStore((s) => s.token);
+  if (!token) {
+    return <Redirect to="/login" />;
+  }
+
   return (
     <Switch>
       <Route path="/" component={Home} />
@@ -32,6 +40,17 @@ function Router() {
       <Route path="/notes" component={Notes} />
       <Route path="/notes/:id" component={NoteDetail} />
       <Route component={NotFound} />
+    </Switch>
+  );
+}
+
+function Router() {
+  return (
+    <Switch>
+      <Route path="/login" component={LoginPage} />
+      <Route path="/register" component={RegisterPage} />
+      <Route path="/admin" component={AdminPage} />
+      <Route component={AuthenticatedRoutes} />
     </Switch>
   );
 }

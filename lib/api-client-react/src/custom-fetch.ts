@@ -6,6 +6,13 @@ export type ErrorType<T = unknown> = ApiError<T>;
 
 export type BodyType<T> = T;
 
+let accessTokenGetter: () => string | null | undefined = () => undefined;
+
+/** Register a function that returns the current Bearer token (e.g. from Zustand). */
+export function setAccessTokenGetter(fn: () => string | null | undefined): void {
+  accessTokenGetter = fn;
+}
+
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
@@ -288,6 +295,11 @@ export async function customFetch<T = unknown>(
   }
 
   const headers = mergeHeaders(isRequest(input) ? input.headers : undefined, headersInit);
+
+  const token = accessTokenGetter();
+  if (token && !headers.has("authorization")) {
+    headers.set("authorization", `Bearer ${token}`);
+  }
 
   if (
     typeof init.body === "string" &&

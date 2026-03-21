@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { and, eq, inArray } from "drizzle-orm";
 import {
   GenerateNoteBody,
   GenerateNoteResponse,
@@ -6,10 +7,21 @@ import {
   SaveNoteBody,
   SaveNoteResponse,
 } from "@workspace/api-zod";
+import { db } from "@workspace/db";
+import { clientsTable, companiesTable, programsTable, notesTable } from "@workspace/db/schema";
 
 const router: IRouter = Router();
 
-const MOCK_NOTE_TEMPLATE = (clientName: string, sessionDate: string, sessionHours: number, presentPeople: string[], hasEnvChanges: boolean, envChanges: string, programs: string[]) => `
+const MOCK_NOTE_TEMPLATE = (
+  clientName: string,
+  sessionDate: string,
+  sessionHours: number,
+  presentPeople: string[],
+  hasEnvChanges: boolean,
+  envChanges: string,
+  programNames: string[],
+) =>
+  `
 Session Note — ${clientName}
 Session Date: ${sessionDate}
 Duration: ${sessionHours} hour${sessionHours > 1 ? "s" : ""}
@@ -23,7 +35,12 @@ ${hasEnvChanges ? `**Environmental Changes**\n${envChanges}\n` : ""}
 
 **Skill Acquisition Programs**
 
-${programs.map((prog, i) => `${i + 1}. **${prog}**: ${clientName} demonstrated consistent responding across multiple trials during today's session. The client met criterion for ${Math.floor(Math.random() * 3) + 2} of ${Math.floor(Math.random() * 3) + 4} targets. Prompting hierarchy was implemented as outlined in the treatment plan, with gradual fading of prompt levels to promote independence. Data were recorded using a trial-by-trial format.`).join("\n\n")}
+${programNames
+  .map(
+    (prog, i) =>
+      `${i + 1}. **${prog}**: ${clientName} demonstrated consistent responding across multiple trials during today's session. The client met criterion for ${Math.floor(Math.random() * 3) + 2} of ${Math.floor(Math.random() * 3) + 4} targets. Prompting hierarchy was implemented as outlined in the treatment plan, with gradual fading of prompt levels to promote independence. Data were recorded using a trial-by-trial format.`,
+  )
+  .join("\n\n")}
 
 **Behavior Reduction**
 
@@ -39,28 +56,63 @@ Overall, ${clientName} had a productive session. Programming targets are progres
 `.trim();
 
 router.post("/notes/generate", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
   const body = GenerateNoteBody.parse(req.body);
+
+  if (process.env.ENFORCE_COMPLIMENTARY_ACCESS === "true") {
+    const [co] = await db
+      .select()
+      .from(companiesTable)
+      .where(eq(companiesTable.id, companyId))
+      .limit(1);
+    if (!co?.freeUsage) {
+      res.status(402).json({
+        success: false,
+        error: "Complimentary or paid access required for note generation.",
+        messages: [],
+      });
+      return;
+    }
+  }
+
+  const [client] = await db
+    .select()
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, body.clientId), eq(clientsTable.companyId, companyId)))
+    .limit(1);
+
+  if (!client) {
+    res.status(404).json({ success: false, error: "Client not found", messages: [] });
+    return;
+  }
 
   await new Promise((resolve) => setTimeout(resolve, 2000));
 
-  const clientNames: Record<string, string> = {
-    c1: "James R.",
-    c2: "Sophia M.",
-    c3: "Ethan T.",
-    c4: "Olivia K.",
-    c5: "Liam B.",
-  };
-
-  const clientName = clientNames[body.clientId] ?? "Client";
+  let programNames: string[] = [];
+  if (body.selectedReplacements.length > 0) {
+    const programRows = await db
+      .select()
+      .from(programsTable)
+      .where(
+        and(eq(programsTable.companyId, companyId), inArray(programsTable.id, body.selectedReplacements)),
+      );
+    const nameById = new Map(programRows.map((p) => [p.id, p.name]));
+    programNames = body.selectedReplacements.map((id) => nameById.get(id) ?? `Program ${id}`);
+  }
 
   const noteContent = MOCK_NOTE_TEMPLATE(
-    clientName,
+    client.name,
     body.sessionDate,
     body.sessionHours,
     body.presentPeople,
     body.hasEnvironmentalChanges,
     body.environmentalChanges ?? "",
-    body.selectedReplacements,
+    programNames,
   );
 
   const warnings: string[] = [];
@@ -70,16 +122,31 @@ router.post("/notes/generate", async (req, res) => {
     );
   }
 
+  const generatedAt = new Date();
+
+  const [inserted] = await db
+    .insert(notesTable)
+    .values({
+      companyId,
+      clientId: client.id,
+      content: noteContent,
+      status: "draft",
+      sessionDate: body.sessionDate,
+      sessionHours: body.sessionHours,
+      generatedAt,
+    })
+    .returning();
+
   const data = GenerateNoteResponse.parse({
     success: true,
     data: {
-      noteId: `note-${Date.now()}`,
+      noteId: inserted.id,
       content: noteContent,
-      clientId: body.clientId,
-      clientName,
+      clientId: client.id,
+      clientName: client.name,
       sessionDate: body.sessionDate,
       sessionHours: body.sessionHours,
-      generatedAt: new Date().toISOString(),
+      generatedAt: generatedAt.toISOString(),
     },
     warnings: warnings.length > 0 ? warnings : undefined,
     error: null,
@@ -88,9 +155,36 @@ router.post("/notes/generate", async (req, res) => {
   res.json(data);
 });
 
-router.post("/notes/:noteId/save", (req, res) => {
+router.post("/notes/:noteId/save", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
   const params = SaveNoteParams.parse(req.params);
   const body = SaveNoteBody.parse(req.body);
+
+  const [existing] = await db
+    .select()
+    .from(notesTable)
+    .where(and(eq(notesTable.id, params.noteId), eq(notesTable.companyId, companyId)))
+    .limit(1);
+
+  if (!existing) {
+    res.status(404).json({ success: false, error: "Note not found", messages: [] });
+    return;
+  }
+
+  const now = new Date();
+  await db
+    .update(notesTable)
+    .set({
+      status: body.status,
+      content: body.content,
+      updatedAt: now,
+    })
+    .where(and(eq(notesTable.id, params.noteId), eq(notesTable.companyId, companyId)));
 
   const data = SaveNoteResponse.parse({
     success: true,

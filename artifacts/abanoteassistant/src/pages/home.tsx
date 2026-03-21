@@ -1,8 +1,12 @@
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Sparkles, Clock, ShieldCheck, FileCheck2, LayoutTemplate, ChevronRight, CheckCircle2, Zap } from "lucide-react";
+import { useAuthStore } from "@/store/auth-store";
 
 export default function Home() {
+  const token = useAuthStore((s) => s.token);
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
   return (
     <div className="min-h-screen w-full relative overflow-hidden bg-background">
 
@@ -29,6 +33,23 @@ export default function Home() {
             <span className="text-[#C27A8A]">Dashboard</span>
             <Link href="/notes"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Notes</span></Link>
             <Link href="/clients"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Clients</span></Link>
+            {user?.role === "super_admin" ? (
+              <Link href="/admin"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Admin</span></Link>
+            ) : null}
+            {token ? (
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="hover:text-[#2D2523] transition-colors cursor-pointer bg-transparent border-0 p-0 font-semibold"
+              >
+                Sign out
+              </button>
+            ) : (
+              <>
+                <Link href="/login"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Sign in</span></Link>
+                <Link href="/register"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Register</span></Link>
+              </>
+            )}
           </div>
 
           <Link href="/wizard">

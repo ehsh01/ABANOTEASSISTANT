@@ -1,0 +1,53 @@
+---
+description: OpenAPI specification maintenance and codegen workflow
+globs: lib/api-spec/**/*.yaml, lib/api-spec/**/*.ts
+alwaysApply: false
+---
+
+# API Specification Rules
+
+## OpenAPI as Source of Truth
+
+- **OpenAPI spec is authoritative** - `lib/api-spec/openapi.yaml` defines all API contracts
+- **Update spec first** - before modifying routes, update the OpenAPI schema
+- **Run codegen after changes** - `pnpm --filter @workspace/api-spec run codegen`
+
+## Codegen Workflow
+
+1. Edit `lib/api-spec/openapi.yaml` to add/modify endpoints
+2. Run codegen: `pnpm --filter @workspace/api-spec run codegen`
+3. Generated files update:
+   - `lib/api-zod/src/generated/` - Zod schemas for validation
+   - `lib/api-client-react/src/generated/` - React Query hooks
+4. Use generated schemas in API routes
+
+## Schema Changes
+
+- **Never break existing contracts** - maintain backward compatibility
+- **Add new fields as optional** when extending existing schemas
+- **Version endpoints** if breaking changes are required (e.g., `/api/v2/...`)
+
+## Response Schema Pattern
+
+All endpoints use consistent response wrapper:
+
+```yaml
+properties:
+  success:
+    type: boolean
+  data:
+    # endpoint-specific data
+  error:
+    type: string
+    nullable: true
+  warnings:
+    type: array
+    items:
+      type: string
+```
+
+## Orval Configuration
+
+- Config in `lib/api-spec/orval.config.ts`
+- Generates TypeScript types and Zod schemas
+- Keep config in sync with package structure

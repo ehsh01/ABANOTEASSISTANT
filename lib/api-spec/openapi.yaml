@@ -9,10 +9,14 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication
   - name: clients
     description: Client operations
   - name: notes
     description: Note generation operations
+  - name: admin
+    description: Super-admin (platform) operations
 paths:
   /healthz:
     get:
@@ -28,11 +32,147 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /auth/register:
+    post:
+      operationId: register
+      tags: [auth]
+      summary: Register user and create company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterRequest"
+      responses:
+        "200":
+          description: Registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RegisterResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: Login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/companies:
+    get:
+      operationId: listAdminCompanies
+      tags: [admin]
+      summary: List all companies (super admin)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Companies
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCompanyListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden — not a super admin
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/companies/{companyId}:
+    patch:
+      operationId: patchAdminCompany
+      tags: [admin]
+      summary: Update company flags (e.g. complimentary access)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: companyId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PatchAdminCompanyRequest"
+      responses:
+        "200":
+          description: Updated company
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminCompanyPatchResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Company not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /clients:
     get:
       operationId: listClients
       tags: [clients]
       summary: List all clients
+      security:
+        - bearerAuth: []
       responses:
         "200":
           description: List of clients
@@ -40,18 +180,26 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /clients/{clientId}:
     get:
       operationId: getClient
       tags: [clients]
       summary: Get client by ID
+      security:
+        - bearerAuth: []
       parameters:
         - name: clientId
           in: path
           required: true
           schema:
-            type: string
+            type: integer
       responses:
         "200":
           description: Client details
@@ -59,6 +207,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ClientDetailResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Client not found
           content:
@@ -71,12 +225,14 @@ paths:
       operationId: listClientPrograms
       tags: [clients]
       summary: List replacement programs for a client
+      security:
+        - bearerAuth: []
       parameters:
         - name: clientId
           in: path
           required: true
           schema:
-            type: string
+            type: integer
       responses:
         "200":
           description: List of programs
@@ -84,12 +240,20 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProgramListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /notes/generate:
     post:
       operationId: generateNote
       tags: [notes]
       summary: Generate a session note
+      security:
+        - bearerAuth: []
       requestBody:
         required: true
         content:
@@ -105,6 +269,18 @@ paths:
                 $ref: "#/components/schemas/GenerateNoteResponse"
         "400":
           description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
           content:
             application/json:
               schema:
@@ -127,12 +303,14 @@ paths:
       operationId: saveNote
       tags: [notes]
       summary: Save a generated note as draft or final
+      security:
+        - bearerAuth: []
       parameters:
         - name: noteId
           in: path
           required: true
           schema:
-            type: string
+            type: integer
       requestBody:
         required: true
         content:
@@ -146,6 +324,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SaveNoteResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Note not found
           content:
@@ -154,6 +338,11 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   schemas:
     HealthStatus:
       type: object
@@ -178,11 +367,187 @@ components:
         - success
         - error
 
+    RegisterRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+        companyName:
+          type: string
+        companyAddress:
+          type: string
+        companyPhone:
+          type: string
+        companyEmail:
+          type: string
+          format: email
+      required:
+        - email
+        - password
+        - companyName
+
+    LoginRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+      required:
+        - email
+        - password
+
+    AuthUser:
+      type: object
+      properties:
+        id:
+          type: integer
+        email:
+          type: string
+        companyId:
+          type: integer
+        role:
+          type: string
+          enum: [user, super_admin]
+      required:
+        - id
+        - email
+        - companyId
+        - role
+
+    AuthCompany:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        address:
+          type: string
+        phone:
+          type: string
+        email:
+          type: string
+        freeUsage:
+          type: boolean
+          description: When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server).
+      required:
+        - id
+        - name
+        - freeUsage
+
+    AdminCompany:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        freeUsage:
+          type: boolean
+        userCount:
+          type: integer
+        createdAt:
+          type: string
+      required:
+        - id
+        - name
+        - freeUsage
+        - userCount
+        - createdAt
+
+    AdminCompanyListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminCompany"
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    PatchAdminCompanyRequest:
+      type: object
+      properties:
+        freeUsage:
+          type: boolean
+      required:
+        - freeUsage
+
+    AdminCompanyPatchResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/AdminCompany"
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    AuthPayload:
+      type: object
+      properties:
+        token:
+          type: string
+        user:
+          $ref: "#/components/schemas/AuthUser"
+        company:
+          $ref: "#/components/schemas/AuthCompany"
+      required:
+        - token
+        - user
+        - company
+
+    RegisterResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/AuthPayload"
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    LoginResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/AuthPayload"
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
     Client:
       type: object
       properties:
         id:
-          type: string
+          type: integer
+        companyId:
+          type: integer
         name:
           type: string
         ageBand:
@@ -194,6 +559,7 @@ components:
           enum: [uploaded, processing, ready, missing]
       required:
         - id
+        - companyId
         - name
         - hasAssessment
         - assessmentStatus
@@ -232,7 +598,9 @@ components:
       type: object
       properties:
         id:
-          type: string
+          type: integer
+        companyId:
+          type: integer
         name:
           type: string
         type:
@@ -242,6 +610,7 @@ components:
           type: string
       required:
         - id
+        - companyId
         - name
         - type
 
@@ -268,7 +637,7 @@ components:
       type: object
       properties:
         clientId:
-          type: string
+          type: integer
         sessionHours:
           type: integer
           minimum: 1
@@ -286,7 +655,7 @@ components:
         selectedReplacements:
           type: array
           items:
-            type: string
+            type: integer
         nextSessionDate:
           type: string
       required:
@@ -319,11 +688,11 @@ components:
       type: object
       properties:
         noteId:
-          type: string
+          type: integer
         content:
           type: string
         clientId:
-          type: string
+          type: integer
         clientName:
           type: string
         sessionDate:
@@ -362,7 +731,7 @@ components:
           type: object
           properties:
             noteId:
-              type: string
+              type: integer
             status:
               type: string
           required:

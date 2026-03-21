@@ -51,7 +51,7 @@ export default defineConfig({
       workspace: apiZodSrc,
       client: "zod",
       target: "generated",
-      schemas: { path: "generated/types", type: "typescript" },
+      // Omit separate TS schema re-exports — they duplicate names already exported from generated/api.ts.
       mode: "split",
       clean: true,
       prettier: true,

@@ -17,13 +17,20 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AdminCompanyListResponse,
+  AdminCompanyPatchResponse,
   ClientDetailResponse,
   ClientListResponse,
   ErrorResponse,
   GenerateNoteRequest,
   GenerateNoteResponse,
   HealthStatus,
+  LoginRequest,
+  LoginResponse,
+  PatchAdminCompanyRequest,
   ProgramListResponse,
+  RegisterRequest,
+  RegisterResponse,
   SaveNoteRequest,
   SaveNoteResponse,
 } from "./api.schemas";
@@ -114,6 +121,343 @@ export function useHealthCheck<
 }
 
 /**
+ * @summary Register user and create company
+ */
+export const getRegisterUrl = () => {
+  return `/api/auth/register`;
+};
+
+export const register = async (
+  registerRequest: RegisterRequest,
+  options?: RequestInit,
+): Promise<RegisterResponse> => {
+  return customFetch<RegisterResponse>(getRegisterUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(registerRequest),
+  });
+};
+
+export const getRegisterMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof register>>,
+    TError,
+    { data: BodyType<RegisterRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof register>>,
+  TError,
+  { data: BodyType<RegisterRequest> },
+  TContext
+> => {
+  const mutationKey = ["register"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof register>>,
+    { data: BodyType<RegisterRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return register(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type RegisterMutationResult = NonNullable<
+  Awaited<ReturnType<typeof register>>
+>;
+export type RegisterMutationBody = BodyType<RegisterRequest>;
+export type RegisterMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Register user and create company
+ */
+export const useRegister = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof register>>,
+    TError,
+    { data: BodyType<RegisterRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof register>>,
+  TError,
+  { data: BodyType<RegisterRequest> },
+  TContext
+> => {
+  return useMutation(getRegisterMutationOptions(options));
+};
+
+/**
+ * @summary Login
+ */
+export const getLoginUrl = () => {
+  return `/api/auth/login`;
+};
+
+export const login = async (
+  loginRequest: LoginRequest,
+  options?: RequestInit,
+): Promise<LoginResponse> => {
+  return customFetch<LoginResponse>(getLoginUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(loginRequest),
+  });
+};
+
+export const getLoginMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof login>>,
+    TError,
+    { data: BodyType<LoginRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof login>>,
+  TError,
+  { data: BodyType<LoginRequest> },
+  TContext
+> => {
+  const mutationKey = ["login"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof login>>,
+    { data: BodyType<LoginRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return login(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type LoginMutationResult = NonNullable<
+  Awaited<ReturnType<typeof login>>
+>;
+export type LoginMutationBody = BodyType<LoginRequest>;
+export type LoginMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Login
+ */
+export const useLogin = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof login>>,
+    TError,
+    { data: BodyType<LoginRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof login>>,
+  TError,
+  { data: BodyType<LoginRequest> },
+  TContext
+> => {
+  return useMutation(getLoginMutationOptions(options));
+};
+
+/**
+ * @summary List all companies (super admin)
+ */
+export const getListAdminCompaniesUrl = () => {
+  return `/api/admin/companies`;
+};
+
+export const listAdminCompanies = async (
+  options?: RequestInit,
+): Promise<AdminCompanyListResponse> => {
+  return customFetch<AdminCompanyListResponse>(getListAdminCompaniesUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListAdminCompaniesQueryKey = () => {
+  return [`/api/admin/companies`] as const;
+};
+
+export const getListAdminCompaniesQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAdminCompanies>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminCompanies>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListAdminCompaniesQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAdminCompanies>>
+  > = ({ signal }) => listAdminCompanies({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminCompanies>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAdminCompaniesQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAdminCompanies>>
+>;
+export type ListAdminCompaniesQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List all companies (super admin)
+ */
+
+export function useListAdminCompanies<
+  TData = Awaited<ReturnType<typeof listAdminCompanies>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAdminCompanies>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListAdminCompaniesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Update company flags (e.g. complimentary access)
+ */
+export const getPatchAdminCompanyUrl = (companyId: number) => {
+  return `/api/admin/companies/${companyId}`;
+};
+
+export const patchAdminCompany = async (
+  companyId: number,
+  patchAdminCompanyRequest: PatchAdminCompanyRequest,
+  options?: RequestInit,
+): Promise<AdminCompanyPatchResponse> => {
+  return customFetch<AdminCompanyPatchResponse>(
+    getPatchAdminCompanyUrl(companyId),
+    {
+      ...options,
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(patchAdminCompanyRequest),
+    },
+  );
+};
+
+export const getPatchAdminCompanyMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchAdminCompany>>,
+    TError,
+    { companyId: number; data: BodyType<PatchAdminCompanyRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof patchAdminCompany>>,
+  TError,
+  { companyId: number; data: BodyType<PatchAdminCompanyRequest> },
+  TContext
+> => {
+  const mutationKey = ["patchAdminCompany"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof patchAdminCompany>>,
+    { companyId: number; data: BodyType<PatchAdminCompanyRequest> }
+  > = (props) => {
+    const { companyId, data } = props ?? {};
+
+    return patchAdminCompany(companyId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PatchAdminCompanyMutationResult = NonNullable<
+  Awaited<ReturnType<typeof patchAdminCompany>>
+>;
+export type PatchAdminCompanyMutationBody = BodyType<PatchAdminCompanyRequest>;
+export type PatchAdminCompanyMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update company flags (e.g. complimentary access)
+ */
+export const usePatchAdminCompany = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof patchAdminCompany>>,
+    TError,
+    { companyId: number; data: BodyType<PatchAdminCompanyRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof patchAdminCompany>>,
+  TError,
+  { companyId: number; data: BodyType<PatchAdminCompanyRequest> },
+  TContext
+> => {
+  return useMutation(getPatchAdminCompanyMutationOptions(options));
+};
+
+/**
  * @summary List all clients
  */
 export const getListClientsUrl = () => {
@@ -135,7 +479,7 @@ export const getListClientsQueryKey = () => {
 
 export const getListClientsQueryOptions = <
   TData = Awaited<ReturnType<typeof listClients>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ErrorResponse>,
 >(options?: {
   query?: UseQueryOptions<
     Awaited<ReturnType<typeof listClients>>,
@@ -162,7 +506,7 @@ export const getListClientsQueryOptions = <
 export type ListClientsQueryResult = NonNullable<
   Awaited<ReturnType<typeof listClients>>
 >;
-export type ListClientsQueryError = ErrorType<unknown>;
+export type ListClientsQueryError = ErrorType<ErrorResponse>;
 
 /**
  * @summary List all clients
@@ -170,7 +514,7 @@ export type ListClientsQueryError = ErrorType<unknown>;
 
 export function useListClients<
   TData = Awaited<ReturnType<typeof listClients>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ErrorResponse>,
 >(options?: {
   query?: UseQueryOptions<
     Awaited<ReturnType<typeof listClients>>,
@@ -191,12 +535,12 @@ export function useListClients<
 /**
  * @summary Get client by ID
  */
-export const getGetClientUrl = (clientId: string) => {
+export const getGetClientUrl = (clientId: number) => {
   return `/api/clients/${clientId}`;
 };
 
 export const getClient = async (
-  clientId: string,
+  clientId: number,
   options?: RequestInit,
 ): Promise<ClientDetailResponse> => {
   return customFetch<ClientDetailResponse>(getGetClientUrl(clientId), {
@@ -205,7 +549,7 @@ export const getClient = async (
   });
 };
 
-export const getGetClientQueryKey = (clientId: string) => {
+export const getGetClientQueryKey = (clientId: number) => {
   return [`/api/clients/${clientId}`] as const;
 };
 
@@ -213,7 +557,7 @@ export const getGetClientQueryOptions = <
   TData = Awaited<ReturnType<typeof getClient>>,
   TError = ErrorType<ErrorResponse>,
 >(
-  clientId: string,
+  clientId: number,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getClient>>,
@@ -254,7 +598,7 @@ export function useGetClient<
   TData = Awaited<ReturnType<typeof getClient>>,
   TError = ErrorType<ErrorResponse>,
 >(
-  clientId: string,
+  clientId: number,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof getClient>>,
@@ -276,12 +620,12 @@ export function useGetClient<
 /**
  * @summary List replacement programs for a client
  */
-export const getListClientProgramsUrl = (clientId: string) => {
+export const getListClientProgramsUrl = (clientId: number) => {
   return `/api/clients/${clientId}/programs`;
 };
 
 export const listClientPrograms = async (
-  clientId: string,
+  clientId: number,
   options?: RequestInit,
 ): Promise<ProgramListResponse> => {
   return customFetch<ProgramListResponse>(getListClientProgramsUrl(clientId), {
@@ -290,15 +634,15 @@ export const listClientPrograms = async (
   });
 };
 
-export const getListClientProgramsQueryKey = (clientId: string) => {
+export const getListClientProgramsQueryKey = (clientId: number) => {
   return [`/api/clients/${clientId}/programs`] as const;
 };
 
 export const getListClientProgramsQueryOptions = <
   TData = Awaited<ReturnType<typeof listClientPrograms>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ErrorResponse>,
 >(
-  clientId: string,
+  clientId: number,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof listClientPrograms>>,
@@ -333,7 +677,7 @@ export const getListClientProgramsQueryOptions = <
 export type ListClientProgramsQueryResult = NonNullable<
   Awaited<ReturnType<typeof listClientPrograms>>
 >;
-export type ListClientProgramsQueryError = ErrorType<unknown>;
+export type ListClientProgramsQueryError = ErrorType<ErrorResponse>;
 
 /**
  * @summary List replacement programs for a client
@@ -341,9 +685,9 @@ export type ListClientProgramsQueryError = ErrorType<unknown>;
 
 export function useListClientPrograms<
   TData = Awaited<ReturnType<typeof listClientPrograms>>,
-  TError = ErrorType<unknown>,
+  TError = ErrorType<ErrorResponse>,
 >(
-  clientId: string,
+  clientId: number,
   options?: {
     query?: UseQueryOptions<
       Awaited<ReturnType<typeof listClientPrograms>>,
@@ -451,12 +795,12 @@ export const useGenerateNote = <
 /**
  * @summary Save a generated note as draft or final
  */
-export const getSaveNoteUrl = (noteId: string) => {
+export const getSaveNoteUrl = (noteId: number) => {
   return `/api/notes/${noteId}/save`;
 };
 
 export const saveNote = async (
-  noteId: string,
+  noteId: number,
   saveNoteRequest: SaveNoteRequest,
   options?: RequestInit,
 ): Promise<SaveNoteResponse> => {
@@ -475,14 +819,14 @@ export const getSaveNoteMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof saveNote>>,
     TError,
-    { noteId: string; data: BodyType<SaveNoteRequest> },
+    { noteId: number; data: BodyType<SaveNoteRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof saveNote>>,
   TError,
-  { noteId: string; data: BodyType<SaveNoteRequest> },
+  { noteId: number; data: BodyType<SaveNoteRequest> },
   TContext
 > => {
   const mutationKey = ["saveNote"];
@@ -496,7 +840,7 @@ export const getSaveNoteMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof saveNote>>,
-    { noteId: string; data: BodyType<SaveNoteRequest> }
+    { noteId: number; data: BodyType<SaveNoteRequest> }
   > = (props) => {
     const { noteId, data } = props ?? {};
 
@@ -522,14 +866,14 @@ export const useSaveNote = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof saveNote>>,
     TError,
-    { noteId: string; data: BodyType<SaveNoteRequest> },
+    { noteId: number; data: BodyType<SaveNoteRequest> },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof saveNote>>,
   TError,
-  { noteId: string; data: BodyType<SaveNoteRequest> },
+  { noteId: number; data: BodyType<SaveNoteRequest> },
   TContext
 > => {
   return useMutation(getSaveNoteMutationOptions(options));

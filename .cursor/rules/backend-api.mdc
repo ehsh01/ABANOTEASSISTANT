@@ -1,0 +1,45 @@
+---
+description: Backend API development standards and contract preservation
+globs: artifacts/api-server/**/*.ts
+alwaysApply: false
+---
+
+# Backend API Development Rules
+
+## API Contract Preservation
+
+- **Never modify route paths** without updating `lib/api-spec/openapi.yaml` first
+- **Never change request/response shapes** without updating the OpenAPI spec and running codegen
+- **Always use Zod schemas** from `@workspace/api-zod` for request/response validation
+- **Preserve existing API contracts** - no breaking changes to existing endpoints
+
+## Validation Pattern
+
+```typescript
+// ✅ GOOD - Use generated Zod schemas
+import { GenerateNoteBody, GenerateNoteResponse } from "@workspace/api-zod";
+
+router.post("/notes/generate", async (req, res) => {
+  const body = GenerateNoteBody.parse(req.body);
+  // ... handler logic
+  const data = GenerateNoteResponse.parse({ success: true, data: {...}, error: null });
+  res.json(data);
+});
+```
+
+## Error Handling
+
+- Error responses must match OpenAPI `ErrorResponse` schema: `{ success: false, error: string, messages: string[] }`
+- Use appropriate HTTP status codes (404, 400, 409, 500) as defined in OpenAPI spec
+- Always validate params with Zod: `const params = GetClientParams.parse(req.params);`
+
+## Route Structure
+
+- One router per domain (clients, notes, health)
+- Export default router from each route file
+- Mount routes in `src/routes/index.ts`
+- Use Express 5 patterns consistently
+
+## Response Format
+
+All responses follow: `{ success: boolean, data: T | null, error: string | null, warnings?: string[] }`

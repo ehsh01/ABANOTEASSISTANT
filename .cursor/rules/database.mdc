@@ -1,0 +1,51 @@
+---
+description: Database layer conventions using Drizzle ORM
+globs: lib/db/**/*.ts
+alwaysApply: false
+---
+
+# Database Development Rules
+
+## Schema Organization
+
+- **One model per file** - each table in its own file under `lib/db/src/schema/`
+- **Export from index** - add `export * from "./model-name";` to `schema/index.ts`
+- **Never modify existing migrations** - only add new ones via `drizzle-kit push`
+
+## Model Structure Pattern
+
+Each model file must define:
+
+```typescript
+import { pgTable, text, serial, timestamp } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+
+export const clientsTable = pgTable("clients", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertClientSchema = createInsertSchema(clientsTable).omit({ id: true });
+export type InsertClient = z.infer<typeof insertClientSchema>;
+export type Client = typeof clientsTable.$inferSelect;
+```
+
+## Required Exports
+
+- Table definition: `export const tableName = pgTable(...)`
+- Insert schema: `export const insertTableNameSchema = createInsertSchema(...).omit({ id: true })`
+- Types: `InsertTableName` and `TableName` (inferred from table)
+
+## Database Access
+
+- Use `db` instance from `@workspace/db` (not direct pool access)
+- Import schema types: `import { Client, InsertClient } from "@workspace/db/schema"`
+- Use Drizzle query builder, not raw SQL
+
+## Migrations
+
+- Development: `pnpm --filter @workspace/db run push`
+- Force (if needed): `pnpm --filter @workspace/db run push-force`
+- Production migrations handled by Replit deployment

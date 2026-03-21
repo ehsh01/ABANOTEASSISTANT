@@ -586,16 +586,16 @@ function Step6Programs() {
   const minRequired = data.sessionHours || 1; // Fallback to 1 if not set
   const selected = data.selectedReplacements || [];
 
-  const toggleProgram = (name: string) => {
-    if (selected.includes(name)) {
-      updateData({ selectedReplacements: selected.filter(n => n !== name) });
+  const toggleProgram = (programId: number) => {
+    if (selected.includes(programId)) {
+      updateData({ selectedReplacements: selected.filter((n) => n !== programId) });
     } else {
-      updateData({ selectedReplacements: [...selected, name] });
+      updateData({ selectedReplacements: [...selected, programId] });
     }
   };
 
   const selectAll = () => {
-    updateData({ selectedReplacements: programs.map(p => p.name) });
+    updateData({ selectedReplacements: programs.map((p) => p.id) });
   };
 
   const hasEnough = selected.length >= minRequired;
@@ -620,11 +620,11 @@ function Step6Programs() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {programs.map(program => {
-          const isSelected = selected.includes(program.name);
+          const isSelected = selected.includes(program.id);
           return (
             <button
               key={program.id}
-              onClick={() => toggleProgram(program.name)}
+              onClick={() => toggleProgram(program.id)}
               className={cn(
                 "flex items-start text-left p-4 rounded-xl border-2 transition-all hover-elevate",
                 isSelected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/30"

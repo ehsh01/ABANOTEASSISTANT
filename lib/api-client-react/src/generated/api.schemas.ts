@@ -15,6 +15,87 @@ export interface ErrorResponse {
   messages?: string[];
 }
 
+export interface RegisterRequest {
+  email: string;
+  /** @minLength 8 */
+  password: string;
+  companyName: string;
+  companyAddress?: string;
+  companyPhone?: string;
+  companyEmail?: string;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+export type AuthUserRole = (typeof AuthUserRole)[keyof typeof AuthUserRole];
+
+export const AuthUserRole = {
+  user: "user",
+  super_admin: "super_admin",
+} as const;
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  companyId: number;
+  role: AuthUserRole;
+}
+
+export interface AuthCompany {
+  id: number;
+  name: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  /** When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server). */
+  freeUsage: boolean;
+}
+
+export interface AdminCompany {
+  id: number;
+  name: string;
+  freeUsage: boolean;
+  userCount: number;
+  createdAt: string;
+}
+
+export interface AdminCompanyListResponse {
+  success: boolean;
+  data: AdminCompany[];
+  error?: string | null;
+}
+
+export interface PatchAdminCompanyRequest {
+  freeUsage: boolean;
+}
+
+export interface AdminCompanyPatchResponse {
+  success: boolean;
+  data: AdminCompany;
+  error?: string | null;
+}
+
+export interface AuthPayload {
+  token: string;
+  user: AuthUser;
+  company: AuthCompany;
+}
+
+export interface RegisterResponse {
+  success: boolean;
+  data: AuthPayload;
+  error?: string | null;
+}
+
+export interface LoginResponse {
+  success: boolean;
+  data: AuthPayload;
+  error?: string | null;
+}
+
 export type ClientAssessmentStatus =
   (typeof ClientAssessmentStatus)[keyof typeof ClientAssessmentStatus];
 
@@ -26,7 +107,8 @@ export const ClientAssessmentStatus = {
 } as const;
 
 export interface Client {
-  id: string;
+  id: number;
+  companyId: number;
   name: string;
   ageBand?: string;
   hasAssessment: boolean;
@@ -53,7 +135,8 @@ export const ProgramType = {
 } as const;
 
 export interface Program {
-  id: string;
+  id: number;
+  companyId: number;
   name: string;
   type: ProgramType;
   description?: string;
@@ -67,7 +150,7 @@ export interface ProgramListResponse {
 }
 
 export interface GenerateNoteRequest {
-  clientId: string;
+  clientId: number;
   /**
    * @minimum 1
    * @maximum 8
@@ -77,14 +160,14 @@ export interface GenerateNoteRequest {
   presentPeople: string[];
   hasEnvironmentalChanges: boolean;
   environmentalChanges?: string;
-  selectedReplacements: string[];
+  selectedReplacements: number[];
   nextSessionDate?: string;
 }
 
 export interface GeneratedNote {
-  noteId: string;
+  noteId: number;
   content: string;
-  clientId: string;
+  clientId: number;
   clientName: string;
   sessionDate: string;
   sessionHours: number;
@@ -112,7 +195,7 @@ export interface SaveNoteRequest {
 }
 
 export type SaveNoteResponseData = {
-  noteId: string;
+  noteId: number;
   status: string;
 };
 

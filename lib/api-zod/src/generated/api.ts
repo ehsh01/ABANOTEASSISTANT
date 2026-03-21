@@ -16,13 +16,128 @@ export const HealthCheckResponse = zod.object({
 });
 
 /**
+ * @summary Register user and create company
+ */
+export const registerBodyPasswordMin = 8;
+
+export const RegisterBody = zod.object({
+  email: zod.string().email(),
+  password: zod.string().min(registerBodyPasswordMin),
+  companyName: zod.string(),
+  companyAddress: zod.string().optional(),
+  companyPhone: zod.string().optional(),
+  companyEmail: zod.string().email().optional(),
+});
+
+export const RegisterResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    token: zod.string(),
+    user: zod.object({
+      id: zod.number(),
+      email: zod.string(),
+      companyId: zod.number(),
+      role: zod.enum(["user", "super_admin"]),
+    }),
+    company: zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      address: zod.string().optional(),
+      phone: zod.string().optional(),
+      email: zod.string().optional(),
+      freeUsage: zod
+        .boolean()
+        .describe(
+          "When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server).",
+        ),
+    }),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * @summary Login
+ */
+export const LoginBody = zod.object({
+  email: zod.string().email(),
+  password: zod.string(),
+});
+
+export const LoginResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    token: zod.string(),
+    user: zod.object({
+      id: zod.number(),
+      email: zod.string(),
+      companyId: zod.number(),
+      role: zod.enum(["user", "super_admin"]),
+    }),
+    company: zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      address: zod.string().optional(),
+      phone: zod.string().optional(),
+      email: zod.string().optional(),
+      freeUsage: zod
+        .boolean()
+        .describe(
+          "When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server).",
+        ),
+    }),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * @summary List all companies (super admin)
+ */
+export const ListAdminCompaniesResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.array(
+    zod.object({
+      id: zod.number(),
+      name: zod.string(),
+      freeUsage: zod.boolean(),
+      userCount: zod.number(),
+      createdAt: zod.string(),
+    }),
+  ),
+  error: zod.string().nullish(),
+});
+
+/**
+ * @summary Update company flags (e.g. complimentary access)
+ */
+export const PatchAdminCompanyParams = zod.object({
+  companyId: zod.coerce.number(),
+});
+
+export const PatchAdminCompanyBody = zod.object({
+  freeUsage: zod.boolean(),
+});
+
+export const PatchAdminCompanyResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    id: zod.number(),
+    name: zod.string(),
+    freeUsage: zod.boolean(),
+    userCount: zod.number(),
+    createdAt: zod.string(),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
  * @summary List all clients
  */
 export const ListClientsResponse = zod.object({
   success: zod.boolean(),
   data: zod.array(
     zod.object({
-      id: zod.string(),
+      id: zod.number(),
+      companyId: zod.number(),
       name: zod.string(),
       ageBand: zod.string().optional(),
       hasAssessment: zod.boolean(),
@@ -41,13 +156,14 @@ export const ListClientsResponse = zod.object({
  * @summary Get client by ID
  */
 export const GetClientParams = zod.object({
-  clientId: zod.coerce.string(),
+  clientId: zod.coerce.number(),
 });
 
 export const GetClientResponse = zod.object({
   success: zod.boolean(),
   data: zod.object({
-    id: zod.string(),
+    id: zod.number(),
+    companyId: zod.number(),
     name: zod.string(),
     ageBand: zod.string().optional(),
     hasAssessment: zod.boolean(),
@@ -60,14 +176,15 @@ export const GetClientResponse = zod.object({
  * @summary List replacement programs for a client
  */
 export const ListClientProgramsParams = zod.object({
-  clientId: zod.coerce.string(),
+  clientId: zod.coerce.number(),
 });
 
 export const ListClientProgramsResponse = zod.object({
   success: zod.boolean(),
   data: zod.array(
     zod.object({
-      id: zod.string(),
+      id: zod.number(),
+      companyId: zod.number(),
       name: zod.string(),
       type: zod.enum(["primary", "supplemental"]),
       description: zod.string().optional(),
@@ -83,22 +200,22 @@ export const ListClientProgramsResponse = zod.object({
 export const generateNoteBodySessionHoursMax = 8;
 
 export const GenerateNoteBody = zod.object({
-  clientId: zod.string(),
+  clientId: zod.number(),
   sessionHours: zod.number().min(1).max(generateNoteBodySessionHoursMax),
   sessionDate: zod.string(),
   presentPeople: zod.array(zod.string()),
   hasEnvironmentalChanges: zod.boolean(),
   environmentalChanges: zod.string().optional(),
-  selectedReplacements: zod.array(zod.string()),
+  selectedReplacements: zod.array(zod.number()),
   nextSessionDate: zod.string().optional(),
 });
 
 export const GenerateNoteResponse = zod.object({
   success: zod.boolean(),
   data: zod.object({
-    noteId: zod.string(),
+    noteId: zod.number(),
     content: zod.string(),
-    clientId: zod.string(),
+    clientId: zod.number(),
     clientName: zod.string(),
     sessionDate: zod.string(),
     sessionHours: zod.number(),
@@ -112,7 +229,7 @@ export const GenerateNoteResponse = zod.object({
  * @summary Save a generated note as draft or final
  */
 export const SaveNoteParams = zod.object({
-  noteId: zod.coerce.string(),
+  noteId: zod.coerce.number(),
 });
 
 export const SaveNoteBody = zod.object({
@@ -123,7 +240,7 @@ export const SaveNoteBody = zod.object({
 export const SaveNoteResponse = zod.object({
   success: zod.boolean(),
   data: zod.object({
-    noteId: zod.string(),
+    noteId: zod.number(),
     status: zod.string(),
   }),
   error: zod.string().nullish(),
