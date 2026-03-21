@@ -4,6 +4,7 @@ export const modules: ModuleMap = {
   "./components/mockups/aba-designs/Aurora.tsx": () => import("../components/mockups/aba-designs/Aurora.tsx"),
   "./components/mockups/aba-designs/Bloom.tsx": () => import("../components/mockups/aba-designs/Bloom.tsx"),
   "./components/mockups/aba-designs/Crystal.tsx": () => import("../components/mockups/aba-designs/Crystal.tsx"),
+  "./components/mockups/admin-panel/BloomAdmin.tsx": () => import("../components/mockups/admin-panel/BloomAdmin.tsx"),
   "./components/mockups/pop-samples/Bold.tsx": () => import("../components/mockups/pop-samples/Bold.tsx"),
   "./components/mockups/pop-samples/Cinematic.tsx": () => import("../components/mockups/pop-samples/Cinematic.tsx"),
   "./components/mockups/pop-samples/Raised.tsx": () => import("../components/mockups/pop-samples/Raised.tsx")
