@@ -1,25 +1,42 @@
 import { defineConfig } from "drizzle-kit";
 import path from "path";
+import { parse } from "pg-connection-string";
 
 if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL, ensure the database is provisioned");
 }
 
 /**
- * drizzle-kit builds `pg.Pool({ connectionString })` only when `url` is set — it does
- * not merge `ssl` into that pool. Keep TLS via the connection string (DigitalOcean, etc.).
+ * drizzle-kit only passes `connectionString` to `pg.Pool` when `url` is set, so TLS
+ * options in config are ignored. Parse the URL and pass `ssl` explicitly (needed for
+ * managed Postgres such as DigitalOcean).
  */
-function ensureSslModeInUrl(url: string): string {
-  if (/[?&]sslmode=/.test(url)) {
-    return url;
-  }
-  return url.includes("?") ? `${url}&sslmode=require` : `${url}?sslmode=require`;
+const parsed = parse(process.env.DATABASE_URL);
+
+if (!parsed.host || !parsed.database || !parsed.user) {
+  throw new Error(
+    "DATABASE_URL must include host, database name, and user",
+  );
+}
+
+const port =
+  parsed.port !== undefined && parsed.port !== null
+    ? Number(parsed.port)
+    : 5432;
+
+if (Number.isNaN(port)) {
+  throw new Error("DATABASE_URL has invalid port");
 }
 
 export default defineConfig({
   schema: path.join(__dirname, "./src/schema/index.ts"),
   dialect: "postgresql",
   dbCredentials: {
-    url: ensureSslModeInUrl(process.env.DATABASE_URL),
+    host: parsed.host,
+    port,
+    user: parsed.user,
+    password: parsed.password,
+    database: parsed.database,
+    ssl: { rejectUnauthorized: false },
   },
 });
