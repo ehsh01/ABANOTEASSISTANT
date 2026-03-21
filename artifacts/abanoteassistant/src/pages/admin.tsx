@@ -1,4 +1,4 @@
-import { Redirect } from "wouter";
+import { Redirect, useLocation } from "wouter";
 import {
   useListAdminCompanies,
   useListAdminUsers,
@@ -24,6 +24,7 @@ export default function AdminPage() {
   const token = useAuthStore((s) => s.token);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const [, setLocation] = useLocation();
   const { toast } = useToast();
 
   const usersQuery = useListAdminUsers({
@@ -75,15 +76,20 @@ export default function AdminPage() {
               company and are not visible here.
             </p>
           </div>
-          <Button
-            variant="outline"
-            type="button"
-            onClick={() => {
-              logout();
-            }}
-          >
-            Sign out
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" type="button" onClick={() => setLocation("/")}>
+              Dashboard
+            </Button>
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => {
+                logout();
+              }}
+            >
+              Sign out
+            </Button>
+          </div>
         </div>
 
         <Card>

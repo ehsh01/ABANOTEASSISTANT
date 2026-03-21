@@ -1,0 +1,17 @@
+---
+description: Cursor + Replit monorepo boundaries; API-first changes; do not edit generated clients by hand.
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# Monorepo collaboration (ABA Note Assistant)
+
+- **Backend / API:** `artifacts/api-server/`, `lib/db/`. Prefer minimal, contract-safe changes.
+- **API contract:** `lib/api-spec/openapi.yaml` is the source of truth for HTTP. Any route or response change MUST update OpenAPI, then run **`pnpm run codegen`** from the repo root.
+- **Do not hand-edit** `lib/api-client-react/src/generated/**` or `lib/api-zod/src/generated/**`.
+- **Frontend UI** (`artifacts/abanoteassistant/`): Replit typically owns layout and styling; avoid unsolicited UI redesigns unless the user asks. When wiring API calls, use generated hooks from **`@workspace/api-client-react`**.
+- **Merge bar:** After OpenAPI or dependency changes, run codegen, then typecheck and build before considering work complete.
+- **Details and checklists:** see **`CONTRIBUTING.md`** in the repo root.
+
+Related rules: `.cursor/rules/api-spec.mdc`, `.cursor/rules/backend-api.mdc`, `.cursor/rules/database.mdc`.

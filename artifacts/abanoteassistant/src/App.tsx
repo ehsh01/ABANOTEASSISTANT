@@ -35,6 +35,7 @@ function AuthenticatedRoutes() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/admin" component={AdminPage} />
       <Route path="/wizard" component={Wizard} />
       <Route path="/result" component={Result} />
       <Route path="/clients" component={Clients} />
@@ -52,7 +53,6 @@ function Router() {
       <Route path="/login" component={LoginPage} />
       <Route path="/register" component={RegisterPage} />
       <Route path="/verify-email" component={VerifyEmailPage} />
-      <Route path="/admin" component={AdminPage} />
       <Route component={AuthenticatedRoutes} />
     </Switch>
   );

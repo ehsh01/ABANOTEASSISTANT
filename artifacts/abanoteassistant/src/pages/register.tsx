@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, Redirect } from "wouter";
 import { useRegister, useResendVerification } from "@workspace/api-client-react";
 import { useAuthStore } from "@/store/auth-store";
+import { navigateToAppRoot } from "@/lib/navigate-app-root";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -37,6 +38,7 @@ export default function RegisterPage() {
           if (d.message) {
             toast({ title: "Welcome", description: d.message });
           }
+          navigateToAppRoot();
         }
       },
       onError: (err: Error & { data?: { error?: string } }) => {

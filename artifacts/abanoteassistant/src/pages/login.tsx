@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, Redirect } from "wouter";
 import { useLogin, useResendVerification } from "@workspace/api-client-react";
 import { useAuthStore } from "@/store/auth-store";
+import { navigateToAppRoot } from "@/lib/navigate-app-root";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,6 +50,8 @@ export default function LoginPage() {
         if (!res.success || !res.data) return;
         const { token: t, user, company } = res.data;
         setSession(t, user as import("@/store/auth-store").SessionUser, company);
+        // Full navigation resets URL + bundle/router state so super_admin never stays stuck on /admin.
+        navigateToAppRoot();
       },
       onError: (err: Error & { data?: { error?: string } }) => {
         const msg = err?.data?.error ?? err.message ?? "Login failed";
