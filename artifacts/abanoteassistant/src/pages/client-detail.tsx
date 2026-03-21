@@ -89,7 +89,7 @@ export default function ClientDetail() {
           className="max-w-2xl mx-auto space-y-5"
         >
           {/* Header card */}
-          <div className="bg-white rounded-2xl border border-[#F0E4E1] shadow-sm p-6 flex items-start gap-4">
+          <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6 flex items-start gap-4">
             <div className="w-14 h-14 rounded-full bg-[#F9EEF1] flex items-center justify-center text-[#C27A8A] font-bold text-xl shrink-0">
               {initials || <User className="w-6 h-6" />}
             </div>
@@ -130,7 +130,7 @@ export default function ClientDetail() {
           </div>
 
           {/* Basic info */}
-          <div className="bg-white rounded-2xl border border-[#F0E4E1] shadow-sm p-6">
+          <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
               <User className="w-3.5 h-3.5" /> Basic Information
             </h2>
@@ -144,7 +144,7 @@ export default function ClientDetail() {
 
           {/* Maladaptive Behaviors */}
           {behaviors.length > 0 && (
-            <div className="bg-white rounded-2xl border border-[#F0E4E1] shadow-sm p-6">
+            <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
               <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5" /> Maladaptive Behaviors
               </h2>
@@ -158,7 +158,7 @@ export default function ClientDetail() {
 
           {/* Replacement Programs */}
           {replacements.length > 0 && (
-            <div className="bg-white rounded-2xl border border-[#F0E4E1] shadow-sm p-6">
+            <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
               <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5" /> Replacement Programs
               </h2>
@@ -172,7 +172,7 @@ export default function ClientDetail() {
 
           {/* Programs from API */}
           {programs.length > 0 && (
-            <div className="bg-white rounded-2xl border border-[#F0E4E1] shadow-sm p-6">
+            <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
               <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
                 <BookOpen className="w-3.5 h-3.5" /> Programs
               </h2>

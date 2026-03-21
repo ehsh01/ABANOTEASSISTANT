@@ -113,8 +113,8 @@ export default function Notes() {
           <div
             className="rounded-2xl overflow-hidden"
             style={{
-              border: "1px solid #F0E4E1",
-              boxShadow: "0 2px 8px rgba(194,122,138,0.06)",
+              border: "1px solid #E8D8D3",
+              boxShadow: "0 4px 20px -4px rgba(44,37,35,0.12), 0 1px 3px rgba(44,37,35,0.06)",
             }}
           >
             <div className="overflow-x-auto">

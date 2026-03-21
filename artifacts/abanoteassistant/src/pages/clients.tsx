@@ -77,7 +77,7 @@ function ClientCard({ client }: { client: Client }) {
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-2xl p-6 border border-[#F0E4E1] hover:shadow-[0_8px_32px_rgba(194,122,138,0.1)] hover:-translate-y-0.5 transition-all group"
+      className="bg-white rounded-2xl p-6 border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] hover:shadow-[0_14px_40px_-6px_rgba(44,37,35,0.18),0_4px_10px_-2px_rgba(44,37,35,0.10)] hover:-translate-y-1 transition-all duration-200 group"
     >
       <div className="flex items-start justify-between mb-5 gap-3">
         <div className="flex items-center gap-4 min-w-0">
