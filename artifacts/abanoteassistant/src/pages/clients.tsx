@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,15 +69,31 @@ const STATUS_CONFIG = {
 };
 
 function ClientCard({ client }: { client: Client }) {
+  const [, setLocation] = useLocation();
   const d = displayNames(client);
   const status = STATUS_CONFIG[client.assessmentStatus];
   const StatusIcon = status.icon;
+  const detailPath = `/clients/${client.id}`;
+
+  function goToDetail() {
+    setLocation(detailPath);
+  }
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-2xl p-6 border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] hover:shadow-[0_14px_40px_-6px_rgba(44,37,35,0.18),0_4px_10px_-2px_rgba(44,37,35,0.10)] hover:-translate-y-1 transition-all duration-200 group"
+      role="link"
+      tabIndex={0}
+      aria-label={`Open profile for ${d.firstName} ${d.lastName}`}
+      onClick={goToDetail}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          goToDetail();
+        }
+      }}
+      className="bg-white rounded-2xl p-6 border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] hover:shadow-[0_14px_40px_-6px_rgba(44,37,35,0.18),0_4px_10px_-2px_rgba(44,37,35,0.10)] hover:-translate-y-1 transition-all duration-200 group cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C27A8A]/40 focus-visible:ring-offset-2"
     >
       <div className="flex items-start justify-between mb-5 gap-3">
         <div className="flex items-center gap-4 min-w-0">
@@ -97,12 +113,16 @@ function ClientCard({ client }: { client: Client }) {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-1 shrink-0">
+        <div
+          className="flex items-center gap-1 shrink-0"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="p-2.5 rounded-xl border border-[#F0E4E1] text-[#877870] hover:text-[#C27A8A] hover:border-[#C27A8A]/40 hover:bg-[#FDFAF7] transition-colors"
+                className="p-2.5 rounded-xl border border-[#F0E4E1] text-[#877870] hover:text-[#C27A8A] hover:border-[#C27A8A]/40 hover:bg-[#FDFAF7] transition-colors cursor-pointer"
                 title="Edit client"
                 aria-label={`Edit ${d.firstName} ${d.lastName}`}
               >
@@ -191,17 +211,21 @@ function ClientCard({ client }: { client: Client }) {
         )}
       </div>
 
-      {/* Footer: DOB + quick actions */}
-      <div className="flex items-center justify-between mt-4 pt-4 border-t border-[#F0E4E1] gap-3">
+      {/* Footer: DOB + quick actions (stopPropagation so links don’t double-fire card navigation) */}
+      <div
+        className="flex items-center justify-between mt-4 pt-4 border-t border-[#F0E4E1] gap-3"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
         <div className="flex items-center gap-1.5 text-xs text-[#877870]">
           <Clock className="w-3.5 h-3.5 pop-icon" />
           DOB: {d.dateOfBirth || "—"}
         </div>
         <div className="flex items-center gap-2">
-          <Link href={`/clients/${client.id}`}>
+          <Link href={detailPath}>
             <button
               type="button"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#877870] hover:border-[#C27A8A] hover:text-[#C27A8A] transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#877870] hover:border-[#C27A8A] hover:text-[#C27A8A] transition-all cursor-pointer"
             >
               <ChevronRight className="w-3.5 h-3.5" />
               View
@@ -210,7 +234,7 @@ function ClientCard({ client }: { client: Client }) {
           <Link href={`/wizard?clientId=${client.id}`}>
             <button
               type="button"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#C27A8A] hover:bg-[#C27A8A] hover:text-white hover:border-[#C27A8A] transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#C27A8A] hover:bg-[#C27A8A] hover:text-white hover:border-[#C27A8A] transition-all cursor-pointer"
             >
               <FileText className="w-3.5 h-3.5" />
               Add Note

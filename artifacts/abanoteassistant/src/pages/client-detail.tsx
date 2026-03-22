@@ -3,8 +3,6 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft,
   User,
-  CalendarDays,
-  Tag,
   AlertTriangle,
   Zap,
   Shield,
@@ -14,6 +12,7 @@ import {
   AlertCircle,
   Loader2,
   BookOpen,
+  Tag,
 } from "lucide-react";
 import { useClient, useClientPrograms } from "@/hooks/use-aba-api";
 
@@ -39,15 +38,49 @@ function Chip({ label, color }: { label: string; color: "rose" | "amber" | "teal
   );
 }
 
+function TagListSection({
+  title,
+  icon: Icon,
+  items,
+  chipColor,
+  emptyHint,
+}: {
+  title: string;
+  icon: React.ElementType;
+  items: string[];
+  chipColor: "rose" | "amber" | "teal";
+  emptyHint: string;
+}) {
+  return (
+    <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
+      <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
+        <Icon className="w-3.5 h-3.5" /> {title}
+      </h2>
+      {items.length === 0 ? (
+        <p className="text-sm text-[#877870] italic">{emptyHint}</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {items.map((item) => (
+            <Chip key={item} label={item} color={chipColor} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ClientDetail() {
   const { clientId } = useParams<{ clientId: string }>();
   const id = clientId ? Number(clientId) : undefined;
   const { data: clientResp, isLoading: clientLoading } = useClient(id);
-  const { data: programsResp, isLoading: programsLoading } = useClientPrograms(id);
+  const {
+    data: programsResp,
+    isLoading: programsLoading,
+    isError: programsError,
+  } = useClientPrograms(id);
 
   const client = clientResp?.data;
   const programs = programsResp?.data ?? [];
-  const isLoading = clientLoading || programsLoading;
 
   const p = client?.profile;
   const firstName = p?.firstName ?? client?.name?.split(" ")[0] ?? "";
@@ -57,31 +90,34 @@ export default function ClientDetail() {
 
   const behaviors = p?.maladaptiveBehaviors ?? [];
   const replacements = p?.replacementPrograms ?? [];
+  const interventions = p?.interventions ?? [];
 
   return (
     <div className="min-h-screen bg-[#FDE8EE] px-4 py-6 md:px-8 md:py-8">
-      {/* Back link */}
       <Link href="/clients">
-        <button className="flex items-center gap-1.5 text-sm text-[#877870] hover:text-[#C27A8A] transition-colors mb-6">
+        <button
+          type="button"
+          className="flex items-center gap-1.5 text-sm text-[#877870] hover:text-[#C27A8A] transition-colors mb-6"
+        >
           <ArrowLeft className="w-4 h-4" />
           Back to Clients
         </button>
       </Link>
 
-      {isLoading && (
+      {clientLoading && (
         <div className="flex items-center justify-center h-48">
           <Loader2 className="w-6 h-6 animate-spin text-[#C27A8A]" />
         </div>
       )}
 
-      {!isLoading && !client && (
+      {!clientLoading && !client && (
         <div className="flex flex-col items-center justify-center h-48 gap-2 text-[#877870]">
           <User className="w-8 h-8" />
           <p className="text-sm">Client not found.</p>
         </div>
       )}
 
-      {!isLoading && client && (
+      {!clientLoading && client && (
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -95,33 +131,54 @@ export default function ClientDetail() {
             </div>
             <div className="flex-1 min-w-0">
               <h1 className="text-xl font-bold text-[#2D2523]">{fullName || client.name}</h1>
-              {client.ageBand && (
-                <p className="text-sm text-[#877870] mt-0.5">{client.ageBand}</p>
-              )}
-              <div className="mt-2">
-                {client.assessmentStatus === "ready" ? (
+              {client.ageBand && <p className="text-sm text-[#877870] mt-0.5">{client.ageBand}</p>}
+              <div className="mt-2 flex flex-wrap gap-2">
+                {client.assessmentStatus === "ready" && (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 px-2.5 py-1 rounded-full">
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    Assessment complete
+                    Assessment ready
                   </span>
-                ) : (
+                )}
+                {client.assessmentStatus === "uploaded" && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full">
+                    <FileText className="w-3.5 h-3.5" />
+                    Assessment uploaded
+                  </span>
+                )}
+                {client.assessmentStatus === "processing" && (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Processing
+                  </span>
+                )}
+                {client.assessmentStatus === "missing" && (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-full">
                     <AlertCircle className="w-3.5 h-3.5" />
-                    Assessment pending
+                    No assessment on file
                   </span>
                 )}
               </div>
+              {p?.assessmentFileName ? (
+                <p className="text-xs text-[#877870] mt-2 truncate" title={p.assessmentFileName}>
+                  PDF: {p.assessmentFileName}
+                </p>
+              ) : null}
             </div>
-            {/* Actions */}
             <div className="flex flex-col gap-2 shrink-0">
               <Link href={`/wizard?clientId=${client.id}`}>
-                <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#C27A8A] text-white text-xs font-semibold hover:bg-[#b06a79] transition-all">
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#C27A8A] text-white text-xs font-semibold hover:bg-[#b06a79] transition-all w-full justify-center"
+                >
                   <FileText className="w-3.5 h-3.5" />
                   Add Note
                 </button>
               </Link>
-              <Link href={`/clients/edit/${client.id}`}>
-                <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#877870] hover:border-[#C27A8A] hover:text-[#C27A8A] transition-all">
+              <Link href={`/clients/edit/${client.id}?section=personal`}>
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#877870] hover:border-[#C27A8A] hover:text-[#C27A8A] transition-all w-full justify-center"
+                >
                   <Pencil className="w-3.5 h-3.5" />
                   Edit
                 </button>
@@ -129,7 +186,6 @@ export default function ClientDetail() {
             </div>
           </div>
 
-          {/* Basic info */}
           <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
               <User className="w-3.5 h-3.5" /> Basic Information
@@ -142,40 +198,50 @@ export default function ClientDetail() {
             </div>
           </div>
 
-          {/* Maladaptive Behaviors */}
-          {behaviors.length > 0 && (
-            <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
-                <AlertTriangle className="w-3.5 h-3.5" /> Maladaptive Behaviors
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                {behaviors.map((b) => (
-                  <Chip key={b} label={b} color="rose" />
-                ))}
-              </div>
-            </div>
-          )}
+          <TagListSection
+            title="Maladaptive Behaviors"
+            icon={AlertTriangle}
+            items={behaviors}
+            chipColor="rose"
+            emptyHint="No maladaptive behaviors documented yet. Add them from Edit → Edit behaviors."
+          />
 
-          {/* Replacement Programs */}
-          {replacements.length > 0 && (
-            <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5" /> Replacement Programs
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                {replacements.map((r) => (
-                  <Chip key={r} label={r} color="teal" />
-                ))}
-              </div>
-            </div>
-          )}
+          <TagListSection
+            title="Replacement Programs"
+            icon={Zap}
+            items={replacements}
+            chipColor="teal"
+            emptyHint="No replacement programs documented yet. Add them from Edit → Edit programs."
+          />
 
-          {/* Programs from API */}
-          {programs.length > 0 && (
-            <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
-                <BookOpen className="w-3.5 h-3.5" /> Programs
-              </h2>
+          <TagListSection
+            title="Interventions"
+            icon={Shield}
+            items={interventions}
+            chipColor="amber"
+            emptyHint="No interventions documented yet. Add them from Edit → Edit interventions."
+          />
+
+          {/* Structured programs from API (if any) */}
+          <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
+              <BookOpen className="w-3.5 h-3.5" /> Formal program list
+            </h2>
+            {programsLoading && (
+              <div className="flex items-center gap-2 text-sm text-[#877870]">
+                <Loader2 className="w-4 h-4 animate-spin text-[#C27A8A]" />
+                Loading programs…
+              </div>
+            )}
+            {programsError && (
+              <p className="text-sm text-[#877870] italic">
+                Program list could not be loaded. Profile programs above still apply.
+              </p>
+            )}
+            {!programsLoading && !programsError && programs.length === 0 && (
+              <p className="text-sm text-[#877870] italic">No formal programs linked to this client.</p>
+            )}
+            {!programsLoading && !programsError && programs.length > 0 && (
               <div className="space-y-3">
                 {programs.map((prog) => (
                   <div key={prog.id} className="flex items-start gap-3">
@@ -191,15 +257,19 @@ export default function ClientDetail() {
                       {prog.description && (
                         <p className="text-xs text-[#877870] mt-0.5">{prog.description}</p>
                       )}
-                      <span className={`text-xs font-medium mt-1 inline-block ${prog.type === "primary" ? "text-[#C27A8A]" : "text-amber-600"}`}>
+                      <span
+                        className={`text-xs font-medium mt-1 inline-block ${
+                          prog.type === "primary" ? "text-[#C27A8A]" : "text-amber-600"
+                        }`}
+                      >
                         {prog.type === "primary" ? "Primary" : "Supplemental"}
                       </span>
                     </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </motion.div>
       )}
     </div>
