@@ -9,10 +9,17 @@ import {
 } from "@workspace/api-zod";
 import { db } from "@workspace/db";
 import { clientsTable, companiesTable, programsTable, notesTable } from "@workspace/db/schema";
+import {
+  buildLockedOpening,
+  buildNextSessionSentence,
+  buildPerformanceSentence,
+  LOCKED_CLOSING_PARAGRAPH,
+} from "../note-assembly";
 
 const router: IRouter = Router();
 
-const MOCK_NOTE_TEMPLATE = (
+/** Mock clinical body between locked opening and locked closing — replace with ABC pipeline later. */
+function mockClinicalBody(
   clientName: string,
   sessionDate: string,
   sessionHours: number,
@@ -20,40 +27,82 @@ const MOCK_NOTE_TEMPLATE = (
   hasEnvChanges: boolean,
   envChanges: string,
   programNames: string[],
-) =>
-  `
-Session Note — ${clientName}
-Session Date: ${sessionDate}
-Duration: ${sessionHours} hour${sessionHours > 1 ? "s" : ""}
-Present: ${presentPeople.join(", ")}
+): string {
+  const presentLine = presentPeople.length > 0 ? presentPeople.join(", ") : "Caregiver (documented as present)";
+  const envBlock =
+    hasEnvChanges && envChanges.trim().length > 0
+      ? `\n\n**Environmental changes (this session)**\n\n${envChanges.trim()}\n`
+      : "";
 
-**Session Summary**
+  const programsBlock =
+    programNames.length > 0
+      ? programNames
+          .map(
+            (prog, i) =>
+              `${i + 1}. **${prog}**: ${clientName} participated in trials targeting this program during the session. The RBT implemented procedures consistent with the behavior plan and collected data as appropriate.`,
+          )
+          .join("\n\n")
+      : "No replacement programs were enumerated for this generated draft; update selections and regenerate as needed.";
 
-${clientName} participated in a ${sessionHours}-hour ABA therapy session on ${sessionDate}. The session was conducted in the home setting with ${presentPeople.join(" and ")} present. The Registered Behavior Technician (RBT) implemented programming as directed by the Board Certified Behavior Analyst (BCBA) supervisor.
+  return `${envBlock}
+**Session metadata**
 
-${hasEnvChanges ? `**Environmental Changes**\n${envChanges}\n` : ""}
+Session date: ${sessionDate}  
+Duration: ${sessionHours} hour${sessionHours > 1 ? "s" : ""}  
+Individuals documented as present: ${presentLine}
 
-**Skill Acquisition Programs**
+**Session summary**
 
-${programNames
-  .map(
-    (prog, i) =>
-      `${i + 1}. **${prog}**: ${clientName} demonstrated consistent responding across multiple trials during today's session. The client met criterion for ${Math.floor(Math.random() * 3) + 2} of ${Math.floor(Math.random() * 3) + 4} targets. Prompting hierarchy was implemented as outlined in the treatment plan, with gradual fading of prompt levels to promote independence. Data were recorded using a trial-by-trial format.`,
-  )
-  .join("\n\n")}
+Following the opening above, ${clientName} participated in a ${sessionHours}-hour home-based session. The RBT implemented program targets as directed by the supervising BCBA.
 
-**Behavior Reduction**
+**Skill acquisition / replacement programs**
 
-${clientName} exhibited minimal challenging behavior during today's session. The behavior intervention plan was followed with fidelity. When problem behavior occurred, the RBT implemented the prescribed extinction protocol and redirected the client to the task at hand. The client responded appropriately to the intervention strategies and was able to re-engage with programming within a reasonable timeframe.
+${programsBlock}
 
-**Caregiver Involvement**
+**Behavior reduction**
 
-${presentPeople.join(" and ")} participated actively in today's session. The RBT provided coaching on implementation of behavior programs and reviewed current data trends. The caregiver demonstrated understanding of reinforcement delivery and prompting strategies as outlined in the parent training goals.
+${clientName}'s behavior was addressed in accordance with the behavior intervention plan. The RBT applied plan-specified strategies when clinically indicated and documented observations during the session.
 
-**Summary and Recommendations**
+**Caregiver involvement**
 
-Overall, ${clientName} had a productive session. Programming targets are progressing as expected. The BCBA will review current data trends at the next supervision meeting to determine if modifications to the treatment plan are warranted. It is recommended to continue current programming with close monitoring of acquisition data.
+${presentLine} participated during the session. The RBT coordinated implementation and data collection with the caregiver as appropriate.
 `.trim();
+}
+
+function assembleSessionNote(
+  clientName: string,
+  sessionDate: string,
+  sessionHours: number,
+  presentPeople: string[],
+  hasEnvChanges: boolean,
+  envChanges: string,
+  programNames: string[],
+  nextSessionDate: string | undefined,
+): string {
+  const opening = buildLockedOpening(clientName, presentPeople, hasEnvChanges);
+  const body = mockClinicalBody(
+    clientName,
+    sessionDate,
+    sessionHours,
+    presentPeople,
+    hasEnvChanges,
+    envChanges,
+    programNames,
+  );
+  const performance = buildPerformanceSentence(clientName);
+  const nextSession = buildNextSessionSentence(clientName, nextSessionDate);
+
+  return [
+    opening,
+    "",
+    body,
+    "",
+    LOCKED_CLOSING_PARAGRAPH,
+    "",
+    performance,
+    nextSession,
+  ].join("\n");
+}
 
 router.post("/notes/generate", async (req, res) => {
   const companyId = req.companyId;
@@ -117,7 +166,7 @@ router.post("/notes/generate", async (req, res) => {
     programNames = body.selectedReplacements.map((id) => nameById.get(id) ?? `Program ${id}`);
   }
 
-  const noteContent = MOCK_NOTE_TEMPLATE(
+  const noteContent = assembleSessionNote(
     client.name,
     body.sessionDate,
     body.sessionHours,
@@ -125,6 +174,7 @@ router.post("/notes/generate", async (req, res) => {
     body.hasEnvironmentalChanges,
     body.environmentalChanges ?? "",
     programNames,
+    body.nextSessionDate,
   );
 
   const warnings: string[] = [];

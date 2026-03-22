@@ -1,0 +1,62 @@
+---
+description: Mandatory opening, closing, and end-of-note sequence for assembled session notes (non-negotiable prose)
+alwaysApply: true
+---
+
+# Locked prose — ABA session notes (ABA Note Assistant)
+
+These strings are **binding** for any code, prompt, or agent that assembles the **final** session note text. They supplement `.cursor/rules/aba-note-backend.mdc` and `.cursor/rules/aba-note-companion.mdc`.
+
+**Source documents** (human-readable copies): `docs/note-generation/` — includes full rules from *COMPLETE NOTE GENERATION RULES*, ABC format instructions, and sample reference.
+
+## 1. Opening (locked pattern — two sentences)
+
+Every note must **begin** with exactly this structure (fill slots only; do not paraphrase the template):
+
+1. `The RBT met with [ClientFirstNameOrFullName] and [CaregiverList] at home to implement program targets.`
+   - `[CaregiverList]` = people present from session intake (e.g. Mother, Father), joined with natural English (e.g. `Mother and Father`, or `Mother, Father, and Grandmother`). If none documented, use: `the caregiver`.
+2. Environmental status sentence (choose one; do not invent facts):
+   - If **no** environmental changes this session: `There have been no environmental changes recently.`
+   - If **yes**: `There have been environmental changes recently.` (Details belong in the note body per workflow — do not contradict the boolean.)
+
+Do not add sentences **before** these two. Do not reorder them.
+
+## 2. Mandatory closing paragraph (verbatim)
+
+After the clinical body, the following paragraph must appear **exactly** (punctuation and wording as written; straight double quotes inside the parenthetical):
+
+```
+Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., "Good job," "Wow," and "Good attention to detail"), preferred toys, and videos contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned, with the caregiver present during implementation.
+```
+
+No extra sentences **between** the body and this paragraph except where a validated pipeline explicitly inserts only approved blocks.
+
+## 3. End-of-note sequence (exact order — after the closing paragraph)
+
+1. The closing paragraph above  
+2. **Performance sentence** (locked): `[ClientName]'s performance during the session was fair.`  
+   - Do **not** substitute *poor*, *below expectations*, *unsuccessful*, *limited*, *inadequate*, *minimal engagement*, or *regression* for this note product unless a future policy explicitly overrides this file.
+3. **Next session sentence**:  
+   - If a next session date is provided: `The next session is tentatively scheduled to take place at [ClientName]'s home on [DATE].`  
+   - `[DATE]` = US-style display (e.g. `12/10/2025`).  
+   - If no date: `The next session is tentatively scheduled to take place at [ClientName]'s home; the date is to be determined.`
+
+Do not append other sentences after these without product approval.
+
+## 4. ABC and documentation rules (summary)
+
+Full detail: `docs/note-generation/COMPLETE-NOTE-GENERATION-RULES.md` and `docs/note-generation/ABC-FORMAT-INSTRUCTIONS.md`.
+
+Highlights for implementers:
+
+- **Authority**: Master documentation rules → assessment → BIP; higher overrides lower.
+- **Strict labels**: Behaviors, interventions, and replacement programs must match BIP/authorized lists with **exact** wording (capitalization, spacing, punctuation).
+- **ABC**: One complete ABC sequence per hour of service when using ABC narrative; sections flow as continuous narrative unless schema says otherwise.
+- **Introduction rule (doc)** mirrors section 1 above.
+- **Replacement programs**: Either in antecedent (activity being taught) **or** after behavior in consequence — **not both** in the same ABC.
+- **Consequence phrasing**: Use `To address this/these behavior(s), the RBT implemented/applied [EXACT INTERVENTION NAME]` then describe application.
+- **Replacement program phrasing**: `Additionally, the RBT implemented the replacement program '[EXACT PROGRAM NAME]'` followed by `by` and implementation detail.
+
+## 5. Engineering rule
+
+When changing `POST /notes/generate` or any assembly step, **verify** the output starts with §1 and ends with §2–§3 in order. Add automated tests when the pipeline is non-mock.

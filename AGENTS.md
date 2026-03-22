@@ -37,7 +37,7 @@ You MUST:
 
 When implementing or changing **note generation** (prompts, `SessionContext`, validators, assembly, repair):
 
-1. **Follow** `.cursor/rules/aba-note-backend.mdc` and `.cursor/rules/aba-note-companion.mdc` in full—they are binding for this project (`alwaysApply: true`).
+1. **Follow** `.cursor/rules/aba-note-backend.mdc`, `.cursor/rules/aba-note-companion.mdc`, and `.cursor/rules/aba-note-locked-prose.mdc` in full—they are binding for this project (`alwaysApply: true`). Locked opening/closing text is implemented in `artifacts/api-server/src/note-assembly.ts`.
 2. **Include the client’s on-file assessment** (FBA/BIP PDF the RBT uploaded at client creation) in the pipeline together with session data and catalogs. Conceptual field: `client_assessment` in `SessionContext` (reference +/or extracted text). Do not generate notes that ignore that document when it exists on the client record.
 
 ## Change Policy
