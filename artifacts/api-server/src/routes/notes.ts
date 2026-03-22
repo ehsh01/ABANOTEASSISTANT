@@ -8,7 +8,14 @@ import {
   SaveNoteResponse,
 } from "@workspace/api-zod";
 import { db } from "@workspace/db";
-import { clientsTable, companiesTable, programsTable, notesTable } from "@workspace/db/schema";
+import {
+  clientsTable,
+  companiesTable,
+  programsTable,
+  notesTable,
+  type ClientProfileRow,
+} from "@workspace/db/schema";
+import { buildAbcClinicalBody } from "../abc-note-body";
 import {
   buildLockedOpening,
   buildNextSessionSentence,
@@ -18,90 +25,18 @@ import {
 
 const router: IRouter = Router();
 
-/** Mock clinical body between locked opening and locked closing — replace with ABC pipeline later. */
-function mockClinicalBody(
-  clientName: string,
-  sessionDate: string,
-  sessionHours: number,
-  presentPeople: string[],
-  hasEnvChanges: boolean,
-  envChanges: string,
-  programNames: string[],
-): string {
-  const presentLine = presentPeople.length > 0 ? presentPeople.join(", ") : "Caregiver (documented as present)";
-  const envBlock =
-    hasEnvChanges && envChanges.trim().length > 0
-      ? `\n\n**Environmental changes (this session)**\n\n${envChanges.trim()}\n`
-      : "";
-
-  const programsBlock =
-    programNames.length > 0
-      ? programNames
-          .map(
-            (prog, i) =>
-              `${i + 1}. **${prog}**: ${clientName} participated in trials targeting this program during the session. The RBT implemented procedures consistent with the behavior plan and collected data as appropriate.`,
-          )
-          .join("\n\n")
-      : "No replacement programs were enumerated for this generated draft; update selections and regenerate as needed.";
-
-  return `${envBlock}
-**Session metadata**
-
-Session date: ${sessionDate}  
-Duration: ${sessionHours} hour${sessionHours > 1 ? "s" : ""}  
-Individuals documented as present: ${presentLine}
-
-**Session summary**
-
-Following the opening above, ${clientName} participated in a ${sessionHours}-hour home-based session. The RBT implemented program targets as directed by the supervising BCBA.
-
-**Skill acquisition / replacement programs**
-
-${programsBlock}
-
-**Behavior reduction**
-
-${clientName}'s behavior was addressed in accordance with the behavior intervention plan. The RBT applied plan-specified strategies when clinically indicated and documented observations during the session.
-
-**Caregiver involvement**
-
-${presentLine} participated during the session. The RBT coordinated implementation and data collection with the caregiver as appropriate.
-`.trim();
-}
-
 function assembleSessionNote(
   clientName: string,
-  sessionDate: string,
-  sessionHours: number,
   presentPeople: string[],
   hasEnvChanges: boolean,
-  envChanges: string,
-  programNames: string[],
+  clinicalBody: string,
   nextSessionDate: string | undefined,
 ): string {
   const opening = buildLockedOpening(clientName, presentPeople, hasEnvChanges);
-  const body = mockClinicalBody(
-    clientName,
-    sessionDate,
-    sessionHours,
-    presentPeople,
-    hasEnvChanges,
-    envChanges,
-    programNames,
-  );
   const performance = buildPerformanceSentence(clientName);
   const nextSession = buildNextSessionSentence(clientName, nextSessionDate);
 
-  return [
-    opening,
-    "",
-    body,
-    "",
-    LOCKED_CLOSING_PARAGRAPH,
-    "",
-    performance,
-    nextSession,
-  ].join("\n");
+  return [opening, "", clinicalBody, "", LOCKED_CLOSING_PARAGRAPH, "", performance, "", nextSession].join("\n");
 }
 
 router.post("/notes/generate", async (req, res) => {
@@ -166,21 +101,29 @@ router.post("/notes/generate", async (req, res) => {
     programNames = body.selectedReplacements.map((id) => nameById.get(id) ?? `Program ${id}`);
   }
 
+  const profile = (client.profile as ClientProfileRow | null | undefined) ?? null;
+  const { text: clinicalBody, warnings: abcWarnings } = buildAbcClinicalBody({
+    clientName: client.name,
+    sessionHours: body.sessionHours,
+    programNames,
+    maladaptiveBehaviors: profile?.maladaptiveBehaviors ?? [],
+    interventions: profile?.interventions ?? [],
+    hasEnvironmentalChanges: body.hasEnvironmentalChanges,
+    environmentalChanges: body.environmentalChanges ?? "",
+  });
+
   const noteContent = assembleSessionNote(
     client.name,
-    body.sessionDate,
-    body.sessionHours,
     body.presentPeople,
     body.hasEnvironmentalChanges,
-    body.environmentalChanges ?? "",
-    programNames,
+    clinicalBody,
     body.nextSessionDate,
   );
 
-  const warnings: string[] = [];
+  const warnings: string[] = [...abcWarnings];
   if (body.selectedReplacements.length < body.sessionHours) {
     warnings.push(
-      `Fewer programs selected than session hours. ${body.sessionHours - body.selectedReplacements.length} supplemental program(s) will be noted without client outcome data.`,
+      `Fewer programs selected than session hours. Some hours reuse or rotate selected replacement programs in the narrative.`,
     );
   }
 
