@@ -59,7 +59,7 @@ export default function ClientDetail() {
   const replacements = p?.replacementPrograms ?? [];
 
   return (
-    <div className="min-h-screen bg-[#FDFAF7] px-4 py-6 md:px-8 md:py-8">
+    <div className="min-h-screen bg-[#FDE8EE] px-4 py-6 md:px-8 md:py-8">
       {/* Back link */}
       <Link href="/clients">
         <button className="flex items-center gap-1.5 text-sm text-[#877870] hover:text-[#C27A8A] transition-colors mb-6">

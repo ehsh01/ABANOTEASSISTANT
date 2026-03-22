@@ -57,7 +57,7 @@ export default function AdminPage() {
   const companyCount = listQuery.data?.data.length ?? 0;
 
   return (
-    <div className="min-h-screen bg-[#FDFAF7]">
+    <div className="min-h-screen bg-[#FDE8EE]">
 
       {/* ── Nav ── */}
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4">
