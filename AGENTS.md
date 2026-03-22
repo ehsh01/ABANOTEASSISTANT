@@ -33,6 +33,13 @@ You MUST:
 - Database logic and queries (`lib/db/`)
 - OpenAPI specification maintenance (`lib/api-spec/`)
 
+## Session note generation (Cursor rules + client assessment)
+
+When implementing or changing **note generation** (prompts, `SessionContext`, validators, assembly, repair):
+
+1. **Follow** `.cursor/rules/aba-note-backend.mdc` and `.cursor/rules/aba-note-companion.mdc` in full—they are binding for this project (`alwaysApply: true`).
+2. **Include the client’s on-file assessment** (FBA/BIP PDF the RBT uploaded at client creation) in the pipeline together with session data and catalogs. Conceptual field: `client_assessment` in `SessionContext` (reference +/or extracted text). Do not generate notes that ignore that document when it exists on the client record.
+
 ## Change Policy
 
 - **Do NOT change public interfaces** unless explicitly instructed

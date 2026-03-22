@@ -1,0 +1,138 @@
+---
+description: ABA note rules — companion guide (layers, ownership, anti-conflict) alongside aba-note-backend
+alwaysApply: true
+---
+
+# ABA Cursor Companion Guide
+
+## Best Use
+Use this file next to the main backend rules file. It explains how to split your system so rules do not fight each other.
+
+## Invariant: rules + client assessment on every note
+For **every** note generation path, treat as mandatory inputs:
+- **This companion file** and **`aba-note-backend.mdc`** (full rules, precedence, pipeline).
+- **The client’s own assessment** that the RBT uploaded when creating/onboarding that client (same artifact the product stores—PDF path, extracted text, or equivalent). Do not generate as if that document did not exist when it is on file.
+
+If code or prompts only use wizard fields and ignore the stored assessment, that violates this invariant until the pipeline loads and constrains against `client_assessment` (see backend rules).
+
+## Recommended Ownership Model
+### Replit frontend owns
+- forms
+- dropdown selections
+- preview UI
+- error display
+- save and submit actions
+
+### Cursor backend owns
+- session normalization
+- locked catalogs
+- validation
+- repair
+- prose assembly
+- versioning
+- audits
+
+### AI owns
+- structured field drafting only
+
+## Rule Placement Guide
+### Catalog layer
+Put all exact approved values here:
+- maladaptive behaviors
+- replacements
+- interventions
+- programs
+- materials
+- environmental changes
+- setting labels
+
+### Schema layer
+Put shape rules here:
+- required fields
+- data types
+- nested object shapes
+- min and max counts
+- nullable rules
+
+### Validator layer
+Put truth enforcement here:
+- exact catalog match
+- assignment checks
+- contradiction checks
+- order checks
+- coverage checks
+
+### Assembly layer
+Put deterministic writing templates here:
+- opening sentence templates
+- ABC paragraph templates
+- replacement summary templates
+- closing sentence templates
+
+### Repair layer
+Put correction instructions here:
+- remove invalid labels
+- remap canonical enums
+- strip unauthorized text
+- rebuild missing formatting only when facts already exist
+
+### Prompt layer
+Put only bounded generation instructions here:
+- return JSON only
+- use exact labels only
+- no invention
+- no policy decisions
+
+## Anti-Conflict Rules
+- Never let the same vocabulary list live in multiple prompts.
+- Never let the frontend define a clinical rule.
+- Never let the model choose final prose order.
+- Never let repair override locked session facts.
+- Never let assembly introduce content not present in approved structured data.
+
+## Example Request Flow
+1. User selects note inputs in Replit.
+2. Backend normalizes all values to canonical labels and IDs.
+3. Backend creates SessionContext and freezes catalog snapshot.
+4. Backend calls model to generate NotePlan JSON only.
+5. Validators run.
+6. If needed, repair JSON and revalidate.
+7. Backend assembles final note.
+8. Final language checks run.
+9. Persist audit records.
+
+## Suggested Cursor Rule Header
+You can paste this at the top of a Cursor rule file:
+
+- Backend is the final authority for ABA note generation.
+- Keep API contracts stable.
+- Do not redesign frontend UI.
+- Do not move validation logic into prompts.
+- Make minimal safe changes.
+- Before coding, list files to modify and why.
+
+## Suggested Config Files
+- `catalog.behaviors.json`
+- `catalog.interventions.json`
+- `catalog.replacements.json`
+- `catalog.programs.json`
+- `schema.note-plan.json`
+- `schema.session-context.json`
+- `validator-profile.default.json`
+- `assembly.templates.ts`
+- `repair.rules.ts`
+- `prompt.note-plan.ts`
+
+## Testing Strategy
+Create tests for:
+- exact-match failures
+- invalid synonym rejection
+- missing required ABC field rejection
+- duplicate event collapse behavior
+- unsupported intervention rejection
+- invalid closing sequence rejection
+- repair success on simple enum mismatches
+- final note assembly ordering
+
+## Final Recommendation
+Keep prompts small, schemas strict, validators authoritative, and assembly deterministic.

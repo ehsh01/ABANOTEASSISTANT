@@ -1,0 +1,238 @@
+---
+description: ABA session note generation — backend authority, SessionContext, validators, assembly pipeline (source of truth for automated notes)
+alwaysApply: true
+---
+
+# ABA Cursor Backend Rules
+
+## Purpose
+This file defines the backend authority for ABA note generation. The backend must be the final source of truth. The AI may only generate content inside the boundaries defined here.
+
+## Always-on requirements for note generation (non-optional)
+Whenever a session note is generated—by code, prompt, or agent—**all** of the following apply. None of these may be skipped or “best effort”:
+
+1. **These rule documents** — Treat `.cursor/rules/aba-note-backend.mdc` and `.cursor/rules/aba-note-companion.mdc` as binding for this repo. Implement and review note-generation changes against them in full (precedence, pipeline, validators, assembly, repair, prompting limits).
+2. **Client-specific assessment** — The RBT uploads the client’s assessment (e.g. FBA/BIP PDF) when creating/onboarding the client. That **same** assessment for **that** client must be **referenced in the generation pipeline** alongside `SessionContext`: include a stable reference to the on-file artifact (e.g. stored file / `assessmentFileName` / extracted text or chunks in DB) so outputs stay consistent with that document. Do not substitute generic or template assessment text for the real client file unless the product explicitly has no assessment on file and policy defines fallback behavior.
+3. **No contradiction** — Generated content must not contradict the locked assessment material, locked catalogs, or session facts. If the model or assembler cannot satisfy the rules plus the assessment plus the session, **fail validation or repair**—do not invent bridging clinical content.
+
+If implementation does not yet load assessment text into `SessionContext`, treat that as a **required engineering gap** to close, not a reason to bypass this section.
+
+## System Boundaries
+- Frontend (Replit): collects user inputs, displays forms, previews note output, shows validation errors.
+- Backend (Cursor): owns schemas, catalogs, assignment rules, validators, note assembly, repair passes, audit trail.
+- Model: fills approved structured fields only. It does not invent programs, interventions, replacements, materials, behavior labels, or session facts.
+
+## Rule Precedence
+When two rules appear to conflict, apply this exact order:
+1. Safety and compliance rules
+2. Locked runtime data from the session
+3. Schema requirements
+4. Catalog and exact-match vocabulary rules
+5. Programmatic validators
+6. Assembly templates
+7. Repair instructions
+8. Prompt guidance
+
+Later layers may never override earlier layers.
+
+## Single Source of Truth
+The backend must build a single `SessionContext` object before any generation.
+
+Required SessionContext sections:
+- client
+- therapist
+- session_meta
+- selected_behaviors
+- selected_replacements
+- selected_interventions
+- selected_programs
+- environment_changes
+- materials_present
+- schedule_changes
+- mandatory_opening_data
+- mandatory_closing_data
+- plan_catalog_snapshot
+- validation_profile
+- **client_assessment** — Reference and/or text snapshot for the assessment the RBT attached for this client (onboarding upload). Must be the authoritative clinical document set for that client in the pipeline together with this rule file and companion rules.
+
+Generation may not start until SessionContext is complete.
+
+## Non-Negotiable Generation Rules
+- Use exact approved terminology only.
+- Do not paraphrase locked program, intervention, replacement, behavior, material, or trigger names.
+- Do not add any item that is not present in the runtime catalogs.
+- Do not claim an event, trigger, material, or intervention unless it is in SessionContext or explicitly allowed by rule.
+- Do not generate the final prose note first.
+- Generate structured data first, then assemble prose in the backend.
+
+## Required Pipeline
+### Step 1: Intake normalization
+Normalize all incoming selections into canonical IDs and canonical display labels.
+
+### Step 2: Runtime locking
+Freeze a snapshot of all approved catalogs used for this note.
+
+### Step 3: Structured planning
+Create a note plan object with:
+- opening block data
+- ABC event list
+- replacement summary data
+- program summary data
+- closing block data
+
+### Step 4: Structured generation
+Model outputs only strict JSON. No prose note in this step.
+
+### Step 5: Validation
+Run schema validation, exact-match validation, cross-field validation, and business-rule validation.
+
+### Step 6: Repair
+If validation fails, run a repair pass against the invalid JSON only. Repair may correct formatting and unsupported content, but may not invent missing clinical facts.
+
+### Step 7: Assembly
+Backend composes the final note from approved structured fields using deterministic templates.
+
+### Step 8: Final validation
+Run prose-level checks against the assembled note.
+
+## Required Data Shapes
+### ABCEvent
+Each ABC event must contain:
+- behavior_id
+- behavior_label
+- antecedent
+- topography
+- intervention_ids
+- intervention_labels
+- response_to_intervention
+- replacement_ids
+- replacement_labels
+- teaching_or_prompting_summary
+- result_summary
+
+### NotePlan
+Required:
+- opening
+- abc_events
+- replacements_summary
+- program_summary
+- closing
+
+## Validator Classes
+Implement validators as separate modules. Do not hide validator logic inside prompts.
+
+### 1. Schema Validator
+Checks required fields, types, array limits, null handling, and enum compliance.
+
+### 2. Catalog Validator
+Checks every labeled item against the locked catalog snapshot.
+
+### 3. Cross-Reference Validator
+Checks that behaviors, interventions, replacements, and programs referenced in events are actually assigned to the current note context.
+
+### 4. Sequencing Validator
+Checks required order:
+- opening
+- body events
+- replacement/program summary
+- closing
+
+### 5. Coverage Validator
+Checks that all required selected items are represented when policy requires representation, and that no required area is silently omitted.
+
+### 6. Conflict Validator
+Rejects contradictory statements, duplicate event logic, mutually exclusive claims, or unsupported combinations.
+
+### 7. Language Validator
+Rejects disallowed phrasing, unauthorized synonyms, prohibited speculation, and unsupported emotional or diagnostic claims.
+
+## Assembly Rules
+The backend owns final wording structure.
+
+### Opening block
+Opening must be built from fixed template slots using runtime data only.
+Allowed inputs:
+- session location
+- participants present
+- environmental changes
+- schedule changes
+- client presentation if explicitly captured
+
+### ABC body
+Each approved ABC event becomes one controlled paragraph block.
+The template must preserve this internal order:
+1. antecedent/context
+2. behavior/topography
+3. intervention(s)
+4. client response/result
+5. replacement or teaching follow-through if applicable
+
+### Closing block
+Closing must be deterministic and built from approved closing fields only.
+
+## Repair Rules
+Repair is a validator-driven correction pass, not a free rewrite.
+
+Repair may:
+- fix enum mismatches to canonical values
+- remove unsupported items
+- reorder fields
+- fill deterministic template text where source data already exists
+- collapse duplicates
+
+Repair may not:
+- invent behaviors
+- invent triggers
+- invent interventions
+- invent client performance
+- invent outcomes
+- substitute unapproved synonyms for locked labels
+
+## Prompting Rules for the Model
+All model prompts must be narrow.
+
+Allowed prompt responsibilities:
+- convert SessionContext into a constrained NotePlan JSON
+- elaborate within approved field boundaries
+- summarize provided event results without adding new facts
+
+Disallowed prompt responsibilities:
+- interpreting policy precedence
+- deciding what catalogs are valid
+- deciding final note order
+- inventing missing facts
+- bypassing validators
+
+## Logging and Audit Trail
+For each generated note, store:
+- SessionContext snapshot hash
+- prompt version
+- model version
+- raw JSON output
+- validator failures
+- repair actions
+- final note text
+- final pass/fail result
+
+## Recommended Folder Layout
+- `/backend/aba/catalogs`
+- `/backend/aba/schemas`
+- `/backend/aba/validators`
+- `/backend/aba/prompts`
+- `/backend/aba/assembly`
+- `/backend/aba/repair`
+- `/backend/aba/tests`
+
+## Required Engineering Rule
+Whenever a new rule is proposed, place it in exactly one layer:
+- catalog
+- schema
+- validator
+- assembly
+- repair
+- prompt
+
+Do not duplicate the same rule across multiple layers unless one layer is only referencing the authoritative source.
+
+## Final Principle
+The model is a bounded content generator. The backend is the decision-maker.

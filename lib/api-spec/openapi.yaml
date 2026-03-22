@@ -451,6 +451,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Cannot generate — client has no assessment on file (upload FBA/BIP or equivalent first)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Generation failed
           content:

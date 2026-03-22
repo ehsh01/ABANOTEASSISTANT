@@ -91,6 +91,18 @@ router.post("/notes/generate", async (req, res) => {
     return;
   }
 
+  // Policy: no session note generation without an assessment on file for this client.
+  if (!client.hasAssessment || client.assessmentStatus === "missing") {
+    res.status(422).json({
+      success: false,
+      error: "Assessment required",
+      messages: [
+        "This client does not have an assessment on file. Upload an assessment (e.g. FBA/BIP PDF) for the client before generating session notes.",
+      ],
+    });
+    return;
+  }
+
   await new Promise((resolve) => setTimeout(resolve, 2000));
 
   let programNames: string[] = [];
