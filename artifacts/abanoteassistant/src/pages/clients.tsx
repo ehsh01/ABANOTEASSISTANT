@@ -174,7 +174,7 @@ function ClientCard({ client }: { client: Client }) {
           {status.label}
         </span>
         {client.assessmentStatus === "missing" && (
-          <p className="text-xs text-[#877870] mt-1.5 italic">
+          <p className="text-xs text-red-500 mt-1.5 italic">
             Upload assessment to enable notes.
           </p>
         )}
