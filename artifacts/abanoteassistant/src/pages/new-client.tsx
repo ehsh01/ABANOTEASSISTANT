@@ -738,7 +738,11 @@ function NewClientForm({
       replacementPrograms: [...(p?.replacementPrograms ?? [])],
       interventions: [...(p?.interventions ?? [])],
     });
-    setStep(1);
+    // Preserve step parameter from URL if provided, otherwise default to 1
+    const urlStep = searchParams.get("step");
+    if (!urlStep) {
+      setStep(1);
+    }
     setHydrated(true);
   }, [isEdit, detailLoading, detailError, detailRes, setLocation]);
 
