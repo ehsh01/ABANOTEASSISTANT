@@ -13,6 +13,7 @@ import {
   Loader2,
   BookOpen,
   Tag,
+  Upload,
 } from "lucide-react";
 import { useClient, useClientPrograms } from "@/hooks/use-aba-api";
 
@@ -174,17 +175,50 @@ export default function ClientDetail() {
                   Add Note
                 </button>
               </Link>
+              <Link href={`/clients/edit/${client.id}`}>
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#F9EEF1] border border-[#F0D6DC] text-xs font-semibold text-[#C27A8A] hover:bg-[#C27A8A] hover:text-white hover:border-[#C27A8A] transition-all w-full justify-center"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  {client.assessmentStatus === "missing" ? "Upload Assessment" : "Update Assessment"}
+                </button>
+              </Link>
               <Link href={`/clients/edit/${client.id}?section=personal`}>
                 <button
                   type="button"
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#877870] hover:border-[#C27A8A] hover:text-[#C27A8A] transition-all w-full justify-center"
                 >
                   <Pencil className="w-3.5 h-3.5" />
-                  Edit
+                  Edit Info
                 </button>
               </Link>
             </div>
           </div>
+
+          {/* Assessment missing callout */}
+          {client.assessmentStatus === "missing" && (
+            <div className="bg-white rounded-2xl border border-rose-200 shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-5 flex items-start gap-4">
+              <div className="w-9 h-9 rounded-full bg-rose-50 flex items-center justify-center shrink-0">
+                <AlertCircle className="w-5 h-5 text-rose-500" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-sm font-bold text-[#2D2523]">Assessment required</h3>
+                <p className="text-xs text-[#877870] mt-1 leading-relaxed">
+                  Notes can't be generated until an assessment PDF is uploaded for this client. Upload one to unlock note generation.
+                </p>
+                <Link href={`/clients/edit/${client.id}`}>
+                  <button
+                    type="button"
+                    className="mt-3 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#C27A8A] text-white text-xs font-semibold hover:bg-[#b06a79] transition-all"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    Upload Assessment
+                  </button>
+                </Link>
+              </div>
+            </div>
+          )}
 
           <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
