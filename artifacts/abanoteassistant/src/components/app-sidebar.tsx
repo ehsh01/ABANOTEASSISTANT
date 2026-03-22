@@ -2,13 +2,9 @@ import { useLocation, Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
 import { LayoutDashboard, Users, FileText, Settings, LogOut } from "lucide-react";
 import { useAuthStore } from "@/store/auth-store";
+import { useLanguageStore } from "@/store/language-store";
+import { useT } from "@/hooks/use-translation";
 import { cn } from "@/lib/utils";
-
-const NAV_ITEMS = [
-  { label: "Dashboard", href: "/", icon: LayoutDashboard },
-  { label: "Clients", href: "/clients", icon: Users },
-  { label: "Notes", href: "/notes", icon: FileText },
-];
 
 function getInitials(email: string) {
   const parts = email.split("@")[0].split(/[._-]/);
@@ -16,11 +12,45 @@ function getInitials(email: string) {
   return email.slice(0, 2).toUpperCase();
 }
 
+function LanguageToggle() {
+  const { language, setLanguage } = useLanguageStore();
+  return (
+    <div
+      className="flex items-center rounded-xl overflow-hidden border"
+      style={{ borderColor: "rgba(255,255,255,0.25)", background: "rgba(0,0,0,0.12)" }}
+    >
+      <button
+        type="button"
+        onClick={() => setLanguage("en")}
+        className="flex-1 py-1.5 text-xs font-bold transition-all"
+        style={{
+          background: language === "en" ? "rgba(255,255,255,0.9)" : "transparent",
+          color: language === "en" ? "#C27A8A" : "rgba(255,255,255,0.55)",
+        }}
+      >
+        EN
+      </button>
+      <button
+        type="button"
+        onClick={() => setLanguage("es")}
+        className="flex-1 py-1.5 text-xs font-bold transition-all"
+        style={{
+          background: language === "es" ? "rgba(255,255,255,0.9)" : "transparent",
+          color: language === "es" ? "#C27A8A" : "rgba(255,255,255,0.55)",
+        }}
+      >
+        ES
+      </button>
+    </div>
+  );
+}
+
 export function AppSidebar() {
   const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
+  const t = useT();
 
   function handleLogout() {
     queryClient.clear();
@@ -28,9 +58,17 @@ export function AppSidebar() {
     setLocation("/login");
   }
 
+  const NAV_ITEMS = [
+    { label: t.nav.dashboard, href: "/", icon: LayoutDashboard },
+    { label: t.nav.clients, href: "/clients", icon: Users },
+    { label: t.nav.notes, href: "/notes", icon: FileText },
+  ];
+
   const navItems = [
     ...NAV_ITEMS,
-    ...(user?.role === "super_admin" ? [{ label: "Admin", href: "/admin", icon: Settings }] : []),
+    ...(user?.role === "super_admin"
+      ? [{ label: t.nav.admin, href: "/admin", icon: Settings }]
+      : []),
   ];
 
   return (
@@ -78,7 +116,7 @@ export function AppSidebar() {
                     "flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all",
                     isActive
                       ? "border-l-[3px] border-white"
-                      : "border-l-[3px] border-transparent",
+                      : "border-l-[3px] border-transparent"
                   )}
                   style={{
                     background: isActive ? "rgba(0,0,0,0.15)" : "transparent",
@@ -103,11 +141,14 @@ export function AppSidebar() {
           })}
         </nav>
 
-        {/* User + Logout */}
+        {/* User + Language + Logout */}
         <div
           className="px-4 py-4 flex flex-col gap-3"
           style={{ borderTop: "1px solid rgba(255,255,255,0.2)" }}
         >
+          {/* Language toggle */}
+          <LanguageToggle />
+
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0"
@@ -124,7 +165,7 @@ export function AppSidebar() {
                 {user?.email ?? ""}
               </p>
               <p className="text-xs capitalize" style={{ color: "rgba(255,255,255,0.65)" }}>
-                {user?.role === "super_admin" ? "Super Admin" : "Therapist"}
+                {user?.role === "super_admin" ? t.nav.superAdmin : t.nav.therapist}
               </p>
             </div>
           </div>
@@ -141,7 +182,7 @@ export function AppSidebar() {
             aria-label="Log out"
           >
             <LogOut className="w-3.5 h-3.5 shrink-0" />
-            Log out
+            {t.nav.logOut}
           </button>
         </div>
       </aside>
@@ -163,7 +204,8 @@ export function AppSidebar() {
 
           return (
             <Link key={href} href={href}>
-              <div className="flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl cursor-pointer transition-all"
+              <div
+                className="flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl cursor-pointer transition-all"
                 style={{ background: isActive ? "rgba(0,0,0,0.15)" : "transparent" }}
               >
                 <Icon

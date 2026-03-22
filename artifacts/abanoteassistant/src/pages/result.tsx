@@ -1,19 +1,25 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Copy, Save, Edit3, RotateCcw, AlertTriangle, CheckCircle2, ChevronLeft, Calendar, Clock, User, Wand2 } from "lucide-react";
+import { Copy, Save, Edit3, RotateCcw, CheckCircle2, ChevronLeft, Calendar, Clock, User, Wand2, Languages } from "lucide-react";
 import { useWizardStore } from "@/store/wizard-store";
 import { useSaveSessionNote } from "@/hooks/use-aba-api";
+import { useT } from "@/hooks/use-translation";
+import { translateNote } from "@/lib/translate-note";
 import { cn, formatSessionDate } from "@/lib/utils";
 
 export default function Result() {
   const [, setLocation] = useLocation();
   const { generatedNote, reset } = useWizardStore();
   const saveMutation = useSaveSessionNote();
-  
+  const t = useT();
+
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [content, setContent] = useState("");
+  const [translatedContent, setTranslatedContent] = useState<string | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
+  const [translateError, setTranslateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!generatedNote) {
@@ -25,8 +31,11 @@ export default function Result() {
 
   if (!generatedNote) return null;
 
+  const isTranslated = translatedContent !== null;
+  const displayContent = isTranslated ? translatedContent : content;
+
   const handleCopy = () => {
-    navigator.clipboard.writeText(content);
+    navigator.clipboard.writeText(displayContent);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -43,6 +52,23 @@ export default function Result() {
     setLocation("/");
   };
 
+  const handleTranslate = async () => {
+    if (isTranslated) {
+      setTranslatedContent(null);
+      return;
+    }
+    setIsTranslating(true);
+    setTranslateError(null);
+    try {
+      const result = await translateNote(content, "es");
+      setTranslatedContent(result);
+    } catch {
+      setTranslateError("Translation failed. Please try again.");
+    } finally {
+      setIsTranslating(false);
+    }
+  };
+
   const displayDate = formatSessionDate(generatedNote.sessionDate);
 
   return (
@@ -52,63 +78,67 @@ export default function Result() {
           <button onClick={() => setLocation("/")} className="text-white/80 hover:text-white transition-colors p-2 -ml-2 rounded-lg hover:bg-white/15">
             <ChevronLeft className="w-5 h-5 pop-icon-white" />
           </button>
-          <h1 className="text-lg font-bold text-white font-display hidden sm:block pop-text-white">Session Note Generated</h1>
+          <h1 className="text-lg font-bold text-white font-display hidden sm:block pop-text-white">{t.result.pageTitle}</h1>
         </div>
         <div className="flex items-center gap-3">
-          <button 
+          <button
             onClick={handleCopy}
             className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/15 text-white font-medium hover:bg-white/25 transition-colors"
           >
             {copied ? <CheckCircle2 className="w-4 h-4 text-emerald-300 pop-icon-white" /> : <Copy className="w-4 h-4 pop-icon-white" />}
-            <span className="hidden sm:inline">{copied ? "Copied!" : "Copy"}</span>
+            <span className="hidden sm:inline">{copied ? t.result.copied : t.result.copy}</span>
           </button>
-          <button 
+          <button
             onClick={() => handleSave("draft")}
             disabled={saveMutation.isPending}
             className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-white/30 text-white font-medium hover:bg-white/15 transition-colors disabled:opacity-50"
           >
             <Save className="w-4 h-4 pop-icon-white" />
-            <span className="hidden sm:inline">Save Draft</span>
+            <span className="hidden sm:inline">{t.result.saveDraft}</span>
           </button>
-          <button 
+          <button
             onClick={() => handleSave("final")}
             disabled={saveMutation.isPending}
             className="flex items-center gap-2 px-6 py-2 rounded-lg bg-primary text-primary-foreground font-semibold ring-2 ring-white/50 shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none"
           >
-            {saveMutation.isPending ? "Saving..." : "Save Final"}
+            {saveMutation.isPending ? t.result.saving : t.result.saveFinal}
           </button>
         </div>
       </header>
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-8">
-        
+
         {/* Main Document Area */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           className="flex-1 flex flex-col"
         >
           {/* Metadata Banner (Mobile) */}
           <div className="lg:hidden flex flex-wrap gap-4 mb-4 p-4 bg-card border border-border rounded-xl">
-             <div className="flex items-center gap-2 text-sm font-medium"><User className="w-4 h-4 text-muted-foreground pop-icon"/> {generatedNote.clientName}</div>
-             <div className="flex items-center gap-2 text-sm font-medium"><Calendar className="w-4 h-4 text-muted-foreground pop-icon"/> {displayDate}</div>
-             <div className="flex items-center gap-2 text-sm font-medium"><Clock className="w-4 h-4 text-muted-foreground pop-icon"/> {generatedNote.sessionHours} hrs</div>
+            <div className="flex items-center gap-2 text-sm font-medium"><User className="w-4 h-4 text-muted-foreground pop-icon" /> {generatedNote.clientName}</div>
+            <div className="flex items-center gap-2 text-sm font-medium"><Calendar className="w-4 h-4 text-muted-foreground pop-icon" /> {displayDate}</div>
+            <div className="flex items-center gap-2 text-sm font-medium"><Clock className="w-4 h-4 text-muted-foreground pop-icon" /> {generatedNote.sessionHours} {t.result.hours}</div>
           </div>
 
           <div className="relative flex-1 bg-card rounded-2xl shadow-xl shadow-black/5 border border-border/50 overflow-hidden flex flex-col">
             <div className="bg-secondary/30 border-b border-border px-6 py-3 flex justify-between items-center">
-              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Clinical Note Document</span>
-              <button 
-                onClick={() => setIsEditing(!isEditing)}
-                className={cn("text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors", isEditing ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary")}
-              >
-                <Edit3 className="w-4 h-4 pop-icon" />
-                {isEditing ? "Editing" : "Edit"}
-              </button>
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                {isTranslated ? t.result.translatedLabel : t.result.documentLabel}
+              </span>
+              {!isTranslated && (
+                <button
+                  onClick={() => setIsEditing(!isEditing)}
+                  className={cn("text-sm font-semibold flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors", isEditing ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary")}
+                >
+                  <Edit3 className="w-4 h-4 pop-icon" />
+                  {isEditing ? t.result.editing : t.result.edit}
+                </button>
+              )}
             </div>
-            
+
             <div className="flex-1 p-6 sm:p-10 relative">
-              {isEditing ? (
+              {isEditing && !isTranslated ? (
                 <textarea
                   value={content}
                   onChange={(e) => setContent(e.target.value)}
@@ -117,7 +147,7 @@ export default function Result() {
                 />
               ) : (
                 <div className="prose prose-sm sm:prose-base dark:prose-invert max-w-none prose-p:leading-relaxed text-[15px] whitespace-pre-wrap">
-                  {content}
+                  {displayContent}
                 </div>
               )}
             </div>
@@ -125,7 +155,7 @@ export default function Result() {
         </motion.div>
 
         {/* Right Sidebar */}
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ delay: 0.1 }}
@@ -133,27 +163,27 @@ export default function Result() {
         >
           {/* Metadata Card */}
           <div className="hidden lg:block bg-card rounded-2xl border border-border shadow-sm p-6 space-y-4">
-            <h3 className="font-display font-bold text-lg border-b border-border/50 pb-2">Session Details</h3>
+            <h3 className="font-display font-bold text-lg border-b border-border/50 pb-2">{t.result.sessionDetails}</h3>
             <div className="space-y-3">
               <div className="flex items-center gap-3 text-sm">
                 <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-muted-foreground"><User className="w-4 h-4 pop-icon" /></div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Client</div>
+                  <div className="text-xs text-muted-foreground">{t.result.client}</div>
                   <div className="font-semibold text-foreground">{generatedNote.clientName}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3 text-sm">
                 <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-muted-foreground"><Calendar className="w-4 h-4 pop-icon" /></div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Date</div>
+                  <div className="text-xs text-muted-foreground">{t.result.date}</div>
                   <div className="font-semibold text-foreground">{displayDate}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3 text-sm">
                 <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center text-muted-foreground"><Clock className="w-4 h-4 pop-icon" /></div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Duration</div>
-                  <div className="font-semibold text-foreground">{generatedNote.sessionHours} hours</div>
+                  <div className="text-xs text-muted-foreground">{t.result.duration}</div>
+                  <div className="font-semibold text-foreground">{generatedNote.sessionHours} {t.result.hours}</div>
                 </div>
               </div>
             </div>
@@ -162,42 +192,61 @@ export default function Result() {
           {/* AI Notice */}
           <div className="bg-primary/5 rounded-2xl border border-primary/20 p-5">
             <div className="flex items-center gap-2 text-primary font-semibold mb-2">
-              <Wand2 className="w-4 h-4 pop-icon" /> AI Generated
+              <Wand2 className="w-4 h-4 pop-icon" /> {t.result.aiGenerated}
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              This note was generated based on your inputs. Please review carefully and edit as needed to ensure complete clinical accuracy before saving as final.
+              {t.result.aiNotice}
             </p>
+          </div>
+
+          {/* Translate Note Button */}
+          <div className="space-y-2">
+            <button
+              onClick={handleTranslate}
+              disabled={isTranslating}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-primary/30 bg-primary/5 text-primary font-semibold hover:bg-primary/10 hover:border-primary/50 transition-all hover-elevate disabled:opacity-60 disabled:cursor-wait"
+            >
+              <Languages className="w-4 h-4" />
+              {isTranslating
+                ? t.result.translating
+                : isTranslated
+                ? t.result.translateToEnglish
+                : t.result.translateToSpanish}
+            </button>
+            {translateError && (
+              <p className="text-xs text-red-500 text-center">{translateError}</p>
+            )}
           </div>
 
           {/* Secondary Actions */}
           <div className="space-y-3">
-            <button 
+            <button
               onClick={() => setLocation("/wizard")}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-border bg-card text-foreground font-semibold hover:border-primary/50 hover:bg-secondary/30 transition-all hover-elevate"
             >
               <RotateCcw className="w-4 h-4 text-muted-foreground pop-icon" />
-              Regenerate Note
+              {t.result.regenerate}
             </button>
-            <button 
+            <button
               onClick={handleStartOver}
               className="w-full text-sm font-semibold text-muted-foreground hover:text-foreground py-2 transition-colors"
             >
-              Start Over (New Note)
+              {t.result.startOver}
             </button>
           </div>
         </motion.div>
 
       </main>
 
-      {/* Success Toast for Save (mock implementation) */}
+      {/* Success Toast for Save */}
       {saveMutation.isSuccess && (
         <div className="fixed bottom-6 right-6 bg-card border border-border shadow-xl rounded-xl p-4 flex items-center gap-3 animate-in slide-in-from-bottom-5">
           <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 pop-icon" />
           </div>
           <div>
-            <div className="font-semibold text-sm">Note Saved</div>
-            <div className="text-xs text-muted-foreground">Saved as {saveMutation.data?.data.status}</div>
+            <div className="font-semibold text-sm">{t.result.noteSaved}</div>
+            <div className="text-xs text-muted-foreground">{t.result.savedAs} {saveMutation.data?.data.status}</div>
           </div>
         </div>
       )}

@@ -2,9 +2,63 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { Sparkles, Clock, ShieldCheck, FileCheck2, LayoutTemplate, ChevronRight, Zap } from "lucide-react";
 import { useAuthStore } from "@/store/auth-store";
+import { useT } from "@/hooks/use-translation";
+import { useLanguageStore } from "@/store/language-store";
+
+function HomeLanguageToggle() {
+  const { language, setLanguage } = useLanguageStore();
+  return (
+    <div
+      className="flex items-center rounded-xl overflow-hidden border border-[#F0E4E1] bg-[#FDFAF7]"
+    >
+      <button
+        type="button"
+        onClick={() => setLanguage("en")}
+        className="px-3 py-1.5 text-xs font-bold transition-all"
+        style={{
+          background: language === "en" ? "#C27A8A" : "transparent",
+          color: language === "en" ? "#fff" : "#877870",
+        }}
+      >
+        EN
+      </button>
+      <button
+        type="button"
+        onClick={() => setLanguage("es")}
+        className="px-3 py-1.5 text-xs font-bold transition-all"
+        style={{
+          background: language === "es" ? "#C27A8A" : "transparent",
+          color: language === "es" ? "#fff" : "#877870",
+        }}
+      >
+        ES
+      </button>
+    </div>
+  );
+}
 
 export default function Home() {
   const user = useAuthStore((s) => s.user);
+  const t = useT();
+
+  const features = [
+    {
+      icon: LayoutTemplate,
+      title: t.home.feature1Title,
+      description: t.home.feature1Desc,
+    },
+    {
+      icon: Sparkles,
+      title: t.home.feature2Title,
+      description: t.home.feature2Desc,
+    },
+    {
+      icon: ShieldCheck,
+      title: t.home.feature3Title,
+      description: t.home.feature3Desc,
+    },
+  ];
+
   return (
     <div className="min-h-screen w-full relative overflow-hidden bg-background">
 
@@ -28,25 +82,27 @@ export default function Home() {
           </div>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-[#877870]">
-            <span className="text-[#C27A8A]">Dashboard</span>
-            <Link href="/notes"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Notes</span></Link>
-            <Link href="/clients"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Clients</span></Link>
+            <span className="text-[#C27A8A]">{t.nav.dashboard}</span>
+            <Link href="/notes"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">{t.nav.notes}</span></Link>
+            <Link href="/clients"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">{t.nav.clients}</span></Link>
             {user?.role === "super_admin" ? (
-              <Link href="/admin"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Admin</span></Link>
+              <Link href="/admin"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">{t.nav.admin}</span></Link>
             ) : null}
           </div>
 
-          <Link href="/wizard">
-            <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
-              New Note <ChevronRight className="w-4 h-4 pop-icon-white" />
-            </button>
-          </Link>
+          <div className="flex items-center gap-3">
+            <HomeLanguageToggle />
+            <Link href="/wizard">
+              <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
+                {t.nav.newNote} <ChevronRight className="w-4 h-4 pop-icon-white" />
+              </button>
+            </Link>
+          </div>
         </div>
       </nav>
 
       {/* ── Hero — warm dusty rose gradient ── */}
       <div className="relative pt-24 pb-52 px-6 overflow-hidden">
-        {/* Hero background */}
         <div
           className="absolute inset-0 z-0"
           style={{ background: "linear-gradient(160deg, #C87585 0%, #C06B80 50%, #B05E74 100%)" }}
@@ -56,7 +112,6 @@ export default function Home() {
         </div>
 
         <div className="max-w-4xl mx-auto relative z-10 text-center flex flex-col items-center">
-          {/* Eyebrow */}
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -64,26 +119,18 @@ export default function Home() {
             className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-8 shadow-lg"
           >
             <Zap className="w-4 h-4 text-[#FCEEF1] pop-icon-white" />
-            <span className="text-white/90 text-sm font-semibold tracking-wide pop-text-white">AI-Powered Documentation</span>
+            <span className="text-white/90 text-sm font-semibold tracking-wide pop-text-white">{t.home.eyebrow}</span>
           </motion.div>
 
-          {/* Heading */}
           <motion.h1
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.05 }}
-            className="text-5xl md:text-[64px] leading-[1.08] font-extrabold text-white mb-6 tracking-[-0.03em] pop-text-white"
+            className="text-5xl md:text-[64px] leading-[1.08] font-extrabold text-white mb-6 tracking-[-0.03em] pop-text-white whitespace-pre-line"
           >
-            Your notes,{" "}
-            <span
-              className="text-transparent bg-clip-text"
-              style={{ backgroundImage: "linear-gradient(90deg, #ffffff 0%, #FCEEF1 100%)" }}
-            >
-              written in seconds.
-            </span>
+            {t.home.headline}
           </motion.h1>
 
-          {/* Subheading */}
           <motion.p
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -91,10 +138,9 @@ export default function Home() {
             className="text-lg md:text-xl max-w-2xl font-medium leading-relaxed mb-10 pop-text-white"
             style={{ color: "rgba(253,250,247,0.9)" }}
           >
-            Guide through a smart checklist and receive complete, professional ABA session notes — instantly generated and ready to submit.
+            {t.home.subHeadline}
           </motion.p>
 
-          {/* CTAs */}
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -105,18 +151,17 @@ export default function Home() {
               <Link href="/wizard">
                 <button className="w-full sm:w-auto px-8 py-4 bg-white text-[#C27A8A] rounded-full font-bold text-lg shadow-[0_10px_30px_rgba(255,255,255,0.2)] hover:shadow-[0_15px_40px_rgba(255,255,255,0.3)] transition-all hover:-translate-y-1 flex items-center justify-center gap-2">
                   <Sparkles className="w-5 h-5 pop-icon" />
-                  Generate Note
+                  {t.home.ctaNote}
                 </button>
               </Link>
               <Link to="/notes">
                 <button className="w-full sm:w-auto px-8 py-4 bg-transparent border border-white/30 text-white rounded-full font-bold text-lg hover:bg-white/10 backdrop-blur-sm transition-all flex items-center justify-center gap-2">
-                  View Past Notes
+                  {t.nav.notes}
                 </button>
               </Link>
             </>
           </motion.div>
 
-          {/* Trust badges */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -130,12 +175,12 @@ export default function Home() {
             <div className="hidden sm:block w-1 h-1 rounded-full bg-white/30" />
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-5 h-5 text-[#FCEEF1] pop-icon-white" />
-              <span className="pop-text-white">Compliant notes</span>
+              <span className="pop-text-white">{t.home.statAcc}</span>
             </div>
             <div className="hidden sm:block w-1 h-1 rounded-full bg-white/30" />
             <div className="flex items-center gap-2">
               <FileCheck2 className="w-5 h-5 text-[#FCEEF1] pop-icon-white" />
-              <span className="pop-text-white">5,000+ notes written</span>
+              <span className="pop-text-white">5,000+ {t.home.statNotes.toLowerCase()}</span>
             </div>
           </motion.div>
         </div>
@@ -158,17 +203,14 @@ export default function Home() {
             boxShadow: "0 24px 64px rgba(194,122,138,0.14), 0 1px 0 rgba(255,255,255,0.8) inset",
           }}
         >
-          {/* Subtle warm glow behind card */}
           <div className="absolute -top-40 -right-40 w-80 h-80 bg-[#e6b3c0]/15 rounded-full blur-[80px] pointer-events-none" />
 
           <div className="relative z-10">
-            {/* Wizard header */}
             <div className="flex items-center justify-between mb-8">
               <div>
-                <h2 className="text-2xl font-bold text-[#2D2523] mb-1 tracking-tight">Select Client</h2>
-                <p className="text-[#877870] text-sm">Who is this session note for?</p>
+                <h2 className="text-2xl font-bold text-[#2D2523] mb-1 tracking-tight">{t.wizard.stepSelectClient}</h2>
+                <p className="text-[#877870] text-sm">{t.wizard.selectClientPrompt}</p>
               </div>
-              {/* Progress steps */}
               <div className="hidden sm:flex items-center gap-2">
                 {[1,2,3,4].map((n) => (
                   <div key={n} className="flex items-center gap-2">
@@ -191,14 +233,13 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Client step preview — no sample PHI; real clients live under Clients after you add them */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
               <div
                 className="rounded-2xl p-6 relative transition-all"
                 style={{ background: "#FDFAF7", border: "2px solid rgba(240,228,225,0.8)" }}
               >
                 <p className="text-[#877870] text-sm leading-relaxed">
-                  After you add clients under <strong className="text-[#2D2523]">Clients</strong>, they
+                  After you add clients under <strong className="text-[#2D2523]">{t.nav.clients}</strong>, they
                   appear here in the wizard so you can generate notes. Data is private to your company.
                 </p>
               </div>
@@ -207,16 +248,15 @@ export default function Home() {
                   className="rounded-2xl p-6 h-full flex flex-col justify-center cursor-pointer hover:shadow-sm transition-all"
                   style={{ background: "#fff", border: "2px solid #C27A8A" }}
                 >
-                  <h3 className="font-bold text-[#2D2523] text-lg mb-2">Your clients</h3>
-                  <p className="text-[#877870] text-sm mb-4">Add and manage clients for your organization only.</p>
+                  <h3 className="font-bold text-[#2D2523] text-lg mb-2">{t.clientDetail.backToClients.replace("← ", "")}</h3>
+                  <p className="text-[#877870] text-sm mb-4">{t.home.feature1Desc}</p>
                   <span className="inline-flex items-center gap-2 text-sm font-semibold text-[#C27A8A]">
-                    Go to Clients <ChevronRight className="w-4 h-4 pop-icon" />
+                    {t.nav.clients} <ChevronRight className="w-4 h-4 pop-icon" />
                   </span>
                 </div>
               </Link>
             </div>
 
-            {/* Action bar */}
             <div className="flex items-center justify-between pt-6 border-t border-[#F0E4E1]">
               <span className="text-[#877870] font-semibold text-sm">Step 1 of 8</span>
               <Link href="/wizard">
@@ -224,7 +264,7 @@ export default function Home() {
                   className="text-white px-8 py-3 rounded-xl font-bold flex items-center gap-2 transition-all hover:-translate-y-0.5"
                   style={{ background: "#C27A8A", boxShadow: "0 8px 20px rgba(194,122,138,0.25)" }}
                 >
-                  Continue <ChevronRight className="w-5 h-5 pop-icon-white" />
+                  {t.wizard.next} <ChevronRight className="w-5 h-5 pop-icon-white" />
                 </button>
               </Link>
             </div>
@@ -240,23 +280,7 @@ export default function Home() {
           transition={{ duration: 0.5, delay: 0.3 }}
           className="grid grid-cols-1 md:grid-cols-3 gap-8"
         >
-          {[
-            {
-              icon: LayoutTemplate,
-              title: "Guided Wizard",
-              description: "Answer simple questions about the session. Our intuitive flow ensures you never miss a required detail.",
-            },
-            {
-              icon: Sparkles,
-              title: "AI-Written Notes",
-              description: "Transform brief observations into fully articulated, professional narratives that capture clinical progress perfectly.",
-            },
-            {
-              icon: ShieldCheck,
-              title: "Instant Compliance",
-              description: "Notes are structured to meet insurance requirements automatically, reducing rejection risks and audit anxiety.",
-            },
-          ].map(({ icon: Icon, title, description }) => (
+          {features.map(({ icon: Icon, title, description }) => (
             <div
               key={title}
               className="group bg-white rounded-2xl p-8 transition-all duration-300 hover:-translate-y-1"

@@ -16,6 +16,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useClient, useClientPrograms } from "@/hooks/use-aba-api";
+import { useT } from "@/hooks/use-translation";
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -79,6 +80,7 @@ export default function ClientDetail() {
     isLoading: programsLoading,
     isError: programsError,
   } = useClientPrograms(id);
+  const t = useT();
 
   const client = clientResp?.data;
   const programs = programsResp?.data ?? [];
@@ -101,7 +103,7 @@ export default function ClientDetail() {
           className="flex items-center gap-1.5 text-sm text-[#877870] hover:text-[#C27A8A] transition-colors mb-6"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Clients
+          {t.clientDetail.backToClients}
         </button>
       </Link>
 
@@ -137,25 +139,25 @@ export default function ClientDetail() {
                 {client.assessmentStatus === "ready" && (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 px-2.5 py-1 rounded-full">
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    Assessment ready
+                    {t.clientDetail.assessmentReady}
                   </span>
                 )}
                 {client.assessmentStatus === "uploaded" && (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 px-2.5 py-1 rounded-full">
                     <FileText className="w-3.5 h-3.5" />
-                    Assessment uploaded
+                    {t.clientDetail.assessmentUploaded}
                   </span>
                 )}
                 {client.assessmentStatus === "processing" && (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Processing
+                    {t.clientDetail.processing}
                   </span>
                 )}
                 {client.assessmentStatus === "missing" && (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-full">
                     <AlertCircle className="w-3.5 h-3.5" />
-                    No assessment on file
+                    {t.clientDetail.noAssessment}
                   </span>
                 )}
               </div>
@@ -172,7 +174,7 @@ export default function ClientDetail() {
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#C27A8A] text-white text-xs font-semibold hover:bg-[#b06a79] transition-all w-full justify-center"
                 >
                   <FileText className="w-3.5 h-3.5" />
-                  Add Note
+                  {t.clientDetail.generateNote}
                 </button>
               </Link>
               <Link href={`/clients/edit/${client.id}`}>
@@ -181,7 +183,7 @@ export default function ClientDetail() {
                   className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#F9EEF1] border border-[#F0D6DC] text-xs font-semibold text-[#C27A8A] hover:bg-[#C27A8A] hover:text-white hover:border-[#C27A8A] transition-all w-full justify-center"
                 >
                   <Upload className="w-3.5 h-3.5" />
-                  {client.assessmentStatus === "missing" ? "Upload Assessment" : "Update Assessment"}
+                  {client.assessmentStatus === "missing" ? t.clientDetail.uploadAssessment : t.clientDetail.updateAssessment}
                 </button>
               </Link>
               <Link href={`/clients/edit/${client.id}?section=personal`}>
@@ -222,30 +224,30 @@ export default function ClientDetail() {
 
           <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5" /> Basic Information
+              <User className="w-3.5 h-3.5" /> {t.clientDetail.basicInfo}
             </h2>
             <div className="grid grid-cols-2 gap-x-6 gap-y-4">
               <InfoRow label="First Name" value={firstName} />
               <InfoRow label="Last Name" value={lastName} />
-              <InfoRow label="Date of Birth" value={p?.dateOfBirth || "—"} />
-              <InfoRow label="Gender" value={p?.gender || "—"} />
+              <InfoRow label={t.clientDetail.dateOfBirth} value={p?.dateOfBirth || "—"} />
+              <InfoRow label={t.clientDetail.gender} value={p?.gender || "—"} />
             </div>
           </div>
 
           <TagListSection
-            title="Maladaptive Behaviors"
+            title={t.clientDetail.behaviors}
             icon={AlertTriangle}
             items={behaviors}
             chipColor="rose"
-            emptyHint="No maladaptive behaviors documented yet. Add them from Edit → Edit behaviors."
+            emptyHint={t.clientDetail.noBehaviors}
           />
 
           <TagListSection
-            title="Replacement Programs"
+            title={t.clientDetail.programs}
             icon={Zap}
             items={replacements}
             chipColor="teal"
-            emptyHint="No replacement programs documented yet. Add them from Edit → Edit programs."
+            emptyHint={t.clientDetail.noPrograms}
           />
 
           <TagListSection
@@ -253,7 +255,7 @@ export default function ClientDetail() {
             icon={Shield}
             items={interventions}
             chipColor="amber"
-            emptyHint="No interventions documented yet. Add them from Edit → Edit interventions."
+            emptyHint={t.clientDetail.noPrograms}
           />
 
           {/* Structured programs from API (if any) */}

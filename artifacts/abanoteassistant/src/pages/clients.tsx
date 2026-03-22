@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import type { Client } from "@workspace/api-client-react";
 import { useClients } from "@/hooks/use-aba-api";
+import { useT } from "@/hooks/use-translation";
 
 function displayNames(client: Client) {
   const p = client.profile;
@@ -61,16 +62,18 @@ function calcAge(dob: string): string {
   return `${age} yrs`;
 }
 
-const STATUS_CONFIG = {
-  ready: { label: "Assessment Ready", icon: CheckCircle2, bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
-  uploaded: { label: "Assessment Uploaded", icon: FileText, bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
-  processing: { label: "Processing", icon: Loader2, bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
-  missing: { label: "No Assessment", icon: AlertCircle, bg: "bg-rose-50", text: "text-rose-600", border: "border-rose-200" },
-};
-
 function ClientCard({ client }: { client: Client }) {
   const [, setLocation] = useLocation();
+  const t = useT();
   const d = displayNames(client);
+
+  const STATUS_CONFIG = {
+    ready: { label: t.clients.assessmentReady, icon: CheckCircle2, bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+    uploaded: { label: t.clients.assessmentUploaded, icon: FileText, bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
+    processing: { label: t.clients.processing, icon: Loader2, bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
+    missing: { label: t.clients.noAssessment, icon: AlertCircle, bg: "bg-rose-50", text: "text-rose-600", border: "border-rose-200" },
+  };
+
   const status = STATUS_CONFIG[client.assessmentStatus];
   const StatusIcon = status.icon;
   const detailPath = `/clients/${client.id}`;
@@ -175,7 +178,7 @@ function ClientCard({ client }: { client: Client }) {
         </span>
         {client.assessmentStatus === "missing" && (
           <p className="text-xs text-red-500 mt-1.5 italic">
-            Upload assessment to enable notes.
+            {t.clients.uploadAssessment}
           </p>
         )}
       </div>
@@ -184,7 +187,7 @@ function ClientCard({ client }: { client: Client }) {
       <div className="space-y-2 text-sm">
         {d.maladaptiveBehaviors.length > 0 && (
           <div className="flex items-start gap-2">
-            <span className="text-[#877870] whitespace-nowrap pt-0.5">Behaviors:</span>
+            <span className="text-[#877870] whitespace-nowrap pt-0.5">{t.clients.behaviors}:</span>
             <div className="flex flex-wrap gap-1">
               {d.maladaptiveBehaviors.slice(0, 2).map((b) => (
                 <span key={b} className="px-2 py-0.5 rounded-md bg-[#FDFAF7] border border-[#F0E4E1] text-[#2D2523] text-xs">
@@ -201,7 +204,7 @@ function ClientCard({ client }: { client: Client }) {
         )}
         {d.replacementPrograms.length > 0 && (
           <div className="flex items-start gap-2">
-            <span className="text-[#877870] whitespace-nowrap pt-0.5">Programs:</span>
+            <span className="text-[#877870] whitespace-nowrap pt-0.5">{t.clients.programs}:</span>
             <div className="flex flex-wrap gap-1">
               {d.replacementPrograms.slice(0, 2).map((p) => (
                 <span key={p} className="px-2 py-0.5 rounded-md bg-[#FDFAF7] border border-[#F0E4E1] text-[#2D2523] text-xs">
@@ -226,7 +229,7 @@ function ClientCard({ client }: { client: Client }) {
       >
         <div className="flex items-center gap-1.5 text-xs text-[#877870]">
           <Clock className="w-3.5 h-3.5 pop-icon" />
-          DOB: {d.dateOfBirth || "—"}
+          {t.clients.dob}: {d.dateOfBirth || "—"}
         </div>
         <div className="flex items-center gap-2">
           <Link href={detailPath}>
@@ -235,7 +238,7 @@ function ClientCard({ client }: { client: Client }) {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#877870] hover:border-[#C27A8A] hover:text-[#C27A8A] transition-all cursor-pointer"
             >
               <ChevronRight className="w-3.5 h-3.5" />
-              View
+              {t.clients.view}
             </button>
           </Link>
           <Link href={`/wizard?clientId=${client.id}`}>
@@ -244,7 +247,7 @@ function ClientCard({ client }: { client: Client }) {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#C27A8A] hover:bg-[#C27A8A] hover:text-white hover:border-[#C27A8A] transition-all cursor-pointer"
             >
               <FileText className="w-3.5 h-3.5" />
-              Add Note
+              {t.clients.addNote}
             </button>
           </Link>
         </div>
@@ -256,6 +259,7 @@ function ClientCard({ client }: { client: Client }) {
 export default function Clients() {
   const { data: clientsRes, isLoading, isError } = useClients();
   const [search, setSearch] = useState("");
+  const t = useT();
 
   const clients = clientsRes?.data ?? [];
   const filtered = clients.filter((c) => {
@@ -287,14 +291,14 @@ export default function Clients() {
           </Link>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-[#877870]">
-            <Link href="/"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Dashboard</span></Link>
-            <Link href="/notes"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Notes</span></Link>
-            <Link href="/clients"><span className="text-[#C27A8A] cursor-pointer">Clients</span></Link>
+            <Link href="/"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">{t.nav.dashboard}</span></Link>
+            <Link href="/notes"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">{t.nav.notes}</span></Link>
+            <Link href="/clients"><span className="text-[#C27A8A] cursor-pointer">{t.nav.clients}</span></Link>
           </div>
 
           <Link href="/wizard">
             <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
-              New Note <ChevronRight className="w-4 h-4 pop-icon-white" />
+              {t.nav.newNote} <ChevronRight className="w-4 h-4 pop-icon-white" />
             </button>
           </Link>
         </div>
@@ -304,15 +308,15 @@ export default function Clients() {
       <div className="max-w-7xl mx-auto px-6 pt-10 pb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-[#2D2523] tracking-tight">Clients</h1>
+            <h1 className="text-3xl font-bold text-[#2D2523] tracking-tight">{t.clients.title}</h1>
             <p className="text-[#877870] mt-1">
-              {isLoading ? "Loading…" : `${clients.length} total clients`}
+              {isLoading ? t.common.loading : `${clients.length} total`}
             </p>
           </div>
           <Link href="/clients/new">
             <button className="flex items-center gap-2 bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-3 rounded-xl font-semibold transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:-translate-y-0.5">
               <UserPlus className="w-5 h-5 pop-icon-white" />
-              New Client
+              {t.clients.newClient}
             </button>
           </Link>
         </div>
@@ -322,7 +326,7 @@ export default function Clients() {
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[#877870] pop-icon" />
           <input
             type="search"
-            placeholder="Search clients..."
+            placeholder={t.clients.searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-10 pr-4 py-3 rounded-xl border border-[#F0E4E1] bg-white text-[#2D2523] placeholder:text-[#877870] text-sm focus:outline-none focus:ring-2 focus:ring-[#C27A8A]/30 focus:border-[#C27A8A] transition-all"
@@ -344,15 +348,15 @@ export default function Clients() {
             <div className="w-16 h-16 rounded-2xl bg-[#FDFAF7] border border-[#F0E4E1] flex items-center justify-center mb-4">
               <Users className="w-8 h-8 text-[#C27A8A]/50 pop-icon" />
             </div>
-            <h3 className="text-lg font-bold text-[#2D2523] mb-1">No clients found</h3>
+            <h3 className="text-lg font-bold text-[#2D2523] mb-1">{t.clients.noClients}</h3>
             <p className="text-[#877870] text-sm mb-6">
-              {search ? `No results for "${search}"` : "Add your first client to get started"}
+              {search ? `"${search}"` : t.clients.noClientsHint}
             </p>
             {!search && (
               <Link href="/clients/new">
                 <button className="flex items-center gap-2 bg-[#C27A8A] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all hover:bg-[#b06a79]">
                   <UserPlus className="w-4 h-4 pop-icon-white" />
-                  Add First Client
+                  {t.clients.newClient}
                 </button>
               </Link>
             )}

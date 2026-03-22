@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { useNotesStore, type SessionNote } from "@/store/notes-store";
 import { formatSessionDate } from "@/lib/utils";
+import { useT } from "@/hooks/use-translation";
 
 const BILLING_CODE_LABELS: Record<string, string> = {
   "97153": "Adaptive behavior treatment",
@@ -19,13 +20,14 @@ const BILLING_CODE_LABELS: Record<string, string> = {
 };
 
 function StatusBadge({ status }: { status: SessionNote["status"] }) {
+  const t = useT();
   return status === "final" ? (
     <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold pop-text">
-      Final
+      {t.notes.statusFinal}
     </span>
   ) : (
     <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold pop-text">
-      Draft
+      {t.notes.statusDraft}
     </span>
   );
 }
@@ -40,6 +42,7 @@ function TypeBadge({ type }: { type: SessionNote["type"] }) {
 
 export default function Notes() {
   const { notes, deleteNote } = useNotesStore();
+  const t = useT();
 
   return (
     <div className="min-h-screen bg-background">
@@ -60,14 +63,14 @@ export default function Notes() {
           </Link>
 
           <div className="hidden md:flex items-center gap-8 text-sm font-semibold text-[#877870]">
-            <Link href="/"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Dashboard</span></Link>
-            <Link href="/notes"><span className="text-[#C27A8A] cursor-pointer">Notes</span></Link>
-            <Link href="/clients"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">Clients</span></Link>
+            <Link href="/"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">{t.nav.dashboard}</span></Link>
+            <Link href="/notes"><span className="text-[#C27A8A] cursor-pointer">{t.nav.notes}</span></Link>
+            <Link href="/clients"><span className="hover:text-[#2D2523] transition-colors cursor-pointer">{t.nav.clients}</span></Link>
           </div>
 
           <Link href="/wizard">
             <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
-              New Note <ChevronRight className="w-4 h-4 pop-icon-white" />
+              {t.nav.newNote} <ChevronRight className="w-4 h-4 pop-icon-white" />
             </button>
           </Link>
         </div>
@@ -77,13 +80,13 @@ export default function Notes() {
       <div className="max-w-7xl mx-auto px-6 pt-10 pb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-[#2D2523] tracking-tight">Session Notes</h1>
-            <p className="text-[#877870] mt-1">{notes.length} total notes</p>
+            <h1 className="text-3xl font-bold text-[#2D2523] tracking-tight">{t.notes.title}</h1>
+            <p className="text-[#877870] mt-1">{notes.length} total</p>
           </div>
           <Link href="/wizard">
             <button className="flex items-center gap-2 bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-3 rounded-xl font-semibold transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:-translate-y-0.5">
               <Plus className="w-5 h-5 pop-icon-white" />
-              Generate Note
+              {t.notes.newNote}
             </button>
           </Link>
         </div>
@@ -98,14 +101,14 @@ export default function Notes() {
             <div className="w-16 h-16 rounded-2xl bg-[#FDFAF7] border border-[#F0E4E1] flex items-center justify-center mb-4">
               <FileText className="w-8 h-8 text-[#C27A8A]/50 pop-icon" />
             </div>
-            <h3 className="text-lg font-bold text-[#2D2523] mb-1">No notes yet</h3>
+            <h3 className="text-lg font-bold text-[#2D2523] mb-1">{t.notes.noNotes}</h3>
             <p className="text-[#877870] text-sm mb-6 max-w-sm">
-              Generate your first session note using the wizard — it only takes a minute.
+              {t.notes.noNotesHint}
             </p>
             <Link href="/wizard">
               <button className="flex items-center gap-2 bg-[#C27A8A] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all hover:bg-[#b06a79]">
                 <Plus className="w-4 h-4 pop-icon-white" />
-                Generate First Note
+                {t.notes.generateNote}
               </button>
             </Link>
           </motion.div>
@@ -121,7 +124,7 @@ export default function Notes() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-[#FDFAF7] border-b border-[#F0E4E1]">
-                    {["CLIENT NAME", "TYPE", "BILLING CODE", "SESSION DATE", "START TIME", "END TIME", "ACTIONS"].map(
+                    {[t.admin.name.toUpperCase(), "TYPE", t.notes.billingCode.toUpperCase(), "SESSION DATE", "START TIME", "END TIME", t.admin.actions.toUpperCase()].map(
                       (col) => (
                         <th
                           key={col}
