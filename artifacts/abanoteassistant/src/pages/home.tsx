@@ -239,8 +239,9 @@ export default function Home() {
                 style={{ background: "#FDFAF7", border: "2px solid rgba(240,228,225,0.8)" }}
               >
                 <p className="text-[#877870] text-sm leading-relaxed">
-                  After you add clients under <strong className="text-[#2D2523]">{t.nav.clients}</strong>, they
-                  appear here in the wizard so you can generate notes. Data is private to your company.
+                  {t.home.wizardCardHint.split("{clients}")[0]}
+                  <strong className="text-[#2D2523]">{t.nav.clients}</strong>
+                  {t.home.wizardCardHint.split("{clients}")[1]}
                 </p>
               </div>
               <Link href="/clients" className="block">

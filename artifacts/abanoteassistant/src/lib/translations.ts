@@ -44,6 +44,9 @@ export const translations = {
       statTime: "Min per Note",
       statAcc: "Compliance Rate",
       ctaBottom: "Start Documenting",
+      wizardCardHint: "After you add clients under {clients}, they appear here in the wizard so you can generate notes. Data is private to your company.",
+      wizardCardClientTitle: "Your clients",
+      wizardCardClientDesc: "Add and manage clients for your organization only.",
     },
     // ── Clients page ──
     clients: {
@@ -281,6 +284,9 @@ export const translations = {
       statTime: "Min por nota",
       statAcc: "Tasa de cumplimiento",
       ctaBottom: "Comenzar a documentar",
+      wizardCardHint: "Después de agregar clientes en {clients}, aparecen aquí en el asistente para que puedas generar notas. Los datos son privados para tu empresa.",
+      wizardCardClientTitle: "Tus clientes",
+      wizardCardClientDesc: "Agrega y administra clientes solo para tu organización.",
     },
     // ── Clients page ──
     clients: {
