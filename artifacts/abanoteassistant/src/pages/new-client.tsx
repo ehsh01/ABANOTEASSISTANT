@@ -689,12 +689,14 @@ function NewClientForm({
   } = useClient(isEdit ? numericId : undefined);
 
   const [hydrated, setHydrated] = useState(!isEdit);
-  const [step, setStep] = useState(1);
+  const searchParams = new URLSearchParams(window.location.search);
+  const initialStep = isEdit ? Math.min(3, Math.max(1, Number(searchParams.get("step") || 1))) : 1;
+  const [step, setStep] = useState(initialStep);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   // Detect return destination from query param (?returnTo=wizard)
-  const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+  const returnTo = searchParams.get("returnTo");
 
   const [step1, setStep1] = useState<Step1Data>({
     firstName: "",
