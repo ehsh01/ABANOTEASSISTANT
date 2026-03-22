@@ -166,12 +166,19 @@ function ClientCard({ client }: { client: Client }) {
       </div>
 
       {/* Assessment badge */}
-      <span
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border mb-4 ${status.bg} ${status.text} ${status.border}`}
-      >
-        <StatusIcon className={`w-3.5 h-3.5 pop-icon ${client.assessmentStatus === "processing" ? "animate-spin" : ""}`} />
-        {status.label}
-      </span>
+      <div className="mb-4">
+        <span
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold border ${status.bg} ${status.text} ${status.border}`}
+        >
+          <StatusIcon className={`w-3.5 h-3.5 pop-icon ${client.assessmentStatus === "processing" ? "animate-spin" : ""}`} />
+          {status.label}
+        </span>
+        {client.assessmentStatus === "missing" && (
+          <p className="text-xs text-[#877870] mt-1.5 italic">
+            Upload assessment to enable notes.
+          </p>
+        )}
+      </div>
 
       {/* Chips summary */}
       <div className="space-y-2 text-sm">
