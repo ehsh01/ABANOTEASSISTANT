@@ -906,11 +906,11 @@ export default function Wizard() {
   const canProceed = () => {
     switch (step) {
       case 1: return !!data.clientId;
-      case 2: return !!data.sessionHours;
-      case 3: return !!data.sessionDate;
-      case 4: return true; // Optional
-      case 5: return data.hasEnvironmentalChanges === false || (data.hasEnvironmentalChanges === true && !!data.environmentalChanges?.trim());
-      case 6: return (data.selectedReplacements?.length || 0) >= (data.sessionHours || 1);
+      case 2: return (data.selectedReplacements?.length || 0) >= 1; // Programs (must select at least 1)
+      case 3: return !!data.sessionHours;
+      case 4: return !!data.sessionDate;
+      case 5: return true; // Optional
+      case 6: return data.hasEnvironmentalChanges === false || (data.hasEnvironmentalChanges === true && !!data.environmentalChanges?.trim());
       case 7: return true; // Optional
       case 8: return true;
       default: return false;
@@ -981,11 +981,11 @@ export default function Wizard() {
             className="h-full"
           >
             {step === 1 && <Step1Client />}
-            {step === 2 && <Step2Hours />}
-            {step === 3 && <Step3Date />}
-            {step === 4 && <Step4People />}
-            {step === 5 && <Step5Env />}
-            {step === 6 && <Step6Programs />}
+            {step === 2 && <Step6Programs />}
+            {step === 3 && <Step2Hours />}
+            {step === 4 && <Step3Date />}
+            {step === 5 && <Step4People />}
+            {step === 6 && <Step5Env />}
             {step === 7 && <Step7NextDate />}
             {step === 8 && <Step8Review />}
           </motion.div>
