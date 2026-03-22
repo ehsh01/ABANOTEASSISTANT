@@ -177,15 +177,6 @@ export default function ClientDetail() {
                   {t.clientDetail.generateNote}
                 </button>
               </Link>
-              <Link href={`/clients/edit/${client.id}?step=2`}>
-                <button
-                  type="button"
-                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#F9EEF1] border border-[#F0D6DC] text-xs font-semibold text-[#C27A8A] hover:bg-[#C27A8A] hover:text-white hover:border-[#C27A8A] transition-all w-full justify-center"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  {client.assessmentStatus === "missing" ? t.clientDetail.uploadAssessment : t.clientDetail.updateAssessment}
-                </button>
-              </Link>
               <Link href={`/clients/edit/${client.id}?section=personal`}>
                 <button
                   type="button"
@@ -209,7 +200,7 @@ export default function ClientDetail() {
                 <p className="text-xs text-[#877870] mt-1 leading-relaxed">
                   Notes can't be generated until an assessment PDF is uploaded for this client. Upload one to unlock note generation.
                 </p>
-                <Link href={`/clients/edit/${client.id}`}>
+                <Link href={`/clients/edit/${client.id}?step=2`}>
                   <button
                     type="button"
                     className="mt-3 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#C27A8A] text-white text-xs font-semibold hover:bg-[#b06a79] transition-all"
