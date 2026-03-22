@@ -1078,6 +1078,14 @@ export function EditClientPage() {
 
   const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
   const sectionRaw = params.get("section");
+  const stepRaw = params.get("step");
+  
+  // If step parameter is provided, skip section validation (allow multi-step form)
+  if (stepRaw) {
+    return <NewClientForm editClientId={clientId} />;
+  }
+  
+  // Otherwise, require a valid section parameter
   if (!isEditSection(sectionRaw)) {
     return <Redirect to={`/clients/edit/${clientId}?section=personal`} />;
   }
