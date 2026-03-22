@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon, UserPlus } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
-import type { Client as ApiClient } from "@workspace/api-client-react";
+import type { Client as ApiClient, Program } from "@workspace/api-client-react";
 import { useWizardStore } from "@/store/wizard-store";
 import { useClients, useClientPrograms, useGenerateSessionNote } from "@/hooks/use-aba-api";
 import { cn, formatSessionDate } from "@/lib/utils";
@@ -701,7 +701,135 @@ function Step5Env() {
   );
 }
 
+/** Searchable multi-select for replacement programs (same Command/Popover pattern as client picker). */
+function ProgramsMultiSelectCombobox({
+  programs,
+  selectedIds,
+  onToggle,
+}: {
+  programs: Program[];
+  selectedIds: number[];
+  onToggle: (programId: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const selectedPrograms = programs.filter((p) => selectedIds.includes(p.id));
+
+  const remove = (programId: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggle(programId);
+  };
+
+  return (
+    <div className="space-y-2 mb-6">
+      <p className="text-sm font-medium text-muted-foreground text-center">
+        Search and select programs
+      </p>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <button
+            ref={triggerRef}
+            type="button"
+            role="combobox"
+            aria-expanded={open}
+            disabled={programs.length === 0}
+            className={cn(
+              "w-full flex items-center justify-between px-4 py-3 rounded-xl bg-card border-2 text-sm font-medium transition-all text-left",
+              programs.length === 0 && "opacity-60 cursor-not-allowed",
+              open && programs.length > 0
+                ? "border-primary ring-4 ring-primary/10"
+                : "border-border hover:border-primary/50"
+            )}
+          >
+            <span className="truncate text-foreground">
+              {programs.length === 0 ? (
+                <span className="text-muted-foreground">No programs to list yet</span>
+              ) : selectedPrograms.length > 0 ? (
+                <span className="font-semibold">{selectedPrograms.length} program(s) selected</span>
+              ) : (
+                <span className="text-muted-foreground">Open to search and select programs…</span>
+              )}
+            </span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 text-muted-foreground pop-icon" />
+          </button>
+        </PopoverTrigger>
+        <PopoverContent
+          className="p-0 w-[var(--radix-popover-trigger-width)] max-w-[min(100vw-2rem,32rem)]"
+          align="center"
+          sideOffset={4}
+        >
+          <Command>
+            <CommandInput placeholder="Search by program name…" />
+            <CommandList className="max-h-64">
+              <CommandEmpty>No matching programs.</CommandEmpty>
+              <CommandGroup>
+                {programs.map((program) => {
+                  const isSelected = selectedIds.includes(program.id);
+                  return (
+                    <CommandItem
+                      key={program.id}
+                      value={`${program.name} ${program.description ?? ""}`}
+                      onSelect={() => onToggle(program.id)}
+                      className="cursor-pointer"
+                    >
+                      <div
+                        className={cn(
+                          "mr-2 flex h-4 w-4 items-center justify-center rounded border transition-colors shrink-0",
+                          isSelected
+                            ? "bg-primary border-primary text-primary-foreground"
+                            : "border-muted-foreground/40 bg-background"
+                        )}
+                      >
+                        {isSelected && <Check className="h-3 w-3 pop-icon-white" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium truncate flex items-center gap-2">
+                          {program.name}
+                          {program.type === "supplemental" && (
+                            <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground shrink-0">
+                              Supp
+                            </span>
+                          )}
+                        </div>
+                        {program.description ? (
+                          <div className="text-xs text-muted-foreground truncate">{program.description}</div>
+                        ) : null}
+                      </div>
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+
+      {selectedPrograms.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 justify-center pt-1">
+          {selectedPrograms.map((p) => (
+            <span
+              key={p.id}
+              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold border border-primary/20"
+            >
+              {p.name}
+              <button
+                type="button"
+                onClick={(e) => remove(p.id, e)}
+                className="hover:text-destructive transition-colors"
+                aria-label={`Remove ${p.name}`}
+              >
+                <X className="h-3 w-3 pop-icon" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Step6Programs() {
+  const [, setLocation] = useLocation();
   const { data, updateData } = useWizardStore();
   const { data: programsRes, isLoading } = useClientPrograms(data.clientId!);
 
@@ -732,6 +860,29 @@ function Step6Programs() {
         <p className="text-muted-foreground mt-2">Select the programs targeted during this session.</p>
       </div>
 
+      <ProgramsMultiSelectCombobox
+        programs={programs}
+        selectedIds={selected}
+        onToggle={toggleProgram}
+      />
+
+      {programs.length === 0 && (
+        <div className="rounded-xl border border-border bg-card p-6 text-center space-y-3">
+          <p className="text-sm text-muted-foreground">
+            This client has no linked programs yet. Replacement programs from the client profile are added automatically when you open this step; you can also add or edit them on the client record.
+          </p>
+          {data.clientId != null && (
+            <button
+              type="button"
+              onClick={() => setLocation(`/clients/edit/${data.clientId}`)}
+              className="text-sm font-semibold text-primary hover:underline"
+            >
+              Edit client →
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="flex items-center justify-between bg-secondary/50 p-4 rounded-xl border border-border/50">
         <div>
           <span className="text-sm font-medium text-foreground">Selected: </span>
@@ -740,7 +891,14 @@ function Step6Programs() {
           </span>
           <span className="text-sm text-muted-foreground"> / {minRequired} required for {data.sessionHours} hrs</span>
         </div>
-        <button onClick={selectAll} className="text-sm font-semibold text-primary hover:underline">Select All</button>
+        <button
+          type="button"
+          onClick={selectAll}
+          disabled={programs.length === 0}
+          className="text-sm font-semibold text-primary hover:underline disabled:opacity-40 disabled:no-underline disabled:cursor-not-allowed"
+        >
+          Select All
+        </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

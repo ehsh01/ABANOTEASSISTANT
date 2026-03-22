@@ -22,6 +22,61 @@ const router: IRouter = Router();
 
 type AssessmentStatus = "uploaded" | "processing" | "ready" | "missing";
 
+/**
+ * Wizard and note generation use `client_programs` + `programs` rows.
+ * Replacement program names live on `client.profile.replacementPrograms` from the intake form;
+ * ensure each name has a matching program row (per company) and is linked to the client.
+ */
+async function syncReplacementProgramsFromProfile(
+  clientId: number,
+  companyId: number,
+  profile: ClientProfileRow | null | undefined,
+): Promise<void> {
+  const raw = profile?.replacementPrograms ?? [];
+  const names = [...new Set(raw.map((n) => n.trim()).filter((n) => n.length > 0))];
+  if (names.length === 0) return;
+
+  for (const name of names) {
+    const [existingProg] = await db
+      .select()
+      .from(programsTable)
+      .where(and(eq(programsTable.companyId, companyId), eq(programsTable.name, name)))
+      .limit(1);
+
+    let programId: number;
+    if (existingProg) {
+      programId = existingProg.id;
+    } else {
+      const [inserted] = await db
+        .insert(programsTable)
+        .values({
+          companyId,
+          name,
+          type: "primary",
+          description: null,
+        })
+        .returning();
+      if (!inserted) continue;
+      programId = inserted.id;
+    }
+
+    const [existingLink] = await db
+      .select()
+      .from(clientProgramsTable)
+      .where(
+        and(
+          eq(clientProgramsTable.clientId, clientId),
+          eq(clientProgramsTable.programId, programId),
+        ),
+      )
+      .limit(1);
+
+    if (!existingLink) {
+      await db.insert(clientProgramsTable).values({ clientId, programId });
+    }
+  }
+}
+
 function profileFromNameFallback(name: string): ClientProfileRow {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return {
@@ -121,6 +176,8 @@ router.post("/clients", async (req, res) => {
     return;
   }
 
+  await syncReplacementProgramsFromProfile(row.id, companyId, profile);
+
   const data = GetClientResponse.parse({
     success: true,
     data: rowToApiData(row),
@@ -148,6 +205,12 @@ router.get("/clients/:clientId/programs", async (req, res) => {
     res.status(404).json({ success: false, error: "Client not found", messages: [] });
     return;
   }
+
+  await syncReplacementProgramsFromProfile(
+    client.id,
+    companyId,
+    client.profile as ClientProfileRow | null | undefined,
+  );
 
   const sessionHours = Number(req.query.sessionHours) || 1;
   const minimumRequired = Math.max(sessionHours, 1);
@@ -282,6 +345,8 @@ router.patch("/clients/:clientId", async (req, res) => {
     res.status(500).json({ success: false, error: "Failed to update client", messages: [] });
     return;
   }
+
+  await syncReplacementProgramsFromProfile(updated.id, companyId, nextProfile);
 
   const data = GetClientResponse.parse({
     success: true,
