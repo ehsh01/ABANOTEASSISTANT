@@ -1182,6 +1182,14 @@ components:
           type: integer
         generatedAt:
           type: string
+        generationSource:
+          type: string
+          description: Whether the clinical body used OpenAI or the deterministic template
+          enum: [openai, template]
+        generationModel:
+          type: string
+          nullable: true
+          description: OpenAI model id when generationSource is openai; otherwise null
       required:
         - noteId
         - content
@@ -1190,6 +1198,8 @@ components:
         - sessionDate
         - sessionHours
         - generatedAt
+        - generationSource
+        - generationModel
 
     NoteSummary:
       type: object

@@ -114,6 +114,12 @@ export const translations = {
       translateToEnglish: "Translate to English",
       translating: "Translating…",
       translatedLabel: "Translated Clinical Note",
+      sourceOpenaiTitle: "OpenAI clinical narrative",
+      sourceOpenaiBody: "Model: {model}. Each run should differ; regenerating creates a new draft in the database.",
+      sourceTemplateTitle: "Built-in template (not GPT)",
+      sourceTemplateBody:
+        "The API did not use OpenAI for the clinical middle of this note. That usually means OPENAI_API_KEY is missing on the API server, or the model request failed and the server fell back. The template is instant and repeats similar scenarios. Fix: add the key to artifacts/api-server/.env on the server, set OPENAI_MODEL if needed, restart the API (PM2), then generate again.",
+      serverNotices: "Server notices",
     },
     // ── Note detail page ──
     noteDetail: {
@@ -170,6 +176,9 @@ export const translations = {
       reviewTitle: "Ready to generate?",
       reviewHint:
         "Review the session details below before generating the note.",
+      generatingTitle: "Generating session note…",
+      generatingBody:
+        "If your API is configured with OpenAI, this often takes 15–40 seconds. If it finishes in a second or two, the server is probably using the built-in template instead of GPT.",
     },
     // ── Client detail ──
     clientDetail: {
@@ -355,6 +364,12 @@ export const translations = {
       translateToEnglish: "Traducir al Inglés",
       translating: "Traduciendo…",
       translatedLabel: "Nota Clínica Traducida",
+      sourceOpenaiTitle: "Narrativa clínica con OpenAI",
+      sourceOpenaiBody: "Modelo: {model}. Cada ejecución debe variar; al regenerar se crea un nuevo borrador en la base de datos.",
+      sourceTemplateTitle: "Plantilla integrada (no es GPT)",
+      sourceTemplateBody:
+        "La API no usó OpenAI para el cuerpo clínico de esta nota. Suele deberse a que falta OPENAI_API_KEY en el servidor o falló el modelo y se usó respaldo. La plantilla es instantánea y repite escenarios parecidos. Solución: agrega la clave en artifacts/api-server/.env del servidor, configura OPENAI_MODEL si hace falta, reinicia la API (PM2) y vuelve a generar.",
+      serverNotices: "Avisos del servidor",
     },
     // ── Note detail page ──
     noteDetail: {
@@ -412,6 +427,9 @@ export const translations = {
       reviewTitle: "¿Listo para generar?",
       reviewHint:
         "Revisa los detalles de la sesión antes de generar la nota.",
+      generatingTitle: "Generando nota de sesión…",
+      generatingBody:
+        "Si la API está configurada con OpenAI, esto suele tardar 15–40 segundos. Si termina en uno o dos segundos, el servidor probablemente está usando la plantilla integrada en lugar de GPT.",
     },
     // ── Client detail ──
     clientDetail: {

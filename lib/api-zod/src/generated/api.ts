@@ -452,6 +452,17 @@ export const GenerateNoteResponse = zod.object({
     sessionDate: zod.string(),
     sessionHours: zod.number(),
     generatedAt: zod.string(),
+    generationSource: zod
+      .enum(["openai", "template"])
+      .describe(
+        "Whether the clinical body used OpenAI or the deterministic template",
+      ),
+    generationModel: zod
+      .string()
+      .nullable()
+      .describe(
+        "OpenAI model id when generationSource is openai; otherwise null",
+      ),
   }),
   warnings: zod.array(zod.string()).optional(),
   error: zod.string().nullish(),

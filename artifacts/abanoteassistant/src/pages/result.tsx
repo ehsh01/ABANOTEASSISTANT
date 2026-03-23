@@ -10,7 +10,7 @@ import { cn, formatSessionDate } from "@/lib/utils";
 
 export default function Result() {
   const [, setLocation] = useLocation();
-  const { generatedNote, reset } = useWizardStore();
+  const { generatedNote, generateWarnings, reset } = useWizardStore();
   const saveMutation = useSaveSessionNote();
   const t = useT();
 
@@ -89,6 +89,8 @@ export default function Result() {
   };
 
   const displayDate = formatSessionDate(generatedNote.sessionDate);
+  const usedOpenAI = generatedNote.generationSource === "openai";
+  const modelLabel = generatedNote.generationModel?.trim() || "—";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -208,15 +210,40 @@ export default function Result() {
             </div>
           </div>
 
-          {/* AI Notice */}
-          <div className="bg-primary/5 rounded-2xl border border-primary/20 p-5">
-            <div className="flex items-center gap-2 text-primary font-semibold mb-2">
-              <Wand2 className="w-4 h-4 pop-icon" /> {t.result.aiGenerated}
+          {/* How the clinical body was produced */}
+          <div
+            className={cn(
+              "rounded-2xl border p-5",
+              usedOpenAI ? "bg-emerald-50/80 border-emerald-200" : "bg-amber-50/90 border-amber-200",
+            )}
+          >
+            <div
+              className={cn(
+                "flex items-center gap-2 font-semibold mb-2 text-sm",
+                usedOpenAI ? "text-emerald-800" : "text-amber-900",
+              )}
+            >
+              <Wand2 className="w-4 h-4 shrink-0 pop-icon" />
+              {usedOpenAI ? t.result.sourceOpenaiTitle : t.result.sourceTemplateTitle}
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed">
-              {t.result.aiNotice}
+              {usedOpenAI
+                ? t.result.sourceOpenaiBody.replace("{model}", modelLabel)
+                : t.result.sourceTemplateBody}
             </p>
+            <p className="text-xs text-muted-foreground leading-relaxed mt-2">{t.result.aiNotice}</p>
           </div>
+
+          {generateWarnings && generateWarnings.length > 0 && (
+            <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
+              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t.result.serverNotices}</div>
+              <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-4">
+                {generateWarnings.map((w, i) => (
+                  <li key={i}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
 
           {/* Translate Note Button */}
           <div className="space-y-2">

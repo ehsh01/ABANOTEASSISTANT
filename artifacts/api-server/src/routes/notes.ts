@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Router, type IRouter } from "express";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import {
@@ -25,6 +26,7 @@ import {
   generateClinicalBodyOpenAI,
   isOpenAINoteGenerationConfigured,
   openaiNoteGenerationLabel,
+  resolvedOpenAIModel,
   type NoteGenerationContext,
 } from "../openai-notes";
 import {
@@ -268,6 +270,8 @@ router.post("/notes/generate", async (req, res) => {
 
   const warnings: string[] = [];
   let clinicalBody: string;
+  let generationSource: "openai" | "template" = "template";
+  let generationModel: string | null = null;
 
   if (isOpenAINoteGenerationConfigured()) {
     const oaCtx: NoteGenerationContext = {
@@ -282,14 +286,19 @@ router.post("/notes/generate", async (req, res) => {
       maladaptiveBehaviors: profile?.maladaptiveBehaviors ?? [],
       interventions: profile?.interventions ?? [],
       replacementProgramsInOrder: programNames,
+      requestNonce: randomUUID(),
     };
     try {
       clinicalBody = await generateClinicalBodyOpenAI(oaCtx);
+      generationSource = "openai";
+      generationModel = resolvedOpenAIModel();
       warnings.push(`Clinical narrative generated via ${openaiNoteGenerationLabel()}.`);
     } catch (err) {
       console.error("[notes/generate] OpenAI failed, using template body:", err);
       const { text, warnings: abcWarnings } = buildAbcClinicalBody(abcInput);
       clinicalBody = text;
+      generationSource = "template";
+      generationModel = null;
       warnings.push(
         ...abcWarnings,
         `OpenAI generation failed (${err instanceof Error ? err.message : String(err)}); template narrative was used instead.`,
@@ -298,9 +307,11 @@ router.post("/notes/generate", async (req, res) => {
   } else {
     const { text, warnings: abcWarnings } = buildAbcClinicalBody(abcInput);
     clinicalBody = text;
+    generationSource = "template";
+    generationModel = null;
     warnings.push(
       ...abcWarnings,
-      "OPENAI_API_KEY is not set; notes use the built-in template. Add the key to use GPT-5.3 (see OPENAI_MODEL in .env.example).",
+      "OPENAI_API_KEY is not set on the API server; notes use the built-in template (fast, similar each time). Add OPENAI_API_KEY to artifacts/api-server/.env and restart the API.",
     );
   }
 
@@ -343,6 +354,8 @@ router.post("/notes/generate", async (req, res) => {
       sessionDate: body.sessionDate,
       sessionHours: body.sessionHours,
       generatedAt: generatedAt.toISOString(),
+      generationSource,
+      generationModel,
     },
     warnings: warnings.length > 0 ? warnings : undefined,
     error: null,

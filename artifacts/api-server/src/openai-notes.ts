@@ -1,6 +1,6 @@
 /**
  * OpenAI-powered clinical body for session notes.
- * Model defaults to GPT-5.3 family (override with OPENAI_MODEL).
+ * Model defaults to gpt-4o unless OPENAI_MODEL is set.
  * Opening/closing locked prose is still assembled server-side in note-assembly.ts.
  */
 
@@ -19,6 +19,8 @@ export type NoteGenerationContext = {
   interventions: string[];
   /** Replacement program names in wizard order (one focal program per hour when possible) */
   replacementProgramsInOrder: string[];
+  /** Unique per request so the model does not replay identical scenarios across regenerations */
+  requestNonce: string;
 };
 
 const SYSTEM_PROMPT = `You write ABA session note clinical narratives for RBT documentation.
@@ -38,10 +40,17 @@ STRICT RULES:
 - Pronouns: use he/him/his if gender indicates male, she/her/hers if female, they/them/their otherwise.
 - If hasEnvironmentalChanges is true and environmentalChanges is non-empty, your FIRST paragraph may begin with one short bridging sentence that references those environmental factors, then continue into the first hour's ABC narrative (do not repeat the system's fixed environmental opening sentence).
 - Tone: professional, specific, observable; no generic filler like "aligned with session targets" without concrete detail.
-- Client names: use the client's first name for most in-paragraph references after first mention if natural; use full clientName where appropriate for clarity.`;
+- Client names: use the client's first name for most in-paragraph references after first mention if natural; use full clientName where appropriate for clarity.
+- VARIETY (critical): Each hour paragraph MUST use a clearly different activity, setting, materials, social context, or instructional demand from every other hour. Do not reuse the same antecedent wording, story beat, or scenario structure across hours. Vary transitions, demands, and environmental details while staying truthful to the JSON lists.
+- The JSON includes requestNonce — treat it only as a uniqueness hint; do not quote it in the note.`;
+
+/** Default when OPENAI_MODEL is unset. Use gpt-4o for broad API compatibility; set OPENAI_MODEL for newer models (e.g. gpt-5.3-chat-latest) when your key has access. */
+export function resolvedOpenAIModel(): string {
+  return process.env.OPENAI_MODEL?.trim() || "gpt-4o";
+}
 
 function defaultModel(): string {
-  return process.env.OPENAI_MODEL?.trim() || "gpt-5.3-chat-latest";
+  return resolvedOpenAIModel();
 }
 
 export function isOpenAINoteGenerationConfigured(): boolean {
@@ -65,7 +74,7 @@ export async function generateClinicalBodyOpenAI(ctx: NoteGenerationContext): Pr
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userContent },
     ],
-    temperature: 0.65,
+    temperature: 0.82,
     max_tokens: 12000,
   });
 
@@ -78,5 +87,5 @@ export async function generateClinicalBodyOpenAI(ctx: NoteGenerationContext): Pr
 }
 
 export function openaiNoteGenerationLabel(): string {
-  return `openai:${defaultModel()}`;
+  return `openai:${resolvedOpenAIModel()}`;
 }

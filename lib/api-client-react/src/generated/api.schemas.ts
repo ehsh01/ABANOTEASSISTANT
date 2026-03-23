@@ -281,6 +281,17 @@ export interface GenerateNoteRequest {
   nextSessionDate?: string;
 }
 
+/**
+ * Whether the clinical body used OpenAI or the deterministic template
+ */
+export type GeneratedNoteGenerationSource =
+  (typeof GeneratedNoteGenerationSource)[keyof typeof GeneratedNoteGenerationSource];
+
+export const GeneratedNoteGenerationSource = {
+  openai: "openai",
+  template: "template",
+} as const;
+
 export interface GeneratedNote {
   noteId: number;
   content: string;
@@ -289,6 +300,10 @@ export interface GeneratedNote {
   sessionDate: string;
   sessionHours: number;
   generatedAt: string;
+  /** Whether the clinical body used OpenAI or the deterministic template */
+  generationSource: GeneratedNoteGenerationSource;
+  /** OpenAI model id when generationSource is openai; otherwise null */
+  generationModel: string | null;
 }
 
 export interface GenerateNoteResponse {

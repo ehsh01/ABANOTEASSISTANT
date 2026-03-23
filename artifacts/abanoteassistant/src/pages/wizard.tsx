@@ -7,6 +7,7 @@ import { Calendar } from "@/components/ui/calendar";
 import type { Client as ApiClient, Program } from "@workspace/api-client-react";
 import { useWizardStore } from "@/store/wizard-store";
 import { useClients, useClientPrograms, useGenerateSessionNote } from "@/hooks/use-aba-api";
+import { useT } from "@/hooks/use-translation";
 import { cn, formatSessionDate } from "@/lib/utils";
 import {
   Popover,
@@ -1038,6 +1039,7 @@ export default function Wizard() {
   const [, setLocation] = useLocation();
   const { step, setStep, data, setGeneratedNote } = useWizardStore();
   const generateMutation = useGenerateSessionNote();
+  const t = useT();
 
   const totalSteps = 8;
   const isGenerating = generateMutation.isPending;
@@ -1054,9 +1056,9 @@ export default function Wizard() {
   const handleGenerate = () => {
     generateMutation.mutate(data as any, {
       onSuccess: (res) => {
-        setGeneratedNote(res.data);
+        setGeneratedNote(res.data, res.warnings);
         setLocation("/result");
-      }
+      },
     });
   };
 
@@ -1100,9 +1102,9 @@ export default function Wizard() {
               <div className="absolute inset-0 border-4 border-primary rounded-full border-t-transparent animate-spin"></div>
               <Wand2 className="absolute inset-0 m-auto w-8 h-8 text-primary animate-pulse pop-icon" />
             </div>
-            <h2 className="text-2xl font-display font-bold text-foreground mb-2">Generating Session Note...</h2>
-            <p className="text-muted-foreground max-w-sm">
-              Our AI is structuring your data into a compliant clinical format. This usually takes about 5 seconds.
+            <h2 className="text-2xl font-display font-bold text-foreground mb-2">{t.wizard.generatingTitle}</h2>
+            <p className="text-muted-foreground max-w-md">
+              {t.wizard.generatingBody}
             </p>
           </motion.div>
         )}
