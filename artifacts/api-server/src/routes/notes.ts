@@ -30,6 +30,12 @@ import {
   type NoteGenerationContext,
 } from "../openai-notes";
 import {
+  approximateAgeYearsAtSession,
+  validateCaregiverMentionRule,
+  validateClinicalBodyCompliance,
+  type NoteComplianceContext,
+} from "../note-validation";
+import {
   buildLockedOpening,
   buildNextSessionSentence,
   buildPerformanceSentence,
@@ -256,6 +262,14 @@ router.post("/notes/generate", async (req, res) => {
   }
 
   const profile = (client.profile as ClientProfileRow | null | undefined) ?? null;
+  const clientAgeYears = approximateAgeYearsAtSession(profile?.dateOfBirth ?? null, body.sessionDate);
+
+  const complianceCtxBase: NoteComplianceContext = {
+    sessionHours: body.sessionHours,
+    replacementProgramsInOrder: programNames,
+    clientAgeYears,
+    presentPeople: body.presentPeople,
+  };
 
   const abcInput = {
     clientName: client.name,
@@ -287,12 +301,16 @@ router.post("/notes/generate", async (req, res) => {
       interventions: profile?.interventions ?? [],
       replacementProgramsInOrder: programNames,
       requestNonce: randomUUID(),
+      clientAgeYears,
+      ageBand: client.ageBand,
     };
     try {
-      clinicalBody = await generateClinicalBodyOpenAI(oaCtx);
+      const oaResult = await generateClinicalBodyOpenAI(oaCtx);
+      clinicalBody = oaResult.body;
+      warnings.push(`Clinical narrative generated via ${openaiNoteGenerationLabel()}.`);
+      warnings.push(...oaResult.warnings);
       generationSource = "openai";
       generationModel = resolvedOpenAIModel();
-      warnings.push(`Clinical narrative generated via ${openaiNoteGenerationLabel()}.`);
     } catch (err) {
       console.error("[notes/generate] OpenAI failed, using template body:", err);
       const { text, warnings: abcWarnings } = buildAbcClinicalBody(abcInput);
@@ -303,6 +321,9 @@ router.post("/notes/generate", async (req, res) => {
         ...abcWarnings,
         `OpenAI generation failed (${err instanceof Error ? err.message : String(err)}); template narrative was used instead.`,
       );
+      for (const issue of validateClinicalBodyCompliance(clinicalBody, complianceCtxBase)) {
+        warnings.push(`Template compliance check: ${issue}`);
+      }
     }
   } else {
     const { text, warnings: abcWarnings } = buildAbcClinicalBody(abcInput);
@@ -313,6 +334,9 @@ router.post("/notes/generate", async (req, res) => {
       ...abcWarnings,
       "OPENAI_API_KEY is not set on the API server; notes use the built-in template (fast, similar each time). Add OPENAI_API_KEY to artifacts/api-server/.env and restart the API.",
     );
+    for (const issue of validateClinicalBodyCompliance(clinicalBody, complianceCtxBase)) {
+      warnings.push(`Template compliance check: ${issue}`);
+    }
   }
 
   const noteContent = assembleSessionNote(
@@ -322,6 +346,10 @@ router.post("/notes/generate", async (req, res) => {
     clinicalBody,
     body.nextSessionDate,
   );
+
+  for (const issue of validateCaregiverMentionRule(noteContent, body.presentPeople)) {
+    warnings.push(`Full-note check: ${issue}`);
+  }
 
   if (body.selectedReplacements.length < body.sessionHours) {
     warnings.push(

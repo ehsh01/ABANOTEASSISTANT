@@ -18,9 +18,10 @@ import {
   Loader2,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { format } from "date-fns";
+import { format, parse, parseISO, isValid } from "date-fns";
 import { useWizardStore } from "@/store/wizard-store";
-import { useClients, useClient } from "@/hooks/use-aba-api";
+import { useClients, useClient, useExtractAssessmentFromPdf } from "@/hooks/use-aba-api";
+import { ApiError, type AssessmentExtractResultPayload } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -87,6 +88,49 @@ function formatDOB(raw: string): string {
   if (digits.length <= 2) return digits;
   if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
   return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
+const GENDER_OPTIONS = ["Male", "Female", "Non-binary", "Prefer not to say"] as const;
+
+/** Map model / PDF gender strings to intake options. */
+function normalizeExtractedGender(raw: string | undefined): string {
+  if (!raw?.trim()) return "";
+  const t = raw.trim().toLowerCase();
+  for (const g of GENDER_OPTIONS) {
+    if (g.toLowerCase() === t) return g;
+  }
+  if (t === "m" || t === "male") return "Male";
+  if (t === "f" || t === "female") return "Female";
+  if (t.includes("non-binary") || t === "nb" || t === "nonbinary") return "Non-binary";
+  return "";
+}
+
+/** Convert extracted DOB to MM/dd/yyyy for the calendar field. */
+function normalizeExtractedDob(raw: string | undefined): string {
+  if (!raw?.trim()) return "";
+  const t = raw.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) {
+    const d = parseISO(t);
+    return isValid(d) ? format(d, "MM/dd/yyyy") : "";
+  }
+  const d2 = parse(t, "M/d/yyyy", new Date());
+  if (isValid(d2)) return format(d2, "MM/dd/yyyy");
+  const d3 = parse(t, "MM/dd/yyyy", new Date());
+  return isValid(d3) ? format(d3, "MM/dd/yyyy") : "";
+}
+
+function appendDedupedTags(base: string[], add: string[]): string[] {
+  const lower = new Set(base.map((b) => b.trim().toLowerCase()).filter(Boolean));
+  const out = [...base];
+  for (const a of add) {
+    const t = a.trim();
+    if (!t) continue;
+    const k = t.toLowerCase();
+    if (lower.has(k)) continue;
+    lower.add(k);
+    out.push(t);
+  }
+  return out;
 }
 
 // ── Chip tag component ────────────────────────────────────────────────────────
@@ -368,11 +412,19 @@ function Step2({
   data,
   onChange,
   priorAssessmentFileName,
+  extracting,
+  extractError,
+  extractSuccess,
+  onExtractFromPdf,
 }: {
   data: Step2Data;
   onChange: (d: Step2Data) => void;
   /** Shown when editing and a PDF was saved previously (File can’t be restored). */
   priorAssessmentFileName?: string;
+  extracting?: boolean;
+  extractError?: string | null;
+  extractSuccess?: string | null;
+  onExtractFromPdf?: () => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -412,20 +464,54 @@ function Step2({
       ) : null}
 
       {data.file ? (
-        <div className="flex items-center gap-4 p-5 rounded-2xl bg-emerald-50 border border-emerald-200">
-          <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
-            <FileText className="w-6 h-6 text-emerald-600 pop-icon" />
+        <div className="space-y-4">
+          <div className="flex items-center gap-4 p-5 rounded-2xl bg-emerald-50 border border-emerald-200">
+            <div className="w-12 h-12 rounded-xl bg-emerald-100 flex items-center justify-center shrink-0">
+              <FileText className="w-6 h-6 text-emerald-600 pop-icon" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-emerald-800 text-sm truncate">{data.file.name}</p>
+              <p className="text-emerald-600 text-xs mt-0.5">{(data.file.size / 1024).toFixed(0)} KB · PDF</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => onChange({ file: null })}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-emerald-600 hover:bg-emerald-100 transition-colors"
+            >
+              <X className="w-4 h-4 pop-icon" />
+            </button>
           </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-emerald-800 text-sm truncate">{data.file.name}</p>
-            <p className="text-emerald-600 text-xs mt-0.5">{(data.file.size / 1024).toFixed(0)} KB · PDF</p>
-          </div>
-          <button
-            onClick={() => onChange({ file: null })}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-emerald-600 hover:bg-emerald-100 transition-colors"
-          >
-            <X className="w-4 h-4 pop-icon" />
-          </button>
+          {onExtractFromPdf ? (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={onExtractFromPdf}
+                disabled={extracting}
+                className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-[#C27A8A] text-[#C27A8A] font-semibold text-sm hover:bg-[#C27A8A]/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {extracting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+                    Reading PDF &amp; extracting fields…
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4 shrink-0 pop-icon" />
+                    Fill name, age, behaviors &amp; programs from this PDF
+                  </>
+                )}
+              </button>
+              {extractError ? (
+                <p className="text-sm text-rose-600 font-medium">{extractError}</p>
+              ) : null}
+              {extractSuccess ? (
+                <p className="text-sm text-emerald-700 font-medium leading-relaxed">{extractSuccess}</p>
+              ) : null}
+              <p className="text-xs text-[#877870] leading-relaxed">
+                Uses the PDF text layer plus AI. Scanned-only PDFs may not extract well. Review step 1 and step 3 before saving.
+              </p>
+            </div>
+          ) : null}
         </div>
       ) : (
         <div
@@ -712,6 +798,67 @@ function NewClientForm({
     replacementPrograms: [],
     interventions: [],
   });
+
+  const extractMutation = useExtractAssessmentFromPdf();
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [extractSuccess, setExtractSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!step2.file) {
+      setExtractError(null);
+      setExtractSuccess(null);
+    }
+  }, [step2.file]);
+
+  function applyAssessmentExtract(payload: AssessmentExtractResultPayload) {
+    const e = payload.extracted;
+    setStep1((s) => ({
+      firstName: s.firstName.trim() || e.firstName?.trim() || "",
+      lastName: s.lastName.trim() || e.lastName?.trim() || "",
+      dateOfBirth:
+        s.dateOfBirth.length === 10 ? s.dateOfBirth : normalizeExtractedDob(e.dateOfBirth) || s.dateOfBirth,
+      gender: s.gender || normalizeExtractedGender(e.gender) || s.gender,
+    }));
+    setStep3((s) => ({
+      maladaptiveBehaviors: appendDedupedTags(s.maladaptiveBehaviors, e.maladaptiveBehaviors),
+      replacementPrograms: appendDedupedTags(s.replacementPrograms, e.replacementPrograms),
+      interventions: appendDedupedTags(s.interventions, e.interventions),
+    }));
+  }
+
+  async function handleExtractFromPdf() {
+    if (!step2.file) return;
+    setExtractError(null);
+    setExtractSuccess(null);
+    try {
+      const res = await extractMutation.mutateAsync(step2.file);
+      applyAssessmentExtract(res.data);
+      const e = res.data.extracted;
+      const counts = [
+        e.firstName || e.lastName ? "name" : null,
+        e.dateOfBirth ? "DOB" : null,
+        e.gender ? "gender" : null,
+        e.maladaptiveBehaviors.length ? `${e.maladaptiveBehaviors.length} behaviors` : null,
+        e.replacementPrograms.length ? `${e.replacementPrograms.length} programs` : null,
+        e.interventions.length ? `${e.interventions.length} interventions` : null,
+      ].filter(Boolean);
+      const warn = res.data.warnings.length ? ` Note: ${res.data.warnings.join(" ")}` : "";
+      setExtractSuccess(
+        counts.length
+          ? `Imported ${counts.join(", ")} from the document.${warn}`
+          : `No structured fields were found in the PDF text.${warn}`,
+      );
+    } catch (err) {
+      let msg = "Could not extract from PDF.";
+      if (err instanceof ApiError) {
+        const data = err.data as { error?: string } | null;
+        msg = (data && typeof data.error === "string" && data.error) || err.message || msg;
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
+      setExtractError(msg);
+    }
+  }
 
   useEffect(() => {
     if (!isEdit) {
@@ -1023,6 +1170,10 @@ function NewClientForm({
                 data={step2}
                 onChange={setStep2}
                 priorAssessmentFileName={priorAssessmentFileName}
+                extracting={extractMutation.isPending}
+                extractError={extractError}
+                extractSuccess={extractSuccess}
+                onExtractFromPdf={handleExtractFromPdf}
               />
             )}
             {step === 3 && <Step3 data={step3} onChange={setStep3} />}

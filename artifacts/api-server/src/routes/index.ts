@@ -4,6 +4,7 @@ import authRouter from "./auth";
 import adminRouter from "./admin";
 import clientsRouter from "./clients";
 import notesRouter from "./notes";
+import assessmentExtractRouter from "./assessment-extract";
 import { requireAuth, rejectSuperAdminFromTenantData } from "../middleware/auth";
 
 const router: IRouter = Router();
@@ -15,6 +16,7 @@ router.use(requireAuth);
 // runs on every authenticated route (403 for normal users on /clients, /notes, etc.).
 router.use("/admin", adminRouter);
 router.use(rejectSuperAdminFromTenantData, clientsRouter);
+router.use(rejectSuperAdminFromTenantData, assessmentExtractRouter);
 router.use(rejectSuperAdminFromTenantData, notesRouter);
 
 export default router;

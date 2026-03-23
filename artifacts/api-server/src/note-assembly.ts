@@ -28,7 +28,7 @@ export function formatUsDateFromIso(iso: string): string {
 
 /** Verbatim mandatory closing paragraph (do not paraphrase). */
 export const LOCKED_CLOSING_PARAGRAPH =
-  'Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., "Good job," "Wow," and "Good attention to detail"), preferred toys, and videos contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned, with the caregiver present during implementation.';
+  'Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., "Good job," "Wow," and "Good attention to detail"), preferred toys, and videos contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned.';
 
 export function buildLockedOpening(clientName: string, presentPeople: string[], hasEnvironmentalChanges: boolean): string {
   const caregivers = formatCaregiverList(presentPeople);

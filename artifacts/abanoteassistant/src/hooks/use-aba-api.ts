@@ -20,6 +20,8 @@ import {
   generateNote,
   saveNote,
   deleteNote as deleteNoteRequest,
+  extractAssessmentFromPdf,
+  type AssessmentExtractSuccessResponse,
 } from "@workspace/api-client-react";
 import { useAuthStore } from "@/store/auth-store";
 
@@ -100,5 +102,12 @@ export function useDeleteSessionNote() {
       queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notes", noteId] });
     },
+  });
+}
+
+export function useExtractAssessmentFromPdf() {
+  return useMutation({
+    mutationFn: async (file: File): Promise<AssessmentExtractSuccessResponse> =>
+      extractAssessmentFromPdf(file),
   });
 }

@@ -1,0 +1,466 @@
+{
+  "config_version": "1.0.0",
+  "config_name": "aba-note-backend",
+  "description": "Backend authority config for structured ABA note generation with strict separation of catalogs, schemas, validators, assembly, repair, and prompt layers.",
+  "ownership": {
+    "frontend": {
+      "system": "Replit",
+      "responsibilities": [
+        "collect_user_inputs",
+        "display_forms",
+        "preview_note_output",
+        "display_validation_errors",
+        "save_submit_actions"
+      ],
+      "must_not": [
+        "define_clinical_rules",
+        "enforce_catalog_truth",
+        "assemble_final_note"
+      ]
+    },
+    "backend": {
+      "system": "Cursor",
+      "responsibilities": [
+        "session_normalization",
+        "catalog_snapshot_locking",
+        "schema_validation",
+        "business_rule_validation",
+        "repair_orchestration",
+        "deterministic_note_assembly",
+        "audit_logging",
+        "versioning"
+      ],
+      "authority": "final_source_of_truth"
+    },
+    "model": {
+      "responsibilities": [
+        "draft_structured_fields_only",
+        "generate_note_plan_json_only",
+        "summarize_provided_results_without_new_facts"
+      ],
+      "must_not": [
+        "invent_programs",
+        "invent_behaviors",
+        "invent_interventions",
+        "invent_replacements",
+        "invent_materials",
+        "invent_session_facts",
+        "override_locked_runtime_data",
+        "decide_policy_precedence",
+        "assemble_final_note"
+      ]
+    }
+  },
+  "precedence": [
+    "safety_and_compliance",
+    "locked_runtime_session_context",
+    "schema_requirements",
+    "catalog_and_exact_match_vocabulary",
+    "programmatic_validators",
+    "assembly_templates",
+    "repair_instructions",
+    "prompt_guidance"
+  ],
+  "single_source_of_truth": {
+    "object_name": "SessionContext",
+    "required": true,
+    "required_sections": [
+      "client",
+      "therapist",
+      "session_meta",
+      "selected_behaviors",
+      "selected_replacements",
+      "selected_interventions",
+      "selected_programs",
+      "environment_changes",
+      "materials_present",
+      "schedule_changes",
+      "mandatory_opening_data",
+      "mandatory_closing_data",
+      "plan_catalog_snapshot",
+      "validation_profile"
+    ],
+    "generation_blocked_until_complete": true
+  },
+  "global_rules": {
+    "exact_approved_terminology_only": true,
+    "paraphrase_locked_labels": false,
+    "allow_items_outside_runtime_catalogs": false,
+    "allow_claims_outside_session_context": false,
+    "generate_final_prose_first": false,
+    "structured_generation_first": true
+  },
+  "pipeline": [
+    {
+      "step": 1,
+      "name": "intake_normalization",
+      "required": true,
+      "outputs": [
+        "canonical_ids",
+        "canonical_display_labels"
+      ]
+    },
+    {
+      "step": 2,
+      "name": "runtime_locking",
+      "required": true,
+      "outputs": [
+        "frozen_catalog_snapshot"
+      ]
+    },
+    {
+      "step": 3,
+      "name": "structured_planning",
+      "required": true,
+      "outputs": [
+        "NotePlan.opening",
+        "NotePlan.abc_events",
+        "NotePlan.replacements_summary",
+        "NotePlan.program_summary",
+        "NotePlan.closing"
+      ]
+    },
+    {
+      "step": 4,
+      "name": "structured_generation",
+      "required": true,
+      "model_output_format": "json_only",
+      "prose_note_allowed": false
+    },
+    {
+      "step": 5,
+      "name": "validation",
+      "required": true,
+      "validators": [
+        "schema",
+        "catalog",
+        "cross_reference",
+        "sequencing",
+        "coverage",
+        "conflict",
+        "language"
+      ]
+    },
+    {
+      "step": 6,
+      "name": "repair",
+      "required": true,
+      "run_only_if_validation_fails": true,
+      "scope": "invalid_json_only"
+    },
+    {
+      "step": 7,
+      "name": "assembly",
+      "required": true,
+      "mode": "deterministic_templates"
+    },
+    {
+      "step": 8,
+      "name": "final_validation",
+      "required": true,
+      "checks": [
+        "prose_level_language",
+        "approved_ordering",
+        "unsupported_content_absence"
+      ]
+    }
+  ],
+  "schemas": {
+    "SessionContext": {
+      "type": "object",
+      "required_sections": [
+        "client",
+        "therapist",
+        "session_meta",
+        "selected_behaviors",
+        "selected_replacements",
+        "selected_interventions",
+        "selected_programs",
+        "environment_changes",
+        "materials_present",
+        "schedule_changes",
+        "mandatory_opening_data",
+        "mandatory_closing_data",
+        "plan_catalog_snapshot",
+        "validation_profile"
+      ]
+    },
+    "ABCEvent": {
+      "type": "object",
+      "required_fields": [
+        "behavior_id",
+        "behavior_label",
+        "antecedent",
+        "topography",
+        "intervention_ids",
+        "intervention_labels",
+        "response_to_intervention",
+        "replacement_ids",
+        "replacement_labels",
+        "teaching_or_prompting_summary",
+        "result_summary"
+      ]
+    },
+    "NotePlan": {
+      "type": "object",
+      "required_fields": [
+        "opening",
+        "abc_events",
+        "replacements_summary",
+        "program_summary",
+        "closing"
+      ]
+    }
+  },
+  "validators": {
+    "schema": {
+      "enabled": true,
+      "checks": [
+        "required_fields",
+        "types",
+        "array_limits",
+        "null_handling",
+        "enum_compliance"
+      ]
+    },
+    "catalog": {
+      "enabled": true,
+      "checks": [
+        "locked_catalog_membership_for_all_labels",
+        "exact_match_only"
+      ]
+    },
+    "cross_reference": {
+      "enabled": true,
+      "checks": [
+        "behavior_assigned_to_note_context",
+        "intervention_assigned_to_note_context",
+        "replacement_assigned_to_note_context",
+        "program_assigned_to_note_context"
+      ]
+    },
+    "sequencing": {
+      "enabled": true,
+      "required_order": [
+        "opening",
+        "body_events",
+        "replacement_program_summary",
+        "closing"
+      ]
+    },
+    "coverage": {
+      "enabled": true,
+      "checks": [
+        "required_selected_items_represented_when_policy_requires",
+        "required_areas_not_silently_omitted"
+      ]
+    },
+    "conflict": {
+      "enabled": true,
+      "checks": [
+        "contradictory_statements",
+        "duplicate_event_logic",
+        "mutually_exclusive_claims",
+        "unsupported_combinations"
+      ]
+    },
+    "language": {
+      "enabled": true,
+      "checks": [
+        "disallowed_phrasing",
+        "unauthorized_synonyms",
+        "prohibited_speculation",
+        "unsupported_emotional_claims",
+        "unsupported_diagnostic_claims"
+      ]
+    }
+  },
+  "assembly": {
+    "owner": "backend",
+    "opening_block": {
+      "mode": "fixed_template_slots",
+      "allowed_inputs": [
+        "session_location",
+        "participants_present",
+        "environmental_changes",
+        "schedule_changes",
+        "client_presentation_if_explicitly_captured"
+      ]
+    },
+    "abc_body": {
+      "mode": "controlled_paragraph_per_event",
+      "internal_order": [
+        "antecedent_context",
+        "behavior_topography",
+        "interventions",
+        "client_response_result",
+        "replacement_or_teaching_follow_through_if_applicable"
+      ]
+    },
+    "closing_block": {
+      "mode": "deterministic",
+      "allowed_inputs": "approved_closing_fields_only"
+    },
+    "must_not_introduce_new_content": true
+  },
+  "repair": {
+    "mode": "validator_driven_correction",
+    "is_free_rewrite": false,
+    "allowed": [
+      "fix_enum_mismatches_to_canonical_values",
+      "remove_unsupported_items",
+      "reorder_fields",
+      "fill_deterministic_template_text_when_source_data_exists",
+      "collapse_duplicates"
+    ],
+    "forbidden": [
+      "invent_behaviors",
+      "invent_triggers",
+      "invent_interventions",
+      "invent_client_performance",
+      "invent_outcomes",
+      "substitute_unapproved_synonyms_for_locked_labels"
+    ]
+  },
+  "prompts": {
+    "policy": "narrow_only",
+    "allowed_responsibilities": [
+      "convert_session_context_into_constrained_note_plan_json",
+      "elaborate_within_approved_field_boundaries",
+      "summarize_provided_event_results_without_new_facts"
+    ],
+    "disallowed_responsibilities": [
+      "interpret_policy_precedence",
+      "decide_valid_catalogs",
+      "decide_final_note_order",
+      "invent_missing_facts",
+      "bypass_validators"
+    ],
+    "response_format": "json_only"
+  },
+  "rule_layers": {
+    "catalog": {
+      "purpose": "exact approved values",
+      "examples": [
+        "maladaptive_behaviors",
+        "replacements",
+        "interventions",
+        "programs",
+        "materials",
+        "environmental_changes",
+        "setting_labels"
+      ]
+    },
+    "schema": {
+      "purpose": "shape rules",
+      "examples": [
+        "required_fields",
+        "data_types",
+        "nested_object_shapes",
+        "min_max_counts",
+        "nullable_rules"
+      ]
+    },
+    "validator": {
+      "purpose": "truth enforcement",
+      "examples": [
+        "exact_catalog_match",
+        "assignment_checks",
+        "contradiction_checks",
+        "order_checks",
+        "coverage_checks"
+      ]
+    },
+    "assembly": {
+      "purpose": "deterministic writing templates",
+      "examples": [
+        "opening_sentence_templates",
+        "abc_paragraph_templates",
+        "replacement_summary_templates",
+        "closing_sentence_templates"
+      ]
+    },
+    "repair": {
+      "purpose": "correction instructions",
+      "examples": [
+        "remove_invalid_labels",
+        "remap_canonical_enums",
+        "strip_unauthorized_text",
+        "rebuild_missing_formatting_when_facts_exist"
+      ]
+    },
+    "prompt": {
+      "purpose": "bounded generation instructions",
+      "examples": [
+        "return_json_only",
+        "use_exact_labels_only",
+        "no_invention",
+        "no_policy_decisions"
+      ]
+    }
+  },
+  "anti_conflict_rules": [
+    "never_duplicate_the_same_vocabulary_list_across_multiple_prompts",
+    "never_let_frontend_define_a_clinical_rule",
+    "never_let_model_choose_final_prose_order",
+    "never_let_repair_override_locked_session_facts",
+    "never_let_assembly_introduce_content_not_present_in_approved_structured_data"
+  ],
+  "audit": {
+    "required_fields": [
+      "session_context_snapshot_hash",
+      "prompt_version",
+      "model_version",
+      "raw_json_output",
+      "validator_failures",
+      "repair_actions",
+      "final_note_text",
+      "final_pass_fail_result"
+    ]
+  },
+  "engineering_rule": {
+    "new_rule_must_live_in_exactly_one_layer": true,
+    "allowed_layers": [
+      "catalog",
+      "schema",
+      "validator",
+      "assembly",
+      "repair",
+      "prompt"
+    ],
+    "duplicate_rule_across_layers": false,
+    "exception": "reference_only_to_authoritative_source"
+  },
+  "recommended_paths": {
+    "catalogs": "/backend/aba/catalogs",
+    "schemas": "/backend/aba/schemas",
+    "validators": "/backend/aba/validators",
+    "prompts": "/backend/aba/prompts",
+    "assembly": "/backend/aba/assembly",
+    "repair": "/backend/aba/repair",
+    "tests": "/backend/aba/tests"
+  },
+  "suggested_config_files": [
+    "catalog.behaviors.json",
+    "catalog.interventions.json",
+    "catalog.replacements.json",
+    "catalog.programs.json",
+    "schema.note-plan.json",
+    "schema.session-context.json",
+    "validator-profile.default.json",
+    "assembly.templates.ts",
+    "repair.rules.ts",
+    "prompt.note-plan.ts"
+  ],
+  "testing_strategy": [
+    "exact_match_failures",
+    "invalid_synonym_rejection",
+    "missing_required_abc_field_rejection",
+    "duplicate_event_collapse_behavior",
+    "unsupported_intervention_rejection",
+    "invalid_closing_sequence_rejection",
+    "repair_success_on_simple_enum_mismatches",
+    "final_note_assembly_ordering"
+  ],
+  "final_principle": "The model is a bounded content generator. The backend is the decision-maker."
+}
