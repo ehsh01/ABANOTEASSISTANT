@@ -17,6 +17,7 @@
     "drizzle-orm": "catalog:",
     "express": "^5",
     "jsonwebtoken": "^9.0.2",
+    "openai": "^4.77.0",
     "resend": "^6.9.4"
   },
   "devDependencies": {

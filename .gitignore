@@ -34,6 +34,9 @@ node_modules
 !**/.env.example
 artifacts/api-server/.env
 
+# Cursor local project folder (not tracked)
+/cursor/
+
 # misc
 /.sass-cache
 /connect.lock

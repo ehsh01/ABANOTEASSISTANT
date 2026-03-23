@@ -17,6 +17,12 @@ import {
 } from "@workspace/db/schema";
 import { buildAbcClinicalBody } from "../abc-note-body";
 import {
+  generateClinicalBodyOpenAI,
+  isOpenAINoteGenerationConfigured,
+  openaiNoteGenerationLabel,
+  type NoteGenerationContext,
+} from "../openai-notes";
+import {
   buildLockedOpening,
   buildNextSessionSentence,
   buildPerformanceSentence,
@@ -24,6 +30,11 @@ import {
 } from "../note-assembly";
 
 const router: IRouter = Router();
+
+function clientFirstName(fullName: string): string {
+  const p = fullName.trim().split(/\s+/).filter(Boolean);
+  return p[0] ?? fullName;
+}
 
 function assembleSessionNote(
   clientName: string,
@@ -87,8 +98,6 @@ router.post("/notes/generate", async (req, res) => {
     return;
   }
 
-  await new Promise((resolve) => setTimeout(resolve, 2000));
-
   let programNames: string[] = [];
   if (body.selectedReplacements.length > 0) {
     const programRows = await db
@@ -102,7 +111,8 @@ router.post("/notes/generate", async (req, res) => {
   }
 
   const profile = (client.profile as ClientProfileRow | null | undefined) ?? null;
-  const { text: clinicalBody, warnings: abcWarnings } = buildAbcClinicalBody({
+
+  const abcInput = {
     clientName: client.name,
     gender: profile?.gender,
     sessionHours: body.sessionHours,
@@ -111,7 +121,45 @@ router.post("/notes/generate", async (req, res) => {
     interventions: profile?.interventions ?? [],
     hasEnvironmentalChanges: body.hasEnvironmentalChanges,
     environmentalChanges: body.environmentalChanges ?? "",
-  });
+  };
+
+  const warnings: string[] = [];
+  let clinicalBody: string;
+
+  if (isOpenAINoteGenerationConfigured()) {
+    const oaCtx: NoteGenerationContext = {
+      clientName: client.name,
+      firstName: clientFirstName(client.name),
+      gender: profile?.gender,
+      sessionHours: body.sessionHours,
+      sessionDate: body.sessionDate,
+      presentPeople: body.presentPeople,
+      hasEnvironmentalChanges: body.hasEnvironmentalChanges,
+      environmentalChanges: body.environmentalChanges ?? "",
+      maladaptiveBehaviors: profile?.maladaptiveBehaviors ?? [],
+      interventions: profile?.interventions ?? [],
+      replacementProgramsInOrder: programNames,
+    };
+    try {
+      clinicalBody = await generateClinicalBodyOpenAI(oaCtx);
+      warnings.push(`Clinical narrative generated via ${openaiNoteGenerationLabel()}.`);
+    } catch (err) {
+      console.error("[notes/generate] OpenAI failed, using template body:", err);
+      const { text, warnings: abcWarnings } = buildAbcClinicalBody(abcInput);
+      clinicalBody = text;
+      warnings.push(
+        ...abcWarnings,
+        `OpenAI generation failed (${err instanceof Error ? err.message : String(err)}); template narrative was used instead.`,
+      );
+    }
+  } else {
+    const { text, warnings: abcWarnings } = buildAbcClinicalBody(abcInput);
+    clinicalBody = text;
+    warnings.push(
+      ...abcWarnings,
+      "OPENAI_API_KEY is not set; notes use the built-in template. Add the key to use GPT-5.3 (see OPENAI_MODEL in .env.example).",
+    );
+  }
 
   const noteContent = assembleSessionNote(
     client.name,
@@ -121,7 +169,6 @@ router.post("/notes/generate", async (req, res) => {
     body.nextSessionDate,
   );
 
-  const warnings: string[] = [...abcWarnings];
   if (body.selectedReplacements.length < body.sessionHours) {
     warnings.push(
       `Fewer programs selected than session hours. Some hours reuse or rotate selected replacement programs in the narrative.`,
