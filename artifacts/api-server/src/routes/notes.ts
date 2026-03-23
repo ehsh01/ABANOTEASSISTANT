@@ -104,6 +104,7 @@ router.post("/notes/generate", async (req, res) => {
   const profile = (client.profile as ClientProfileRow | null | undefined) ?? null;
   const { text: clinicalBody, warnings: abcWarnings } = buildAbcClinicalBody({
     clientName: client.name,
+    gender: profile?.gender,
     sessionHours: body.sessionHours,
     programNames,
     maladaptiveBehaviors: profile?.maladaptiveBehaviors ?? [],
