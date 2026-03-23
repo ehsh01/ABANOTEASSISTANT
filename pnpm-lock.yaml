@@ -405,6 +405,9 @@ importers:
       resend:
         specifier: ^6.9.4
         version: 6.9.4
+      zod:
+        specifier: 'catalog:'
+        version: 3.25.76
     devDependencies:
       '@types/bcrypt':
         specifier: ^5.0.2
