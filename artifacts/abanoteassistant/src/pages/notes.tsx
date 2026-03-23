@@ -1,4 +1,4 @@
-import { Fragment } from "react";
+import { Fragment, useMemo } from "react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -9,15 +9,36 @@ import {
   FileText,
   Plus,
 } from "lucide-react";
-import { useNotesStore, type SessionNote } from "@/store/notes-store";
-import { formatSessionDate } from "@/lib/utils";
+import type { SessionNote } from "@/store/notes-store";
+import { formatSessionDate, sessionTimeRangeFromHours } from "@/lib/utils";
 import { useT } from "@/hooks/use-translation";
+import { useDeleteSessionNote, useNotesList } from "@/hooks/use-aba-api";
+import type { NoteSummary } from "@workspace/api-client-react";
 
 const BILLING_CODE_LABELS: Record<string, string> = {
   "97153": "Adaptive behavior treatment",
   "97155": "Protocol modification",
   "97156": "Family adaptive behavior",
 };
+
+const DEFAULT_TYPE = "RBT" as const;
+const DEFAULT_BILLING = "97153" as const;
+
+function summaryToSessionNote(s: NoteSummary): SessionNote {
+  const { startTime, endTime } = sessionTimeRangeFromHours(s.sessionHours);
+  return {
+    id: String(s.noteId),
+    clientName: s.clientName,
+    type: DEFAULT_TYPE,
+    billingCode: DEFAULT_BILLING,
+    sessionDate: s.sessionDate,
+    startTime,
+    endTime,
+    status: s.status,
+    createdAt: s.createdAt,
+    content: "",
+  };
+}
 
 function StatusBadge({ status }: { status: SessionNote["status"] }) {
   const t = useT();
@@ -41,8 +62,18 @@ function TypeBadge({ type }: { type: SessionNote["type"] }) {
 }
 
 export default function Notes() {
-  const { notes, deleteNote } = useNotesStore();
+  const { data, isLoading, isError, error, refetch } = useNotesList();
+  const deleteMutation = useDeleteSessionNote();
   const t = useT();
+
+  const notes = useMemo(() => (data?.data ?? []).map(summaryToSessionNote), [data?.data]);
+
+  const handleDelete = (id: string) => {
+    const noteId = Number(id);
+    if (!Number.isFinite(noteId)) return;
+    if (!window.confirm("Delete this note? This cannot be undone.")) return;
+    deleteMutation.mutate(noteId);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -81,7 +112,7 @@ export default function Notes() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-bold text-[#2D2523] tracking-tight">{t.notes.title}</h1>
-            <p className="text-[#877870] mt-1">{notes.length} total</p>
+            <p className="text-[#877870] mt-1">{isLoading ? "…" : `${notes.length} total`}</p>
           </div>
           <Link href="/wizard">
             <button className="flex items-center gap-2 bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-3 rounded-xl font-semibold transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:-translate-y-0.5">
@@ -91,8 +122,24 @@ export default function Notes() {
           </Link>
         </div>
 
+        {isError && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 text-rose-800 px-4 py-3 mb-6 text-sm">
+            <p className="font-semibold">Could not load notes</p>
+            <p className="text-rose-700/90 mt-1">{error instanceof Error ? error.message : "Unknown error"}</p>
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="mt-2 text-sm font-semibold underline hover:no-underline"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
         {/* ── Table ── */}
-        {notes.length === 0 ? (
+        {isLoading ? (
+          <div className="flex justify-center py-24 text-[#877870] text-sm font-medium">Loading notes…</div>
+        ) : notes.length === 0 && !isError ? (
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
@@ -132,7 +179,7 @@ export default function Notes() {
                         >
                           {col}
                         </th>
-                      )
+                      ),
                     )}
                   </tr>
                 </thead>
@@ -201,8 +248,9 @@ export default function Notes() {
                               </Link>
                               <button
                                 title="Delete note"
-                                onClick={() => deleteNote(note.id)}
-                                className="w-8 h-8 rounded-lg flex items-center justify-center text-[#877870] hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                                disabled={deleteMutation.isPending}
+                                onClick={() => handleDelete(note.id)}
+                                className="w-8 h-8 rounded-lg flex items-center justify-center text-[#877870] hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
                               >
                                 <Trash2 className="w-4 h-4 pop-icon" />
                               </button>

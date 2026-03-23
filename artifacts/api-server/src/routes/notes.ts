@@ -1,8 +1,13 @@
 import { Router, type IRouter } from "express";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import {
   GenerateNoteBody,
   GenerateNoteResponse,
+  ListNotesResponse,
+  GetNoteParams,
+  GetNoteResponse,
+  DeleteNoteParams,
+  DeleteNoteResponse,
   SaveNoteParams,
   SaveNoteBody,
   SaveNoteResponse,
@@ -49,6 +54,144 @@ function assembleSessionNote(
 
   return [opening, "", clinicalBody, "", LOCKED_CLOSING_PARAGRAPH, "", performance, "", nextSession].join("\n");
 }
+
+function toIso(d: Date | string): string {
+  return d instanceof Date ? d.toISOString() : String(d);
+}
+
+function normalizeNoteStatus(value: string): "draft" | "final" {
+  return value === "final" ? "final" : "draft";
+}
+
+router.get("/notes", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const rows = await db
+    .select({
+      noteId: notesTable.id,
+      clientId: notesTable.clientId,
+      clientName: clientsTable.name,
+      status: notesTable.status,
+      sessionDate: notesTable.sessionDate,
+      sessionHours: notesTable.sessionHours,
+      generatedAt: notesTable.generatedAt,
+      createdAt: notesTable.createdAt,
+      updatedAt: notesTable.updatedAt,
+    })
+    .from(notesTable)
+    .innerJoin(clientsTable, eq(notesTable.clientId, clientsTable.id))
+    .where(and(eq(notesTable.companyId, companyId), eq(clientsTable.companyId, companyId)))
+    .orderBy(desc(notesTable.generatedAt));
+
+  const data = ListNotesResponse.parse({
+    success: true,
+    data: rows.map((r) => ({
+      noteId: r.noteId,
+      clientId: r.clientId,
+      clientName: r.clientName,
+      status: normalizeNoteStatus(r.status),
+      sessionDate: r.sessionDate,
+      sessionHours: r.sessionHours,
+      generatedAt: toIso(r.generatedAt),
+      createdAt: toIso(r.createdAt),
+      updatedAt: toIso(r.updatedAt),
+    })),
+  });
+
+  res.json(data);
+});
+
+router.get("/notes/:noteId", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const params = GetNoteParams.parse(req.params);
+
+  const [row] = await db
+    .select({
+      noteId: notesTable.id,
+      clientId: notesTable.clientId,
+      clientName: clientsTable.name,
+      status: notesTable.status,
+      sessionDate: notesTable.sessionDate,
+      sessionHours: notesTable.sessionHours,
+      generatedAt: notesTable.generatedAt,
+      createdAt: notesTable.createdAt,
+      updatedAt: notesTable.updatedAt,
+      content: notesTable.content,
+    })
+    .from(notesTable)
+    .innerJoin(clientsTable, eq(notesTable.clientId, clientsTable.id))
+    .where(
+      and(
+        eq(notesTable.id, params.noteId),
+        eq(notesTable.companyId, companyId),
+        eq(clientsTable.companyId, companyId),
+      ),
+    )
+    .limit(1);
+
+  if (!row) {
+    res.status(404).json({ success: false, error: "Note not found", messages: [] });
+    return;
+  }
+
+  const data = GetNoteResponse.parse({
+    success: true,
+    data: {
+      noteId: row.noteId,
+      clientId: row.clientId,
+      clientName: row.clientName,
+      status: normalizeNoteStatus(row.status),
+      sessionDate: row.sessionDate,
+      sessionHours: row.sessionHours,
+      generatedAt: toIso(row.generatedAt),
+      createdAt: toIso(row.createdAt),
+      updatedAt: toIso(row.updatedAt),
+      content: row.content,
+    },
+  });
+
+  res.json(data);
+});
+
+router.delete("/notes/:noteId", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const params = DeleteNoteParams.parse(req.params);
+
+  const [existing] = await db
+    .select({ id: notesTable.id })
+    .from(notesTable)
+    .where(and(eq(notesTable.id, params.noteId), eq(notesTable.companyId, companyId)))
+    .limit(1);
+
+  if (!existing) {
+    res.status(404).json({ success: false, error: "Note not found", messages: [] });
+    return;
+  }
+
+  await db.delete(notesTable).where(and(eq(notesTable.id, params.noteId), eq(notesTable.companyId, companyId)));
+
+  const data = DeleteNoteResponse.parse({
+    success: true,
+    data: { noteId: params.noteId },
+    error: null,
+  });
+
+  res.json(data);
+});
 
 router.post("/notes/generate", async (req, res) => {
   const companyId = req.companyId;

@@ -369,6 +369,64 @@ export const ListClientProgramsResponse = zod.object({
 });
 
 /**
+ * @summary List session notes for the company
+ */
+export const ListNotesResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.array(
+    zod.object({
+      noteId: zod.number(),
+      clientId: zod.number(),
+      clientName: zod.string(),
+      status: zod.enum(["draft", "final"]),
+      sessionDate: zod.string(),
+      sessionHours: zod.number(),
+      generatedAt: zod.string(),
+      createdAt: zod.string(),
+      updatedAt: zod.string(),
+    }),
+  ),
+});
+
+/**
+ * @summary Get one session note by id
+ */
+export const GetNoteParams = zod.object({
+  noteId: zod.coerce.number(),
+});
+
+export const GetNoteResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    noteId: zod.number(),
+    clientId: zod.number(),
+    clientName: zod.string(),
+    status: zod.enum(["draft", "final"]),
+    sessionDate: zod.string(),
+    sessionHours: zod.number(),
+    generatedAt: zod.string(),
+    createdAt: zod.string(),
+    updatedAt: zod.string(),
+    content: zod.string(),
+  }),
+});
+
+/**
+ * @summary Delete a session note
+ */
+export const DeleteNoteParams = zod.object({
+  noteId: zod.coerce.number(),
+});
+
+export const DeleteNoteResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    noteId: zod.number(),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
  * @summary Generate a session note
  */
 export const generateNoteBodySessionHoursMax = 8;

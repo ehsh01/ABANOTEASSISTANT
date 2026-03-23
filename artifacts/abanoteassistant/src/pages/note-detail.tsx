@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useParams } from "wouter";
 import { motion } from "framer-motion";
 import { Copy, CheckCircle2, ChevronLeft, Calendar, Clock, User, Edit3, Save, FileText, Languages } from "lucide-react";
-import { useNotesStore } from "@/store/notes-store";
+import { useNoteDetail, useSaveSessionNote } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
 import { translateNote } from "@/lib/translate-note";
 import { cn, formatSessionDate } from "@/lib/utils";
@@ -13,24 +13,57 @@ const BILLING_CODE_LABELS: Record<string, string> = {
   "97156": "Adaptive Behavior Treatment with Caregiver/Training",
 };
 
+const DEFAULT_BILLING = "97153";
+
 export default function NoteDetail() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
-  const { notes, updateNote } = useNotesStore();
-  const note = notes.find((n) => n.id === params.id);
+  const noteId = Number(params.id);
+  const validId = Number.isFinite(noteId);
+
+  const { data, isLoading, isError } = useNoteDetail(validId ? noteId : undefined);
+  const saveMutation = useSaveSessionNote();
   const t = useT();
+
+  const note = data?.data;
 
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [content, setContent] = useState(note?.content ?? "");
+  const [content, setContent] = useState("");
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [translatedContent, setTranslatedContent] = useState<string | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [translateError, setTranslateError] = useState<string | null>(null);
 
-  if (!note) {
-    setLocation("/notes");
+  useEffect(() => {
+    if (!validId) {
+      setLocation("/notes");
+    }
+  }, [validId, setLocation]);
+
+  useEffect(() => {
+    if (isError) {
+      setLocation("/notes");
+    }
+  }, [isError, setLocation]);
+
+  useEffect(() => {
+    if (note) {
+      setContent(note.content);
+    }
+  }, [note?.noteId]);
+
+  if (!validId) {
     return null;
+  }
+
+  if (isLoading || !note) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground">
+        Loading…
+      </div>
+    );
   }
 
   const isTranslated = translatedContent !== null;
@@ -42,11 +75,19 @@ export default function NoteDetail() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleSave = (status: "draft" | "final") => {
-    updateNote(note.id, { content, status });
-    setSaved(true);
-    setIsEditing(false);
-    setTimeout(() => setSaved(false), 2500);
+  const handleSave = async (status: "draft" | "final") => {
+    setSaveError(null);
+    try {
+      await saveMutation.mutateAsync({
+        noteId: note.noteId,
+        data: { status, content },
+      });
+      setSaved(true);
+      setIsEditing(false);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : "Save failed");
+    }
   };
 
   const handleTranslate = async () => {
@@ -65,13 +106,6 @@ export default function NoteDetail() {
       setIsTranslating(false);
     }
   };
-
-  const durationHours =
-    (() => {
-      const [sh, sm] = note.startTime.split(":").map(Number);
-      const [eh, em] = note.endTime.split(":").map(Number);
-      return ((eh * 60 + em) - (sh * 60 + sm)) / 60;
-    })();
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -101,7 +135,8 @@ export default function NoteDetail() {
           {note.status === "draft" && (
             <button
               onClick={() => handleSave("draft")}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-white/30 text-white font-medium hover:bg-white/15 transition-colors"
+              disabled={saveMutation.isPending}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg border-2 border-white/30 text-white font-medium hover:bg-white/15 transition-colors disabled:opacity-50"
             >
               <Save className="w-4 h-4 pop-icon-white" />
               <span className="hidden sm:inline">{t.noteDetail.saveDraft}</span>
@@ -109,12 +144,17 @@ export default function NoteDetail() {
           )}
           <button
             onClick={() => handleSave("final")}
-            className="flex items-center gap-2 px-6 py-2 rounded-lg bg-white text-primary font-semibold shadow-md hover:-translate-y-0.5 transition-all"
+            disabled={saveMutation.isPending}
+            className="flex items-center gap-2 px-6 py-2 rounded-lg bg-white text-primary font-semibold shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none"
           >
-            {t.noteDetail.saveFinal}
+            {saveMutation.isPending ? "…" : t.noteDetail.saveFinal}
           </button>
         </div>
       </header>
+
+      {saveError && (
+        <div className="bg-destructive/10 text-destructive text-sm px-4 py-2 text-center">{saveError}</div>
+      )}
 
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 flex flex-col lg:flex-row gap-8">
 
@@ -133,7 +173,7 @@ export default function NoteDetail() {
               <Calendar className="w-4 h-4 text-muted-foreground pop-icon" /> {formatSessionDate(note.sessionDate)}
             </div>
             <div className="flex items-center gap-2 text-sm font-medium">
-              <Clock className="w-4 h-4 text-muted-foreground pop-icon" /> {durationHours} {t.noteDetail.hours}
+              <Clock className="w-4 h-4 text-muted-foreground pop-icon" /> {note.sessionHours} {t.noteDetail.hours}
             </div>
           </div>
 
@@ -209,7 +249,7 @@ export default function NoteDetail() {
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">{t.noteDetail.duration}</div>
-                  <div className="font-semibold text-foreground">{durationHours} {t.noteDetail.hours}</div>
+                  <div className="font-semibold text-foreground">{note.sessionHours} {t.noteDetail.hours}</div>
                 </div>
               </div>
               <div className="flex items-center gap-3 text-sm">
@@ -218,8 +258,8 @@ export default function NoteDetail() {
                 </div>
                 <div>
                   <div className="text-xs text-muted-foreground">{t.noteDetail.billingCode}</div>
-                  <div className="font-semibold text-foreground">{note.billingCode}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{BILLING_CODE_LABELS[note.billingCode]}</div>
+                  <div className="font-semibold text-foreground">{DEFAULT_BILLING}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{BILLING_CODE_LABELS[DEFAULT_BILLING]}</div>
                 </div>
               </div>
             </div>

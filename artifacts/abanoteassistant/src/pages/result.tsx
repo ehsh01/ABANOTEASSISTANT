@@ -20,6 +20,8 @@ export default function Result() {
   const [translatedContent, setTranslatedContent] = useState<string | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
   const [translateError, setTranslateError] = useState<string | null>(null);
+  const [saveBanner, setSaveBanner] = useState<"success" | "error" | null>(null);
+  const [saveMessage, setSaveMessage] = useState("");
 
   useEffect(() => {
     if (!generatedNote) {
@@ -41,10 +43,27 @@ export default function Result() {
   };
 
   const handleSave = (status: "draft" | "final") => {
-    saveMutation.mutate({
-      noteId: generatedNote.noteId,
-      data: { status, content }
-    });
+    setSaveBanner(null);
+    setSaveMessage("");
+    saveMutation.mutate(
+      {
+        noteId: generatedNote.noteId,
+        data: { status, content },
+      },
+      {
+        onSuccess: () => {
+          setSaveBanner("success");
+          window.setTimeout(() => {
+            setSaveBanner(null);
+            saveMutation.reset();
+          }, 3500);
+        },
+        onError: (err) => {
+          setSaveBanner("error");
+          setSaveMessage(err instanceof Error ? err.message : "Save failed. Please try again.");
+        },
+      },
+    );
   };
 
   const handleStartOver = () => {
@@ -238,9 +257,9 @@ export default function Result() {
 
       </main>
 
-      {/* Success Toast for Save */}
-      {saveMutation.isSuccess && (
-        <div className="fixed bottom-6 right-6 bg-card border border-border shadow-xl rounded-xl p-4 flex items-center gap-3 animate-in slide-in-from-bottom-5">
+      {/* Save feedback */}
+      {saveBanner === "success" && (
+        <div className="fixed bottom-6 right-6 bg-card border border-border shadow-xl rounded-xl p-4 flex items-center gap-3 animate-in slide-in-from-bottom-5 z-50">
           <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center">
             <CheckCircle2 className="w-5 h-5 text-emerald-600 pop-icon" />
           </div>
@@ -248,6 +267,12 @@ export default function Result() {
             <div className="font-semibold text-sm">{t.result.noteSaved}</div>
             <div className="text-xs text-muted-foreground">{t.result.savedAs} {saveMutation.data?.data.status}</div>
           </div>
+        </div>
+      )}
+      {saveBanner === "error" && (
+        <div className="fixed bottom-6 right-6 max-w-sm bg-card border border-destructive/30 shadow-xl rounded-xl p-4 z-50">
+          <div className="font-semibold text-sm text-destructive">Could not save</div>
+          <p className="text-xs text-muted-foreground mt-1">{saveMessage}</p>
         </div>
       )}
     </div>

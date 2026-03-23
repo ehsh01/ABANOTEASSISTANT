@@ -5,15 +5,21 @@ import type {
   ProgramListResponse,
   GenerateNoteRequest,
   GenerateNoteResponse,
+  NoteListResponse,
+  NoteDetailResponse,
   SaveNoteRequest,
   SaveNoteResponse,
+  DeleteNoteResponse,
 } from "@workspace/api-client-react";
 import {
   listClients,
   getClient,
   listClientPrograms,
+  listNotes,
+  getNote,
   generateNote,
   saveNote,
+  deleteNote as deleteNoteRequest,
 } from "@workspace/api-client-react";
 import { useAuthStore } from "@/store/auth-store";
 
@@ -51,6 +57,24 @@ export function useGenerateSessionNote() {
   });
 }
 
+export function useNotesList() {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: ["/api/notes", token],
+    queryFn: async (): Promise<NoteListResponse> => listNotes(),
+    enabled: !!token,
+  });
+}
+
+export function useNoteDetail(noteId: number | undefined) {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: ["/api/notes", noteId, token],
+    queryFn: async (): Promise<NoteDetailResponse> => getNote(noteId!),
+    enabled: !!token && noteId !== undefined && !Number.isNaN(noteId),
+  });
+}
+
 export function useSaveSessionNote() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -61,8 +85,20 @@ export function useSaveSessionNote() {
       noteId: number;
       data: SaveNoteRequest;
     }): Promise<SaveNoteResponse> => saveNote(noteId, data),
-    onSuccess: () => {
+    onSuccess: (_res, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notes", vars.noteId] });
+    },
+  });
+}
+
+export function useDeleteSessionNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (noteId: number): Promise<DeleteNoteResponse> => deleteNoteRequest(noteId),
+    onSuccess: (_res, noteId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notes", noteId] });
     },
   });
 }

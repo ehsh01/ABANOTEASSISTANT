@@ -407,6 +407,91 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /notes:
+    get:
+      operationId: listNotes
+      tags: [notes]
+      summary: List session notes for the company
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Notes list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoteListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /notes/{noteId}:
+    get:
+      operationId: getNote
+      tags: [notes]
+      summary: Get one session note by id
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Note detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NoteDetailResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Note not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteNote
+      tags: [notes]
+      summary: Delete a session note
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: noteId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Note deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteNoteResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Note not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /notes/generate:
     post:
       operationId: generateNote
@@ -1105,6 +1190,118 @@ components:
         - sessionDate
         - sessionHours
         - generatedAt
+
+    NoteSummary:
+      type: object
+      properties:
+        noteId:
+          type: integer
+        clientId:
+          type: integer
+        clientName:
+          type: string
+        status:
+          type: string
+          enum: [draft, final]
+        sessionDate:
+          type: string
+        sessionHours:
+          type: integer
+        generatedAt:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+      required:
+        - noteId
+        - clientId
+        - clientName
+        - status
+        - sessionDate
+        - sessionHours
+        - generatedAt
+        - createdAt
+        - updatedAt
+
+    NoteListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/NoteSummary"
+      required:
+        - success
+        - data
+
+    NoteDetail:
+      type: object
+      properties:
+        noteId:
+          type: integer
+        clientId:
+          type: integer
+        clientName:
+          type: string
+        status:
+          type: string
+          enum: [draft, final]
+        sessionDate:
+          type: string
+        sessionHours:
+          type: integer
+        generatedAt:
+          type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        content:
+          type: string
+      required:
+        - noteId
+        - clientId
+        - clientName
+        - status
+        - sessionDate
+        - sessionHours
+        - generatedAt
+        - createdAt
+        - updatedAt
+        - content
+
+    NoteDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/NoteDetail"
+      required:
+        - success
+        - data
+
+    DeleteNoteResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            noteId:
+              type: integer
+          required:
+            - noteId
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
 
     SaveNoteRequest:
       type: object

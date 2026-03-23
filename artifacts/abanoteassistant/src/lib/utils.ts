@@ -21,3 +21,13 @@ export function formatSessionDate(dateStr: string | undefined | null, fallback =
   }
   return dateStr;
 }
+
+/** Display-only session clock range when the API stores duration in hours only. */
+export function sessionTimeRangeFromHours(sessionHours: number): { startTime: string; endTime: string } {
+  const start = new Date();
+  start.setHours(9, 0, 0, 0);
+  const end = new Date(start);
+  end.setHours(start.getHours() + Math.max(1, sessionHours), start.getMinutes(), 0, 0);
+  const tf = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  return { startTime: tf.format(start), endTime: tf.format(end) };
+}

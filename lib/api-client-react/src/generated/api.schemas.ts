@@ -298,6 +298,67 @@ export interface GenerateNoteResponse {
   error?: string | null;
 }
 
+export type NoteSummaryStatus =
+  (typeof NoteSummaryStatus)[keyof typeof NoteSummaryStatus];
+
+export const NoteSummaryStatus = {
+  draft: "draft",
+  final: "final",
+} as const;
+
+export interface NoteSummary {
+  noteId: number;
+  clientId: number;
+  clientName: string;
+  status: NoteSummaryStatus;
+  sessionDate: string;
+  sessionHours: number;
+  generatedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NoteListResponse {
+  success: boolean;
+  data: NoteSummary[];
+}
+
+export type NoteDetailStatus =
+  (typeof NoteDetailStatus)[keyof typeof NoteDetailStatus];
+
+export const NoteDetailStatus = {
+  draft: "draft",
+  final: "final",
+} as const;
+
+export interface NoteDetail {
+  noteId: number;
+  clientId: number;
+  clientName: string;
+  status: NoteDetailStatus;
+  sessionDate: string;
+  sessionHours: number;
+  generatedAt: string;
+  createdAt: string;
+  updatedAt: string;
+  content: string;
+}
+
+export interface NoteDetailResponse {
+  success: boolean;
+  data: NoteDetail;
+}
+
+export type DeleteNoteResponseData = {
+  noteId: number;
+};
+
+export interface DeleteNoteResponse {
+  success: boolean;
+  data: DeleteNoteResponseData;
+  error?: string | null;
+}
+
 export type SaveNoteRequestStatus =
   (typeof SaveNoteRequestStatus)[keyof typeof SaveNoteRequestStatus];
 
