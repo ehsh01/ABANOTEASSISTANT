@@ -240,7 +240,7 @@ export default function Notes() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-2">
                               <Link
-                                href={`/notes/${note.id}`}
+                                href={`/notes/${note.id}?edit=1`}
                                 title="Edit note"
                                 className="w-8 h-8 rounded-lg flex items-center justify-center text-[#877870] hover:text-[#C27A8A] hover:bg-[#FCEEF1] transition-colors"
                               >

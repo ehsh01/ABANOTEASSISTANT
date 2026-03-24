@@ -18,6 +18,7 @@ const DEFAULT_BILLING = "97153";
 export default function NoteDetail() {
   const params = useParams<{ id: string }>();
   const [, setLocation] = useLocation();
+  const searchParams = new URLSearchParams(window.location.search);
   const noteId = Number(params.id);
   const validId = Number.isFinite(noteId);
 
@@ -53,6 +54,12 @@ export default function NoteDetail() {
       setContent(note.content);
     }
   }, [note?.noteId]);
+
+  useEffect(() => {
+    if (searchParams.get("edit") === "1") {
+      setIsEditing(true);
+    }
+  }, [searchParams]);
 
   if (!validId) {
     return null;
