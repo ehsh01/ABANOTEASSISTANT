@@ -28,7 +28,7 @@ export default function NoteDetail() {
   const note = data?.data;
 
   const [copied, setCopied] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
+  const [isEditing, setIsEditing] = useState(() => new URLSearchParams(window.location.search).get("edit") === "1");
   const [content, setContent] = useState("");
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);

@@ -1,6 +1,6 @@
 import { useParams, Link } from "wouter";
-import { motion } from "framer-motion";
-import { useState, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useState, useMemo, Fragment } from "react";
 import {
   ArrowLeft,
   User,
@@ -15,7 +15,11 @@ import {
   BookOpen,
   Tag,
   Upload,
+  Trash2,
+  Plus,
 } from "lucide-react";
+import { useDeleteSessionNote } from "@/hooks/use-aba-api";
+import { sessionTimeRangeFromHours, formatSessionDate } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClient, useClientPrograms, useNotesList } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
@@ -83,8 +87,14 @@ export default function ClientDetail() {
     isError: programsError,
   } = useClientPrograms(id);
   const { data: notesResp, isLoading: notesLoading } = useNotesList();
+  const deleteMutation = useDeleteSessionNote();
   const t = useT();
   const [activeTab, setActiveTab] = useState("sessionNotes");
+
+  const handleDeleteNote = (noteId: number) => {
+    if (!window.confirm("Delete this note? This cannot be undone.")) return;
+    deleteMutation.mutate(noteId);
+  };
 
   const client = clientResp?.data;
   const programs = programsResp?.data ?? [];
@@ -242,29 +252,102 @@ export default function ClientDetail() {
                 <TabsTrigger value="interventions" className="text-xs">Interventions</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="sessionNotes" className="space-y-3">
+              <TabsContent value="sessionNotes">
                 {notesLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-[#877870]">
+                  <div className="flex items-center gap-2 text-sm text-[#877870] py-6">
                     <Loader2 className="w-4 h-4 animate-spin text-[#C27A8A]" />
                     Loading notes…
                   </div>
                 ) : clientNotes.length === 0 ? (
-                  <p className="text-sm text-[#877870] italic">No session notes created yet for this client.</p>
+                  <div className="flex flex-col items-center justify-center py-16 text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-[#FDFAF7] border border-[#F0E4E1] flex items-center justify-center mb-3">
+                      <FileText className="w-6 h-6 text-[#C27A8A]/50" />
+                    </div>
+                    <p className="text-sm font-semibold text-[#2D2523] mb-1">No session notes yet</p>
+                    <p className="text-xs text-[#877870] mb-4">Generate the first note for this client</p>
+                    <Link href="/wizard">
+                      <button className="flex items-center gap-2 bg-[#C27A8A] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-[#b06a79] transition-colors">
+                        <Plus className="w-4 h-4" /> New Note
+                      </button>
+                    </Link>
+                  </div>
                 ) : (
-                  <div className="space-y-2">
-                    {clientNotes.map((note) => (
-                      <Link key={note.noteId} href={`/notes/${note.noteId}`}>
-                        <div className="p-4 rounded-lg border border-[#E8D8D3] bg-[#FDFAF7] hover:bg-[#F5F1EF] transition-colors cursor-pointer">
-                          <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                              <p className="font-medium text-[#2D2523] text-sm">Session on {new Date(note.sessionDate).toLocaleDateString()}</p>
-                              <p className="text-xs text-[#877870] mt-1">{note.sessionHours} hours • {note.status}</p>
-                            </div>
-                            <FileText className="w-4 h-4 text-[#C27A8A] flex-shrink-0 ml-3" />
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
+                  <div className="rounded-xl overflow-hidden border border-[#E8D8D3]" style={{ boxShadow: "0 2px 10px -2px rgba(44,37,35,0.08)" }}>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-[#FDFAF7] border-b border-[#F0E4E1]">
+                            {["TYPE", "BILLING CODE", "SESSION DATE", "START", "END", "STATUS", "ACTIONS"].map((col) => (
+                              <th key={col} className="px-4 py-3 text-left text-xs font-bold text-[#877870] tracking-widest uppercase whitespace-nowrap">
+                                {col}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-[#F0E4E1]">
+                          <AnimatePresence>
+                            {clientNotes.map((note) => {
+                              const { startTime, endTime } = sessionTimeRangeFromHours(note.sessionHours);
+                              return (
+                                <Fragment key={note.noteId}>
+                                  <motion.tr
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ duration: 0.15 }}
+                                    className="hover:bg-[#FDFAF7] transition-colors"
+                                  >
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-[#FDFAF7] text-[#2D2523] border border-[#F0E4E1] text-xs font-bold tracking-wide">
+                                        RBT
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      <span className="font-bold text-[#2D2523]">97153</span>
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-[#2D2523] font-medium">
+                                      {formatSessionDate(note.sessionDate)}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-[#2D2523]">{startTime}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-[#2D2523]">{endTime}</td>
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      {note.status === "final" ? (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
+                                          Final
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold">
+                                          Draft
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      <div className="flex items-center gap-2">
+                                        <Link
+                                          href={`/notes/${note.noteId}?edit=1`}
+                                          title="Edit note"
+                                          className="w-8 h-8 rounded-lg flex items-center justify-center text-[#877870] hover:text-[#C27A8A] hover:bg-[#FCEEF1] transition-colors"
+                                        >
+                                          <Pencil className="w-4 h-4" />
+                                        </Link>
+                                        <button
+                                          title="Delete note"
+                                          disabled={deleteMutation.isPending}
+                                          onClick={() => handleDeleteNote(note.noteId)}
+                                          className="w-8 h-8 rounded-lg flex items-center justify-center text-[#877870] hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </motion.tr>
+                                </Fragment>
+                              );
+                            })}
+                          </AnimatePresence>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 )}
               </TabsContent>
