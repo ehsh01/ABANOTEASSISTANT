@@ -279,6 +279,7 @@ router.post("/notes/generate", async (req, res) => {
     sessionHours: body.sessionHours,
     replacementProgramsInOrder: programNames,
     maladaptiveBehaviors: profile?.maladaptiveBehaviors ?? [],
+    interventions: profile?.interventions ?? [],
     clientAgeYears,
     presentPeople: body.presentPeople,
   };

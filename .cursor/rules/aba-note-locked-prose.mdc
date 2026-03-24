@@ -58,6 +58,7 @@ Highlights for implementers:
 - **Introduction rule (doc)** mirrors section 1 above.
 - **Replacement programs**: Either in antecedent (activity being taught) **or** after behavior in consequence — **not both** in the same ABC.
 - **Consequence phrasing**: Use `To address this/these behavior(s), the RBT implemented/applied [EXACT INTERVENTION NAME]` then describe application.
+- **Physical aggression**: When the manifested catalog behavior indicates person-directed physical aggression (e.g. label contains "Physical Aggression") and the client's approved interventions include **Response Block** (exact BIP string), the **first** intervention described after "To address this behavior" must be Response Block (e.g. immediately blocking to prevent further contact); additional interventions (e.g. environmental manipulation) follow only after the immediate safety response, using exact catalog names throughout.
 - **Replacement program phrasing**: `Additionally, the RBT implemented the replacement program '[EXACT PROGRAM NAME]'` followed by `by` and implementation detail.
 
 ## 5. Engineering rule

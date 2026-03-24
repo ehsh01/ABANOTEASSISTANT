@@ -56,6 +56,11 @@ BEHAVIOR CLASSIFICATION (use exact catalog labels from JSON; describe actions co
 - If a behavior label indicates property destruction or similar, describe actions toward OBJECTS (throwing toys, breaking items, slamming materials)—not labeled as person-directed aggression unless the text clearly strikes a person.
 - Do not re-label BIP vocabulary; stay faithful to the provided maladaptive behavior names while keeping descriptions observable.
 
+PHYSICAL AGGRESSION — RESPONSE BLOCK FIRST (when listed in JSON):
+- When the hour's manifested maladaptive behavior is person-directed physical aggression (including when the exact catalog label contains "Physical Aggression"), the **first** intervention after "To address this behavior" (or "these behaviors") must be **Response Block** — but **only** if the exact string \`Response Block\` appears in the JSON \`interventions\` array (use that exact spelling/capitalization from JSON). Do not invent Response Block if it is not in the list.
+- Phrase the first consequence sentence like: "To address this behavior, the RBT immediately implemented [exact Response Block string from JSON] by [observable blocking action to prevent further contact]."
+- After immediate safety is addressed, additional interventions may follow in separate clauses (e.g. "Once the immediate safety concern was addressed, the RBT then implemented [exact second intervention name from JSON] by ..."). Do not place another listed intervention before Response Block in that sequence when Response Block is in the JSON list.
+
 TANTRUMS AND OTHER BROAD LABELS (must use assessment-linked topography):
 - When the documented maladaptive behavior is broad (e.g. tantrum, meltdown, emotional dysregulation, crying episode) OR when the narrative would otherwise only say the client "had a tantrum" / "tantrumed," you MUST spell out observable actions in the same episode: what the client did with their body, voice, and materials (e.g. fell to the floor, kicked legs, screamed with tears, threw items, pushed materials away, hit self or surfaces)—aligned with how that behavior is described or implied across the maladaptiveBehaviors strings in JSON.
 - Never end the behavior description on the label alone (e.g. avoid "manifested Tantrum" with no preceding concrete actions). The RBT must be able to see the topography in your text.
@@ -104,6 +109,7 @@ function toComplianceCtx(ctx: NoteGenerationContext): NoteComplianceContext {
     sessionHours: ctx.sessionHours,
     replacementProgramsInOrder: ctx.replacementProgramsInOrder,
     maladaptiveBehaviors: ctx.maladaptiveBehaviors,
+    interventions: ctx.interventions,
     clientAgeYears: ctx.clientAgeYears,
     presentPeople: ctx.presentPeople,
   };
@@ -196,7 +202,7 @@ Output ONLY the corrected clinical body.`;
 
   const repairSystem = `${SYSTEM_PROMPT}
 
-REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; one replacement program and exactly one maladaptive behavior catalog label per paragraph; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech to the client.`;
+REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; one replacement program and exactly one maladaptive behavior catalog label per paragraph; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech to the client; when a paragraph cites physical aggression and JSON interventions include Response Block, describe Response Block immediately first after "To address this behavior," then other interventions.`;
 
   return callOpenAI(
     [

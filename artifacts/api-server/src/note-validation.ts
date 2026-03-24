@@ -8,6 +8,8 @@ export type NoteComplianceContext = {
   replacementProgramsInOrder: string[];
   /** BIP maladaptive behavior names (exact strings) — used for one-behavior-per-paragraph checks */
   maladaptiveBehaviors: string[];
+  /** BIP intervention names (exact strings) — used for physical-aggression / Response Block ordering */
+  interventions: string[];
   /** Approximate age in years from DOB + session date; null if unknown */
   clientAgeYears: number | null;
   presentPeople: string[];
@@ -100,6 +102,39 @@ const CAREGIVER_LEXICON =
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Catalog label denotes physical aggression (person-directed); match is on the catalog string, not free text. */
+function isPhysicalAggressionCatalogLabel(behaviorName: string): boolean {
+  return /\bphysical\s+aggression\b/i.test(behaviorName.trim());
+}
+
+/** Exact intervention string from the client's list when it is the canonical Response Block label. */
+function findResponseBlockInterventionLabel(interventions: string[]): string | null {
+  for (const raw of interventions) {
+    const s = raw.trim();
+    if (s.length > 0 && /^response block$/i.test(s)) {
+      return s;
+    }
+  }
+  return null;
+}
+
+/** Smallest index in `text` among catalog intervention names that appear; longest names first to reduce substring ambiguity. */
+function firstInterventionMentionInText(text: string, interventionNames: string[]): string | null {
+  const names = [...new Set(interventionNames.map((s) => s.trim()).filter((s) => s.length > 0))].sort(
+    (a, b) => b.length - a.length,
+  );
+  let bestIdx = Infinity;
+  let bestName: string | null = null;
+  for (const n of names) {
+    const idx = text.indexOf(n);
+    if (idx !== -1 && idx < bestIdx) {
+      bestIdx = idx;
+      bestName = n;
+    }
+  }
+  return bestName;
 }
 
 /** First sentence = text up to first ". " (MVP; avoids most abbreviations in our locked prose). */
@@ -229,6 +264,32 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         `Tantrum topography: paragraph ${i + 1} mentions tantrum/meltdown without enough observable detail; describe what the client did (sounds, movements, materials) consistent with the assessment behavior definitions.`,
       );
       break;
+    }
+  }
+
+  const responseBlockLabel = findResponseBlockInterventionLabel(ctx.interventions ?? []);
+  const paBehaviorLabels = behaviorCatalog.filter(isPhysicalAggressionCatalogLabel);
+  if (responseBlockLabel && paBehaviorLabels.length > 0) {
+    const interventionList = ctx.interventions ?? [];
+    for (let i = 0; i < paragraphs.length; i++) {
+      const p = paragraphs[i]!;
+      const citesPa = paBehaviorLabels.some((label) => p.includes(label));
+      if (!citesPa) continue;
+      const m = /\bto address this behavior\b|\bto address these behaviors\b/i.exec(p);
+      if (!m || m.index === undefined) {
+        issues.push(
+          `Physical aggression: paragraph ${i + 1} cites a physical-aggression catalog behavior; use "To address this behavior" or "To address these behaviors" before consequence interventions.`,
+        );
+        break;
+      }
+      const tail = p.slice(m.index);
+      const firstNamed = firstInterventionMentionInText(tail, interventionList);
+      if (firstNamed !== responseBlockLabel) {
+        issues.push(
+          `Physical aggression: paragraph ${i + 1} must describe "${responseBlockLabel}" as the first implemented intervention after "To address this behavior" (before other listed interventions such as environmental manipulation).`,
+        );
+        break;
+      }
     }
   }
 
