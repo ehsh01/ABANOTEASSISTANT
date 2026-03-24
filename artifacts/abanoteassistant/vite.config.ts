@@ -67,17 +67,8 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
-        runtimeCaching: [
-          {
-            urlPattern: /^\/api\/.*/i,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "api-cache",
-              expiration: { maxEntries: 50, maxAgeSeconds: 300 },
-              networkTimeoutSeconds: 10,
-            },
-          },
-        ],
+        // Do not cache /api in the service worker: POST /notes/generate often exceeds 10s;
+        // NetworkFirst + networkTimeoutSeconds caused failed or confusing behavior after install.
       },
     }),
     ...(process.env.NODE_ENV !== "production" &&

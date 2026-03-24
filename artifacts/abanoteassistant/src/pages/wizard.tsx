@@ -4,9 +4,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon, UserPlus } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
-import type { Client as ApiClient, Program } from "@workspace/api-client-react";
+import type { Client as ApiClient, Program, GenerateNoteRequest } from "@workspace/api-client-react";
 import { ApiError } from "@workspace/api-client-react";
-import { useWizardStore } from "@/store/wizard-store";
+import { useWizardStore, type WizardData } from "@/store/wizard-store";
 import { useClients, useClientPrograms, useGenerateSessionNote } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
 import { cn, formatSessionDate } from "@/lib/utils";
@@ -36,6 +36,37 @@ function formatGenerateNoteFailure(err: unknown): string {
     }
   }
   return err instanceof Error ? err.message : String(err);
+}
+
+function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | null {
+  if (
+    data.clientId == null ||
+    data.sessionHours == null ||
+    typeof data.sessionDate !== "string" ||
+    !data.sessionDate.trim() ||
+    typeof data.hasEnvironmentalChanges !== "boolean" ||
+    !Array.isArray(data.presentPeople) ||
+    !Array.isArray(data.selectedReplacements)
+  ) {
+    return null;
+  }
+  const body: GenerateNoteRequest = {
+    clientId: data.clientId,
+    sessionHours: data.sessionHours,
+    sessionDate: data.sessionDate.trim(),
+    presentPeople: data.presentPeople,
+    hasEnvironmentalChanges: data.hasEnvironmentalChanges,
+    selectedReplacements: data.selectedReplacements,
+  };
+  const env = data.environmentalChanges?.trim();
+  if (env) {
+    body.environmentalChanges = env;
+  }
+  const next = data.nextSessionDate?.trim();
+  if (next) {
+    body.nextSessionDate = next;
+  }
+  return body;
 }
 
 // ─── Environmental change options ────────────────────────────────────────────
@@ -1077,7 +1108,14 @@ export default function Wizard() {
 
   const handleGenerate = () => {
     setGenerateError(null);
-    generateMutation.mutate(data as any, {
+    const payload = toGenerateNoteRequest(data);
+    if (!payload) {
+      setGenerateError(
+        "Session data is incomplete. Use Back to confirm client, programs, session hours, date, and environment step, then try again.",
+      );
+      return;
+    }
+    generateMutation.mutate(payload, {
       onSuccess: (res) => {
         setGeneratedNote(res.data, res.warnings);
         setLocation("/result");
@@ -1196,6 +1234,7 @@ export default function Wizard() {
           
           {step < totalSteps ? (
             <button
+              type="button"
               onClick={handleNext}
               disabled={!canProceed()}
               className="ml-auto flex items-center justify-center px-8 py-3 rounded-xl bg-primary text-primary-foreground font-semibold hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md shadow-primary/20"
@@ -1204,6 +1243,7 @@ export default function Wizard() {
             </button>
           ) : (
             <button
+              type="button"
               onClick={handleGenerate}
               disabled={isGenerating}
               className="w-full sm:w-auto flex items-center justify-center px-10 py-4 rounded-xl bg-gradient-to-r from-primary to-accent text-primary-foreground font-bold text-lg hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30 active:translate-y-0 transition-all"
