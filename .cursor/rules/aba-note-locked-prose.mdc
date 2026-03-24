@@ -53,7 +53,8 @@ Highlights for implementers:
 
 - **Authority**: Master documentation rules → assessment → BIP; higher overrides lower.
 - **Strict labels**: Behaviors, interventions, and replacement programs must match BIP/authorized lists with **exact** wording (capitalization, spacing, punctuation).
-- **ABC**: One complete ABC sequence per hour of service when using ABC narrative; sections flow as continuous narrative unless schema says otherwise.
+- **ABC**: One complete ABC sequence per hour of service when using ABC narrative; sections flow as continuous narrative unless schema says otherwise. **One maladaptive behavior catalog label per hour** (not two behaviors in the same hour). For broad labels (e.g. tantrum), topography must be observable and consistent with the assessment/BIP behavior definitions—not the label alone.
+- **Toddlers / limited verbal**: For very young clients, avoid attributing complex spoken sentences to the client; prefer vocalizations, gestures, and observable actions.
 - **Introduction rule (doc)** mirrors section 1 above.
 - **Replacement programs**: Either in antecedent (activity being taught) **or** after behavior in consequence — **not both** in the same ABC.
 - **Consequence phrasing**: Use `To address this/these behavior(s), the RBT implemented/applied [EXACT INTERVENTION NAME]` then describe application.

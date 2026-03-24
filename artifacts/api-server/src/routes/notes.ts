@@ -21,7 +21,6 @@ import {
   notesTable,
   type ClientProfileRow,
 } from "@workspace/db/schema";
-import { buildAbcClinicalBody } from "../abc-note-body";
 import {
   generateClinicalBodyOpenAI,
   isOpenAINoteGenerationConfigured,
@@ -226,6 +225,18 @@ router.post("/notes/generate", async (req, res) => {
     }
   }
 
+  if (!isOpenAINoteGenerationConfigured()) {
+    res.status(503).json({
+      success: false,
+      error: "AI note generation is not configured on the server.",
+      messages: [
+        "OPENAI_API_KEY is missing or empty. Set it in artifacts/api-server/.env (or your host environment) and restart the API (e.g. pm2 restart abanoteassistant-api). " +
+          "Session notes are generated only with OpenAI; there is no template fallback.",
+      ],
+    });
+    return;
+  }
+
   const [client] = await db
     .select()
     .from(clientsTable)
@@ -267,76 +278,51 @@ router.post("/notes/generate", async (req, res) => {
   const complianceCtxBase: NoteComplianceContext = {
     sessionHours: body.sessionHours,
     replacementProgramsInOrder: programNames,
+    maladaptiveBehaviors: profile?.maladaptiveBehaviors ?? [],
     clientAgeYears,
     presentPeople: body.presentPeople,
   };
 
-  const abcInput = {
+  const warnings: string[] = [];
+  const oaCtx: NoteGenerationContext = {
     clientName: client.name,
+    firstName: clientFirstName(client.name),
     gender: profile?.gender,
     sessionHours: body.sessionHours,
-    programNames,
-    maladaptiveBehaviors: profile?.maladaptiveBehaviors ?? [],
-    interventions: profile?.interventions ?? [],
+    sessionDate: body.sessionDate,
+    presentPeople: body.presentPeople,
     hasEnvironmentalChanges: body.hasEnvironmentalChanges,
     environmentalChanges: body.environmentalChanges ?? "",
+    maladaptiveBehaviors: profile?.maladaptiveBehaviors ?? [],
+    interventions: profile?.interventions ?? [],
+    replacementProgramsInOrder: programNames,
+    requestNonce: randomUUID(),
+    clientAgeYears,
+    ageBand: client.ageBand,
   };
 
-  const warnings: string[] = [];
   let clinicalBody: string;
-  let generationSource: "openai" | "template" = "template";
-  let generationModel: string | null = null;
+  const generationSource: "openai" = "openai";
+  let generationModel: string;
 
-  if (isOpenAINoteGenerationConfigured()) {
-    const oaCtx: NoteGenerationContext = {
-      clientName: client.name,
-      firstName: clientFirstName(client.name),
-      gender: profile?.gender,
-      sessionHours: body.sessionHours,
-      sessionDate: body.sessionDate,
-      presentPeople: body.presentPeople,
-      hasEnvironmentalChanges: body.hasEnvironmentalChanges,
-      environmentalChanges: body.environmentalChanges ?? "",
-      maladaptiveBehaviors: profile?.maladaptiveBehaviors ?? [],
-      interventions: profile?.interventions ?? [],
-      replacementProgramsInOrder: programNames,
-      requestNonce: randomUUID(),
-      clientAgeYears,
-      ageBand: client.ageBand,
-    };
-    try {
-      const oaResult = await generateClinicalBodyOpenAI(oaCtx);
-      clinicalBody = oaResult.body;
-      warnings.push(`Clinical narrative generated via ${openaiNoteGenerationLabel()}.`);
-      warnings.push(...oaResult.warnings);
-      generationSource = "openai";
-      generationModel = resolvedOpenAIModel();
-    } catch (err) {
-      console.error("[notes/generate] OpenAI failed, using template body:", err);
-      const { text, warnings: abcWarnings } = buildAbcClinicalBody(abcInput);
-      clinicalBody = text;
-      generationSource = "template";
-      generationModel = null;
-      warnings.push(
-        ...abcWarnings,
-        `OpenAI generation failed (${err instanceof Error ? err.message : String(err)}); template narrative was used instead.`,
-      );
-      for (const issue of validateClinicalBodyCompliance(clinicalBody, complianceCtxBase)) {
-        warnings.push(`Template compliance check: ${issue}`);
-      }
-    }
-  } else {
-    const { text, warnings: abcWarnings } = buildAbcClinicalBody(abcInput);
-    clinicalBody = text;
-    generationSource = "template";
-    generationModel = null;
-    warnings.push(
-      ...abcWarnings,
-      "OPENAI_API_KEY is not set on the API server; notes use the built-in template (fast, similar each time). Add OPENAI_API_KEY to artifacts/api-server/.env and restart the API.",
-    );
-    for (const issue of validateClinicalBodyCompliance(clinicalBody, complianceCtxBase)) {
-      warnings.push(`Template compliance check: ${issue}`);
-    }
+  try {
+    const oaResult = await generateClinicalBodyOpenAI(oaCtx);
+    clinicalBody = oaResult.body;
+    warnings.push(`Clinical narrative generated via ${openaiNoteGenerationLabel()}.`);
+    warnings.push(...oaResult.warnings);
+    generationModel = resolvedOpenAIModel();
+  } catch (err) {
+    console.error("[notes/generate] OpenAI failed:", err);
+    res.status(502).json({
+      success: false,
+      error: "AI note generation failed.",
+      messages: [err instanceof Error ? err.message : String(err)],
+    });
+    return;
+  }
+
+  for (const issue of validateClinicalBodyCompliance(clinicalBody, complianceCtxBase)) {
+    warnings.push(`Clinical body compliance check: ${issue}`);
   }
 
   const noteContent = assembleSessionNote(
@@ -371,6 +357,12 @@ router.post("/notes/generate", async (req, res) => {
       generatedAt,
     })
     .returning();
+
+  console.log(
+    `[notes/generate] openai_ok noteId=${inserted.id} model=${generationModel} clientId=${client.id} companyId=${companyId}`,
+  );
+  res.setHeader("X-ABA-Clinical-Body-Source", "openai");
+  res.setHeader("X-ABA-OpenAI-Model", generationModel);
 
   const data = GenerateNoteResponse.parse({
     success: true,

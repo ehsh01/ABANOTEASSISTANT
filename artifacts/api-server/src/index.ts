@@ -1,4 +1,5 @@
 import app from "./app";
+import { isOpenAINoteGenerationConfigured } from "./openai-notes";
 
 const rawPort = process.env["PORT"];
 
@@ -16,4 +17,11 @@ if (Number.isNaN(port) || port <= 0) {
 
 app.listen(port, () => {
   console.log(`Server listening on port ${port}`);
+  if (isOpenAINoteGenerationConfigured()) {
+    console.log("[notes] OpenAI clinical narrative: enabled (OPENAI_API_KEY is set)");
+  } else {
+    console.warn(
+      "[notes] OPENAI_API_KEY is missing — POST /notes/generate will return 503 until set in artifacts/api-server/.env (then restart the API).",
+    );
+  }
 });

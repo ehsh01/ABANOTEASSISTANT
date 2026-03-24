@@ -2,6 +2,8 @@
 
 This monorepo is edited in **Cursor** (backend/API) and **Replit** (UI). Both pull from **`main`**. These rules keep `main` buildable and avoid silent breakage.
 
+**Other repositories in your ecosystem:** Reusable Cursor + Replit alignment templates (generic `org-*.mdc` rules, `AGENTS.md` starter, install script) live in **`engineering-standards/`**. They do not replace this repo’s `.cursor/rules/`; use them when bootstrapping or updating *other* apps. See **`engineering-standards/README.md`**.
+
 ## Source of truth
 
 - **Git branch `main`** should stay deployable: install, typecheck, and build are expected to pass after merge.

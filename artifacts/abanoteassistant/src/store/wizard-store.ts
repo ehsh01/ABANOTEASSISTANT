@@ -7,7 +7,7 @@ interface WizardState {
   step: number;
   data: WizardData;
   generatedNote: GeneratedNote | null;
-  /** Server warnings from POST /notes/generate (e.g. template fallback, OpenAI errors). */
+  /** Server warnings from successful POST /notes/generate (e.g. compliance hints). */
   generateWarnings: string[] | undefined;
   // UI-only: tracks which env-change options are selected in the dropdown.
   // Stored in the wizard store (not WizardData) so Step 5 state survives

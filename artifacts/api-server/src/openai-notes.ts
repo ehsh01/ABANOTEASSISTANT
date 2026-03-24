@@ -56,10 +56,19 @@ BEHAVIOR CLASSIFICATION (use exact catalog labels from JSON; describe actions co
 - If a behavior label indicates property destruction or similar, describe actions toward OBJECTS (throwing toys, breaking items, slamming materials)—not labeled as person-directed aggression unless the text clearly strikes a person.
 - Do not re-label BIP vocabulary; stay faithful to the provided maladaptive behavior names while keeping descriptions observable.
 
+TANTRUMS AND OTHER BROAD LABELS (must use assessment-linked topography):
+- When the documented maladaptive behavior is broad (e.g. tantrum, meltdown, emotional dysregulation, crying episode) OR when the narrative would otherwise only say the client "had a tantrum" / "tantrumed," you MUST spell out observable actions in the same episode: what the client did with their body, voice, and materials (e.g. fell to the floor, kicked legs, screamed with tears, threw items, pushed materials away, hit self or surfaces)—aligned with how that behavior is described or implied across the maladaptiveBehaviors strings in JSON.
+- Never end the behavior description on the label alone (e.g. avoid "manifested Tantrum" with no preceding concrete actions). The RBT must be able to see the topography in your text.
+
 AGE-APPROPRIATE ACTIVITIES:
 - Use clientAgeYears (and ageBand if present). Scenarios, demands, and materials must fit typical expectations for that developmental level.
 - For very young children (under ~3–4): avoid independent reading, writing worksheets, essays, spelling tests, chapter books, long division, etc. Prefer picture-based play, simple toys, imitation, matching with manipulatives, gross-motor play, caregiver-style routines as appropriate.
 - If age is unknown, keep activities broadly appropriate and conservative (simple, concrete tasks).
+
+TODDLER / LIMITED VERBAL SKILLS (when clientAgeYears is 0–3, or ageBand clearly indicates toddler):
+- Do not assume clear expressive language. Minimize "the client said…," "stated…," "replied…," "answered…," "verbally requested…," or quoted full sentences attributed to the client.
+- Prefer observable communication: vocalizing (non-word cries, screams, grunts), gestures, reaching, pushing away, head turning, or following a model without claiming the client produced specific words.
+- Do not add meta-lines about whether the client can speak (e.g. "communication level is unknown"); stay observational.
 
 INITIATION OF INTERACTION:
 - When an interaction or invitation happens, state WHO initiated it explicitly (e.g. "The therapist presented…", "A peer said…", "The RBT placed…").
@@ -72,13 +81,16 @@ ONE PROGRAM PER ABC (per hour paragraph):
 - Each paragraph (one service hour) must reference exactly ONE replacement program name from replacementProgramsInOrder for that hour (index h uses programs[h % length] when fewer programs than hours).
 - Do not combine two different program names in the same hour paragraph.
 
+ONE MALADAPTIVE BEHAVIOR PER ABC (per hour paragraph):
+- Each paragraph must cite exactly ONE behavior name from maladaptiveBehaviors for the manifested/challenging-behavior portion (one catalog label per hour).
+- Do not combine two different maladaptive behavior names in the same hour paragraph. If the session involved multiple behavior types, distribute them across different hours.
+
 STRUCTURE (unchanged):
 - Do NOT write the opening ("The RBT met with...") or any closing boilerplate about reinforcers/BIP/performance/next session.
 - Do NOT use markdown headings, bullets, or numbered lists. Prose paragraphs only.
 - Produce exactly sessionHours paragraphs (one per hour of service). Separate paragraphs with a single blank line (\\n\\n).
 - Each paragraph is one continuous ABC-style narrative: rich antecedent (specific setting, materials, demand, timing) → observable client response → "During this activity, [ClientFirstName or full name] manifested [EXACT behavior name from JSON lists]" with concrete topography → "To address this behavior" or "To address these behaviors" with "the RBT implemented" or "the RBT applied" plus EXACT intervention name from JSON and a short, specific description of how it was used in that moment → "Following this intervention..." with observable reduction/re-engagement → exactly one replacement-program sentence using EXACT program name for that hour.
 - For replacement program sentences: use "Additionally, the RBT implemented the replacement program \\"...\\" by ..." for hour indices 0,2,4... and "The RBT implemented the replacement program \\"...\\" by ..." for hour indices 1,3,5... (0-based within this body).
-- If maladaptiveBehaviors has at least two entries, the FIRST hour paragraph should incorporate TWO distinct behavior names from that list in one coherent episode, then one appropriate intervention; still end with exactly one replacement program for that hour.
 - Use ONLY behavior names, intervention names, and replacement program strings exactly as provided. Do not invent new diagnoses, behaviors, interventions, or program names.
 - Pronouns: use he/him/his if gender indicates male, she/her/hers if female, they/them/their otherwise.
 - If hasEnvironmentalChanges is true and environmentalChanges is non-empty, your FIRST paragraph may begin with one short bridging sentence that references those environmental factors, then continue into the first hour's ABC narrative (do not repeat the system's fixed environmental opening sentence).
@@ -91,6 +103,7 @@ function toComplianceCtx(ctx: NoteGenerationContext): NoteComplianceContext {
   return {
     sessionHours: ctx.sessionHours,
     replacementProgramsInOrder: ctx.replacementProgramsInOrder,
+    maladaptiveBehaviors: ctx.maladaptiveBehaviors,
     clientAgeYears: ctx.clientAgeYears,
     presentPeople: ctx.presentPeople,
   };
@@ -166,7 +179,7 @@ Output ONLY the corrected clinical body.`;
 
   const repairSystem = `${SYSTEM_PROMPT}
 
-REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; one program per paragraph; explicit initiators; age-appropriate tasks.`;
+REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; one replacement program and exactly one maladaptive behavior catalog label per paragraph; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech to the client.`;
 
   return callOpenAI(
     [

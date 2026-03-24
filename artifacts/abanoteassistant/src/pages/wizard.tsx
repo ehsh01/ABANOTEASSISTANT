@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, Chevr
 import { format, parseISO, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import type { Client as ApiClient, Program } from "@workspace/api-client-react";
+import { ApiError } from "@workspace/api-client-react";
 import { useWizardStore } from "@/store/wizard-store";
 import { useClients, useClientPrograms, useGenerateSessionNote } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
@@ -22,6 +23,20 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+
+function formatGenerateNoteFailure(err: unknown): string {
+  if (err instanceof ApiError && err.data && typeof err.data === "object") {
+    const d = err.data as { error?: string; messages?: string[] };
+    const chunks = [
+      d.error,
+      ...(Array.isArray(d.messages) ? d.messages.filter((m) => typeof m === "string" && m.trim()) : []),
+    ].filter(Boolean) as string[];
+    if (chunks.length > 0) {
+      return chunks.join(" ");
+    }
+  }
+  return err instanceof Error ? err.message : String(err);
+}
 
 // ─── Environmental change options ────────────────────────────────────────────
 const ENV_CHANGE_OPTIONS: { group: string; items: string[] }[] = [
@@ -1040,9 +1055,16 @@ export default function Wizard() {
   const { step, setStep, data, setGeneratedNote } = useWizardStore();
   const generateMutation = useGenerateSessionNote();
   const t = useT();
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   const totalSteps = 8;
   const isGenerating = generateMutation.isPending;
+
+  useEffect(() => {
+    if (step !== totalSteps) {
+      setGenerateError(null);
+    }
+  }, [step, totalSteps]);
 
   const handleNext = () => {
     if (step < totalSteps) setStep(step + 1);
@@ -1054,10 +1076,14 @@ export default function Wizard() {
   };
 
   const handleGenerate = () => {
+    setGenerateError(null);
     generateMutation.mutate(data as any, {
       onSuccess: (res) => {
         setGeneratedNote(res.data, res.warnings);
         setLocation("/result");
+      },
+      onError: (err) => {
+        setGenerateError(formatGenerateNoteFailure(err));
       },
     });
   };
@@ -1154,6 +1180,15 @@ export default function Wizard() {
 
       {/* Footer Actions */}
       <footer className="bg-card border-t border-border p-4 sm:px-6 lg:px-8">
+        {step === totalSteps && generateError && (
+          <div
+            role="alert"
+            className="max-w-4xl mx-auto mb-4 rounded-xl border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+          >
+            <div className="font-semibold text-destructive mb-1">{t.wizard.generateFailedTitle}</div>
+            <p className="text-destructive/90 leading-snug">{generateError}</p>
+          </div>
+        )}
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="text-sm text-muted-foreground hidden sm:block">
             {step === 8 ? "Ready to generate" : "Complete this step to proceed"}

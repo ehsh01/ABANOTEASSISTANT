@@ -13,6 +13,22 @@ import * as zod from "zod";
  */
 export const HealthCheckResponse = zod.object({
   status: zod.string(),
+  notesClinicalBodyPolicy: zod
+    .enum(["openai_only"])
+    .describe(
+      "Session note clinical body is generated only via OpenAI; there is no server-side template fallback. If your deployed API omits this field, the server is running an older build — redeploy api-server dist and restart the process.\n",
+    ),
+  openaiConfigured: zod
+    .boolean()
+    .describe(
+      "True when OPENAI_API_KEY is non-empty (required for POST \/notes\/generate).",
+    ),
+  buildId: zod
+    .string()
+    .optional()
+    .describe(
+      "Optional deploy stamp; set API_BUILD_ID (or CI commit SHA) on the host to verify which build is running.",
+    ),
 });
 
 /**
@@ -455,14 +471,12 @@ export const GenerateNoteResponse = zod.object({
     generationSource: zod
       .enum(["openai", "template"])
       .describe(
-        "Whether the clinical body used OpenAI or the deterministic template",
+        "Always openai on success; template is legacy for older clients only",
       ),
     generationModel: zod
       .string()
       .nullable()
-      .describe(
-        "OpenAI model id when generationSource is openai; otherwise null",
-      ),
+      .describe("OpenAI model id used for the clinical body (set on success)"),
   }),
   warnings: zod.array(zod.string()).optional(),
   error: zod.string().nullish(),

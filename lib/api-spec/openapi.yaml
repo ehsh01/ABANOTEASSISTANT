@@ -542,6 +542,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: AI provider error — OpenAI call failed (no template fallback; fix key, model, quota, or network)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: AI not configured — OPENAI_API_KEY missing or empty (note generation requires OpenAI)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Generation failed
           content:
@@ -600,8 +612,22 @@ components:
       properties:
         status:
           type: string
+        notesClinicalBodyPolicy:
+          type: string
+          enum: [openai_only]
+          description: >
+            Session note clinical body is generated only via OpenAI; there is no server-side template fallback.
+            If your deployed API omits this field, the server is running an older build — redeploy api-server dist and restart the process.
+        openaiConfigured:
+          type: boolean
+          description: True when OPENAI_API_KEY is non-empty (required for POST /notes/generate).
+        buildId:
+          type: string
+          description: Optional deploy stamp; set API_BUILD_ID (or CI commit SHA) on the host to verify which build is running.
       required:
         - status
+        - notesClinicalBodyPolicy
+        - openaiConfigured
 
     ErrorResponse:
       type: object
@@ -1184,12 +1210,12 @@ components:
           type: string
         generationSource:
           type: string
-          description: Whether the clinical body used OpenAI or the deterministic template
+          description: Always openai on success; template is legacy for older clients only
           enum: [openai, template]
         generationModel:
           type: string
           nullable: true
-          description: OpenAI model id when generationSource is openai; otherwise null
+          description: OpenAI model id used for the clinical body (set on success)
       required:
         - noteId
         - content

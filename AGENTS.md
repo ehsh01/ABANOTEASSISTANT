@@ -107,3 +107,10 @@ All API responses follow this structure:
 - **Preserve existing behavior** - When unsure, maintain current implementation
 - **Ask for clarification** - If requirements are ambiguous
 - **Minimal changes** - Prefer the smallest change that accomplishes the goal
+
+## Organization-wide templates (other applications)
+
+Reusable **Cursor rule templates** and an **`AGENTS.md` starter** for **new or other repositories** live under **`engineering-standards/`** in this repo. They use the `org-*` prefix and are **not** loaded from that folder by Cursor automatically.
+
+- **This project:** Keep using **`.cursor/rules/`** here (including `collaboration.mdc`, `aba-note-*.mdc`, etc.) as the **only** binding Cursor rules for ABA Note Assistant.
+- **Other apps:** Copy from `engineering-standards/` using **`engineering-standards/scripts/install-into-repo.sh`** and `AGENTS.template.md` — see **`engineering-standards/README.md`**.

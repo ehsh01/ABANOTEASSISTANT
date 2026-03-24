@@ -1,9 +1,8 @@
 /**
  * Rich ABC narrative assembly (one continuous paragraph per hour).
  * Mirrors structure and specificity of docs/note-generation/SAMPLE-NOTE-REFERENCE.md:
- * concrete antecedents, observable responses (incl. dialogue where appropriate),
- * dual-behavior first block when possible, "these behaviors" / "applied" vs "implemented",
- * alternating replacement-program openings, no double periods.
+ * concrete antecedents, observable responses, one maladaptive behavior per hour,
+ * "these behaviors" / "applied" vs "implemented", alternating replacement-program openings.
  */
 
 export type AbcBodyInput = {
@@ -16,6 +15,8 @@ export type AbcBodyInput = {
   interventions: string[];
   hasEnvironmentalChanges: boolean;
   environmentalChanges: string;
+  /** When ≤3, template avoids attributed complex speech to the client */
+  clientAgeYears?: number | null;
 };
 
 function nonEmptyStrings(xs: string[] | undefined | null): string[] {
@@ -125,33 +126,28 @@ type ScenarioCtx = {
   first: string;
   p: P;
   behavior: string;
-  behavior2?: string;
   intervention: string;
   programName: string;
   byDetail: string;
   hourIndex: number;
   scenarioKey: string;
+  /** Avoid quoted speech / "stated" when true */
+  isToddler: boolean;
 };
 
-/** Single-behavior variant of the toy-car opening (when only one BIP behavior is listed). */
+/** Single-behavior opening (hour 0): one catalog behavior only. */
 function paragraphSingleToyBin(ctx: ScenarioCtx): string {
-  const { first, p, behavior, intervention, programName, byDetail, hourIndex } = ctx;
+  const { first, p, behavior, intervention, programName, byDetail, hourIndex, isToddler } = ctx;
   const verb = addressVerb(intervention);
   const impl = implementationNarrative(intervention, first, "freePlayCars");
-  return `Upon arrival, ${first} was engaged in free play with toy cars in the living room. The RBT provided a clear instruction to place the toys in the storage bin. After a pause of approximately 15 seconds, ${first} was prompted to follow the instruction. ${p.Subj} responded by throwing several toy cars across the floor and stating, "I don't want to do this," while turning ${p.pos} body away from the RBT. During this activity, ${first} manifested ${behavior} by not complying with the instruction after the initial prompt and disengaging from the presented materials. To address this behavior, the RBT ${verb} ${intervention}, ${impl}. Following this intervention, ${first} exhibited a reduction in ${behavior} and completed the assigned task with additional prompts as needed. ${replacementClosing(hourIndex, programName, byDetail)}`;
-}
-
-/** Hour 0 dual-behavior block (sample paragraph 1 style). */
-function paragraphDualFreePlay(ctx: ScenarioCtx): string {
-  const { first, p, behavior, behavior2, intervention, programName, byDetail, hourIndex } = ctx;
-  const b2 = behavior2 ?? behavior;
-  const verb = addressVerb(intervention);
-  const impl = implementationNarrative(intervention, first, "freePlayCars");
-  return `Upon arrival, ${first} was engaged in free play with toy cars in the living room. The RBT provided a clear instruction to place the toys in the storage bin. After a pause of approximately 15 seconds, ${first} was prompted to follow the instruction. ${p.Subj} responded by throwing several toy cars across the floor and stating, "I don't want to do this," while turning ${p.pos} body away from the RBT. During this activity, ${first} manifested ${behavior} by not complying with the instruction after the initial prompt and ${b2} by forcefully throwing multiple toy cars onto the floor. To address these behaviors, the RBT ${verb} ${intervention}, ${impl}. Following these interventions, ${first} exhibited a reduction in ${behavior} and ${b2} and completed the assigned task. ${replacementClosing(hourIndex, programName, byDetail)}`;
+  const responseClause = isToddler
+    ? `${p.Subj} responded by throwing several toy cars across the floor, vocalizing loudly, and turning ${p.pos} body away from the RBT`
+    : `${p.Subj} responded by throwing several toy cars across the floor and stating, "I don't want to do this," while turning ${p.pos} body away from the RBT`;
+  return `Upon arrival, ${first} was engaged in free play with toy cars in the living room. The RBT provided a clear instruction to place the toys in the storage bin. After a pause of approximately 15 seconds, ${first} was prompted to follow the instruction. ${responseClause}. During this activity, ${first} manifested ${behavior} by not complying with the instruction after the initial prompt and disengaging from the presented materials. To address this behavior, the RBT ${verb} ${intervention}, ${impl}. Following this intervention, ${first} exhibited a reduction in ${behavior} and completed the assigned task with additional prompts as needed. ${replacementClosing(hourIndex, programName, byDetail)}`;
 }
 
 function paragraphColoringTransition(ctx: ScenarioCtx): string {
-  const { first, p, behavior, intervention, programName, byDetail, hourIndex } = ctx;
+  const { first, p, behavior, intervention, programName, byDetail, hourIndex, isToddler: _isToddler } = ctx;
   const verb = addressVerb(intervention);
   const impl = implementationNarrative(intervention, first, "coloringTransition");
   const body = `Later during the session, ${first} was engaged in coloring with markers at the art table when ${p.subj} was informed that coloring time was finished and it was time to transition to a puzzle activity on the floor. Upon this transition demand, ${first} threw multiple markers across the room and knocked over the marker container. This ${behavior} manifested as forcefully throwing multiple markers and overturning the marker container onto the floor. To address this behavior, the RBT ${verb} ${intervention}, ${impl}.`;
@@ -159,7 +155,7 @@ function paragraphColoringTransition(ctx: ScenarioCtx): string {
 }
 
 function paragraphSnackHandWashing(ctx: ScenarioCtx): string {
-  const { first, p, behavior, intervention, programName, byDetail, hourIndex } = ctx;
+  const { first, p, behavior, intervention, programName, byDetail, hourIndex, isToddler: _isToddler } = ctx;
   const verb = addressVerb(intervention);
   const impl = implementationNarrative(intervention, first, "snack");
   const body = `Further into the session, ${first} was seated at the kitchen snack area when the RBT presented a hand-washing routine prior to snack. The RBT gave a step-by-step instruction to walk to the sink and begin washing. After allowing several seconds for independent initiation, ${first} was prompted to start the routine. ${p.Subj} responded by pushing snack items off the placemat and turning away from the sink. During this activity, ${first} manifested ${behavior} by refusing to initiate the routine after the initial prompt and disengaging from the expected sequence. To address this behavior, the RBT ${verb} ${intervention}, ${impl}.`;
@@ -167,42 +163,45 @@ function paragraphSnackHandWashing(ctx: ScenarioCtx): string {
 }
 
 function paragraphGrossMotorBall(ctx: ScenarioCtx): string {
-  const { first, p, behavior, intervention, programName, byDetail, hourIndex } = ctx;
+  const { first, p, behavior, intervention, programName, byDetail, hourIndex, isToddler: _isToddler } = ctx;
   const verb = addressVerb(intervention);
   const impl = implementationNarrative(intervention, first, "motor");
   return `During a mid-session activity block, ${first} was engaged in gross motor play with a soft ball in an open area of the home. The RBT provided a clear instruction to place the ball in a designated bin to end the activity. Following a brief wait period, ${first} was prompted to follow through. ${p.Subj} responded by kicking the ball toward the hallway and running from the instruction area. During this activity, ${first} manifested ${behavior} by leaving the designated play space and failing to complete the clean-up demand within the expected timeframe. To address this behavior, the RBT ${verb} ${intervention}, ${impl}. Following this intervention, ${first} exhibited a reduction in ${behavior} and returned to the activity area to complete the requested step. ${replacementClosing(hourIndex, programName, byDetail)}`;
 }
 
 function paragraphTabletTransition(ctx: ScenarioCtx): string {
-  const { first, p, behavior, intervention, programName, byDetail, hourIndex } = ctx;
+  const { first, p, behavior, intervention, programName, byDetail, hourIndex, isToddler: _isToddler } = ctx;
   const verb = addressVerb(intervention);
   const impl = implementationNarrative(intervention, first, "tablet");
-  return `In a subsequent portion of the session, ${first} was viewing a short preferred video on a tablet when the RBT signaled that screen time was ending and it was time to move to a tabletop task. Upon this transition demand, ${first} pushed the tablet away sharply and raised ${p.pos} voice in protest. During this activity, ${first} manifested ${behavior} by refusing to close the activity and attempting to retain access to the device after the instruction was given. To address this behavior, the RBT ${verb} ${intervention}, ${impl}. Following this intervention, ${first} exhibited a reduction in ${behavior} and transitioned to the next activity with caregiver support as needed. ${replacementClosing(hourIndex, programName, byDetail)}`;
+  return `In a subsequent portion of the session, ${first} was viewing a short preferred video on a tablet when the RBT signaled that screen time was ending and it was time to move to a tabletop task. Upon this transition demand, ${first} pushed the tablet away sharply and raised ${p.pos} voice in protest. During this activity, ${first} manifested ${behavior} by refusing to close the activity and attempting to retain access to the device after the instruction was given. To address this behavior, the RBT ${verb} ${intervention}, ${impl}. Following this intervention, ${first} exhibited a reduction in ${behavior} and transitioned to the next activity with additional prompts as needed. ${replacementClosing(hourIndex, programName, byDetail)}`;
 }
 
 function paragraphBlockCleanup(ctx: ScenarioCtx): string {
-  const { first, p, behavior, intervention, programName, byDetail, hourIndex } = ctx;
+  const { first, p, behavior, intervention, programName, byDetail, hourIndex, isToddler } = ctx;
   const verb = addressVerb(intervention);
   const impl = implementationNarrative(intervention, first, "blocks");
-  return `Earlier in the session, ${first} was building with interlocking blocks on the floor when the RBT directed ${p.obj} to begin cleaning up materials into a storage container. After a pause of approximately ten to fifteen seconds, ${first} was prompted to pick up the first item. ${p.Subj} responded by sweeping blocks off the mat and scattering them across the floor while stating that ${p.subj} did not want to clean up. During this activity, ${first} manifested ${behavior} by not complying with the clean-up instruction after the initial prompt and displacing materials from the work area. To address this behavior, the RBT ${verb} ${intervention}, ${impl}. Following this intervention, ${first} exhibited a reduction in ${behavior} and re-engaged with the clean-up routine. ${replacementClosing(hourIndex, programName, byDetail)}`;
+  const protestClause = isToddler
+    ? `${p.Subj} responded by sweeping blocks off the mat and scattering them across the floor while vocalizing protest`
+    : `${p.Subj} responded by sweeping blocks off the mat and scattering them across the floor while stating that ${p.subj} did not want to clean up`;
+  return `Earlier in the session, ${first} was building with interlocking blocks on the floor when the RBT directed ${p.obj} to begin cleaning up materials into a storage container. After a pause of approximately ten to fifteen seconds, ${first} was prompted to pick up the first item. ${protestClause}. During this activity, ${first} manifested ${behavior} by not complying with the clean-up instruction after the initial prompt and displacing materials from the work area. To address this behavior, the RBT ${verb} ${intervention}, ${impl}. Following this intervention, ${first} exhibited a reduction in ${behavior} and re-engaged with the clean-up routine. ${replacementClosing(hourIndex, programName, byDetail)}`;
 }
 
 function paragraphSocialGame(ctx: ScenarioCtx): string {
-  const { first, p, behavior, intervention, programName, byDetail, hourIndex } = ctx;
+  const { first, p, behavior, intervention, programName, byDetail, hourIndex, isToddler: _isToddler } = ctx;
   const verb = addressVerb(intervention);
   const impl = implementationNarrative(intervention, first, "social");
   return `During the latter part of the session, ${first} was participating in a simple turn-taking game with the RBT at the table. The RBT delivered an instruction to wait for a designated cue before taking a turn. Following a short interval for processing the demand, ${first} was prompted to pause before reaching. ${p.Subj} responded by grabbing materials out of turn and turning away from the RBT. During this activity, ${first} manifested ${behavior} by failing to wait for the cue and interfering with the shared materials. To address this behavior, the RBT ${verb} ${intervention}, ${impl}. Following this intervention, ${first} exhibited a reduction in ${behavior} and completed a brief period of appropriate turn-taking. ${replacementClosing(hourIndex, programName, byDetail)}`;
 }
 
 function paragraphPretendKitchen(ctx: ScenarioCtx): string {
-  const { first, p, behavior, intervention, programName, byDetail, hourIndex } = ctx;
+  const { first, p, behavior, intervention, programName, byDetail, hourIndex, isToddler: _isToddler } = ctx;
   const verb = addressVerb(intervention);
   const impl = implementationNarrative(intervention, first, "pretend");
   return `Following a brief break between activities, ${first} was engaged in pretend play at a toy kitchen when the RBT presented a demand to transition to a tabletop instruction. The RBT stated the expectation clearly and allowed a brief window for independent compliance. After allowing several seconds for independent responding, ${first} was prompted to stand and move to the table. ${p.Subj} responded by knocking play food items to the floor and leaving the play area. During this activity, ${first} manifested ${behavior} by refusing the transition and displacing materials during the demand. To address this behavior, the RBT ${verb} ${intervention}, ${impl}. Following this intervention, ${first} exhibited a reduction in ${behavior} and participated in the transition with prompts. ${replacementClosing(hourIndex, programName, byDetail)}`;
 }
 
 function paragraphWorksheetAcademic(ctx: ScenarioCtx): string {
-  const { first, p, behavior, intervention, programName, byDetail, hourIndex } = ctx;
+  const { first, p, behavior, intervention, programName, byDetail, hourIndex, isToddler: _isToddler } = ctx;
   const verb = addressVerb(intervention);
   const impl = implementationNarrative(intervention, first, "academic");
   return `During a structured tabletop block, ${first} was seated at a table for structured work with a worksheet and crayons. The RBT provided a specific instruction to complete the next row of items and set a brief work interval. After a pause of approximately ten to fifteen seconds, ${first} was prompted to begin marking the page. ${p.Subj} responded by pushing the paper aside and resting ${p.pos} head on the table. During this activity, ${first} manifested ${behavior} by not initiating the academic response after the prompt and disengaging from the materials. To address this behavior, the RBT ${verb} ${intervention}, ${impl}. Following this intervention, ${first} exhibited a reduction in ${behavior} and completed a short segment of the assigned work. ${replacementClosing(hourIndex, programName, byDetail)}`;
@@ -220,7 +219,7 @@ const SINGLE_SCENARIO_BUILDERS = [
 ];
 
 function paragraphGenericChallenging(ctx: ScenarioCtx): string {
-  const { first, p, behavior, intervention, programName, byDetail, hourIndex } = ctx;
+  const { first, p, behavior, intervention, programName, byDetail, hourIndex, isToddler: _isToddler } = ctx;
   const verb = addressVerb(intervention);
   const impl = implementationNarrative(intervention, first, "generic");
   return `During this session segment, ${first} was participating in a structured home-based activity when the RBT delivered a clear instruction related to the task. Following a brief wait period, ${first} was prompted to comply. ${p.Subj} responded by resisting the demand and disengaging from the materials. During this activity, ${first} engaged in challenging behavior, including refusal to follow the instruction after the initial prompt and disengagement from the task materials. To address this behavior, the RBT ${verb} ${intervention}, ${impl}. Following this intervention, ${first} exhibited a reduction in the targeted challenging behavior and re-engaged with the activity. ${replacementClosing(hourIndex, programName, byDetail)}`;
@@ -256,6 +255,10 @@ export function buildAbcClinicalBody(input: AbcBodyInput): { text: string; warni
 
   const first = firstName(clientName);
   const p = pronouns(gender);
+  const isToddler =
+    input.clientAgeYears !== null &&
+    input.clientAgeYears !== undefined &&
+    input.clientAgeYears <= 3;
   const parts: string[] = [];
 
   if (hasEnvironmentalChanges && environmentalChanges.trim().length > 0) {
@@ -289,32 +292,14 @@ export function buildAbcClinicalBody(input: AbcBodyInput): { text: string; warni
         byDetail,
         hourIndex: h,
         scenarioKey: "generic",
+        isToddler,
       };
       parts.push(paragraphGenericChallenging(ctx));
       continue;
     }
 
-    const useDualOpening = h === 0 && behaviors.length >= 2;
-    if (useDualOpening) {
-      const b1 = behaviors[0]!;
-      const b2 = behaviors[1]!;
-      behaviorCursor = 2;
-      const ctx: ScenarioCtx = {
-        first,
-        p,
-        behavior: b1,
-        behavior2: b2,
-        intervention,
-        programName,
-        byDetail,
-        hourIndex: h,
-        scenarioKey: "freePlayCars",
-      };
-      parts.push(paragraphDualFreePlay(ctx));
-      continue;
-    }
-
-    if (h === 0 && behaviors.length === 1) {
+    /** Hour 0 always uses one catalog behavior only (first in profile list). */
+    if (h === 0) {
       const b0 = behaviors[0]!;
       behaviorCursor = 1;
       const ctx: ScenarioCtx = {
@@ -326,6 +311,7 @@ export function buildAbcClinicalBody(input: AbcBodyInput): { text: string; warni
         byDetail,
         hourIndex: h,
         scenarioKey: "freePlayCars",
+        isToddler,
       };
       parts.push(paragraphSingleToyBin(ctx));
       continue;
@@ -342,6 +328,7 @@ export function buildAbcClinicalBody(input: AbcBodyInput): { text: string; warni
       byDetail,
       hourIndex: h,
       scenarioKey: "single",
+      isToddler,
     };
     parts.push(builder(ctx));
   }

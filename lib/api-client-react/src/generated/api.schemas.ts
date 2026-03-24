@@ -5,8 +5,26 @@
  * ABA Note Assistant API specification
  * OpenAPI spec version: 0.1.0
  */
+/**
+ * Session note clinical body is generated only via OpenAI; there is no server-side template fallback. If your deployed API omits this field, the server is running an older build — redeploy api-server dist and restart the process.
+
+ */
+export type HealthStatusNotesClinicalBodyPolicy =
+  (typeof HealthStatusNotesClinicalBodyPolicy)[keyof typeof HealthStatusNotesClinicalBodyPolicy];
+
+export const HealthStatusNotesClinicalBodyPolicy = {
+  openai_only: "openai_only",
+} as const;
+
 export interface HealthStatus {
   status: string;
+  /** Session note clinical body is generated only via OpenAI; there is no server-side template fallback. If your deployed API omits this field, the server is running an older build — redeploy api-server dist and restart the process.
+   */
+  notesClinicalBodyPolicy: HealthStatusNotesClinicalBodyPolicy;
+  /** True when OPENAI_API_KEY is non-empty (required for POST /notes/generate). */
+  openaiConfigured: boolean;
+  /** Optional deploy stamp; set API_BUILD_ID (or CI commit SHA) on the host to verify which build is running. */
+  buildId?: string;
 }
 
 export interface ErrorResponse {
@@ -282,7 +300,7 @@ export interface GenerateNoteRequest {
 }
 
 /**
- * Whether the clinical body used OpenAI or the deterministic template
+ * Always openai on success; template is legacy for older clients only
  */
 export type GeneratedNoteGenerationSource =
   (typeof GeneratedNoteGenerationSource)[keyof typeof GeneratedNoteGenerationSource];
@@ -300,9 +318,9 @@ export interface GeneratedNote {
   sessionDate: string;
   sessionHours: number;
   generatedAt: string;
-  /** Whether the clinical body used OpenAI or the deterministic template */
+  /** Always openai on success; template is legacy for older clients only */
   generationSource: GeneratedNoteGenerationSource;
-  /** OpenAI model id when generationSource is openai; otherwise null */
+  /** OpenAI model id used for the clinical body (set on success) */
   generationModel: string | null;
 }
 
