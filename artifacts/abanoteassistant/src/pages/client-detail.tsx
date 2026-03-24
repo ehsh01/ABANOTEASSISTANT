@@ -83,7 +83,7 @@ export default function ClientDetail() {
     isError: programsError,
   } = useClientPrograms(id);
   const t = useT();
-  const [activeTab, setActiveTab] = useState("behaviors");
+  const [activeTab, setActiveTab] = useState("notes");
 
   const client = clientResp?.data;
   const programs = programsResp?.data ?? [];
@@ -230,14 +230,14 @@ export default function ClientDetail() {
 
           <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-4 mb-6">
-                <TabsTrigger value="behaviors" className="text-xs">Behaviors</TabsTrigger>
-                <TabsTrigger value="programs" className="text-xs">Programs</TabsTrigger>
+              <TabsList className="grid w-full grid-cols-3 mb-6">
+                <TabsTrigger value="notes" className="text-xs">Notes</TabsTrigger>
+                <TabsTrigger value="programs" className="text-xs">Replacement Programs</TabsTrigger>
                 <TabsTrigger value="interventions" className="text-xs">Interventions</TabsTrigger>
-                <TabsTrigger value="formal" className="text-xs">Formal List</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="behaviors" className="space-y-3">
+              <TabsContent value="notes" className="space-y-3">
+                <p className="text-sm text-[#877870] italic">Maladaptive behaviors documented for this client:</p>
                 {behaviors.length === 0 ? (
                   <p className="text-sm text-[#877870] italic">{t.clientDetail.noBehaviors}</p>
                 ) : (
@@ -279,50 +279,6 @@ export default function ClientDetail() {
                 )}
               </TabsContent>
 
-              <TabsContent value="formal" className="space-y-3">
-                {programsLoading && (
-                  <div className="flex items-center gap-2 text-sm text-[#877870]">
-                    <Loader2 className="w-4 h-4 animate-spin text-[#C27A8A]" />
-                    Loading programs…
-                  </div>
-                )}
-                {programsError && (
-                  <p className="text-sm text-[#877870] italic">
-                    Program list could not be loaded.
-                  </p>
-                )}
-                {!programsLoading && !programsError && programs.length === 0 && (
-                  <p className="text-sm text-[#877870] italic">No formal programs linked to this client.</p>
-                )}
-                {!programsLoading && !programsError && programs.length > 0 && (
-                  <div className="space-y-3">
-                    {programs.map((prog) => (
-                      <div key={prog.id} className="flex items-start gap-3">
-                        <div className="mt-0.5">
-                          {prog.type === "primary" ? (
-                            <Shield className="w-4 h-4 text-[#C27A8A]" />
-                          ) : (
-                            <Tag className="w-4 h-4 text-amber-500" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-[#2D2523]">{prog.name}</p>
-                          {prog.description && (
-                            <p className="text-xs text-[#877870] mt-0.5">{prog.description}</p>
-                          )}
-                          <span
-                            className={`text-xs font-medium mt-1 inline-block ${
-                              prog.type === "primary" ? "text-[#C27A8A]" : "text-amber-600"
-                            }`}
-                          >
-                            {prog.type === "primary" ? "Primary" : "Supplemental"}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
             </Tabs>
           </div>
         </motion.div>
