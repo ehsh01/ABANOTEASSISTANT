@@ -135,11 +135,12 @@ async function callOpenAI(messages: ChatCompletionMessageParam[], temperature: n
   }
   const model = defaultModel();
   const client = new OpenAI({ apiKey });
+  // GPT-5.x chat models return 400 if `max_tokens` is sent; they require `max_completion_tokens`.
   const completion = await client.chat.completions.create({
     model,
     messages,
     temperature,
-    max_tokens: 12000,
+    max_completion_tokens: 12000,
   });
   const text = completion.choices[0]?.message?.content?.trim();
   if (!text) {
