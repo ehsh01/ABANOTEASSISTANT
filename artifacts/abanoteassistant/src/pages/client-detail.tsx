@@ -1,6 +1,6 @@
 import { useParams, Link } from "wouter";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   ArrowLeft,
   User,
@@ -17,7 +17,7 @@ import {
   Upload,
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useClient, useClientPrograms } from "@/hooks/use-aba-api";
+import { useClient, useClientPrograms, useNotesList } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -82,11 +82,16 @@ export default function ClientDetail() {
     isLoading: programsLoading,
     isError: programsError,
   } = useClientPrograms(id);
+  const { data: notesResp, isLoading: notesLoading } = useNotesList();
   const t = useT();
   const [activeTab, setActiveTab] = useState("sessionNotes");
 
   const client = clientResp?.data;
   const programs = programsResp?.data ?? [];
+  const clientNotes = useMemo(() => {
+    if (!id || !notesResp?.data) return [];
+    return notesResp.data.filter((note) => note.clientId === id);
+  }, [id, notesResp?.data]);
 
   const p = client?.profile;
   const firstName = p?.firstName ?? client?.name?.split(" ")[0] ?? "";
@@ -238,7 +243,30 @@ export default function ClientDetail() {
               </TabsList>
 
               <TabsContent value="sessionNotes" className="space-y-3">
-                <p className="text-sm text-[#877870] italic">Session notes for this client will appear here.</p>
+                {notesLoading ? (
+                  <div className="flex items-center gap-2 text-sm text-[#877870]">
+                    <Loader2 className="w-4 h-4 animate-spin text-[#C27A8A]" />
+                    Loading notes…
+                  </div>
+                ) : clientNotes.length === 0 ? (
+                  <p className="text-sm text-[#877870] italic">No session notes created yet for this client.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {clientNotes.map((note) => (
+                      <Link key={note.noteId} href={`/notes/${note.noteId}`}>
+                        <div className="p-4 rounded-lg border border-[#E8D8D3] bg-[#FDFAF7] hover:bg-[#F5F1EF] transition-colors cursor-pointer">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <p className="font-medium text-[#2D2523] text-sm">Session on {new Date(note.sessionDate).toLocaleDateString()}</p>
+                              <p className="text-xs text-[#877870] mt-1">{note.sessionHours} hours • {note.status}</p>
+                            </div>
+                            <FileText className="w-4 h-4 text-[#C27A8A] flex-shrink-0 ml-3" />
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="behaviors" className="space-y-3">
