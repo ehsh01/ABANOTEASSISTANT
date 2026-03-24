@@ -231,7 +231,7 @@ export default function ClientDetail() {
           <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-3 mb-6">
-                <TabsTrigger value="notes" className="text-xs">Notes</TabsTrigger>
+                <TabsTrigger value="notes" className="text-xs">Maladaptive Behaviors</TabsTrigger>
                 <TabsTrigger value="programs" className="text-xs">Replacement Programs</TabsTrigger>
                 <TabsTrigger value="interventions" className="text-xs">Interventions</TabsTrigger>
               </TabsList>
