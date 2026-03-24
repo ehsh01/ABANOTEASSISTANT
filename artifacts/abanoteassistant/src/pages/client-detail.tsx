@@ -83,7 +83,7 @@ export default function ClientDetail() {
     isError: programsError,
   } = useClientPrograms(id);
   const t = useT();
-  const [activeTab, setActiveTab] = useState("notes");
+  const [activeTab, setActiveTab] = useState("sessionNotes");
 
   const client = clientResp?.data;
   const programs = programsResp?.data ?? [];
@@ -231,13 +231,16 @@ export default function ClientDetail() {
           <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
               <TabsList className="grid w-full grid-cols-3 mb-6">
-                <TabsTrigger value="notes" className="text-xs">Maladaptive Behaviors</TabsTrigger>
-                <TabsTrigger value="programs" className="text-xs">Replacement Programs</TabsTrigger>
-                <TabsTrigger value="interventions" className="text-xs">Interventions</TabsTrigger>
+                <TabsTrigger value="sessionNotes" className="text-xs">Notes</TabsTrigger>
+                <TabsTrigger value="behaviors" className="text-xs">Maladaptive Behaviors</TabsTrigger>
+                <TabsTrigger value="programsInterventions" className="text-xs">Programs & Interventions</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="notes" className="space-y-3">
-                <p className="text-sm text-[#877870] italic">Maladaptive behaviors documented for this client:</p>
+              <TabsContent value="sessionNotes" className="space-y-3">
+                <p className="text-sm text-[#877870] italic">Session notes for this client will appear here.</p>
+              </TabsContent>
+
+              <TabsContent value="behaviors" className="space-y-3">
                 {behaviors.length === 0 ? (
                   <p className="text-sm text-[#877870] italic">{t.clientDetail.noBehaviors}</p>
                 ) : (
@@ -251,32 +254,35 @@ export default function ClientDetail() {
                 )}
               </TabsContent>
 
-              <TabsContent value="programs" className="space-y-3">
-                {replacements.length === 0 ? (
-                  <p className="text-sm text-[#877870] italic">{t.clientDetail.noPrograms}</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {replacements.map((program) => (
-                      <span key={program} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-teal-50 text-teal-700 border-teal-200">
-                        {program}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="interventions" className="space-y-3">
-                {interventions.length === 0 ? (
-                  <p className="text-sm text-[#877870] italic">{t.clientDetail.noPrograms}</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {interventions.map((intervention) => (
-                      <span key={intervention} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-amber-50 text-amber-700 border-amber-200">
-                        {intervention}
-                      </span>
-                    ))}
-                  </div>
-                )}
+              <TabsContent value="programsInterventions" className="space-y-6">
+                <div>
+                  <h3 className="text-sm font-semibold text-[#2D2523] mb-3">Replacement Programs</h3>
+                  {replacements.length === 0 ? (
+                    <p className="text-sm text-[#877870] italic">{t.clientDetail.noPrograms}</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {replacements.map((program) => (
+                        <span key={program} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-teal-50 text-teal-700 border-teal-200">
+                          {program}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-[#2D2523] mb-3">Interventions</h3>
+                  {interventions.length === 0 ? (
+                    <p className="text-sm text-[#877870] italic">{t.clientDetail.noPrograms}</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {interventions.map((intervention) => (
+                        <span key={intervention} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-amber-50 text-amber-700 border-amber-200">
+                          {intervention}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </TabsContent>
 
             </Tabs>
