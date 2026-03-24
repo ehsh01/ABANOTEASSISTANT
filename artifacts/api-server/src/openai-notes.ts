@@ -128,6 +128,15 @@ export type GenerateClinicalBodyResult = {
   warnings: string[];
 };
 
+/**
+ * GPT-5.x chat models (e.g. gpt-5.3-chat-latest) reject:
+ * - `max_tokens` (use `max_completion_tokens`)
+ * - custom `temperature` (only default 1 is allowed — omit the parameter)
+ */
+function isGpt5FamilyNoteModel(modelId: string): boolean {
+  return modelId.toLowerCase().includes("gpt-5");
+}
+
 async function callOpenAI(messages: ChatCompletionMessageParam[], temperature: number): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
@@ -135,13 +144,20 @@ async function callOpenAI(messages: ChatCompletionMessageParam[], temperature: n
   }
   const model = defaultModel();
   const client = new OpenAI({ apiKey });
-  // GPT-5.x chat models return 400 if `max_tokens` is sent; they require `max_completion_tokens`.
-  const completion = await client.chat.completions.create({
-    model,
-    messages,
-    temperature,
-    max_completion_tokens: 12000,
-  });
+
+  const completion = isGpt5FamilyNoteModel(model)
+    ? await client.chat.completions.create({
+        model,
+        messages,
+        max_completion_tokens: 12000,
+      })
+    : await client.chat.completions.create({
+        model,
+        messages,
+        temperature,
+        max_tokens: 12000,
+      });
+
   const text = completion.choices[0]?.message?.content?.trim();
   if (!text) {
     throw new Error("OpenAI returned empty message content");
