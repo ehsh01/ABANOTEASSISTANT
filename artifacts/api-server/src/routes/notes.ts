@@ -324,9 +324,11 @@ router.post("/notes/generate", async (req, res) => {
     );
   }
 
+  const clientNameForNote = clientFirstName(client.name);
+
   const oaCtx: NoteGenerationContext = {
-    clientName: client.name,
-    firstName: clientFirstName(client.name),
+    clientName: clientNameForNote,
+    firstName: clientNameForNote,
     gender: profile?.gender,
     sessionHours: body.sessionHours,
     sessionDate: body.sessionDate,
@@ -369,7 +371,7 @@ router.post("/notes/generate", async (req, res) => {
   }
 
   const noteContent = assembleSessionNote(
-    client.name,
+    clientNameForNote,
     body.presentPeople,
     body.hasEnvironmentalChanges,
     clinicalBody,

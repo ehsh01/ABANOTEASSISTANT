@@ -13,7 +13,8 @@ These strings are **binding** for any code, prompt, or agent that assembles the 
 
 Every note must **begin** with exactly this structure (fill slots only; do not paraphrase the template):
 
-1. `The RBT met with [ClientFirstNameOrFullName] and [CaregiverList] at home to implement program targets.`
+1. `The RBT met with [ClientFirstName] and [CaregiverList] at home to implement program targets.`
+   - `[ClientFirstName]` = first name only (no last name in assembled notes or AI clinical body).
    - `[CaregiverList]` = people present from session intake (e.g. Mother, Father), joined with natural English (e.g. `Mother and Father`, or `Mother, Father, and Grandmother`). If none documented, use: `the caregiver`.
 2. Environmental status sentence (choose one; do not invent facts):
    - If **no** environmental changes this session: `There have been no environmental changes recently.`
@@ -36,12 +37,12 @@ No extra sentences **between** the body and this paragraph except where a valida
 ## 3. End-of-note sequence (exact order — after the closing paragraph)
 
 1. The closing paragraph above  
-2. **Performance sentence** (locked): `[ClientName]'s performance during the session was fair.`  
+2. **Performance sentence** (locked): `[ClientFirstName]'s performance during the session was fair.`  
    - Do **not** substitute *poor*, *below expectations*, *unsuccessful*, *limited*, *inadequate*, *minimal engagement*, or *regression* for this note product unless a future policy explicitly overrides this file.
 3. **Next session sentence**:  
-   - If a next session date is provided: `The next session is tentatively scheduled to take place at [ClientName]'s home on [DATE].`  
+   - If a next session date is provided: `The next session is tentatively scheduled to take place at [ClientFirstName]'s home on [DATE].`  
    - `[DATE]` = US-style display (e.g. `12/10/2025`).  
-   - If no date: `The next session is tentatively scheduled to take place at [ClientName]'s home; the date is to be determined.`
+   - If no date: `The next session is tentatively scheduled to take place at [ClientFirstName]'s home; the date is to be determined.`
 
 Do not append other sentences after these without product approval.
 
