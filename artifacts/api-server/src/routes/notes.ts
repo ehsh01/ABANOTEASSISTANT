@@ -30,6 +30,8 @@ import {
 } from "../openai-notes";
 import {
   approximateAgeYearsAtSession,
+  maladaptiveBehaviorsCatalogForRotation,
+  maladaptiveBehaviorsForSessionHours,
   validateCaregiverMentionRule,
   validateClinicalBodyCompliance,
   type NoteComplianceContext,
@@ -40,6 +42,7 @@ import {
   buildPerformanceSentence,
   LOCKED_CLOSING_PARAGRAPH,
 } from "../note-assembly";
+import { truncateAssessmentTextForNoteContext } from "../assessment-extract";
 
 const router: IRouter = Router();
 
@@ -275,16 +278,52 @@ router.post("/notes/generate", async (req, res) => {
   const profile = (client.profile as ClientProfileRow | null | undefined) ?? null;
   const clientAgeYears = approximateAgeYearsAtSession(profile?.dateOfBirth ?? null, body.sessionDate);
 
+  const rawAssessmentSnapshot = profile?.assessmentTextSnapshot?.trim() ?? "";
+  const { text: clientAssessmentTextExcerpt, truncated: assessmentExcerptForNoteTruncated } =
+    truncateAssessmentTextForNoteContext(profile?.assessmentTextSnapshot ?? "");
+
+  const profileBehaviorList = profile?.maladaptiveBehaviors ?? [];
+  const rotationResult = maladaptiveBehaviorsCatalogForRotation(
+    profileBehaviorList,
+    rawAssessmentSnapshot,
+  );
+  const behaviorCatalog = rotationResult.catalog;
+  const maladaptiveBehaviorForHour = maladaptiveBehaviorsForSessionHours(
+    behaviorCatalog,
+    body.sessionHours,
+  );
+
   const complianceCtxBase: NoteComplianceContext = {
     sessionHours: body.sessionHours,
     replacementProgramsInOrder: programNames,
-    maladaptiveBehaviors: profile?.maladaptiveBehaviors ?? [],
+    maladaptiveBehaviors: behaviorCatalog,
+    maladaptiveBehaviorForHour,
     interventions: profile?.interventions ?? [],
     clientAgeYears,
     presentPeople: body.presentPeople,
   };
 
   const warnings: string[] = [];
+  if (rotationResult.labelsAddedFromAssessmentText.length > 0) {
+    warnings.push(
+      `Maladaptive behaviors found verbatim in the stored assessment but not on the client profile were included in this note's rotation: ${rotationResult.labelsAddedFromAssessmentText.join(", ")}. Consider adding them to the client profile for consistency.`,
+    );
+  }
+  if (rotationResult.labelsOmittedNotFoundInAssessment.length > 0) {
+    warnings.push(
+      `Some client profile maladaptive behaviors do not appear verbatim in the stored assessment text, so they were omitted from this note's rotation: ${rotationResult.labelsOmittedNotFoundInAssessment.join(", ")}.`,
+    );
+  }
+  if (rawAssessmentSnapshot.length === 0) {
+    warnings.push(
+      "No assessment text excerpt is stored on this client. Upload the assessment PDF (POST /api/clients/:clientId/assessment/document) so the AI can ground narratives in the BIP/FBA. Until then, generation uses profile behavior and program lists only.",
+    );
+  } else if (assessmentExcerptForNoteTruncated) {
+    warnings.push(
+      "Assessment excerpt sent to the AI was truncated for prompt size; later pages of very long assessments may not influence this note.",
+    );
+  }
+
   const oaCtx: NoteGenerationContext = {
     clientName: client.name,
     firstName: clientFirstName(client.name),
@@ -294,12 +333,15 @@ router.post("/notes/generate", async (req, res) => {
     presentPeople: body.presentPeople,
     hasEnvironmentalChanges: body.hasEnvironmentalChanges,
     environmentalChanges: body.environmentalChanges ?? "",
-    maladaptiveBehaviors: profile?.maladaptiveBehaviors ?? [],
+    maladaptiveBehaviors: behaviorCatalog,
+    maladaptiveBehaviorForHour,
     interventions: profile?.interventions ?? [],
     replacementProgramsInOrder: programNames,
     requestNonce: randomUUID(),
     clientAgeYears,
     ageBand: client.ageBand,
+    clientAssessmentTextExcerpt,
+    assessmentReferenceFileName: profile?.assessmentFileName ?? null,
   };
 
   let clinicalBody: string;

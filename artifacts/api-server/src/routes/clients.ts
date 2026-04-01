@@ -17,6 +17,7 @@ import {
   clientProgramsTable,
   type ClientProfileRow,
 } from "@workspace/db/schema";
+import { clientRowToApiData } from "../client-profile-api";
 
 const router: IRouter = Router();
 
@@ -90,30 +91,6 @@ function profileFromNameFallback(name: string): ClientProfileRow {
   };
 }
 
-function rowToApiData(c: typeof clientsTable.$inferSelect) {
-  const profile = (c.profile as ClientProfileRow | null | undefined) ?? null;
-  return {
-    id: c.id,
-    companyId: c.companyId,
-    name: c.name,
-    ageBand: c.ageBand ?? undefined,
-    hasAssessment: c.hasAssessment,
-    assessmentStatus: c.assessmentStatus as AssessmentStatus,
-    profile: profile
-      ? {
-          firstName: profile.firstName,
-          lastName: profile.lastName,
-          dateOfBirth: profile.dateOfBirth,
-          gender: profile.gender,
-          maladaptiveBehaviors: profile.maladaptiveBehaviors,
-          replacementPrograms: profile.replacementPrograms,
-          interventions: profile.interventions,
-          assessmentFileName: profile.assessmentFileName ?? null,
-        }
-      : null,
-  };
-}
-
 router.get("/clients", async (req, res) => {
   const companyId = req.companyId;
   if (companyId === undefined) {
@@ -125,7 +102,7 @@ router.get("/clients", async (req, res) => {
 
   const data = ListClientsResponse.parse({
     success: true,
-    data: rows.map(rowToApiData),
+    data: rows.map(clientRowToApiData),
     error: null,
   });
 
@@ -180,7 +157,7 @@ router.post("/clients", async (req, res) => {
 
   const data = GetClientResponse.parse({
     success: true,
-    data: rowToApiData(row),
+    data: clientRowToApiData(row),
     error: null,
   });
   res.json(data);
@@ -270,7 +247,7 @@ router.get("/clients/:clientId", async (req, res) => {
 
   const data = GetClientResponse.parse({
     success: true,
-    data: rowToApiData(client),
+    data: clientRowToApiData(client),
     error: null,
   });
 
@@ -315,6 +292,7 @@ router.patch("/clients/:clientId", async (req, res) => {
   }
 
   const nextProfile: ClientProfileRow = {
+    ...base,
     firstName: body.firstName?.trim() ?? base.firstName,
     lastName: body.lastName?.trim() ?? base.lastName,
     dateOfBirth: body.dateOfBirth ?? base.dateOfBirth,
@@ -350,7 +328,7 @@ router.patch("/clients/:clientId", async (req, res) => {
 
   const data = GetClientResponse.parse({
     success: true,
-    data: rowToApiData(updated),
+    data: clientRowToApiData(updated),
     error: null,
   });
   res.json(data);

@@ -33,6 +33,24 @@ export type AssessmentExtractResult = {
 
 const MAX_PDF_CHARS = 120_000;
 
+/** Max characters stored in `profile.assessmentTextSnapshot` (aligns with extract truncation). */
+export const MAX_ASSESSMENT_TEXT_STORAGE_CHARS = MAX_PDF_CHARS;
+
+/** Max characters injected into the note-generation prompt (leave room for instructions + JSON). */
+export const MAX_ASSESSMENT_TEXT_NOTE_CONTEXT_CHARS = 28_000;
+
+export function truncateAssessmentTextForStorage(text: string): { text: string; truncated: boolean } {
+  const t = text.trim();
+  if (t.length <= MAX_ASSESSMENT_TEXT_STORAGE_CHARS) return { text: t, truncated: false };
+  return { text: t.slice(0, MAX_ASSESSMENT_TEXT_STORAGE_CHARS), truncated: true };
+}
+
+export function truncateAssessmentTextForNoteContext(text: string): { text: string; truncated: boolean } {
+  const t = text.trim();
+  if (t.length <= MAX_ASSESSMENT_TEXT_NOTE_CONTEXT_CHARS) return { text: t, truncated: false };
+  return { text: t.slice(0, MAX_ASSESSMENT_TEXT_NOTE_CONTEXT_CHARS), truncated: true };
+}
+
 function resolveExtractModel(): string {
   return (
     process.env["OPENAI_ASSESSMENT_EXTRACT_MODEL"]?.trim() ||

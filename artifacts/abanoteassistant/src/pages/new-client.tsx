@@ -28,6 +28,7 @@ import { Calendar } from "@/components/ui/calendar";
 import {
   createClient,
   updateClient,
+  uploadClientAssessmentDocument,
   type Client as ApiClient,
   type UpdateClientRequest,
 } from "@workspace/api-client-react";
@@ -989,8 +990,11 @@ function NewClientForm({
           payload.assessmentFileName = step2.file.name;
         }
         await updateClient(numericId, payload);
+        if (step2.file) {
+          await uploadClientAssessmentDocument(numericId, { file: step2.file });
+        }
       } else {
-        await createClient({
+        const created = await createClient({
           firstName: step1.firstName.trim(),
           lastName: step1.lastName.trim(),
           dateOfBirth: step1.dateOfBirth,
@@ -1002,6 +1006,9 @@ function NewClientForm({
           replacementPrograms: step3.replacementPrograms,
           interventions: step3.interventions,
         });
+        if (step2.file) {
+          await uploadClientAssessmentDocument(created.data.id, { file: step2.file });
+        }
       }
       await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       if (isEdit && !isSectionEdit) {

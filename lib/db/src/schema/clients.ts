@@ -21,6 +21,11 @@ export type ClientProfileRow = {
   replacementPrograms: string[];
   interventions: string[];
   assessmentFileName?: string;
+  /**
+   * Truncated plain text from the uploaded assessment PDF (server-side only).
+   * Used for AI note grounding; omitted from API responses.
+   */
+  assessmentTextSnapshot?: string;
 };
 
 export const clientsTable = abanote.table("clients", {

@@ -415,3 +415,8 @@ export interface SaveNoteResponse {
   data: SaveNoteResponseData;
   error?: string | null;
 }
+
+export type UploadClientAssessmentDocumentBody = {
+  /** Assessment PDF (field name must be `file`) */
+  file: Blob;
+};

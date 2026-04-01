@@ -41,6 +41,7 @@ import type {
   SaveNoteRequest,
   SaveNoteResponse,
   UpdateClientRequest,
+  UploadClientAssessmentDocumentBody,
   VerifyEmailRequest,
   VerifyEmailResponse,
 } from "./api.schemas";
@@ -1049,6 +1050,102 @@ export const useUpdateClient = <
   TContext
 > => {
   return useMutation(getUpdateClientMutationOptions(options));
+};
+
+/**
+ * Parses PDF text server-side, stores a truncated excerpt on the client profile (not returned in API JSON), and sets assessment status to ready. Call after creating or updating a client when the RBT selects an assessment file.
+
+ * @summary Upload assessment PDF and store text for AI note grounding
+ */
+export const getUploadClientAssessmentDocumentUrl = (clientId: number) => {
+  return `/api/clients/${clientId}/assessment/document`;
+};
+
+export const uploadClientAssessmentDocument = async (
+  clientId: number,
+  uploadClientAssessmentDocumentBody: UploadClientAssessmentDocumentBody,
+  options?: RequestInit,
+): Promise<ClientDetailResponse> => {
+  const formData = new FormData();
+  formData.append(`file`, uploadClientAssessmentDocumentBody.file);
+
+  return customFetch<ClientDetailResponse>(
+    getUploadClientAssessmentDocumentUrl(clientId),
+    {
+      ...options,
+      method: "POST",
+      body: formData,
+    },
+  );
+};
+
+export const getUploadClientAssessmentDocumentMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadClientAssessmentDocument>>,
+    TError,
+    { clientId: number; data: BodyType<UploadClientAssessmentDocumentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof uploadClientAssessmentDocument>>,
+  TError,
+  { clientId: number; data: BodyType<UploadClientAssessmentDocumentBody> },
+  TContext
+> => {
+  const mutationKey = ["uploadClientAssessmentDocument"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof uploadClientAssessmentDocument>>,
+    { clientId: number; data: BodyType<UploadClientAssessmentDocumentBody> }
+  > = (props) => {
+    const { clientId, data } = props ?? {};
+
+    return uploadClientAssessmentDocument(clientId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UploadClientAssessmentDocumentMutationResult = NonNullable<
+  Awaited<ReturnType<typeof uploadClientAssessmentDocument>>
+>;
+export type UploadClientAssessmentDocumentMutationBody =
+  BodyType<UploadClientAssessmentDocumentBody>;
+export type UploadClientAssessmentDocumentMutationError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary Upload assessment PDF and store text for AI note grounding
+ */
+export const useUploadClientAssessmentDocument = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof uploadClientAssessmentDocument>>,
+    TError,
+    { clientId: number; data: BodyType<UploadClientAssessmentDocumentBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof uploadClientAssessmentDocument>>,
+  TError,
+  { clientId: number; data: BodyType<UploadClientAssessmentDocumentBody> },
+  TContext
+> => {
+  return useMutation(getUploadClientAssessmentDocumentMutationOptions(options));
 };
 
 /**

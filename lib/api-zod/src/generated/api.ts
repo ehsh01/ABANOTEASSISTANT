@@ -363,6 +363,46 @@ export const UpdateClientResponse = zod.object({
 });
 
 /**
+ * Parses PDF text server-side, stores a truncated excerpt on the client profile (not returned in API JSON), and sets assessment status to ready. Call after creating or updating a client when the RBT selects an assessment file.
+
+ * @summary Upload assessment PDF and store text for AI note grounding
+ */
+export const UploadClientAssessmentDocumentParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const UploadClientAssessmentDocumentBody = zod.object({
+  file: zod
+    .unknown()
+    .describe("Assessment PDF multipart field file (validated at HTTP layer)"),
+});
+
+export const UploadClientAssessmentDocumentResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    id: zod.number(),
+    companyId: zod.number(),
+    name: zod.string(),
+    ageBand: zod.string().optional(),
+    hasAssessment: zod.boolean(),
+    assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    profile: zod
+      .object({
+        firstName: zod.string(),
+        lastName: zod.string(),
+        dateOfBirth: zod.string(),
+        gender: zod.string(),
+        maladaptiveBehaviors: zod.array(zod.string()),
+        replacementPrograms: zod.array(zod.string()),
+        interventions: zod.array(zod.string()),
+        assessmentFileName: zod.string().nullish(),
+      })
+      .nullish(),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
  * @summary List replacement programs for a client
  */
 export const ListClientProgramsParams = zod.object({

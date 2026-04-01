@@ -8,6 +8,11 @@ export type NoteComplianceContext = {
   replacementProgramsInOrder: string[];
   /** BIP maladaptive behavior names (exact strings) — used for one-behavior-per-paragraph checks */
   maladaptiveBehaviors: string[];
+  /**
+   * Exact catalog label assigned to each hour (length = sessionHours), cycling the full client list in order.
+   * Used to enforce rotation across all listed behaviors over multi-hour sessions.
+   */
+  maladaptiveBehaviorForHour: string[];
   /** BIP intervention names (exact strings) — used for physical-aggression / Response Block ordering */
   interventions: string[];
   /** Approximate age in years from DOB + session date; null if unknown */
@@ -102,6 +107,106 @@ const CAREGIVER_LEXICON =
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Canonical rotation order for common BIP maladaptive behavior names (exact spelling for substring match in assessment text). */
+export const STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER: readonly string[] = [
+  "Physical Aggression",
+  "Task Refusal",
+  "Property Destruction",
+  "SIB",
+  "Inappropriate Social Behavior",
+  "Bolting",
+  "Disruption",
+] as const;
+
+function dedupeMaladaptiveBehaviorOrder(catalog: string[]): string[] {
+  const seen = new Set<string>();
+  const ordered: string[] = [];
+  for (const raw of catalog) {
+    const s = raw.trim();
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    ordered.push(s);
+  }
+  return ordered;
+}
+
+export type MaladaptiveBehaviorsCatalogForRotationResult = {
+  /** Labels used for maladaptiveBehaviorForHour + compliance (exact strings for the model). */
+  catalog: string[];
+  /** Standard-order names found in assessment text but not on the client profile. */
+  labelsAddedFromAssessmentText: string[];
+  /** Profile/catalog entries omitted because their exact text does not appear in the stored assessment. */
+  labelsOmittedNotFoundInAssessment: string[];
+};
+
+/**
+ * Build the maladaptive-behavior rotation list:
+ * - Order profile entries using STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER when names match exactly.
+ * - Append other profile labels (custom BIP wording) after that block.
+ * - When assessment text is non-empty: add standard names that appear verbatim in the text but were missing from the profile.
+ * - When assessment text is non-empty: keep only (a) standard catalog entries that appear verbatim in the assessment and
+ *   (b) profile-only labels that appear verbatim in the assessment. Custom profile labels not found verbatim in the text are
+ *   omitted from rotation (with a warning). If nothing would remain, fall back to the full merged list (e.g. OCR/wording mismatch).
+ */
+export function maladaptiveBehaviorsCatalogForRotation(
+  profileBehaviors: string[],
+  assessmentTextFull: string,
+): MaladaptiveBehaviorsCatalogForRotationResult {
+  const profile = dedupeMaladaptiveBehaviorOrder(profileBehaviors);
+  const assessment = assessmentTextFull.trim();
+
+  const head = STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER.filter((s) => profile.some((p) => p === s));
+  const profileRemainder = profile.filter((p) => !head.includes(p));
+
+  const labelsAddedFromAssessmentText: string[] = [];
+  if (assessment.length > 0) {
+    for (const s of STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER) {
+      if (assessment.includes(s) && !profile.some((p) => p === s)) {
+        labelsAddedFromAssessmentText.push(s);
+      }
+    }
+  }
+
+  const standardBlock = dedupeMaladaptiveBehaviorOrder([...head, ...labelsAddedFromAssessmentText]);
+
+  const fullMerged = dedupeMaladaptiveBehaviorOrder([
+    ...standardBlock,
+    ...profileRemainder,
+  ]);
+
+  let catalog = fullMerged;
+  let labelsOmittedNotFoundInAssessment: string[] = [];
+
+  if (assessment.length > 0 && fullMerged.length > 0) {
+    const standardOnAssessment = standardBlock.filter((c) => assessment.includes(c));
+    const customOnAssessment = profileRemainder.filter((c) => assessment.includes(c));
+    const narrowed = dedupeMaladaptiveBehaviorOrder([...standardOnAssessment, ...customOnAssessment]);
+    if (narrowed.length > 0) {
+      catalog = narrowed;
+      labelsOmittedNotFoundInAssessment = fullMerged.filter((c) => !narrowed.includes(c));
+    }
+  }
+
+  return {
+    catalog,
+    labelsAddedFromAssessmentText,
+    labelsOmittedNotFoundInAssessment,
+  };
+}
+
+/**
+ * One assigned behavior label per service hour, cycling `catalog` in order (deduped, first-seen order preserved).
+ * Ensures multi-hour notes rotate through the full BIP list before repeating (e.g. all seven behaviors across seven hours).
+ */
+export function maladaptiveBehaviorsForSessionHours(catalog: string[], sessionHours: number): string[] {
+  const ordered = dedupeMaladaptiveBehaviorOrder(catalog);
+  if (sessionHours <= 0) return [];
+  if (ordered.length === 0) {
+    return Array.from({ length: sessionHours }, () => "");
+  }
+  return Array.from({ length: sessionHours }, (_, h) => ordered[h % ordered.length]!);
 }
 
 /** Catalog label denotes physical aggression (person-directed); match is on the catalog string, not free text. */
@@ -248,6 +353,8 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     }
   }
 
+  const assignedPerHour = ctx.maladaptiveBehaviorForHour ?? [];
+
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i]!;
     if (behaviorCatalog.length > 0) {
@@ -258,6 +365,13 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         );
         break;
       }
+    }
+    const assigned = assignedPerHour[i]?.trim();
+    if (assigned && !p.includes(assigned)) {
+      issues.push(
+        `Maladaptive behavior rotation: paragraph ${i + 1} must cite the assigned catalog label "${assigned}" (maladaptiveBehaviorForHour[${i}]) verbatim in the manifested-behavior portion.`,
+      );
+      break;
     }
     if (tantrumWithoutTopography(p)) {
       issues.push(

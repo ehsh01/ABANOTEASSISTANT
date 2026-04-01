@@ -380,6 +380,61 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /clients/{clientId}/assessment/document:
+    post:
+      operationId: uploadClientAssessmentDocument
+      tags: [clients]
+      summary: Upload assessment PDF and store text for AI note grounding
+      description: >
+        Parses PDF text server-side, stores a truncated excerpt on the client profile (not returned in API JSON),
+        and sets assessment status to ready. Call after creating or updating a client when the RBT selects an assessment file.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Assessment PDF (field name must be `file`)
+              required:
+                - file
+      responses:
+        "200":
+          description: Updated client (profile in response omits stored assessment text)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientDetailResponse"
+        "400":
+          description: Invalid client id, missing file, or PDF parse error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /clients/{clientId}/programs:
     get:
       operationId: listClientPrograms

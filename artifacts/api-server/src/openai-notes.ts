@@ -24,6 +24,10 @@ export type NoteGenerationContext = {
   hasEnvironmentalChanges: boolean;
   environmentalChanges: string;
   maladaptiveBehaviors: string[];
+  /**
+   * Exact catalog behavior for each hour (length = sessionHours), server-computed by cycling `maladaptiveBehaviors` in order.
+   */
+  maladaptiveBehaviorForHour: string[];
   interventions: string[];
   /** Replacement program names in wizard order (one focal program per hour when possible) */
   replacementProgramsInOrder: string[];
@@ -33,6 +37,12 @@ export type NoteGenerationContext = {
   clientAgeYears: number | null;
   /** Optional client.age_band from DB for extra prompt context */
   ageBand: string | null | undefined;
+  /**
+   * Plain-text excerpt from the client's assessment PDF (truncated). Empty if not stored on the client record.
+   */
+  clientAssessmentTextExcerpt: string;
+  /** Original assessment filename when known (reference only). */
+  assessmentReferenceFileName: string | null;
 };
 
 const SYSTEM_PROMPT = `You write ABA session note clinical narratives for RBT documentation.
@@ -40,6 +50,13 @@ const SYSTEM_PROMPT = `You write ABA session note clinical narratives for RBT do
 You will receive JSON "session context". Output ONLY the clinical body that goes BETWEEN:
 (1) the fixed opening two sentences that the system adds separately, and
 (2) the fixed closing reinforcer paragraph, performance line, and next-session line that the system adds separately.
+
+CLIENT ASSESSMENT EXCERPT (BIP/FBA text — when provided in JSON):
+- The JSON may include \`clientAssessmentTextExcerpt\`: plain text from the client's uploaded assessment PDF (truncated for this request). \`assessmentReferenceFileName\` is the file name only (reference).
+- When \`clientAssessmentTextExcerpt\` is non-empty: treat it as the authoritative clinical document for **definitions, topography, and contexts** of target/problem behaviors described there. Align observable descriptions and episode context with that document. Do **not** contradict explicit behavior definitions or operational descriptions stated in the excerpt.
+- **Catalog strings still win for labels:** maladaptive behavior names, intervention names, and replacement program names must match the JSON lists **exactly** (exact spelling/capitalization). If the excerpt uses different wording for a behavior than the JSON catalog label, use the **JSON label** when naming the behavior and keep observable detail consistent with the excerpt's meaning.
+- Do not paste long quotes from the excerpt; paraphrase into observable session narrative.
+- When \`clientAssessmentTextExcerpt\` is empty: rely on the JSON behavior, intervention, and replacement program lists only; do not invent assessment-level detail.
 
 COMPLIANCE (mandatory):
 OBSERVATIONAL-ONLY — NO INTERPRETATION:
@@ -88,7 +105,13 @@ ONE PROGRAM PER ABC (per hour paragraph):
 
 ONE MALADAPTIVE BEHAVIOR PER ABC (per hour paragraph):
 - Each paragraph must cite exactly ONE behavior name from maladaptiveBehaviors for the manifested/challenging-behavior portion (one catalog label per hour).
-- Do not combine two different maladaptive behavior names in the same hour paragraph. If the session involved multiple behavior types, distribute them across different hours.
+- Do not combine two different maladaptive behavior names in the same hour paragraph.
+
+MALADAPTIVE BEHAVIOR ROTATION (mandatory — use JSON \`maladaptiveBehaviorForHour\`):
+- The JSON \`maladaptiveBehaviors\` array is the **rotation catalog for this note**: labels drawn from the client profile and the stored assessment text. When an assessment excerpt exists on the server, it is restricted to maladaptive behavior names whose **exact** wording appears verbatim in that assessment (plus any standard BIP names found in the assessment but missing from the profile). Use **only** those strings for behavior names—do not cite profile-only labels that are not listed in \`maladaptiveBehaviors\`.
+- The JSON includes \`maladaptiveBehaviorForHour\`: an array with **exactly** \`sessionHours\` strings. Index 0 is the first paragraph (first hour), index 1 the second paragraph, and so on.
+- For hour index \`h\`, that paragraph's manifested behavior MUST be **exactly** the string \`maladaptiveBehaviorForHour[h]\` (verbatim character-for-character). That value is always one of the entries in \`maladaptiveBehaviors\`; the server cycles that list in order so **every** entry appears across a long enough session before any repeats.
+- Do **not** substitute a different catalog label for a given hour than the one assigned for that index.
 
 STRUCTURE (unchanged):
 - Do NOT write the opening ("The RBT met with...") or any closing boilerplate about reinforcers/BIP/performance/next session.
@@ -109,6 +132,7 @@ function toComplianceCtx(ctx: NoteGenerationContext): NoteComplianceContext {
     sessionHours: ctx.sessionHours,
     replacementProgramsInOrder: ctx.replacementProgramsInOrder,
     maladaptiveBehaviors: ctx.maladaptiveBehaviors,
+    maladaptiveBehaviorForHour: ctx.maladaptiveBehaviorForHour,
     interventions: ctx.interventions,
     clientAgeYears: ctx.clientAgeYears,
     presentPeople: ctx.presentPeople,
@@ -202,7 +226,7 @@ Output ONLY the corrected clinical body.`;
 
   const repairSystem = `${SYSTEM_PROMPT}
 
-REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; one replacement program and exactly one maladaptive behavior catalog label per paragraph; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech to the client; when a paragraph cites physical aggression and JSON interventions include Response Block, describe Response Block immediately first after "To address this behavior," then other interventions.`;
+REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON and with any non-empty \`clientAssessmentTextExcerpt\` in the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; one replacement program and exactly one maladaptive behavior catalog label per paragraph; **each paragraph h must use maladaptiveBehaviorForHour[h] verbatim** for the manifested behavior; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech to the client; when a paragraph cites physical aggression and JSON interventions include Response Block, describe Response Block immediately first after "To address this behavior," then other interventions.`;
 
   return callOpenAI(
     [
