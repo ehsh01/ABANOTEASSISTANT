@@ -1083,13 +1083,17 @@ function Step8Review() {
 
 export default function Wizard() {
   const [, setLocation] = useLocation();
-  const { step, setStep, data, setGeneratedNote } = useWizardStore();
+  const { step, setStep, data, setGeneratedNote, reset } = useWizardStore();
   const generateMutation = useGenerateSessionNote();
   const t = useT();
   const [generateError, setGenerateError] = useState<string | null>(null);
 
   const totalSteps = 8;
   const isGenerating = generateMutation.isPending;
+
+  useEffect(() => {
+    reset();
+  }, []);
 
   useEffect(() => {
     if (step !== totalSteps) {
