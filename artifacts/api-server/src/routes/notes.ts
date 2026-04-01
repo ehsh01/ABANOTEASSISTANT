@@ -32,6 +32,7 @@ import {
   approximateAgeYearsAtSession,
   maladaptiveBehaviorsCatalogForRotation,
   maladaptiveBehaviorsForSessionHours,
+  replacementProgramsForSessionHours,
   validateCaregiverMentionRule,
   validateClinicalBodyCompliance,
   type NoteComplianceContext,
@@ -292,10 +293,12 @@ router.post("/notes/generate", async (req, res) => {
     behaviorCatalog,
     body.sessionHours,
   );
+  const replacementProgramForHour = replacementProgramsForSessionHours(programNames, body.sessionHours);
 
   const complianceCtxBase: NoteComplianceContext = {
     sessionHours: body.sessionHours,
     replacementProgramsInOrder: programNames,
+    replacementProgramForHour,
     maladaptiveBehaviors: behaviorCatalog,
     maladaptiveBehaviorForHour,
     interventions: profile?.interventions ?? [],
@@ -339,6 +342,7 @@ router.post("/notes/generate", async (req, res) => {
     maladaptiveBehaviorForHour,
     interventions: profile?.interventions ?? [],
     replacementProgramsInOrder: programNames,
+    replacementProgramForHour,
     requestNonce: randomUUID(),
     clientAgeYears,
     ageBand: client.ageBand,

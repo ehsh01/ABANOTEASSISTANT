@@ -6,6 +6,11 @@
 export type NoteComplianceContext = {
   sessionHours: number;
   replacementProgramsInOrder: string[];
+  /**
+   * Exact replacement program name for each hour (length = sessionHours), cycling `replacementProgramsInOrder`.
+   * Clinical body must include this substring verbatim in paragraph h when non-empty.
+   */
+  replacementProgramForHour: string[];
   /** BIP maladaptive behavior names (exact strings) — used for one-behavior-per-paragraph checks */
   maladaptiveBehaviors: string[];
   /**
@@ -69,8 +74,11 @@ function ageInappropriatePatterns(ageYears: number): RegExp[] {
   return [];
 }
 
-/** How many distinct catalog behavior names appear in a paragraph (longest names matched first to reduce substring double-counts). */
-export function countCatalogBehaviorsInParagraph(paragraph: string, catalog: string[]): number {
+/**
+ * How many distinct catalog strings appear as substrings in a paragraph (longest matched first to reduce nested double-counts).
+ * Use for behaviors, replacement programs, or any exact-match catalog list.
+ */
+export function countDistinctCatalogLabelsInParagraph(paragraph: string, catalog: string[]): number {
   const names = [...new Set(catalog.map((s) => s.trim()).filter((s) => s.length > 0))].sort(
     (a, b) => b.length - a.length,
   );
@@ -84,6 +92,11 @@ export function countCatalogBehaviorsInParagraph(paragraph: string, catalog: str
     }
   }
   return count;
+}
+
+/** How many distinct catalog behavior names appear in a paragraph. */
+export function countCatalogBehaviorsInParagraph(paragraph: string, catalog: string[]): number {
+  return countDistinctCatalogLabelsInParagraph(paragraph, catalog);
 }
 
 const TODDLER_ATTRIBUTED_SPEECH: RegExp[] = [
@@ -207,6 +220,18 @@ export function maladaptiveBehaviorsForSessionHours(catalog: string[], sessionHo
     return Array.from({ length: sessionHours }, () => "");
   }
   return Array.from({ length: sessionHours }, (_, h) => ordered[h % ordered.length]!);
+}
+
+/**
+ * One assigned replacement program per service hour, cycling the wizard-ordered list.
+ */
+export function replacementProgramsForSessionHours(programNames: string[], sessionHours: number): string[] {
+  const names = programNames.map((s) => s.trim()).filter((s) => s.length > 0);
+  if (sessionHours <= 0) return [];
+  if (names.length === 0) {
+    return Array.from({ length: sessionHours }, () => "");
+  }
+  return Array.from({ length: sessionHours }, (_, h) => names[h % names.length]!);
 }
 
 /** Catalog label denotes physical aggression (person-directed); match is on the catalog string, not free text. */
@@ -335,21 +360,25 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   }
 
   const programs = ctx.replacementProgramsInOrder.filter((p) => p.trim().length > 0);
+  const replacementPerHour = ctx.replacementProgramForHour ?? [];
   const behaviorCatalog = ctx.maladaptiveBehaviors ?? [];
 
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i]!;
-    let hitCount = 0;
-    for (const prog of programs) {
-      if (p.includes(prog)) {
-        hitCount++;
-      }
+    if (programs.length === 0) {
+      continue;
     }
-    if (hitCount > 1) {
+    const progCount = countDistinctCatalogLabelsInParagraph(p, programs);
+    if (progCount > 1) {
       issues.push(
-        `One program per ABC: paragraph ${i + 1} references more than one replacement program name; keep exactly one program in that hour's narrative.`,
+        `One program per ABC: paragraph ${i + 1} references more than one distinct replacement program name from the catalog; that hour must name only the assigned program and must not describe or cite a second program from the list.`,
       );
-      break;
+    }
+    const assignedRp = replacementPerHour[i]?.trim() ?? "";
+    if (assignedRp.length > 0 && !p.includes(assignedRp)) {
+      issues.push(
+        `Replacement program for hour ${i + 1}: include the assigned program exactly as given (character-for-character, including every "(" and ")"): "${assignedRp}".`,
+      );
     }
   }
 

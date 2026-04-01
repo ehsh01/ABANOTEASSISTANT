@@ -32,6 +32,11 @@ export type NoteGenerationContext = {
   interventions: string[];
   /** Replacement program names in wizard order (one focal program per hour when possible) */
   replacementProgramsInOrder: string[];
+  /**
+   * Exact replacement program string for each hour (length = sessionHours), cycling `replacementProgramsInOrder`.
+   * The clinical body must use only this name for replacement-program content in paragraph h (verbatim, all punctuation).
+   */
+  replacementProgramForHour: string[];
   /** Unique per request so the model does not replay identical scenarios across regenerations */
   requestNonce: string;
   /** Approximate age at session (from profile DOB); null if unknown */
@@ -100,9 +105,10 @@ INITIATION OF INTERACTION:
 CAREGIVER / PRESENT PEOPLE:
 - Do NOT mention caregivers, parents, guardians, or any name from presentPeople in the clinical body. Presence is already stated in the system's fixed opening only.
 
-ONE PROGRAM PER ABC (per hour paragraph):
-- Each paragraph (one service hour) must reference exactly ONE replacement program name from replacementProgramsInOrder for that hour (index h uses programs[h % length] when fewer programs than hours).
-- Do not combine two different program names in the same hour paragraph.
+REPLACEMENT PROGRAM PER HOUR (mandatory — use JSON \`replacementProgramForHour\`):
+- The JSON includes \`replacementProgramForHour\`: an array with **exactly** \`sessionHours\` strings. For hour index \`h\`, paragraph \`h\` must include **only** that hour's assigned program string as the replacement-program vocabulary: **exactly** the characters in \`replacementProgramForHour[h]\` (verbatim), including **all** opening and closing parentheses, hyphens, and punctuation—**never** drop a "(" or ")" or alter the spelling.
+- In that hour's paragraph, **do not** name, paraphrase, or cite **any other** string from \`replacementProgramsInOrder\` except the single assigned \`replacementProgramForHour[h]\`. Do not describe a second replacement program in the same hour (not in the antecedent, not in the consequence, not in the replacement-program sentence).
+- Put the verbatim assigned program inside the straight double-quoted span in the replacement-program sentence (see STRUCTURE). Per documentation workflow, you may place replacement-program teaching in the antecedent **or** in that closing sentence—but **not both** with program names, and never two different catalog program names in the same paragraph.
 
 ONE MALADAPTIVE BEHAVIOR PER ABC (per hour paragraph):
 - Each paragraph must cite exactly ONE behavior name from maladaptiveBehaviors for the manifested/challenging-behavior portion (one catalog label per hour).
@@ -118,8 +124,8 @@ STRUCTURE (unchanged):
 - Do NOT write the opening ("The RBT met with...") or any closing boilerplate about reinforcers/BIP/performance/next session.
 - Do NOT use markdown headings, bullets, or numbered lists. Prose paragraphs only.
 - Produce exactly sessionHours paragraphs (one per hour of service). Separate paragraphs with a single blank line (\\n\\n).
-- Each paragraph is one continuous ABC-style narrative: rich antecedent (specific setting, materials, demand, timing) → observable client response → "During this activity, [ClientFirstName] manifested [EXACT behavior name from JSON lists]" with concrete topography → "To address this behavior" or "To address these behaviors" with "the RBT implemented" or "the RBT applied" plus EXACT intervention name from JSON and a short, specific description of how it was used in that moment → "Following this intervention..." with observable reduction/re-engagement → exactly one replacement-program sentence using EXACT program name for that hour.
-- For replacement program sentences: use "Additionally, the RBT implemented the replacement program \\"...\\" by ..." for hour indices 0,2,4... and "The RBT implemented the replacement program \\"...\\" by ..." for hour indices 1,3,5... (0-based within this body).
+- Each paragraph is one continuous ABC-style narrative: rich antecedent (specific setting, materials, demand, timing) → observable client response → "During this activity, [ClientFirstName] manifested [EXACT behavior name from JSON lists]" with concrete topography → "To address this behavior" or "To address these behaviors" with "the RBT implemented" or "the RBT applied" plus EXACT intervention name from JSON and a short, specific description of how it was used in that moment → "Following this intervention..." with observable reduction/re-engagement → exactly one replacement-program sentence using **only** the assigned string \`replacementProgramForHour[h]\` inside the quotes (verbatim, full punctuation including paired parentheses).
+- For replacement program sentences: use "Additionally, the RBT implemented the replacement program \\"...\\" by ..." for hour indices 0,2,4... and "The RBT implemented the replacement program \\"...\\" by ..." for hour indices 1,3,5... (0-based within this body). The \\"...\\" must be **character-identical** to \`replacementProgramForHour[h]\` for that paragraph—not a shortened form, not missing a parenthesis.
 - Use ONLY behavior names, intervention names, and replacement program strings exactly as provided. Do not invent new diagnoses, behaviors, interventions, or program names.
 - Pronouns: use he/him/his if gender indicates male, she/her/hers if female, they/them/their otherwise.
 - If hasEnvironmentalChanges is true and environmentalChanges is non-empty, your FIRST paragraph may begin with one short bridging sentence that references those environmental factors, then continue into the first hour's ABC narrative (do not repeat the system's fixed environmental opening sentence).
@@ -132,6 +138,7 @@ function toComplianceCtx(ctx: NoteGenerationContext): NoteComplianceContext {
   return {
     sessionHours: ctx.sessionHours,
     replacementProgramsInOrder: ctx.replacementProgramsInOrder,
+    replacementProgramForHour: ctx.replacementProgramForHour,
     maladaptiveBehaviors: ctx.maladaptiveBehaviors,
     maladaptiveBehaviorForHour: ctx.maladaptiveBehaviorForHour,
     interventions: ctx.interventions,
@@ -227,7 +234,7 @@ Output ONLY the corrected clinical body.`;
 
   const repairSystem = `${SYSTEM_PROMPT}
 
-REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON and with any non-empty \`clientAssessmentTextExcerpt\` in the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; one replacement program and exactly one maladaptive behavior catalog label per paragraph; **each paragraph h must use maladaptiveBehaviorForHour[h] verbatim** for the manifested behavior; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech to the client; when a paragraph cites physical aggression and JSON interventions include Response Block, describe Response Block immediately first after "To address this behavior," then other interventions; **use only the client's first name** from JSON in all references—never a last name.`;
+REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON and with any non-empty \`clientAssessmentTextExcerpt\` in the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; **each paragraph h must use replacementProgramForHour[h] verbatim (full string, including every parenthesis) in the replacement-program quote and must not name any other entry from replacementProgramsInOrder in that paragraph**; exactly one maladaptive behavior catalog label per paragraph; **each paragraph h must use maladaptiveBehaviorForHour[h] verbatim** for the manifested behavior; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech to the client; when a paragraph cites physical aggression and JSON interventions include Response Block, describe Response Block immediately first after "To address this behavior," then other interventions; **use only the client's first name** from JSON in all references—never a last name.`;
 
   return callOpenAI(
     [
