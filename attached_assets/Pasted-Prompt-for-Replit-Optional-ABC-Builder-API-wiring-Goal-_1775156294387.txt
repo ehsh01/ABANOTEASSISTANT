@@ -1,0 +1,36 @@
+Prompt for Replit — Optional ABC Builder + API wiring
+Goal: On the new note / generate note screen, add an optional “ABC Section” that feeds the backend. Do not change overall layout or styling patterns unless needed; match existing forms.
+
+Backend contract (already implemented — do not redefine)
+Base URL: Same as the rest of the app (VITE_API_BASE_URL or same-origin /api), with Bearer auth on all calls below.
+
+Activity/antecedent catalog (dropdown options):
+GET /api/notes/abc-builder/activity-antecedents
+Response: { success, data: { activities: string[] } }.
+Use data.activities exactly as dropdown labels/values (character-for-character). Do not trim or “fix” wording.
+
+Generate note (existing):
+POST /api/notes/generate
+Body already includes clientId, sessionHours, sessionDate, presentPeople, hasEnvironmentalChanges, environmentalChanges?, selectedReplacements, nextSessionDate?.
+Add optional: abcHints?: { activityAntecedent?: string | null; maladaptiveBehavior?: string | null }[]
+
+If using the monorepo client: import from @workspace/api-client-react — e.g. listAbcBuilderActivityAntecedents / useListAbcBuilderActivityAntecedents, and generateNote / useGenerateNote. Types: GenerateNoteRequest (includes abcHints).
+
+UI requirements
+Optional section: “ABC Section” / “ABC Builder” — not required to submit; omit abcHints or send [] when the user never fills a complete row.
+Default: Show 3 ABC rows when sessionHours >= 3; if sessionHours is 1 or 2, default to sessionHours rows. Each row:
+Activity/Antecedent: <select> populated from the GET catalog above.
+Maladaptive behavior: <select> populated from the selected client’s profile maladaptiveBehaviors (exact strings from GET /api/clients/:id or whatever you already use to load the client — same list the BIP uses).
+Add ABC: Button adds one row. Cap row count at sessionHours (backend rejects abcHints.length > sessionHours). Disable “Add” or show a short message when at the cap. Reasonable max is fine (e.g. 8) because sessionHours max is 8.
+Per-row rules (must match API):
+A row is used only if both Activity and Maladaptive behavior have a selected value.
+If both are empty, that row is ignored (do not send junk; either omit the entry or send both null).
+Never send one field filled and the other empty — the API returns 400 with messages like provide both … or leave both empty.
+Index = hour: abcHints[0] is hour 1, abcHints[1] hour 2, etc. Array length must be ≤ sessionHours. If you have 3 rows UI but only 2 hours, only send 2 entries (or pad with empty rows only if both fields are null for extra slots — simplest is to send an array whose length equals the number of hour slots you are describing, ≤ sessionHours).
+When nothing is filled: Omit abcHints entirely (or []) so generation behaves exactly as before (full AI ABCs).
+Copy for RBTs (optional helper text)
+Explains that filled rows lock that hour’s activity text and maladaptive label for the AI; consequence/interventions still follow server rules.
+Acceptance checks
+Generate without touching ABC → same as today.
+Generate with one complete row for hour 0 → note still generates; server may return warnings mentioning ABC Builder.
+Invalid partial row → 400; show messages[] from error response.

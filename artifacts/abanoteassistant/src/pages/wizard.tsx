@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon, UserPlus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon, UserPlus, Plus, Trash2 } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
-import type { Client as ApiClient, Program, GenerateNoteRequest } from "@workspace/api-client-react";
+import type { Client as ApiClient, Program, GenerateNoteRequest, AbcHintEntry } from "@workspace/api-client-react";
 import { ApiError } from "@workspace/api-client-react";
 import { useWizardStore, type WizardData } from "@/store/wizard-store";
-import { useClients, useClientPrograms, useGenerateSessionNote } from "@/hooks/use-aba-api";
+import { useClients, useClientPrograms, useGenerateSessionNote, useAbcActivityAntecedents, useClient } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
 import { cn, formatSessionDate } from "@/lib/utils";
 import {
@@ -65,6 +65,19 @@ function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | null {
   const next = data.nextSessionDate?.trim();
   if (next) {
     body.nextSessionDate = next;
+  }
+  if (Array.isArray(data.abcHints)) {
+    const capped = data.abcHints.slice(0, data.sessionHours);
+    const cleaned: AbcHintEntry[] = capped.map((row) => {
+      const hasActivity = !!row.activityAntecedent;
+      const hasBehavior = !!row.maladaptiveBehavior;
+      if (hasActivity && hasBehavior) return row;
+      return { activityAntecedent: null, maladaptiveBehavior: null };
+    });
+    const hasAny = cleaned.some((r) => !!r.activityAntecedent);
+    if (hasAny) {
+      body.abcHints = cleaned;
+    }
   }
   return body;
 }
@@ -985,6 +998,179 @@ function Step6Programs() {
   );
 }
 
+function StepAbcBuilder() {
+  const { data, updateData } = useWizardStore();
+  const sessionHours = data.sessionHours ?? 1;
+  const maxRows = Math.min(sessionHours, 8);
+  const defaultRowCount = sessionHours >= 3 ? 3 : sessionHours;
+
+  const { data: activitiesRes, isLoading: activitiesLoading } = useAbcActivityAntecedents();
+  const { data: clientRes } = useClient(data.clientId);
+
+  const activities = activitiesRes?.data?.activities ?? [];
+  const maladaptiveBehaviors: string[] = clientRes?.data?.profile?.maladaptiveBehaviors ?? [];
+
+  const hints: AbcHintEntry[] = data.abcHints?.length
+    ? data.abcHints
+    : Array.from({ length: defaultRowCount }, () => ({ activityAntecedent: null, maladaptiveBehavior: null }));
+
+  useEffect(() => {
+    if (!data.abcHints || data.abcHints.length === 0) {
+      updateData({
+        abcHints: Array.from({ length: defaultRowCount }, () => ({ activityAntecedent: null, maladaptiveBehavior: null })),
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const updateRow = (index: number, field: keyof AbcHintEntry, value: string | null) => {
+    const updated = [...hints];
+    updated[index] = { ...updated[index], [field]: value || null };
+    updateData({ abcHints: updated });
+  };
+
+  const addRow = () => {
+    if (hints.length >= maxRows) return;
+    updateData({ abcHints: [...hints, { activityAntecedent: null, maladaptiveBehavior: null }] });
+  };
+
+  const removeRow = (index: number) => {
+    const updated = hints.filter((_, i) => i !== index);
+    updateData({ abcHints: updated.length > 0 ? updated : [{ activityAntecedent: null, maladaptiveBehavior: null }] });
+  };
+
+  const resetRows = () => {
+    updateData({
+      abcHints: Array.from({ length: defaultRowCount }, () => ({ activityAntecedent: null, maladaptiveBehavior: null })),
+    });
+  };
+
+  return (
+    <div className="space-y-6 max-w-3xl mx-auto">
+      <div className="text-center mb-8">
+        <h2 className="text-3xl font-display font-bold text-foreground">ABC Builder</h2>
+        <p className="text-muted-foreground mt-2">Optional — lock specific activities and behaviors for each session hour.</p>
+      </div>
+
+      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-muted-foreground leading-relaxed">
+        <p className="font-semibold text-foreground mb-1">How it works</p>
+        <p>
+          Each row represents one session hour. When you fill in both fields, the AI will use your exact activity and maladaptive behavior label for that hour. Consequence and intervention text still follows clinical rules.
+          Leave rows blank to let the AI generate all ABCs automatically.
+        </p>
+      </div>
+
+      {activitiesLoading ? (
+        <div className="flex justify-center py-12">
+          <Loader2 className="w-8 h-8 animate-spin text-primary pop-icon" />
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {hints.map((row, i) => {
+            const hasActivity = !!row.activityAntecedent;
+            const hasBehavior = !!row.maladaptiveBehavior;
+            const isComplete = hasActivity && hasBehavior;
+            const isPartial = hasActivity !== hasBehavior;
+            return (
+              <div
+                key={i}
+                className={cn(
+                  "bg-card border rounded-xl p-4 space-y-3 transition-colors",
+                  isPartial
+                    ? "border-amber-400 bg-amber-50/20"
+                    : isComplete
+                    ? "border-emerald-400 bg-emerald-50/20"
+                    : "border-border",
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
+                    Hour {i + 1}
+                  </span>
+                  {hints.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeRow(i)}
+                      className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded"
+                      aria-label={`Remove hour ${i + 1}`}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+                      Activity / Antecedent
+                    </label>
+                    <select
+                      value={row.activityAntecedent ?? ""}
+                      onChange={(e) => updateRow(i, "activityAntecedent", e.target.value || null)}
+                      className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                    >
+                      <option value="">— Select activity —</option>
+                      {activities.map((a) => (
+                        <option key={a} value={a}>{a}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
+                      Maladaptive Behavior
+                    </label>
+                    <select
+                      value={row.maladaptiveBehavior ?? ""}
+                      onChange={(e) => updateRow(i, "maladaptiveBehavior", e.target.value || null)}
+                      className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
+                    >
+                      <option value="">— Select behavior —</option>
+                      {maladaptiveBehaviors.map((b) => (
+                        <option key={b} value={b}>{b}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {isPartial && (
+                  <p className="text-xs text-amber-600 font-semibold flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    Fill in both fields or leave both empty before continuing.
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between pt-1">
+        <button
+          type="button"
+          onClick={addRow}
+          disabled={hints.length >= maxRows}
+          className="flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Plus className="w-4 h-4" />
+          Add Row
+          {hints.length >= maxRows && (
+            <span className="text-xs font-normal text-muted-foreground ml-1">
+              (max {maxRows} for {sessionHours}h session)
+            </span>
+          )}
+        </button>
+        <button
+          type="button"
+          onClick={resetRows}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          Reset
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Step7NextDate() {
   const { data, updateData } = useWizardStore();
   const [open, setOpen] = useState(false);
@@ -1088,7 +1274,7 @@ export default function Wizard() {
   const t = useT();
   const [generateError, setGenerateError] = useState<string | null>(null);
 
-  const totalSteps = 8;
+  const totalSteps = 9;
   const isGenerating = generateMutation.isPending;
 
   useEffect(() => {
@@ -1142,8 +1328,18 @@ export default function Wizard() {
       case 4: return !!data.sessionDate;
       case 5: return true; // Optional
       case 6: return data.hasEnvironmentalChanges === false || (data.hasEnvironmentalChanges === true && !!data.environmentalChanges?.trim());
-      case 7: return true; // Optional
-      case 8: return true;
+      case 7: {
+        // ABC Builder — optional, but no partial rows allowed
+        const hints = data.abcHints ?? [];
+        const hasPartial = hints.some((r) => {
+          const a = !!r.activityAntecedent;
+          const b = !!r.maladaptiveBehavior;
+          return a !== b;
+        });
+        return !hasPartial;
+      }
+      case 8: return true; // Next session date — optional
+      case 9: return true;
       default: return false;
     }
   };
@@ -1217,8 +1413,9 @@ export default function Wizard() {
             {step === 4 && <Step3Date />}
             {step === 5 && <Step4People />}
             {step === 6 && <Step5Env />}
-            {step === 7 && <Step7NextDate />}
-            {step === 8 && <Step8Review />}
+            {step === 7 && <StepAbcBuilder />}
+            {step === 8 && <Step7NextDate />}
+            {step === 9 && <Step8Review />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -1236,7 +1433,7 @@ export default function Wizard() {
         )}
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="text-sm text-muted-foreground hidden sm:block">
-            {step === 8 ? "Ready to generate" : "Complete this step to proceed"}
+            {step === 9 ? "Ready to generate" : "Complete this step to proceed"}
           </div>
           
           {step < totalSteps ? (

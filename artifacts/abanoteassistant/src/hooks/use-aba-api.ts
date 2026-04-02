@@ -10,6 +10,7 @@ import type {
   SaveNoteRequest,
   SaveNoteResponse,
   DeleteNoteResponse,
+  AbcActivityAntecedentListResponse,
 } from "@workspace/api-client-react";
 import {
   listClients,
@@ -21,6 +22,7 @@ import {
   saveNote,
   deleteNote as deleteNoteRequest,
   extractAssessmentFromPdf,
+  listAbcBuilderActivityAntecedents,
   type AssessmentExtractSuccessResponse,
 } from "@workspace/api-client-react";
 import { useAuthStore } from "@/store/auth-store";
@@ -109,5 +111,16 @@ export function useExtractAssessmentFromPdf() {
   return useMutation({
     mutationFn: async (file: File): Promise<AssessmentExtractSuccessResponse> =>
       extractAssessmentFromPdf(file),
+  });
+}
+
+export function useAbcActivityAntecedents() {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: ["/api/notes/abc-builder/activity-antecedents", token],
+    queryFn: async (): Promise<AbcActivityAntecedentListResponse> =>
+      listAbcBuilderActivityAntecedents(),
+    enabled: !!token,
+    staleTime: 1000 * 60 * 10,
   });
 }
