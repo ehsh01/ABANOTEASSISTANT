@@ -1,3 +1,4 @@
+import "./load-local-env";
 import app from "./app";
 import { isOpenAINoteGenerationConfigured } from "./openai-notes";
 

@@ -36,7 +36,7 @@ This monorepo is edited in **Cursor** (backend/API) and **Replit** (UI). Both pu
 
 - The SPA build reads **`PORT`** and **`BASE_PATH`** for Vite (see `artifacts/abanoteassistant/vite.config.ts`). Set these in Replit / CI / local env as required.
 - **Frontend → API (AI note generation):** The client calls **`/api/*`** by default. If the UI and API are **not** same-origin (common on Replit or split hosting), set **`VITE_API_BASE_URL`** to the API origin (no path, no trailing slash) and **rebuild** the SPA. See **`artifacts/abanoteassistant/.env.example`**. The app applies this in **`main.tsx`** via **`setApiBaseUrl`** (`lib/api-client-react`).
-- **Backend OpenAI:** **`OPENAI_API_KEY`** must remain set on the API server (`artifacts/api-server/.env`); without it, **`POST /notes/generate`** returns 503. Verify with **`GET /api/healthz`** after deploys.
+- **Backend OpenAI:** **`OPENAI_API_KEY`** must remain set on the API server (`artifacts/api-server/.env`); without it, **`POST /notes/generate`** returns 503. Verify with **`GET /api/healthz`** after deploys. **`pnpm --filter @workspace/api-server run dev`** loads that `.env` automatically via **`src/load-local-env.ts`** (development only; production uses PM2 + `ecosystem.config.cjs`).
 - New server or client env vars should be documented in **`artifacts/api-server/.env.example`** and **`artifacts/abanoteassistant/.env.example`** (and Replit secrets where applicable).
 
 ## Pull / merge checklist (both sides)
