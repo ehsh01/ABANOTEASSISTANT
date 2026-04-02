@@ -6,6 +6,7 @@ import {
   GenerateNoteBody,
   GenerateNoteResponse,
   ListNotesResponse,
+  ListAbcBuilderActivityAntecedentsResponse,
   GetNoteParams,
   GetNoteResponse,
   DeleteNoteParams,
@@ -45,6 +46,8 @@ import {
   LOCKED_CLOSING_PARAGRAPH,
 } from "../note-assembly";
 import { truncateAssessmentTextForNoteContext } from "../assessment-extract";
+import { resolveAbcHintsForNoteGeneration } from "../abc-hints";
+import { ABC_ACTIVITY_ANTECEDENT_CATALOG } from "../abc-activity-antecedent-catalog";
 
 /** Map OpenAI / transport failures to actionable text (distinct from "missing OPENAI_API_KEY" 503). */
 function formatOpenAINoteGenerationError(err: unknown): string {
@@ -142,6 +145,21 @@ router.get("/notes", async (req, res) => {
     })),
   });
 
+  res.json(data);
+});
+
+router.get("/notes/abc-builder/activity-antecedents", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const data = ListAbcBuilderActivityAntecedentsResponse.parse({
+    success: true,
+    data: { activities: [...ABC_ACTIVITY_ANTECEDENT_CATALOG] },
+    error: null,
+  });
   res.json(data);
 });
 
@@ -319,11 +337,28 @@ router.post("/notes/generate", async (req, res) => {
   );
   const behaviorCatalog = rotationResult.catalog;
   const behaviorRotationSeed = randomUUID();
-  const maladaptiveBehaviorForHour = maladaptiveBehaviorsForSessionHours(
+  const baseMaladaptiveForHour = maladaptiveBehaviorsForSessionHours(
     behaviorCatalog,
     body.sessionHours,
     behaviorRotationSeed,
   );
+
+  const abcResolved = resolveAbcHintsForNoteGeneration(
+    body.abcHints,
+    body.sessionHours,
+    behaviorCatalog,
+    baseMaladaptiveForHour,
+  );
+  if (!abcResolved.ok) {
+    res.status(400).json({
+      success: false,
+      error: "Invalid ABC Builder input",
+      messages: abcResolved.messages,
+    });
+    return;
+  }
+
+  const { maladaptiveBehaviorForHour, activityAntecedentForHour } = abcResolved;
   const replacementProgramForHour = replacementProgramsForSessionHours(programNames, body.sessionHours);
 
   const complianceCtxBase: NoteComplianceContext = {
@@ -332,6 +367,7 @@ router.post("/notes/generate", async (req, res) => {
     replacementProgramForHour,
     maladaptiveBehaviors: behaviorCatalog,
     maladaptiveBehaviorForHour,
+    activityAntecedentForHour,
     interventions: profile?.interventions ?? [],
     clientAgeYears,
     presentPeople: body.presentPeople,
@@ -358,6 +394,13 @@ router.post("/notes/generate", async (req, res) => {
     );
   }
 
+  const filledAbcHours = activityAntecedentForHour.map((a) => (typeof a === "string" && a.length > 0 ? 1 : 0));
+  if (filledAbcHours.some((x) => x === 1)) {
+    warnings.push(
+      "ABC Builder: one or more hours use RBT-selected activity/antecedent and maladaptive behavior; the AI must keep those exact strings.",
+    );
+  }
+
   const clientNameForNote = clientFirstName(client.name);
 
   const oaCtx: NoteGenerationContext = {
@@ -379,6 +422,7 @@ router.post("/notes/generate", async (req, res) => {
     ageBand: client.ageBand,
     clientAssessmentTextExcerpt,
     assessmentReferenceFileName: profile?.assessmentFileName ?? null,
+    activityAntecedentForHour,
   };
 
   let clinicalBody: string;

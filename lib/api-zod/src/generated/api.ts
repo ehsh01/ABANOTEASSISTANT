@@ -445,6 +445,19 @@ export const ListNotesResponse = zod.object({
 });
 
 /**
+ * Exact catalog for note-generation ABC Builder dropdowns. Values must be sent verbatim on POST /notes/generate abcHints[].activityAntecedent.
+
+ * @summary List predefined Activity/Antecedent strings for optional ABC Builder
+ */
+export const ListAbcBuilderActivityAntecedentsResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    activities: zod.array(zod.string()),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
  * @summary Get one session note by id
  */
 export const GetNoteParams = zod.object({
@@ -487,6 +500,8 @@ export const DeleteNoteResponse = zod.object({
  */
 export const generateNoteBodySessionHoursMax = 8;
 
+export const generateNoteBodyAbcHintsMax = 8;
+
 export const GenerateNoteBody = zod.object({
   clientId: zod.number(),
   sessionHours: zod.number().min(1).max(generateNoteBodySessionHoursMax),
@@ -496,6 +511,32 @@ export const GenerateNoteBody = zod.object({
   environmentalChanges: zod.string().optional(),
   selectedReplacements: zod.array(zod.number()),
   nextSessionDate: zod.string().optional(),
+  abcHints: zod
+    .array(
+      zod
+        .object({
+          activityAntecedent: zod
+            .string()
+            .nullish()
+            .describe(
+              "Exact string from GET \/notes\/abc-builder\/activity-antecedents",
+            ),
+          maladaptiveBehavior: zod
+            .string()
+            .nullish()
+            .describe(
+              "Exact maladaptive behavior label from the client BIP\/profile catalog",
+            ),
+        })
+        .describe(
+          "One optional ABC row. Both properties must be non-empty together, or both empty\/null — partial rows are invalid.\n",
+        ),
+    )
+    .max(generateNoteBodyAbcHintsMax)
+    .optional()
+    .describe(
+      "Optional ABC Builder rows, index-aligned with service hours (index 0 = first hour). When both activityAntecedent and maladaptiveBehavior are set for an index, the AI must use those exact strings for that hour; empty rows use default AI rotation. Length must not exceed sessionHours. Omit or send [] for fully automatic ABCs.\n",
+    ),
 });
 
 export const GenerateNoteResponse = zod.object({

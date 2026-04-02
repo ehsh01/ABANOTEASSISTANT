@@ -18,6 +18,10 @@ export type NoteComplianceContext = {
    * Used to enforce rotation across all listed behaviors over multi-hour sessions.
    */
   maladaptiveBehaviorForHour: string[];
+  /**
+   * Optional ABC Builder: per hour, exact activity/antecedent catalog string that must appear verbatim in the paragraph, or null for AI-chosen antecedent.
+   */
+  activityAntecedentForHour?: (string | null)[] | undefined;
   /** BIP intervention names (exact strings) — used for physical-aggression / Response Block ordering */
   interventions: string[];
   /** Approximate age in years from DOB + session date; null if unknown */
@@ -395,9 +399,17 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   }
 
   const assignedPerHour = ctx.maladaptiveBehaviorForHour ?? [];
+  const activityLockedPerHour = ctx.activityAntecedentForHour ?? [];
 
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i]!;
+    const lockedActivity = activityLockedPerHour[i];
+    if (typeof lockedActivity === "string" && lockedActivity.length > 0 && !p.includes(lockedActivity)) {
+      issues.push(
+        `ABC Builder: paragraph ${i + 1} must include the selected activity/antecedent string verbatim (character-for-character): "${lockedActivity.slice(0, 80)}${lockedActivity.length > 80 ? "…" : ""}".`,
+      );
+      break;
+    }
     if (behaviorCatalog.length > 0) {
       const bCount = countCatalogBehaviorsInParagraph(p, behaviorCatalog);
       if (bCount > 1) {

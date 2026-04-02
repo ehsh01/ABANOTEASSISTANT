@@ -284,6 +284,17 @@ export interface ProgramListResponse {
   error?: string | null;
 }
 
+/**
+ * One optional ABC row. Both properties must be non-empty together, or both empty/null — partial rows are invalid.
+
+ */
+export interface AbcHintEntry {
+  /** Exact string from GET /notes/abc-builder/activity-antecedents */
+  activityAntecedent?: string | null;
+  /** Exact maladaptive behavior label from the client BIP/profile catalog */
+  maladaptiveBehavior?: string | null;
+}
+
 export interface GenerateNoteRequest {
   clientId: number;
   /**
@@ -297,6 +308,22 @@ export interface GenerateNoteRequest {
   environmentalChanges?: string;
   selectedReplacements: number[];
   nextSessionDate?: string;
+  /**
+   * Optional ABC Builder rows, index-aligned with service hours (index 0 = first hour). When both activityAntecedent and maladaptiveBehavior are set for an index, the AI must use those exact strings for that hour; empty rows use default AI rotation. Length must not exceed sessionHours. Omit or send [] for fully automatic ABCs.
+
+   * @maxItems 8
+   */
+  abcHints?: AbcHintEntry[];
+}
+
+export type AbcActivityAntecedentListResponseData = {
+  activities: string[];
+};
+
+export interface AbcActivityAntecedentListResponse {
+  success: boolean;
+  data: AbcActivityAntecedentListResponseData;
+  error?: string | null;
 }
 
 /**

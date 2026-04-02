@@ -17,6 +17,7 @@ import type {
 } from "@tanstack/react-query";
 
 import type {
+  AbcActivityAntecedentListResponse,
   AdminCompanyListResponse,
   AdminCompanyPatchResponse,
   AdminUserListResponse,
@@ -1296,6 +1297,90 @@ export function useListNotes<
   request?: SecondParameter<typeof customFetch>;
 }): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
   const queryOptions = getListNotesQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Exact catalog for note-generation ABC Builder dropdowns. Values must be sent verbatim on POST /notes/generate abcHints[].activityAntecedent.
+
+ * @summary List predefined Activity/Antecedent strings for optional ABC Builder
+ */
+export const getListAbcBuilderActivityAntecedentsUrl = () => {
+  return `/api/notes/abc-builder/activity-antecedents`;
+};
+
+export const listAbcBuilderActivityAntecedents = async (
+  options?: RequestInit,
+): Promise<AbcActivityAntecedentListResponse> => {
+  return customFetch<AbcActivityAntecedentListResponse>(
+    getListAbcBuilderActivityAntecedentsUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListAbcBuilderActivityAntecedentsQueryKey = () => {
+  return [`/api/notes/abc-builder/activity-antecedents`] as const;
+};
+
+export const getListAbcBuilderActivityAntecedentsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listAbcBuilderActivityAntecedents>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAbcBuilderActivityAntecedents>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getListAbcBuilderActivityAntecedentsQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listAbcBuilderActivityAntecedents>>
+  > = ({ signal }) =>
+    listAbcBuilderActivityAntecedents({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listAbcBuilderActivityAntecedents>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListAbcBuilderActivityAntecedentsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listAbcBuilderActivityAntecedents>>
+>;
+export type ListAbcBuilderActivityAntecedentsQueryError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary List predefined Activity/Antecedent strings for optional ABC Builder
+ */
+
+export function useListAbcBuilderActivityAntecedents<
+  TData = Awaited<ReturnType<typeof listAbcBuilderActivityAntecedents>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listAbcBuilderActivityAntecedents>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions =
+    getListAbcBuilderActivityAntecedentsQueryOptions(options);
 
   const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
     queryKey: QueryKey;

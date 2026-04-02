@@ -49,6 +49,10 @@ export type NoteGenerationContext = {
   clientAssessmentTextExcerpt: string;
   /** Original assessment filename when known (reference only). */
   assessmentReferenceFileName: string | null;
+  /**
+   * Optional ABC Builder: length = sessionHours. Non-null entries are exact activity/antecedent catalog strings the RBT selected; null = AI chooses antecedent for that hour.
+   */
+  activityAntecedentForHour: (string | null)[];
 };
 
 const SYSTEM_PROMPT = `You write ABA session note clinical narratives for RBT documentation.
@@ -132,8 +136,13 @@ STRUCTURE (unchanged):
 - If hasEnvironmentalChanges is true and environmentalChanges is non-empty, your FIRST paragraph may begin with one short bridging sentence that references those environmental factors, then continue into the first hour's ABC narrative (do not repeat the system's fixed environmental opening sentence).
 - Tone: professional, specific, observable; no generic filler like "aligned with session targets" without concrete detail.
 - Client names: use **only** the client's first name from JSON (\`firstName\` / \`clientName\` — same value) everywhere in the clinical body. Do not use, repeat, or invent a last name or full name.
-- VARIETY: Each hour paragraph MUST use a clearly different activity, setting, materials, social context, or instructional demand from every other hour.
-- The JSON includes requestNonce — treat it only as a uniqueness hint; do not quote it in the note.`;
+- VARIETY: For hours where JSON \`activityAntecedentForHour[h]\` is null, each such paragraph MUST use a clearly different activity, setting, materials, social context, or instructional demand from every other null-guided hour. Hours with a non-null \`activityAntecedentForHour[h]\` MUST use that exact string (see ABC BUILDER) and are exempt from differing from each other or from AI-chosen hours except when the user selected the same catalog string twice.
+- The JSON includes requestNonce — treat it only as a uniqueness hint; do not quote it in the note.
+
+ABC BUILDER (optional — JSON \`activityAntecedentForHour\`):
+- Array length equals \`sessionHours\`. When \`activityAntecedentForHour[h]\` is a non-null string, paragraph \`h\` MUST incorporate that **exact** catalog text **verbatim** (identical characters, punctuation, and spacing). You may add brief observable context around it (setting, materials, position, who initiated) but you must **not** paraphrase, shorten, or substitute synonyms for that string.
+- When \`activityAntecedentForHour[h]\` is null, choose the antecedent/activity for that hour as usual (full AI).
+- \`maladaptiveBehaviorForHour[h]\` always assigns the single manifested catalog behavior name for that paragraph; never replace it with a different catalog label even when the activity string mentions other demands.`;
 
 function toComplianceCtx(ctx: NoteGenerationContext): NoteComplianceContext {
   return {
@@ -142,6 +151,7 @@ function toComplianceCtx(ctx: NoteGenerationContext): NoteComplianceContext {
     replacementProgramForHour: ctx.replacementProgramForHour,
     maladaptiveBehaviors: ctx.maladaptiveBehaviors,
     maladaptiveBehaviorForHour: ctx.maladaptiveBehaviorForHour,
+    activityAntecedentForHour: ctx.activityAntecedentForHour,
     interventions: ctx.interventions,
     clientAgeYears: ctx.clientAgeYears,
     presentPeople: ctx.presentPeople,
@@ -235,7 +245,7 @@ Output ONLY the corrected clinical body.`;
 
   const repairSystem = `${SYSTEM_PROMPT}
 
-REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON and with any non-empty \`clientAssessmentTextExcerpt\` in the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; **each paragraph h must use replacementProgramForHour[h] verbatim (full string, including every parenthesis) in the replacement-program quote and must not name any other entry from replacementProgramsInOrder in that paragraph**; exactly one maladaptive behavior catalog label per paragraph; **each paragraph h must use maladaptiveBehaviorForHour[h] verbatim** for the manifested behavior; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech to the client; when a paragraph cites physical aggression and JSON interventions include Response Block, describe Response Block immediately first after "To address this behavior," then other interventions; **use only the client's first name** from JSON in all references—never a last name.`;
+REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON and with any non-empty \`clientAssessmentTextExcerpt\` in the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; **each paragraph h must use replacementProgramForHour[h] verbatim (full string, including every parenthesis) in the replacement-program quote and must not name any other entry from replacementProgramsInOrder in that paragraph**; exactly one maladaptive behavior catalog label per paragraph; **each paragraph h must use maladaptiveBehaviorForHour[h] verbatim** for the manifested behavior; **when activityAntecedentForHour[h] is a non-null string, paragraph h must contain that exact substring verbatim**; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech to the client; when a paragraph cites physical aggression and JSON interventions include Response Block, describe Response Block immediately first after "To address this behavior," then other interventions; **use only the client's first name** from JSON in all references—never a last name.`;
 
   return callOpenAI(
     [
