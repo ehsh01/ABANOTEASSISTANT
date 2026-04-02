@@ -9,7 +9,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-function parseDotEnv(text: string): Record<string, string> {
+function parseDotEnv(raw: string): Record<string, string> {
+  let text = raw;
+  if (text.charCodeAt(0) === 0xfeff) {
+    text = text.slice(1);
+  }
   const out: Record<string, string> = {};
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
@@ -20,7 +24,10 @@ function parseDotEnv(text: string): Record<string, string> {
     if (eq <= 0) {
       continue;
     }
-    const key = trimmed.slice(0, eq).trim();
+    let key = trimmed.slice(0, eq).trim();
+    if (key.startsWith("export ")) {
+      key = key.slice("export ".length).trim();
+    }
     let value = trimmed.slice(eq + 1).trim();
     if (
       (value.startsWith('"') && value.endsWith('"')) ||

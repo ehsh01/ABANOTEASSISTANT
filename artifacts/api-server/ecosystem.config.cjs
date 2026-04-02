@@ -20,7 +20,10 @@ function loadDotEnv(filePath) {
   if (!fs.existsSync(filePath)) {
     return out;
   }
-  const text = fs.readFileSync(filePath, "utf8");
+  let text = fs.readFileSync(filePath, "utf8");
+  if (text.charCodeAt(0) === 0xfeff) {
+    text = text.slice(1);
+  }
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) {
@@ -30,7 +33,10 @@ function loadDotEnv(filePath) {
     if (eq <= 0) {
       continue;
     }
-    const key = trimmed.slice(0, eq).trim();
+    let key = trimmed.slice(0, eq).trim();
+    if (key.startsWith("export ")) {
+      key = key.slice("export ".length).trim();
+    }
     let value = trimmed.slice(eq + 1).trim();
     if (
       (value.startsWith('"') && value.endsWith('"')) ||
