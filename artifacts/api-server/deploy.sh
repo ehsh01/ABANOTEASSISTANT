@@ -52,7 +52,7 @@ pnpm install
 # Step 4: Build
 echo ""
 echo "🔨 Building API server..."
-pnpm run build
+pnpm run build:api-server
 
 # Step 5: Check environment variables
 echo ""
