@@ -115,7 +115,8 @@ ONE MALADAPTIVE BEHAVIOR PER ABC (per hour paragraph):
 - Do not combine two different maladaptive behavior names in the same hour paragraph.
 
 MALADAPTIVE BEHAVIOR ROTATION (mandatory — use JSON \`maladaptiveBehaviorForHour\`):
-- The JSON \`maladaptiveBehaviors\` array is the **rotation catalog for this note**: labels drawn from the client profile and the stored assessment text. When an assessment excerpt exists on the server, it is restricted to maladaptive behavior names whose **exact** wording appears verbatim in that assessment (plus any standard BIP names found in the assessment but missing from the profile). Use **only** those strings for behavior names—do not cite profile-only labels that are not listed in \`maladaptiveBehaviors\`.
+- The JSON \`maladaptiveBehaviors\` array is the **full rotation catalog** for this client: every BIP-listed target behavior from the client profile, plus any standard BIP names detected from the stored assessment document that were not already on the profile. Use **only** those strings for behavior names—do not cite labels that are not listed in \`maladaptiveBehaviors\`.
+- The stored assessment excerpt may still be used for **definitions, topography, and contexts**; the JSON catalog is authoritative for **which behavior names** may appear and how they are spelled.
 - The JSON includes \`maladaptiveBehaviorForHour\`: an array with **exactly** \`sessionHours\` strings. Index 0 is the first paragraph (first hour), index 1 the second paragraph, and so on.
 - For hour index \`h\`, that paragraph's manifested behavior MUST be **exactly** the string \`maladaptiveBehaviorForHour[h]\` (verbatim character-for-character). That value is always one of the entries in \`maladaptiveBehaviors\`; the server cycles that list in order so **every** entry appears across a long enough session before any repeats.
 - Do **not** substitute a different catalog label for a given hour than the one assigned for that index.

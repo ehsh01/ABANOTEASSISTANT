@@ -150,7 +150,10 @@ export type MaladaptiveBehaviorsCatalogForRotationResult = {
   catalog: string[];
   /** Standard-order names found in assessment text but not on the client profile. */
   labelsAddedFromAssessmentText: string[];
-  /** Profile/catalog entries omitted because their exact text does not appear in the stored assessment. */
+  /**
+   * Catalog labels whose exact text does not appear verbatim in the stored assessment snapshot (OCR/wording drift).
+   * They remain in rotation when listed on the client profile; the RBT should verify BIP wording if this is non-empty.
+   */
   labelsOmittedNotFoundInAssessment: string[];
 };
 
@@ -159,9 +162,9 @@ export type MaladaptiveBehaviorsCatalogForRotationResult = {
  * - Order profile entries using STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER when names match exactly.
  * - Append other profile labels (custom BIP wording) after that block.
  * - When assessment text is non-empty: add standard names that appear verbatim in the text but were missing from the profile.
- * - When assessment text is non-empty: keep only (a) standard catalog entries that appear verbatim in the assessment and
- *   (b) profile-only labels that appear verbatim in the assessment. Custom profile labels not found verbatim in the text are
- *   omitted from rotation (with a warning). If nothing would remain, fall back to the full merged list (e.g. OCR/wording mismatch).
+ * - **All profile-listed behaviors stay in the catalog** even when the PDF snapshot does not contain that exact substring
+ *   (common with OCR, line breaks, or alternate wording). Narrowing to “verbatim in text only” caused notes to repeat the same
+ *   few behaviors; rotation must cover the full client/BIP list from the profile plus assessment-detected standards.
  */
 export function maladaptiveBehaviorsCatalogForRotation(
   profileBehaviors: string[],
@@ -184,23 +187,12 @@ export function maladaptiveBehaviorsCatalogForRotation(
 
   const standardBlock = dedupeMaladaptiveBehaviorOrder([...head, ...labelsAddedFromAssessmentText]);
 
-  const fullMerged = dedupeMaladaptiveBehaviorOrder([
-    ...standardBlock,
-    ...profileRemainder,
-  ]);
+  const catalog = dedupeMaladaptiveBehaviorOrder([...standardBlock, ...profileRemainder]);
 
-  let catalog = fullMerged;
-  let labelsOmittedNotFoundInAssessment: string[] = [];
-
-  if (assessment.length > 0 && fullMerged.length > 0) {
-    const standardOnAssessment = standardBlock.filter((c) => assessment.includes(c));
-    const customOnAssessment = profileRemainder.filter((c) => assessment.includes(c));
-    const narrowed = dedupeMaladaptiveBehaviorOrder([...standardOnAssessment, ...customOnAssessment]);
-    if (narrowed.length > 0) {
-      catalog = narrowed;
-      labelsOmittedNotFoundInAssessment = fullMerged.filter((c) => !narrowed.includes(c));
-    }
-  }
+  const labelsOmittedNotFoundInAssessment =
+    assessment.length > 0 && catalog.length > 0
+      ? catalog.filter((c) => !assessment.includes(c))
+      : [];
 
   return {
     catalog,
@@ -209,17 +201,37 @@ export function maladaptiveBehaviorsCatalogForRotation(
   };
 }
 
+/** Non-cryptographic hash for rotating which catalog behavior starts hour 0 (variety across regenerations). */
+export function hashStringForRotation(s: string): number {
+  let h = 0;
+  for (let i = 0; i < s.length; i++) {
+    h = (h * 31 + s.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
 /**
  * One assigned behavior label per service hour, cycling `catalog` in order (deduped, first-seen order preserved).
  * Ensures multi-hour notes rotate through the full BIP list before repeating (e.g. all seven behaviors across seven hours).
+ * When `rotationSeed` is set, hour 0 starts at a pseudorandom offset into the catalog so the same three labels are not
+ * always the first block for short sessions.
  */
-export function maladaptiveBehaviorsForSessionHours(catalog: string[], sessionHours: number): string[] {
+export function maladaptiveBehaviorsForSessionHours(
+  catalog: string[],
+  sessionHours: number,
+  rotationSeed?: string,
+): string[] {
   const ordered = dedupeMaladaptiveBehaviorOrder(catalog);
   if (sessionHours <= 0) return [];
   if (ordered.length === 0) {
     return Array.from({ length: sessionHours }, () => "");
   }
-  return Array.from({ length: sessionHours }, (_, h) => ordered[h % ordered.length]!);
+  const start =
+    rotationSeed && rotationSeed.length > 0 ? hashStringForRotation(rotationSeed) % ordered.length : 0;
+  return Array.from(
+    { length: sessionHours },
+    (_, h) => ordered[(start + h) % ordered.length]!,
+  );
 }
 
 /**

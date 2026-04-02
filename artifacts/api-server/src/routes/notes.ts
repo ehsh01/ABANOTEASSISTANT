@@ -318,9 +318,11 @@ router.post("/notes/generate", async (req, res) => {
     rawAssessmentSnapshot,
   );
   const behaviorCatalog = rotationResult.catalog;
+  const behaviorRotationSeed = randomUUID();
   const maladaptiveBehaviorForHour = maladaptiveBehaviorsForSessionHours(
     behaviorCatalog,
     body.sessionHours,
+    behaviorRotationSeed,
   );
   const replacementProgramForHour = replacementProgramsForSessionHours(programNames, body.sessionHours);
 
@@ -343,7 +345,7 @@ router.post("/notes/generate", async (req, res) => {
   }
   if (rotationResult.labelsOmittedNotFoundInAssessment.length > 0) {
     warnings.push(
-      `Some client profile maladaptive behaviors do not appear verbatim in the stored assessment text, so they were omitted from this note's rotation: ${rotationResult.labelsOmittedNotFoundInAssessment.join(", ")}.`,
+      `These maladaptive behaviors are in the rotation but were not found as exact substrings in the stored assessment text (check OCR/BIP wording if needed): ${rotationResult.labelsOmittedNotFoundInAssessment.join(", ")}.`,
     );
   }
   if (rawAssessmentSnapshot.length === 0) {
@@ -372,7 +374,7 @@ router.post("/notes/generate", async (req, res) => {
     interventions: profile?.interventions ?? [],
     replacementProgramsInOrder: programNames,
     replacementProgramForHour,
-    requestNonce: randomUUID(),
+    requestNonce: behaviorRotationSeed,
     clientAgeYears,
     ageBand: client.ageBand,
     clientAssessmentTextExcerpt,
