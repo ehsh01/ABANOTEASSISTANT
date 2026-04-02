@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { APIError } from "openai";
 import { Router, type IRouter } from "express";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import {
@@ -44,6 +45,34 @@ import {
   LOCKED_CLOSING_PARAGRAPH,
 } from "../note-assembly";
 import { truncateAssessmentTextForNoteContext } from "../assessment-extract";
+
+/** Map OpenAI / transport failures to actionable text (distinct from "missing OPENAI_API_KEY" 503). */
+function formatOpenAINoteGenerationError(err: unknown): string {
+  const status = err instanceof APIError ? err.status : undefined;
+  if (status === 401) {
+    return (
+      "OpenAI returned 401 (unauthorized): the key is invalid, revoked, or for a different organization/project. " +
+      "Create or verify a key at https://platform.openai.com/api-keys , set OPENAI_API_KEY in artifacts/api-server/.env on the server, then restart PM2. " +
+      "Your .env line can look unchanged locally while the key no longer works at OpenAI."
+    );
+  }
+  if (status === 429) {
+    return (
+      "OpenAI returned 429 (rate limit or insufficient quota). Check usage and billing at https://platform.openai.com — nothing on your server changed, but OpenAI may have tightened limits or a payment failed."
+    );
+  }
+  if (status === 503 || status === 502) {
+    return "OpenAI returned a temporary service error. Retry in a few minutes.";
+  }
+  const msg = err instanceof Error ? err.message : String(err);
+  if (/401|incorrect api key|invalid api key|invalid_api_key|authentication/i.test(msg)) {
+    return (
+      "OpenAI rejected the API key. The value in .env may be expired or revoked at OpenAI even if the file was not edited. " +
+      "Generate a new key at https://platform.openai.com/api-keys , update the server .env, and restart PM2."
+    );
+  }
+  return msg;
+}
 
 const router: IRouter = Router();
 
@@ -365,7 +394,7 @@ router.post("/notes/generate", async (req, res) => {
     res.status(502).json({
       success: false,
       error: "AI note generation failed.",
-      messages: [err instanceof Error ? err.message : String(err)],
+      messages: [formatOpenAINoteGenerationError(err)],
     });
     return;
   }
