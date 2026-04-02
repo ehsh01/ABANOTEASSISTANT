@@ -86,6 +86,10 @@ pnpm exec drizzle-kit push --config ./drizzle.config.ts --force
 
 Use **`artifacts/api-server/ecosystem.config.cjs`** (it loads `artifacts/api-server/.env` and passes those variables into the process, including `RESEND_API_KEY`, `EMAIL_FROM`, and `APP_ORIGIN`).
 
+Repo root **`ecosystem.config.js`** re-exports that same file so `pm2 start ecosystem.config.js` also loads **`.env`** (the old root file only read `process.env.*` from the shell, so **`DATABASE_URL_STAGING` in `.env` was ignored** unless exported).
+
+**Staging vs production data:** Set **`DATABASE_URL_STAGING`** (and optionally **`JWT_SECRET_STAGING`**) in **`artifacts/api-server/.env`**. If omitted, staging uses **`DATABASE_URL`** / **`JWT_SECRET`** (same DB as production).
+
 ```bash
 cd /path/to/repo
 pm2 start artifacts/api-server/ecosystem.config.cjs --only abanoteassistant-api
@@ -113,8 +117,8 @@ curl http://localhost:5002/api/healthz
 Based on your droplet setup:
 - **abaworkspace**: Port 5001 (different app)
 - **abaworkspace-staging**: Port 5004 (different app)
-- **ABA Note Assistant API (Production)**: Port 5002 (configure in ecosystem.config.js)
-- **ABA Note Assistant API (Staging)**: Port 5005 (configure in ecosystem.config.js)
+- **ABA Note Assistant API (Production)**: Port 5002 (`API_PORT_PROD` in `.env`)
+- **ABA Note Assistant API (Staging)**: Port 5007 by default (`API_PORT_STAGING` in `.env`)
 
 **Important:** Make sure these ports don't conflict with other services!
 
