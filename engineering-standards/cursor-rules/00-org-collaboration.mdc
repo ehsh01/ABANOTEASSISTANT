@@ -1,0 +1,30 @@
+---
+description: Organization template — Cursor vs frontend ownership; API-first; no hand-editing generated clients. Paths for each repo belong in AGENTS.md.
+globs:
+  - "**/*"
+alwaysApply: true
+---
+
+# Monorepo / multi-package collaboration (organization template)
+
+> **Per repository:** Document concrete paths (API server, SPA, OpenAPI, DB, codegen command) in this repo’s root **`AGENTS.md`**. This rule is generic.
+
+## Ownership (default split — override in AGENTS.md if different)
+
+- **Backend / API / DB / auth / uploads / business logic:** Cursor (or designated backend owner).
+- **Frontend UI (layout, styling, visual UX):** Replit or frontend owner unless the task explicitly includes UI work.
+- **HTTP contract:** Single source of truth (usually OpenAPI or equivalent). Server and client must match the spec.
+
+## API contract
+
+- Any new or changed route, query, or response shape **starts with** the spec, then codegen (if used), then implementation.
+- **Do not hand-edit** generated SDK / Zod / OpenAPI-derived files; regenerate with the repo’s documented command.
+
+## Safe changes
+
+- Prefer **minimal, contract-safe** edits.
+- Do not rename public HTTP paths or shared DTOs without updating the spec and consumers.
+
+## Related template rules
+
+When installed alongside this file: `org-api-spec.mdc`, `org-backend-api.mdc`, `org-database.mdc`.

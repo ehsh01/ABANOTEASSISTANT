@@ -1,0 +1,28 @@
+---
+description: Organization template — database layer conventions (Drizzle-style; adapt in AGENTS.md).
+globs:
+  - "**/db/**/*.ts"
+  - "**/schema/**/*.ts"
+alwaysApply: false
+---
+
+# Database development (organization template)
+
+> Document **ORM**, **schema folder**, and **migration commands** in **`AGENTS.md`**.
+
+## Organization
+
+- Prefer **one table/model per file** (or follow your existing house pattern consistently).
+- Export tables, insert/update schemas, and inferred types as your codebase already does.
+
+## Access
+
+- Use the shared **`db`** (or equivalent) instance from your workspace package — avoid ad-hoc pools scattered across routes.
+
+## Migrations
+
+- Follow team policy for **push / migrate / generate**. Do not rewrite published migration history unless policy explicitly allows it.
+
+## Queries
+
+- Prefer the ORM query builder; reserve raw SQL for documented exceptions.

@@ -1,0 +1,31 @@
+---
+description: Organization template — backend HTTP handlers; validation; preserve contracts.
+globs:
+  - "**/api-server/**/*.ts"
+  - "**/server/**/*.ts"
+  - "**/src/routes/**/*.ts"
+alwaysApply: false
+---
+
+# Backend API development (organization template)
+
+> Document **router layout**, **validation library** (e.g. Zod from codegen), and **response envelope** in **`AGENTS.md`**.
+
+## Contracts
+
+- **Do not** change path, query, or body shapes without updating the API spec (if used) and regenerating types.
+- Validate **params, body, and responses** with the same schemas the client expects.
+
+## Errors
+
+- Use HTTP status codes appropriate to the project standard.
+- Return the project’s standard error JSON shape (see AGENTS.md).
+
+## Structure
+
+- Prefer **one router module per domain**; mount from a central routes index.
+- Keep handlers thin: validate → call service/DB → map to response.
+
+## Security
+
+- Do not log secrets; validate auth on protected routes per project middleware.

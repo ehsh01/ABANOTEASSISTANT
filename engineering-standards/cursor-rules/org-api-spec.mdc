@@ -1,0 +1,32 @@
+---
+description: Organization template — OpenAPI (or equivalent) as source of truth; codegen workflow.
+globs:
+  - "**/openapi.yaml"
+  - "**/openapi.yml"
+  - "**/api-spec/**/*.yaml"
+  - "**/api-spec/**/*.yml"
+alwaysApply: false
+---
+
+# API specification (organization template)
+
+> Set the **authoritative spec path** and **codegen command** in **`AGENTS.md`** for this repository.
+
+## Source of truth
+
+- The OpenAPI (or equivalent) document defines HTTP contracts.
+- **Update the spec first** when adding or changing endpoints or schemas.
+
+## Codegen
+
+- After spec changes, run the project’s documented codegen (e.g. Zod schemas, React Query hooks, types).
+- **Never hand-edit** generated output directories; fix the spec or generator config instead.
+
+## Compatibility
+
+- Prefer backward-compatible changes (optional fields, additive endpoints).
+- If a breaking change is required, version the API or coordinate a migration (document in AGENTS.md / CHANGELOG).
+
+## Response shape
+
+- Keep a **consistent envelope** across endpoints if the project defines one (e.g. `success`, `data`, `error`, optional `warnings` / `messages`).
