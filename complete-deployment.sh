@@ -70,9 +70,14 @@ fi
 echo "🔨 Building API server..."
 pnpm --filter @workspace/api-server run build
 
-echo "🌐 Building frontend (adjust PORT/BASE_PATH if needed)..."
+echo "🌐 Building frontend..."
+echo "   PORT=${FRONTEND_BUILD_PORT:-5000} BASE_PATH=${FRONTEND_BASE_PATH:-/}"
+echo "   Vite also loads artifacts/abanoteassistant/.env.production if that file exists on the server."
+echo "   Optional shell env for split UI/API hosts: export VITE_API_BASE_URL=https://api.example.com (no trailing slash)"
 export PORT="${FRONTEND_BUILD_PORT:-5000}"
 export BASE_PATH="${FRONTEND_BASE_PATH:-/}"
+# Expose optional VITE_* from the deploy environment into the SPA build (same-origin /api if unset).
+export VITE_API_BASE_URL="${VITE_API_BASE_URL:-}"
 pnpm --filter @workspace/abanoteassistant run build
 
 echo "📁 Creating logs directory..."

@@ -1083,7 +1083,7 @@ function Step8Review() {
 
 export default function Wizard() {
   const [, setLocation] = useLocation();
-  const { step, setStep, data, setGeneratedNote, reset } = useWizardStore();
+  const { step, setStep, data, setGeneratedNote, resetWizardForm } = useWizardStore();
   const generateMutation = useGenerateSessionNote();
   const t = useT();
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -1092,7 +1092,10 @@ export default function Wizard() {
   const isGenerating = generateMutation.isPending;
 
   useEffect(() => {
-    reset();
+    resetWizardForm();
+    generateMutation.reset();
+    // Intentionally once per Wizard mount — do not depend on mutation/store refs (would reset mid-flow).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

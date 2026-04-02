@@ -13,6 +13,32 @@ export function setAccessTokenGetter(fn: () => string | null | undefined): void 
   accessTokenGetter = fn;
 }
 
+/**
+ * Optional API origin for environments where `/api` on the page origin is wrong
+ * (e.g. Replit preview vs API on another port, or API on a separate subdomain).
+ * Pass the origin only, e.g. `https://my-api.example.com` — paths still use `/api/...`.
+ */
+let apiOriginPrefix = "";
+
+export function setApiBaseUrl(url: string | undefined | null): void {
+  const t = url?.trim();
+  if (!t) {
+    apiOriginPrefix = "";
+    return;
+  }
+  apiOriginPrefix = t.replace(/\/$/, "");
+}
+
+function resolveFetchInput(input: RequestInfo | URL): RequestInfo | URL {
+  if (apiOriginPrefix === "" || typeof input !== "string") {
+    return input;
+  }
+  if (!input.startsWith("/api")) {
+    return input;
+  }
+  return `${apiOriginPrefix}${input}`;
+}
+
 const NO_BODY_STATUS = new Set([204, 205, 304]);
 const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
@@ -313,9 +339,10 @@ export async function customFetch<T = unknown>(
     headers.set("accept", DEFAULT_JSON_ACCEPT);
   }
 
-  const requestInfo = { method, url: resolveUrl(input) };
+  const resolvedInput = resolveFetchInput(input);
+  const requestInfo = { method, url: resolveUrl(resolvedInput) };
 
-  const response = await fetch(input, { ...init, method, headers });
+  const response = await fetch(resolvedInput, { ...init, method, headers });
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);

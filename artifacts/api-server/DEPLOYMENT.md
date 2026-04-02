@@ -118,6 +118,12 @@ Based on your droplet setup:
 
 **Important:** Make sure these ports don't conflict with other services!
 
+## Frontend → API (AI session notes)
+
+- **Same domain (recommended):** Serve the SPA and proxy **`/api`** to the Node process (see Nginx snippet below). Do **not** set **`VITE_API_BASE_URL`** on the frontend build.
+- **UI and API on different origins:** Set **`VITE_API_BASE_URL`** to the API origin (no path, no trailing slash) when building the SPA—see **`artifacts/abanoteassistant/.env.example`**. Rebuild after any change; the value is embedded at build time.
+- **OpenAI:** Keep **`OPENAI_API_KEY`** in **`artifacts/api-server/.env`**. Without it, note generation returns **503**. After deploy: **`curl -sS http://127.0.0.1:5002/api/healthz`** (adjust port) should show **`"status":"ok"`** and OpenAI readiness.
+
 ## Nginx Configuration
 
 If you need to route `abanoteassistant.com` to your API:
