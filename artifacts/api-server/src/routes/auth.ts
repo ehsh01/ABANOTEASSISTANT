@@ -1,5 +1,6 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcrypt";
+import { ZodError } from "zod";
 import { eq } from "drizzle-orm";
 import {
   RegisterBody,
@@ -278,70 +279,91 @@ router.post("/auth/resend-verification", async (req, res) => {
 });
 
 router.post("/auth/login", async (req, res) => {
-  const body = LoginBody.parse(req.body);
+  try {
+    const body = LoginBody.parse(req.body);
 
-  const [user] = await db.select().from(usersTable).where(eq(usersTable.email, body.email)).limit(1);
+    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, body.email)).limit(1);
 
-  if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
-    res.status(401).json({
-      success: false,
-      error: "Invalid credentials",
-      messages: [],
+    if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
+      res.status(401).json({
+        success: false,
+        error: "Invalid credentials",
+        messages: [],
+      });
+      return;
+    }
+
+    if (!user.emailVerified) {
+      res.status(403).json({
+        success: false,
+        error:
+          "Please confirm your email before signing in. Check your inbox or use “Resend confirmation” on the registration page.",
+        messages: [],
+      });
+      return;
+    }
+
+    const [company] = await db
+      .select()
+      .from(companiesTable)
+      .where(eq(companiesTable.id, user.companyId))
+      .limit(1);
+
+    if (!company) {
+      res.status(500).json({
+        success: false,
+        error: "Company not found for user",
+        messages: [],
+      });
+      return;
+    }
+
+    const tokenRole = dbRoleToTokenRole(user.role);
+    const token = signAuthToken(user.id, user.companyId, tokenRole);
+
+    const data = LoginResponse.parse({
+      success: true,
+      data: {
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          companyId: user.companyId,
+          role: tokenRole,
+        },
+        company: {
+          id: company.id,
+          name: company.name,
+          address: company.address ?? undefined,
+          phone: company.phone ?? undefined,
+          email: company.email ?? undefined,
+          freeUsage: company.freeUsage,
+        },
+      },
+      error: null,
     });
-    return;
-  }
 
-  if (!user.emailVerified) {
-    res.status(403).json({
-      success: false,
-      error:
-        "Please confirm your email before signing in. Check your inbox or use “Resend confirmation” on the registration page.",
-      messages: [],
-    });
-    return;
-  }
-
-  const [company] = await db
-    .select()
-    .from(companiesTable)
-    .where(eq(companiesTable.id, user.companyId))
-    .limit(1);
-
-  if (!company) {
+    res.json(data);
+  } catch (err) {
+    if (err instanceof ZodError) {
+      res.status(400).json({
+        success: false,
+        error: "Invalid request",
+        messages: err.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`),
+      });
+      return;
+    }
+    console.error("[auth/login]", err);
+    const exposeDetail = process.env.NODE_ENV !== "production";
     res.status(500).json({
       success: false,
-      error: "Company not found for user",
-      messages: [],
+      error: "Login temporarily unavailable. Please try again.",
+      messages:
+        exposeDetail && err instanceof Error
+          ? [err.message]
+          : [],
     });
-    return;
   }
-
-  const tokenRole = dbRoleToTokenRole(user.role);
-  const token = signAuthToken(user.id, user.companyId, tokenRole);
-
-  const data = LoginResponse.parse({
-    success: true,
-    data: {
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        companyId: user.companyId,
-        role: tokenRole,
-      },
-      company: {
-        id: company.id,
-        name: company.name,
-        address: company.address ?? undefined,
-        phone: company.phone ?? undefined,
-        email: company.email ?? undefined,
-        freeUsage: company.freeUsage,
-      },
-    },
-    error: null,
-  });
-
-  res.json(data);
 });
 
 export default router;
