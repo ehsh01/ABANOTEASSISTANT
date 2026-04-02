@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcrypt";
 import { ZodError } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   RegisterBody,
   RegisterResponse,
@@ -15,7 +15,10 @@ import {
 import { db } from "@workspace/db";
 import { companiesTable, usersTable } from "@workspace/db/schema";
 import { signAuthToken, type UserRole } from "../middleware/auth";
-import { roleForNewRegistration } from "../lib/super-admin";
+import {
+  normalizeAuthEmail,
+  roleForNewRegistration,
+} from "../lib/super-admin";
 import {
   generateRawVerificationToken,
   hashVerificationToken,
@@ -37,11 +40,12 @@ const router: IRouter = Router();
 
 router.post("/auth/register", async (req, res) => {
   const body = RegisterBody.parse(req.body);
+  const email = normalizeAuthEmail(body.email);
 
   const existing = await db
     .select({ id: usersTable.id })
     .from(usersTable)
-    .where(eq(usersTable.email, body.email))
+    .where(sql`lower(${usersTable.email}) = ${email}`)
     .limit(1);
 
   if (existing.length > 0) {
@@ -69,7 +73,7 @@ router.post("/auth/register", async (req, res) => {
   const needsVerification = emailConfigured && !verificationDisabled;
 
   const passwordHash = await bcrypt.hash(body.password, 10);
-  const role = roleForNewRegistration(body.email);
+  const role = roleForNewRegistration(email);
 
   let rawToken: string | null = null;
   const tokenHash = needsVerification ? hashVerificationToken((rawToken = generateRawVerificationToken())) : null;
@@ -90,7 +94,7 @@ router.post("/auth/register", async (req, res) => {
       const [user] = await tx
         .insert(usersTable)
         .values({
-          email: body.email,
+          email,
           passwordHash,
           companyId: company.id,
           role,
@@ -105,7 +109,7 @@ router.post("/auth/register", async (req, res) => {
 
     if (needsVerification && rawToken) {
       try {
-        await sendVerificationEmail({ to: body.email, rawToken });
+        await sendVerificationEmail({ to: email, rawToken });
       } catch (err) {
         console.error("verification email failed", err);
         res.status(500).json({
@@ -121,7 +125,7 @@ router.post("/auth/register", async (req, res) => {
         success: true,
         data: {
           pendingEmailVerification: true,
-          message: `We sent a confirmation link to ${body.email}. Open it to activate your account, then sign in.`,
+          message: `We sent a confirmation link to ${email}. Open it to activate your account, then sign in.`,
           token: null,
           user: null,
           company: null,
@@ -237,6 +241,7 @@ router.post("/auth/verify-email", async (req, res) => {
 
 router.post("/auth/resend-verification", async (req, res) => {
   const body = ResendVerificationBody.parse(req.body);
+  const email = normalizeAuthEmail(body.email);
 
   const generic = ResendVerificationResponse.parse({
     success: true,
@@ -248,7 +253,7 @@ router.post("/auth/resend-verification", async (req, res) => {
   const [user] = await db
     .select()
     .from(usersTable)
-    .where(eq(usersTable.email, body.email))
+    .where(sql`lower(${usersTable.email}) = ${email}`)
     .limit(1);
 
   if (!user || user.emailVerified || !isEmailConfigured()) {
@@ -281,8 +286,13 @@ router.post("/auth/resend-verification", async (req, res) => {
 router.post("/auth/login", async (req, res) => {
   try {
     const body = LoginBody.parse(req.body);
+    const email = normalizeAuthEmail(body.email);
 
-    const [user] = await db.select().from(usersTable).where(eq(usersTable.email, body.email)).limit(1);
+    const [user] = await db
+      .select()
+      .from(usersTable)
+      .where(sql`lower(${usersTable.email}) = ${email}`)
+      .limit(1);
 
     if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
       res.status(401).json({
