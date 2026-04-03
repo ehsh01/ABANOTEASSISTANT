@@ -23,6 +23,7 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import { Button } from "@/components/ui/button";
 
 function formatGenerateNoteFailure(err: unknown): string {
   if (err instanceof ApiError && err.data && typeof err.data === "object") {
@@ -891,9 +892,29 @@ function ProgramsMultiSelectCombobox({
 function Step6Programs() {
   const [, setLocation] = useLocation();
   const { data, updateData } = useWizardStore();
-  const { data: programsRes, isLoading } = useClientPrograms(data.clientId!);
+  const {
+    data: programsRes,
+    isLoading,
+    isError: programsQueryError,
+    error: programsQueryFailure,
+    refetch: refetchPrograms,
+  } = useClientPrograms(data.clientId!);
 
   if (isLoading) return <div className="py-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary pop-icon" /></div>;
+
+  if (programsQueryError) {
+    return (
+      <div className="space-y-4 max-w-xl mx-auto text-center">
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 space-y-2">
+          <p className="font-semibold text-destructive">Could not load replacement programs</p>
+          <p className="text-sm text-muted-foreground">{formatGenerateNoteFailure(programsQueryFailure)}</p>
+        </div>
+        <Button type="button" variant="secondary" onClick={() => void refetchPrograms()}>
+          Try again
+        </Button>
+      </div>
+    );
+  }
 
   const programs = programsRes?.data || [];
   const minRequired = data.sessionHours || 1; // Fallback to 1 if not set

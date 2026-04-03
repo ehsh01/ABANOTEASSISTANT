@@ -23,6 +23,19 @@ import { sessionTimeRangeFromHours, formatSessionDate } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClient, useClientPrograms, useNotesList } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
+import { ApiError } from "@workspace/api-client-react";
+
+function formatProgramsFetchError(err: unknown): string {
+  if (err instanceof ApiError && err.data && typeof err.data === "object") {
+    const d = err.data as { error?: string; messages?: string[] };
+    const chunks = [
+      d.error,
+      ...(Array.isArray(d.messages) ? d.messages.filter((m) => typeof m === "string" && m.trim()) : []),
+    ].filter(Boolean) as string[];
+    if (chunks.length > 0) return chunks.join(" ");
+  }
+  return err instanceof Error ? err.message : String(err);
+}
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -85,6 +98,7 @@ export default function ClientDetail() {
     data: programsResp,
     isLoading: programsLoading,
     isError: programsError,
+    error: programsFetchError,
   } = useClientPrograms(id);
   const { data: notesResp, isLoading: notesLoading } = useNotesList();
   const deleteMutation = useDeleteSessionNote();
@@ -358,17 +372,51 @@ export default function ClientDetail() {
               </TabsContent>
 
               <TabsContent value="programs" className="space-y-3">
-                {replacements.length === 0 ? (
-                  <p className="text-sm text-[#877870] italic">{t.clientDetail.noPrograms}</p>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {replacements.map((program) => (
-                      <span key={program} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-teal-50 text-teal-700 border-teal-200">
-                        {program}
-                      </span>
-                    ))}
+                {programsError && (
+                  <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
+                    <p className="font-semibold text-rose-800 mb-1">Could not load linked programs</p>
+                    <p className="text-rose-800/90">{formatProgramsFetchError(programsFetchError)}</p>
                   </div>
                 )}
+                {programsLoading && (
+                  <p className="text-sm text-[#877870] flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin" /> Loading linked programs…
+                  </p>
+                )}
+                {!programsLoading && !programsError && programs.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-semibold uppercase tracking-widest text-[#877870]">
+                      Linked for session note wizard
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {programs.map((program) => (
+                        <span
+                          key={program.id}
+                          className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-emerald-50 text-emerald-800 border-emerald-200"
+                        >
+                          {program.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-[#877870]">On client profile</p>
+                  {replacements.length === 0 ? (
+                    <p className="text-sm text-[#877870] italic">{t.clientDetail.noPrograms}</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {replacements.map((program) => (
+                        <span
+                          key={program}
+                          className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-teal-50 text-teal-700 border-teal-200"
+                        >
+                          {program}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </TabsContent>
 
               <TabsContent value="interventions" className="space-y-3">

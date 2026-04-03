@@ -28,13 +28,36 @@ type AssessmentStatus = "uploaded" | "processing" | "ready" | "missing";
  * Replacement program names live on `client.profile.replacementPrograms` from the intake form;
  * ensure each name has a matching program row (per company) and is linked to the client.
  */
+function replacementProgramNamesFromProfile(profile: unknown): string[] {
+  if (profile === null || profile === undefined || typeof profile !== "object") {
+    return [];
+  }
+  const raw = (profile as { replacementPrograms?: unknown }).replacementPrograms;
+  if (Array.isArray(raw)) {
+    return [
+      ...new Set(
+        raw
+          .map((n) => String(n).trim())
+          .filter((n) => n.length > 0),
+      ),
+    ];
+  }
+  if (typeof raw === "string" && raw.trim()) {
+    return [raw.trim()];
+  }
+  return [];
+}
+
+function normalizeProgramApiType(type: string | null | undefined): "primary" | "supplemental" {
+  return type === "supplemental" ? "supplemental" : "primary";
+}
+
 async function syncReplacementProgramsFromProfile(
   clientId: number,
   companyId: number,
-  profile: ClientProfileRow | null | undefined,
+  profile: unknown,
 ): Promise<void> {
-  const raw = profile?.replacementPrograms ?? [];
-  const names = [...new Set(raw.map((n) => n.trim()).filter((n) => n.length > 0))];
+  const names = replacementProgramNamesFromProfile(profile);
   if (names.length === 0) return;
 
   for (const name of names) {
@@ -183,11 +206,17 @@ router.get("/clients/:clientId/programs", async (req, res) => {
     return;
   }
 
-  await syncReplacementProgramsFromProfile(
-    client.id,
-    companyId,
-    client.profile as ClientProfileRow | null | undefined,
-  );
+  try {
+    await syncReplacementProgramsFromProfile(client.id, companyId, client.profile);
+  } catch (err) {
+    console.error("[GET /clients/:id/programs] syncReplacementProgramsFromProfile", err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to sync replacement programs from client profile",
+      messages: [],
+    });
+    return;
+  }
 
   const sessionHours = Number(req.query.sessionHours) || 1;
   const minimumRequired = Math.max(sessionHours, 1);
@@ -215,7 +244,7 @@ router.get("/clients/:clientId/programs", async (req, res) => {
       id: p.id,
       companyId: p.companyId,
       name: p.name,
-      type: p.type as "primary" | "supplemental",
+      type: normalizeProgramApiType(p.type),
       description: p.description ?? undefined,
     })),
     minimumRequired,
@@ -243,6 +272,12 @@ router.get("/clients/:clientId", async (req, res) => {
   if (!client) {
     res.status(404).json({ success: false, error: "Client not found", messages: [] });
     return;
+  }
+
+  try {
+    await syncReplacementProgramsFromProfile(client.id, companyId, client.profile);
+  } catch (err) {
+    console.error("[clients/:clientId] syncReplacementProgramsFromProfile", err);
   }
 
   const data = GetClientResponse.parse({
