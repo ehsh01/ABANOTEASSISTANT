@@ -7,9 +7,7 @@ import { isOpenAINoteGenerationConfigured } from "./openai-notes";
  * PORT=4000 (e.g. Replit-style) while nginx still proxies to 5002/5007 — that caused 502s.
  */
 function resolveListenPortEnv(): string | undefined {
-  // Bracket form: esbuild `define: { "process.env.NODE_ENV": '"production"' }` in build.ts
-  // must not replace this read — otherwise staging PM2 always binds API_PORT_PROD.
-  const nodeEnv = process.env["NODE_ENV"];
+  const nodeEnv = process.env.NODE_ENV;
   const prod = process.env.API_PORT_PROD?.trim();
   const stg = process.env.API_PORT_STAGING?.trim();
   if (nodeEnv === "production" && prod) {

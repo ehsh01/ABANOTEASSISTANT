@@ -66,9 +66,8 @@ async function buildAll() {
     bundle: true,
     format: "cjs",
     outfile: path.resolve(distDir, "index.cjs"),
-    define: {
-      "process.env.NODE_ENV": '"production"',
-    },
+    // Do not define process.env.NODE_ENV: esbuild replaces *all* reads (including
+    // process.env["NODE_ENV"] in index.ts), which breaks PM2 staging listen port.
     minify: true,
     external: externals,
     logLevel: "info",
