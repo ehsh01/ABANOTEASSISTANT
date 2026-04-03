@@ -55,11 +55,16 @@ if (process.env.ALLOW_PASSWORD_RESET_SCRIPT !== "1") {
   process.exit(1);
 }
 
-const loginEmail = process.argv[2];
-const newPassword = process.argv[3];
+// pnpm/npm pass `--` before forwarded args: argv becomes [node, script, '--', email, pass]
+const argvArgs = process.argv.slice(2).filter((a) => a !== "--");
+const loginEmail = argvArgs[0];
+const newPassword = argvArgs[1];
 if (!loginEmail?.trim() || !newPassword || newPassword.length < 8) {
   console.error(
-    "Usage: ALLOW_PASSWORD_RESET_SCRIPT=1 node .../reset-user-password.mjs <email> <newPasswordMin8>",
+    "Usage: ALLOW_PASSWORD_RESET_SCRIPT=1 pnpm --filter @workspace/api-server run reset-password -- <email> <newPasswordMin8>",
+  );
+  console.error(
+    "   or: ALLOW_PASSWORD_RESET_SCRIPT=1 node scripts/reset-user-password.mjs <email> <newPasswordMin8>  (from artifacts/api-server/)",
   );
   process.exit(1);
 }
