@@ -2,11 +2,28 @@ import "./load-local-env";
 import app from "./app";
 import { isOpenAINoteGenerationConfigured } from "./openai-notes";
 
-const rawPort = process.env["PORT"];
+/**
+ * Prefer API_PORT_PROD / API_PORT_STAGING over generic PORT. PM2 or the host may inject
+ * PORT=4000 (e.g. Replit-style) while nginx still proxies to 5002/5007 — that caused 502s.
+ */
+function resolveListenPortEnv(): string | undefined {
+  const nodeEnv = process.env.NODE_ENV;
+  const prod = process.env.API_PORT_PROD?.trim();
+  const stg = process.env.API_PORT_STAGING?.trim();
+  if (nodeEnv === "production" && prod) {
+    return prod;
+  }
+  if (nodeEnv === "staging" && stg) {
+    return stg;
+  }
+  return process.env.PORT?.trim();
+}
+
+const rawPort = resolveListenPortEnv();
 
 if (!rawPort) {
   throw new Error(
-    "PORT environment variable is required but was not provided.",
+    "PORT (or API_PORT_PROD / API_PORT_STAGING for PM2) must be set.",
   );
 }
 

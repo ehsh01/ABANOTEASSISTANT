@@ -66,8 +66,11 @@ const repoRoot = path.resolve(__dirname, "../..");
 function prodEnv() {
   // Spread `.env` so Resend, APP_ORIGIN, etc. reach the Node process (previously only
   // DATABASE_URL + JWT_SECRET were passed, so RESEND_API_KEY in .env was ignored).
+  // Drop `PORT` from `.env` / fileEnv — a generic PORT= (e.g. 4000) must not override
+  // API_PORT_PROD; PM2/nginx expect production on 5002 by default.
+  const { PORT: _dropPort, ...fileEnvNoPort } = fileEnv;
   const e = {
-    ...fileEnv,
+    ...fileEnvNoPort,
     NODE_ENV: "production",
     PORT: env("API_PORT_PROD") || "5002",
   };
@@ -83,8 +86,9 @@ function prodEnv() {
 }
 
 function stagingEnv() {
+  const { PORT: _dropPort, ...fileEnvNoPort } = fileEnv;
   const e = {
-    ...fileEnv,
+    ...fileEnvNoPort,
     NODE_ENV: "staging",
     PORT: env("API_PORT_STAGING") || "5007",
   };
