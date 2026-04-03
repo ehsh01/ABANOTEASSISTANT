@@ -76,7 +76,8 @@ export default function LoginPage() {
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              loginMutation.mutate({ data: { email, password } });
+              const em = email.trim().toLowerCase();
+              loginMutation.mutate({ data: { email: em, password } });
             }}
           >
             <div className="space-y-2">

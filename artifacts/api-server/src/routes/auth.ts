@@ -288,13 +288,33 @@ router.post("/auth/login", async (req, res) => {
     const body = LoginBody.parse(req.body);
     const email = normalizeAuthEmail(body.email);
 
-    const [user] = await db
+    const candidates = await db
       .select()
       .from(usersTable)
-      .where(sql`lower(${usersTable.email}) = ${email}`)
-      .limit(1);
+      .where(sql`lower(${usersTable.email}) = ${email}`);
 
-    if (!user || !(await bcrypt.compare(body.password, user.passwordHash))) {
+    if (candidates.length > 1) {
+      console.warn(
+        "[auth/login] multiple rows match email case-insensitively; user ids=%s — verify data",
+        candidates.map((u) => u.id).join(","),
+      );
+    }
+
+    let user: (typeof candidates)[number] | undefined;
+    for (const row of candidates) {
+      if (await bcrypt.compare(body.password, row.passwordHash)) {
+        user = row;
+        break;
+      }
+    }
+
+    if (!user) {
+      const domain = email.includes("@") ? email.slice(email.lastIndexOf("@") + 1) : "?";
+      console.warn(
+        "[auth/login] invalid credentials domain=%s rows=%s (0=no such user; ≥1=password mismatch)",
+        domain,
+        String(candidates.length),
+      );
       res.status(401).json({
         success: false,
         error: "Invalid credentials",
