@@ -4,7 +4,9 @@
  *   cd /path/to/ABANOTEASSISTANT
  *   ALLOW_PASSWORD_RESET_SCRIPT=1 node artifacts/api-server/scripts/reset-user-password.mjs 'user@example.com' 'NewPasswordHere'
  *
- * Uses DATABASE_URL from the environment, or reads DATABASE_URL from artifacts/api-server/.env.
+ * Uses DATABASE_URL from artifacts/api-server/.env first, then process.env.
+ * (A stale `export DATABASE_URL=...` from drizzle push would otherwise override .env
+ * and point at the wrong database — "No user found".)
  */
 import bcrypt from "bcrypt";
 import { readFileSync, existsSync } from "node:fs";
@@ -15,10 +17,7 @@ import { parse } from "pg-connection-string";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function loadDatabaseUrl() {
-  if (process.env.DATABASE_URL?.trim()) {
-    return process.env.DATABASE_URL.trim();
-  }
+function loadDatabaseUrlFromDotEnv() {
   const envPath = resolve(__dirname, "../.env");
   if (!existsSync(envPath)) {
     return null;
@@ -46,6 +45,14 @@ function loadDatabaseUrl() {
     return v;
   }
   return null;
+}
+
+function loadDatabaseUrl() {
+  return (
+    loadDatabaseUrlFromDotEnv()?.trim() ||
+    process.env.DATABASE_URL?.trim() ||
+    null
+  );
 }
 
 if (process.env.ALLOW_PASSWORD_RESET_SCRIPT !== "1") {
@@ -76,6 +83,9 @@ if (!url) {
 }
 
 const parsed = parse(url);
+if (parsed.database) {
+  console.log(`reset-password: using database "${parsed.database}" on ${parsed.host}`);
+}
 if (!parsed.host || !parsed.database || !parsed.user) {
   console.error("DATABASE_URL must include host, database, and user");
   process.exit(1);
