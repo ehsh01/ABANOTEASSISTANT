@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Copy, Save, Edit3, RotateCcw, CheckCircle2, ChevronLeft, Calendar, Clock, User, Wand2, Languages } from "lucide-react";
+import { Copy, Save, Edit3, RotateCcw, CheckCircle2, ChevronLeft, Calendar, Clock, User, Languages } from "lucide-react";
 import { useWizardStore } from "@/store/wizard-store";
 import { useSaveSessionNote } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
@@ -10,7 +10,7 @@ import { cn, formatSessionDate } from "@/lib/utils";
 
 export default function Result() {
   const [, setLocation] = useLocation();
-  const { generatedNote, generateWarnings, reset } = useWizardStore();
+  const { generatedNote, reset } = useWizardStore();
   const saveMutation = useSaveSessionNote();
   const t = useT();
 
@@ -89,8 +89,6 @@ export default function Result() {
   };
 
   const displayDate = formatSessionDate(generatedNote.sessionDate);
-  const usedOpenAI = generatedNote.generationSource === "openai";
-  const modelLabel = generatedNote.generationModel?.trim() || "—";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -209,41 +207,6 @@ export default function Result() {
               </div>
             </div>
           </div>
-
-          {/* How the clinical body was produced */}
-          <div
-            className={cn(
-              "rounded-2xl border p-5",
-              usedOpenAI ? "bg-emerald-50/80 border-emerald-200" : "bg-amber-50/90 border-amber-200",
-            )}
-          >
-            <div
-              className={cn(
-                "flex items-center gap-2 font-semibold mb-2 text-sm",
-                usedOpenAI ? "text-emerald-800" : "text-amber-900",
-              )}
-            >
-              <Wand2 className="w-4 h-4 shrink-0 pop-icon" />
-              {usedOpenAI ? t.result.sourceOpenaiTitle : t.result.sourceTemplateTitle}
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {usedOpenAI
-                ? t.result.sourceOpenaiBody.replace("{model}", modelLabel)
-                : t.result.sourceTemplateBody}
-            </p>
-            <p className="text-xs text-muted-foreground leading-relaxed mt-2">{t.result.aiNotice}</p>
-          </div>
-
-          {generateWarnings && generateWarnings.length > 0 && (
-            <div className="rounded-2xl border border-border bg-card p-4 space-y-2">
-              <div className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t.result.serverNotices}</div>
-              <ul className="text-xs text-muted-foreground space-y-1.5 list-disc pl-4">
-                {generateWarnings.map((w, i) => (
-                  <li key={i}>{w}</li>
-                ))}
-              </ul>
-            </div>
-          )}
 
           {/* Translate Note Button */}
           <div className="space-y-2">
