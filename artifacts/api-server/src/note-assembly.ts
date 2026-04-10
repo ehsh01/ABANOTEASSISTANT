@@ -3,6 +3,12 @@
  * Source of truth for wording: .cursor/rules/aba-note-locked-prose.mdc
  */
 
+import type { TherapySetting } from "@workspace/therapy-settings";
+import { therapySettingLocationPhrase } from "@workspace/therapy-settings";
+
+export type { TherapySetting };
+export { therapySettingLocationPhrase };
+
 export function formatCaregiverList(presentPeople: string[]): string {
   const p = presentPeople.map((s) => s.trim()).filter(Boolean);
   if (p.length === 0) return "the caregiver";
@@ -31,10 +37,16 @@ export const LOCKED_CLOSING_PARAGRAPH =
   'Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., "Good job," "Wow," and "Good attention to detail"), preferred toys, and videos contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned.';
 
 /** @param clientName First name only (product policy: no last name in session notes). */
-export function buildLockedOpening(clientName: string, presentPeople: string[], hasEnvironmentalChanges: boolean): string {
+export function buildLockedOpening(
+  clientName: string,
+  presentPeople: string[],
+  hasEnvironmentalChanges: boolean,
+  therapySetting: TherapySetting,
+): string {
   const caregivers = formatCaregiverList(presentPeople);
   const env = environmentalOpeningSentence(hasEnvironmentalChanges);
-  return `The RBT met with ${clientName} and ${caregivers} at home to implement program targets. ${env}`;
+  const where = therapySettingLocationPhrase(therapySetting);
+  return `The RBT met with ${clientName} and ${caregivers} ${where} to implement program targets. ${env}`;
 }
 
 /** @param clientName First name only (matches locked-opening policy). */

@@ -15,6 +15,7 @@ import {
   SaveNoteBody,
   SaveNoteResponse,
 } from "@workspace/api-zod";
+import { normalizeLegacyTherapySetting } from "@workspace/therapy-settings";
 import { db } from "@workspace/db";
 import {
   clientsTable,
@@ -44,6 +45,7 @@ import {
   buildNextSessionSentence,
   buildPerformanceSentence,
   LOCKED_CLOSING_PARAGRAPH,
+  type TherapySetting,
 } from "../note-assembly";
 import { truncateAssessmentTextForNoteContext } from "../assessment-extract";
 import { resolveAbcHintsForNoteGeneration } from "../abc-hints";
@@ -88,10 +90,11 @@ function assembleSessionNote(
   clientName: string,
   presentPeople: string[],
   hasEnvChanges: boolean,
+  therapySetting: TherapySetting,
   clinicalBody: string,
   nextSessionDate: string | undefined,
 ): string {
-  const opening = buildLockedOpening(clientName, presentPeople, hasEnvChanges);
+  const opening = buildLockedOpening(clientName, presentPeople, hasEnvChanges, therapySetting);
   const performance = buildPerformanceSentence(clientName);
   const nextSession = buildNextSessionSentence(clientName, nextSessionDate);
 
@@ -258,7 +261,19 @@ router.post("/notes/generate", async (req, res) => {
     return;
   }
 
-  const body = GenerateNoteBody.parse(req.body);
+  const raw = req.body;
+  const bodyIn =
+    raw != null && typeof raw === "object"
+      ? {
+          ...(raw as Record<string, unknown>),
+          therapySetting:
+            typeof (raw as { therapySetting?: unknown }).therapySetting === "string"
+              ? normalizeLegacyTherapySetting((raw as { therapySetting: string }).therapySetting)
+              : (raw as { therapySetting?: unknown }).therapySetting,
+        }
+      : raw;
+
+  const body = GenerateNoteBody.parse(bodyIn);
 
   if (process.env.ENFORCE_COMPLIMENTARY_ACCESS === "true") {
     const [co] = await db
@@ -409,6 +424,7 @@ router.post("/notes/generate", async (req, res) => {
     gender: profile?.gender,
     sessionHours: body.sessionHours,
     sessionDate: body.sessionDate,
+    therapySetting: body.therapySetting,
     presentPeople: body.presentPeople,
     hasEnvironmentalChanges: body.hasEnvironmentalChanges,
     environmentalChanges: body.environmentalChanges ?? "",
@@ -453,6 +469,7 @@ router.post("/notes/generate", async (req, res) => {
     clientNameForNote,
     body.presentPeople,
     body.hasEnvironmentalChanges,
+    body.therapySetting,
     clinicalBody,
     body.nextSessionDate,
   );

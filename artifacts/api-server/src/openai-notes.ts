@@ -10,6 +10,7 @@ import {
   validateClinicalBodyCompliance,
   type NoteComplianceContext,
 } from "./note-validation";
+import type { TherapySetting } from "@workspace/therapy-settings";
 
 /** Chat Completions model id for note clinical body when OPENAI_MODEL is unset. */
 export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-5.3-chat-latest";
@@ -21,6 +22,8 @@ export type NoteGenerationContext = {
   gender: string | null | undefined;
   sessionHours: number;
   sessionDate: string;
+  /** Approved session location label; align antecedents and setting with this. */
+  therapySetting: TherapySetting;
   presentPeople: string[];
   hasEnvironmentalChanges: boolean;
   environmentalChanges: string;
@@ -91,6 +94,9 @@ PHYSICAL AGGRESSION — RESPONSE BLOCK FIRST (when listed in JSON):
 TANTRUMS AND OTHER BROAD LABELS (must use assessment-linked topography):
 - When the documented maladaptive behavior is broad (e.g. tantrum, meltdown, emotional dysregulation, crying episode) OR when the narrative would otherwise only say the client "had a tantrum" / "tantrumed," you MUST spell out observable actions in the same episode: what the client did with their body, voice, and materials (e.g. fell to the floor, kicked legs, screamed with tears, threw items, pushed materials away, hit self or surfaces)—aligned with how that behavior is described or implied across the maladaptiveBehaviors strings in JSON.
 - Never end the behavior description on the label alone (e.g. avoid "manifested Tantrum" with no preceding concrete actions). The RBT must be able to see the topography in your text.
+
+SESSION SETTING (JSON \`therapySetting\` — approved location label, e.g. Home, School, Daycare, Medical Facility, Community, combined labels such as Home/School):
+- The fixed system opening states where the session occurred using a server-assembled phrase derived from this exact label. Keep each hour's antecedents, activities, materials, and social context **consistent with that setting** (e.g., classroom or playground when school is involved; typical home routines when home is involved; clinic or medical context when those labels apply; community outings or public spaces when community is involved). Do not contradict \`therapySetting\`.
 
 AGE-APPROPRIATE ACTIVITIES:
 - Use clientAgeYears (and ageBand if present). Scenarios, demands, and materials must fit typical expectations for that developmental level.

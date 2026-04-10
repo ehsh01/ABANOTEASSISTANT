@@ -180,6 +180,10 @@ export const translations = {
       generatingBody:
         "Generation uses OpenAI and usually takes about 15–40 seconds. If something is wrong (missing API key, model error, or quota), you will see an error message instead of a note.",
       generateFailedTitle: "Could not generate note",
+      therapySettingTitle: "Where did therapy take place?",
+      therapySettingSubtitle: "Select the location that best describes this session.",
+      therapySettingPlaceholder: "Select a location…",
+      therapySettingReviewLabel: "Session location",
     },
     // ── Client detail ──
     clientDetail: {
@@ -432,6 +436,10 @@ export const translations = {
       generatingBody:
         "La generación usa OpenAI y suele tardar unos 15–40 segundos. Si hay un problema (clave faltante, error del modelo o cuota), verás un mensaje de error en lugar de una nota.",
       generateFailedTitle: "No se pudo generar la nota",
+      therapySettingTitle: "¿Dónde se realizó la terapia?",
+      therapySettingSubtitle: "Selecciona el lugar que mejor describa esta sesión.",
+      therapySettingPlaceholder: "Selecciona un lugar…",
+      therapySettingReviewLabel: "Lugar de la sesión",
     },
     // ── Client detail ──
     clientDetail: {

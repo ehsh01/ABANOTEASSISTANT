@@ -13,9 +13,10 @@ These strings are **binding** for any code, prompt, or agent that assembles the 
 
 Every note must **begin** with exactly this structure (fill slots only; do not paraphrase the template):
 
-1. `The RBT met with [ClientFirstName] and [CaregiverList] at home to implement program targets.`
+1. `The RBT met with [ClientFirstName] and [CaregiverList] [SESSION_LOCATION] to implement program targets.`
    - `[ClientFirstName]` = first name only (no last name in assembled notes or AI clinical body).
    - `[CaregiverList]` = people present from session intake (e.g. Mother, Father), joined with natural English (e.g. `Mother and Father`, or `Mother, Father, and Grandmother`). If none documented, use: `the caregiver`.
+   - `[SESSION_LOCATION]` = server-assembled phrase from session intake `therapySetting` (approved location label from the wizard/API). Do not paraphrase: mapping lives in `@workspace/therapy-settings` (`therapySettingLocationPhrase`) and must stay aligned with the OpenAPI enum for `therapySetting`. Legacy slugs `home` / `school` / `community` are normalized to `Home` / `School` / `Community` before assembly.
 2. Environmental status sentence (choose one; do not invent facts):
    - If **no** environmental changes this session: `There have been no environmental changes recently.`
    - If **yes**: `There have been environmental changes recently.` (Details belong in the note body per workflow — do not contradict the boolean.)

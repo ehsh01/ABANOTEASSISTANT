@@ -4,7 +4,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon, UserPlus, Plus, Trash2 } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
-import type { Client as ApiClient, Program, GenerateNoteRequest, AbcHintEntry } from "@workspace/api-client-react";
+import type { Client as ApiClient, Program, GenerateNoteRequest, AbcHintEntry, TherapySetting } from "@workspace/api-client-react";
+import { THERAPY_SETTINGS_ORDERED, isTherapySetting } from "@workspace/therapy-settings";
 import { ApiError } from "@workspace/api-client-react";
 import { useWizardStore, type WizardData } from "@/store/wizard-store";
 import { useClients, useClientPrograms, useGenerateSessionNote, useAbcActivityAntecedents, useClient } from "@/hooks/use-aba-api";
@@ -24,6 +25,13 @@ import {
   CommandList,
 } from "@/components/ui/command";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 function formatGenerateNoteFailure(err: unknown): string {
   if (err instanceof ApiError && err.data && typeof err.data === "object") {
@@ -47,7 +55,9 @@ function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | null {
     !data.sessionDate.trim() ||
     typeof data.hasEnvironmentalChanges !== "boolean" ||
     !Array.isArray(data.presentPeople) ||
-    !Array.isArray(data.selectedReplacements)
+    !Array.isArray(data.selectedReplacements) ||
+    data.therapySetting == null ||
+    !isTherapySetting(data.therapySetting)
   ) {
     return null;
   }
@@ -55,6 +65,7 @@ function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | null {
     clientId: data.clientId,
     sessionHours: data.sessionHours,
     sessionDate: data.sessionDate.trim(),
+    therapySetting: data.therapySetting,
     presentPeople: data.presentPeople,
     hasEnvironmentalChanges: data.hasEnvironmentalChanges,
     selectedReplacements: data.selectedReplacements,
@@ -640,6 +651,49 @@ function Step4People() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+const THERAPY_SETTING_SELECT_NONE = "__none__";
+
+function Step5SessionSetting() {
+  const { data, updateData } = useWizardStore();
+  const t = useT();
+  const value = data.therapySetting;
+  const selectValue = value && isTherapySetting(value) ? value : THERAPY_SETTING_SELECT_NONE;
+
+  return (
+    <div className="space-y-8 max-w-2xl mx-auto">
+      <div className="text-center mb-8">
+        <h2 className="text-3xl font-display font-bold text-foreground">{t.wizard.therapySettingTitle}</h2>
+        <p className="text-muted-foreground mt-2">{t.wizard.therapySettingSubtitle}</p>
+      </div>
+
+      <div className="max-w-xl mx-auto">
+        <Select
+          value={selectValue}
+          onValueChange={(v) =>
+            updateData({
+              therapySetting: v === THERAPY_SETTING_SELECT_NONE ? undefined : (v as TherapySetting),
+            })
+          }
+        >
+          <SelectTrigger className="h-12 rounded-xl border-2 border-border bg-card text-base">
+            <SelectValue placeholder={t.wizard.therapySettingPlaceholder} />
+          </SelectTrigger>
+          <SelectContent className="max-h-[min(70vh,28rem)]">
+            <SelectItem value={THERAPY_SETTING_SELECT_NONE} className="text-muted-foreground">
+              {t.wizard.therapySettingPlaceholder}
+            </SelectItem>
+            {THERAPY_SETTINGS_ORDERED.map((label) => (
+              <SelectItem key={label} value={label}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   );
 }
@@ -1261,6 +1315,7 @@ function Step7NextDate() {
 function Step8Review() {
   const { data } = useWizardStore();
   const { data: clientsRes } = useClients();
+  const t = useT();
   const clientName = clientsRes?.data?.find(c => c.id === data.clientId)?.name || "Unknown";
 
   const Item = ({ label, value }: { label: string, value: React.ReactNode }) => (
@@ -1282,6 +1337,7 @@ function Step8Review() {
         <Item label="Session Date" value={formatSessionDate(data.sessionDate)} />
         <Item label="Duration" value={`${data.sessionHours} hours`} />
         <Item label="Present" value={data.presentPeople?.length ? data.presentPeople.join(", ") : "Therapist only"} />
+        <Item label={t.wizard.therapySettingReviewLabel} value={data.therapySetting ?? "—"} />
         <Item label="Env Changes" value={data.hasEnvironmentalChanges ? "Yes" : "No"} />
         <Item label="Programs" value={<span className="text-primary">{data.selectedReplacements?.length} selected</span>} />
         <Item label="Next Session" value={formatSessionDate(data.nextSessionDate, "Not scheduled")} />
@@ -1299,7 +1355,7 @@ export default function Wizard() {
   const t = useT();
   const [generateError, setGenerateError] = useState<string | null>(null);
 
-  const totalSteps = 9;
+  const totalSteps = 10;
   const isGenerating = generateMutation.isPending;
 
   useEffect(() => {
@@ -1329,7 +1385,7 @@ export default function Wizard() {
     const payload = toGenerateNoteRequest(data);
     if (!payload) {
       setGenerateError(
-        "Session data is incomplete. Use Back to confirm client, programs, session hours, date, and environment step, then try again.",
+        "Session data is incomplete. Use Back to confirm client, programs, session hours, date, where therapy took place, environment step, then try again.",
       );
       return;
     }
@@ -1351,9 +1407,11 @@ export default function Wizard() {
       case 2: return (data.selectedReplacements?.length || 0) >= 1; // Programs (must select at least 1)
       case 3: return !!data.sessionHours;
       case 4: return !!data.sessionDate;
-      case 5: return true; // Optional
-      case 6: return data.hasEnvironmentalChanges === false || (data.hasEnvironmentalChanges === true && !!data.environmentalChanges?.trim());
-      case 7: {
+      case 5: return true; // Who was present — optional
+      case 6:
+        return typeof data.therapySetting === "string" && isTherapySetting(data.therapySetting);
+      case 7: return data.hasEnvironmentalChanges === false || (data.hasEnvironmentalChanges === true && !!data.environmentalChanges?.trim());
+      case 8: {
         // ABC Builder — optional, but no partial rows allowed
         const hints = data.abcHints ?? [];
         const hasPartial = hints.some((r) => {
@@ -1363,8 +1421,8 @@ export default function Wizard() {
         });
         return !hasPartial;
       }
-      case 8: return true; // Next session date — optional
-      case 9: return true;
+      case 9: return true; // Next session date — optional
+      case 10: return true;
       default: return false;
     }
   };
@@ -1437,10 +1495,11 @@ export default function Wizard() {
             {step === 3 && <Step2Hours />}
             {step === 4 && <Step3Date />}
             {step === 5 && <Step4People />}
-            {step === 6 && <Step5Env />}
-            {step === 7 && <StepAbcBuilder />}
-            {step === 8 && <Step7NextDate />}
-            {step === 9 && <Step8Review />}
+            {step === 6 && <Step5SessionSetting />}
+            {step === 7 && <Step5Env />}
+            {step === 8 && <StepAbcBuilder />}
+            {step === 9 && <Step7NextDate />}
+            {step === 10 && <Step8Review />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -1458,7 +1517,7 @@ export default function Wizard() {
         )}
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="text-sm text-muted-foreground hidden sm:block">
-            {step === 9 ? "Ready to generate" : "Complete this step to proceed"}
+            {step === totalSteps ? "Ready to generate" : "Complete this step to proceed"}
           </div>
           
           {step < totalSteps ? (

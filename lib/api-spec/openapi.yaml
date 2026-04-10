@@ -1378,6 +1378,40 @@ components:
           maximum: 8
         sessionDate:
           type: string
+        therapySetting:
+          type: string
+          enum:
+            - "Seasonal Residence"
+            - "Walk-in Retail Health Clinic"
+            - "Neighbor Residence"
+            - "Office"
+            - "Prescribed Pediatric Extended Care (PPEC) Center"
+            - "Relative Residence"
+            - "School"
+            - "School/Community"
+            - "School/Home"
+            - "Home"
+            - "Home/School"
+            - "Home/Community"
+            - "Home/Daycare"
+            - "Independent Clinic"
+            - "Medical Facility"
+            - "Member Home"
+            - "Comprehensive Outpatient Rehab Facility"
+            - "Daycare"
+            - "Daycare/Community"
+            - "Daycare/Home"
+            - "Family Home"
+            - "Friend Residence"
+            - "Group Home"
+            - "Assisted Living Facility (ALF)"
+            - "Community Mental Health Center"
+            - "Community"
+            - "Community/Daycare"
+            - "Community/Home"
+            - "Community/School"
+          description: >
+            Where therapy was delivered. Must be one of the approved location labels; drives the locked opening location phrase assembled server-side (do not paraphrase the stored label when interpreting setting for the clinical body).
         presentPeople:
           type: array
           items:
@@ -1403,6 +1437,7 @@ components:
         - clientId
         - sessionHours
         - sessionDate
+        - therapySetting
         - presentPeople
         - hasEnvironmentalChanges
         - selectedReplacements

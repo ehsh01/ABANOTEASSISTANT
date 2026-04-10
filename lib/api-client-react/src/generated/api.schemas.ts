@@ -5,6 +5,11 @@
  * ABA Note Assistant API specification
  * OpenAPI spec version: 0.1.0
  */
+import type { TherapySetting } from "@workspace/therapy-settings";
+import { THERAPY_SETTINGS_ORDERED } from "@workspace/therapy-settings";
+
+export type { TherapySetting };
+export { THERAPY_SETTINGS_ORDERED };
 /**
  * Session note clinical body is generated only via OpenAI; there is no server-side template fallback. If your deployed API omits this field, the server is running an older build — redeploy api-server dist and restart the process.
 
@@ -328,6 +333,8 @@ export interface GenerateNoteRequest {
    */
   sessionHours: number;
   sessionDate: string;
+  /** Where therapy was delivered; drives the locked opening phrase. */
+  therapySetting: TherapySetting;
   presentPeople: string[];
   hasEnvironmentalChanges: boolean;
   environmentalChanges?: string;

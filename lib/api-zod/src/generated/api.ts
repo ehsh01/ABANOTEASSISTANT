@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import * as zod from "zod";
+import { THERAPY_SETTING_ZOD_ENUM } from "@workspace/therapy-settings";
 
 /**
  * Returns server health status
@@ -558,6 +559,11 @@ export const GenerateNoteBody = zod.object({
   clientId: zod.number(),
   sessionHours: zod.number().min(1).max(generateNoteBodySessionHoursMax),
   sessionDate: zod.string(),
+  therapySetting: zod
+    .enum(THERAPY_SETTING_ZOD_ENUM)
+    .describe(
+      "Where therapy was delivered; must match an approved location label. Drives the locked opening location phrase assembled server-side.",
+    ),
   presentPeople: zod.array(zod.string()),
   hasEnvironmentalChanges: zod.boolean(),
   environmentalChanges: zod.string().optional(),

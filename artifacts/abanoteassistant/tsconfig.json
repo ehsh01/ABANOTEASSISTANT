@@ -13,7 +13,8 @@
     "paths": {
       "@/*": ["./src/*"],
       "@workspace/api-client-react": ["../../lib/api-client-react/src/index.ts"],
-      "@workspace/api-client-react/*": ["../../lib/api-client-react/src/*"]
+      "@workspace/api-client-react/*": ["../../lib/api-client-react/src/*"],
+      "@workspace/therapy-settings": ["../../lib/therapy-settings/src/index.ts"]
     }
   }
 }
