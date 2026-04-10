@@ -18,12 +18,12 @@ import {
   Trash2,
   Plus,
 } from "lucide-react";
-import { useDeleteSessionNote } from "@/hooks/use-aba-api";
+import { useDeleteSessionNote, useUpdateClientProgram, useDeleteClientProgram } from "@/hooks/use-aba-api";
 import { sessionTimeRangeFromHours, formatSessionDate } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClient, useClientPrograms, useNotesList } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
-import { ApiError } from "@workspace/api-client-react";
+import { ApiError, ProgramType, type Program } from "@workspace/api-client-react";
 
 function formatProgramsFetchError(err: unknown): string {
   if (err instanceof ApiError && err.data && typeof err.data === "object") {
@@ -102,12 +102,55 @@ export default function ClientDetail() {
   } = useClientPrograms(id);
   const { data: notesResp, isLoading: notesLoading } = useNotesList();
   const deleteMutation = useDeleteSessionNote();
+  const updateProgramMutation = useUpdateClientProgram();
+  const deleteProgramMutation = useDeleteClientProgram();
   const t = useT();
   const [activeTab, setActiveTab] = useState("sessionNotes");
+
+  // Program edit state
+  const [editingProgramId, setEditingProgramId] = useState<number | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editType, setEditType] = useState<string>(ProgramType.primary);
+  const [editDescription, setEditDescription] = useState("");
 
   const handleDeleteNote = (noteId: number) => {
     if (!window.confirm("Delete this note? This cannot be undone.")) return;
     deleteMutation.mutate(noteId);
+  };
+
+  const handleStartEdit = (program: Program) => {
+    setEditingProgramId(program.id);
+    setEditName(program.name);
+    setEditType(program.type);
+    setEditDescription(program.description ?? "");
+  };
+
+  const handleCancelEdit = () => {
+    setEditingProgramId(null);
+  };
+
+  const handleSaveEdit = () => {
+    if (!id || editingProgramId === null) return;
+    updateProgramMutation.mutate(
+      {
+        clientId: id,
+        programId: editingProgramId,
+        data: {
+          name: editName.trim() || undefined,
+          type: editType as typeof ProgramType[keyof typeof ProgramType],
+          description: editDescription.trim() || null,
+        },
+      },
+      {
+        onSuccess: () => setEditingProgramId(null),
+      },
+    );
+  };
+
+  const handleDeleteProgram = (programId: number) => {
+    if (!id) return;
+    if (!window.confirm("Remove this program? This cannot be undone.")) return;
+    deleteProgramMutation.mutate({ clientId: id, programId });
   };
 
   const client = clientResp?.data;
@@ -388,15 +431,89 @@ export default function ClientDetail() {
                     <p className="text-xs font-semibold uppercase tracking-widest text-[#877870]">
                       Linked for session note wizard
                     </p>
-                    <div className="flex flex-wrap gap-2">
-                      {programs.map((program) => (
-                        <span
-                          key={program.id}
-                          className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-emerald-50 text-emerald-800 border-emerald-200"
-                        >
-                          {program.name}
-                        </span>
-                      ))}
+                    <div className="space-y-2">
+                      {programs.map((program) =>
+                        editingProgramId === program.id ? (
+                          <div key={program.id} className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                            <div className="space-y-1">
+                              <label className="text-xs font-semibold text-[#877870] uppercase tracking-wide">Name</label>
+                              <input
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-semibold text-[#877870] uppercase tracking-wide">Type</label>
+                              <select
+                                value={editType}
+                                onChange={(e) => setEditType(e.target.value)}
+                                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                              >
+                                <option value={ProgramType.primary}>Primary</option>
+                                <option value={ProgramType.supplemental}>Supplemental</option>
+                              </select>
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs font-semibold text-[#877870] uppercase tracking-wide">Description <span className="font-normal normal-case">(optional)</span></label>
+                              <input
+                                value={editDescription}
+                                onChange={(e) => setEditDescription(e.target.value)}
+                                placeholder="e.g. Reduce task refusal"
+                                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                              />
+                            </div>
+                            {updateProgramMutation.isError && (
+                              <p className="text-xs text-red-500">Save failed — please try again.</p>
+                            )}
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                onClick={handleSaveEdit}
+                                disabled={!editName.trim() || updateProgramMutation.isPending}
+                                className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                              >
+                                {updateProgramMutation.isPending ? "Saving…" : "Save"}
+                              </button>
+                              <button
+                                onClick={handleCancelEdit}
+                                disabled={updateProgramMutation.isPending}
+                                className="flex-1 py-2 rounded-lg border border-border bg-white text-sm font-semibold text-[#877870] hover:bg-secondary/30 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div key={program.id} className="flex items-center justify-between rounded-xl border border-border bg-white px-4 py-3 gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-sm font-semibold text-foreground">{program.name}</span>
+                                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 capitalize">{program.type}</span>
+                              </div>
+                              {program.description && (
+                                <p className="text-xs text-[#877870] mt-0.5 truncate">{program.description}</p>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => handleStartEdit(program)}
+                                className="p-1.5 rounded-lg text-[#877870] hover:text-primary hover:bg-primary/10 transition-colors"
+                                title="Edit program"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteProgram(program.id)}
+                                disabled={deleteProgramMutation.isPending}
+                                className="p-1.5 rounded-lg text-[#877870] hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                                title="Remove program"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      )}
                     </div>
                   </div>
                 )}
