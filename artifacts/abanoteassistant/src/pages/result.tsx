@@ -10,7 +10,7 @@ import { cn, formatSessionDate } from "@/lib/utils";
 
 export default function Result() {
   const [, setLocation] = useLocation();
-  const { generatedNote, reset } = useWizardStore();
+  const { generatedNote, reset, resetWizardForm } = useWizardStore();
   const saveMutation = useSaveSessionNote();
   const t = useT();
 
@@ -230,7 +230,7 @@ export default function Result() {
           {/* Secondary Actions */}
           <div className="space-y-3">
             <button
-              onClick={() => setLocation("/wizard")}
+              onClick={() => { resetWizardForm(); setLocation("/wizard"); }}
               className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-border bg-card text-foreground font-semibold hover:border-primary/50 hover:bg-secondary/30 transition-all hover-elevate"
             >
               <RotateCcw className="w-4 h-4 text-muted-foreground pop-icon" />

@@ -1125,31 +1125,35 @@ function StepAbcBuilder() {
                     <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
                       Activity / Antecedent
                     </label>
-                    <select
+                    <input
+                      list={`activities-list-${i}`}
                       value={row.activityAntecedent ?? ""}
                       onChange={(e) => updateRow(i, "activityAntecedent", e.target.value || null)}
+                      placeholder="Type or choose…"
                       className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-                    >
-                      <option value="">— Select activity —</option>
+                    />
+                    <datalist id={`activities-list-${i}`}>
                       {activities.map((a) => (
-                        <option key={a} value={a}>{a}</option>
+                        <option key={a} value={a} />
                       ))}
-                    </select>
+                    </datalist>
                   </div>
                   <div>
                     <label className="block text-xs font-semibold text-muted-foreground mb-1.5">
                       Maladaptive Behavior
                     </label>
-                    <select
+                    <input
+                      list={`behaviors-list-${i}`}
                       value={row.maladaptiveBehavior ?? ""}
                       onChange={(e) => updateRow(i, "maladaptiveBehavior", e.target.value || null)}
+                      placeholder="Type or choose…"
                       className="w-full px-3 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all"
-                    >
-                      <option value="">— Select behavior —</option>
+                    />
+                    <datalist id={`behaviors-list-${i}`}>
                       {maladaptiveBehaviors.map((b) => (
-                        <option key={b} value={b}>{b}</option>
+                        <option key={b} value={b} />
                       ))}
-                    </select>
+                    </datalist>
                   </div>
                 </div>
 
