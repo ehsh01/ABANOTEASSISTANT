@@ -10,6 +10,9 @@ import type {
   SaveNoteRequest,
   SaveNoteResponse,
   DeleteNoteResponse,
+  DeleteClientProgramResponse,
+  UpdateClientProgramBody,
+  UpdateClientProgramResponse,
   AbcActivityAntecedentListResponse,
 } from "@workspace/api-client-react";
 import {
@@ -21,6 +24,8 @@ import {
   generateNote,
   saveNote,
   deleteNote as deleteNoteRequest,
+  updateClientProgram,
+  deleteClientProgram,
   extractAssessmentFromPdf,
   listAbcBuilderActivityAntecedents,
   type AssessmentExtractSuccessResponse,
@@ -103,6 +108,37 @@ export function useDeleteSessionNote() {
     onSuccess: (_res, noteId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notes", noteId] });
+    },
+  });
+}
+
+export function useUpdateClientProgram() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      clientId: number;
+      programId: number;
+      data: UpdateClientProgramBody;
+    }): Promise<UpdateClientProgramResponse> =>
+      updateClientProgram(vars.clientId, vars.programId, vars.data),
+    onSuccess: (_res, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients", vars.clientId, "programs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/clients", vars.clientId] });
+    },
+  });
+}
+
+export function useDeleteClientProgram() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      clientId: number;
+      programId: number;
+    }): Promise<DeleteClientProgramResponse> =>
+      deleteClientProgram(vars.clientId, vars.programId),
+    onSuccess: (_res, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients", vars.clientId, "programs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/clients", vars.clientId] });
     },
   });
 }

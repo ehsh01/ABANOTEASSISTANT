@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 import {
   ListClientsResponse,
   GetClientParams,
@@ -9,6 +9,11 @@ import {
   UpdateClientBody,
   ListClientProgramsParams,
   ListClientProgramsResponse,
+  UpdateClientProgramParams,
+  UpdateClientProgramBody,
+  UpdateClientProgramResponse,
+  DeleteClientProgramParams,
+  DeleteClientProgramResponse,
 } from "@workspace/api-zod";
 import { db } from "@workspace/db";
 import {
@@ -18,6 +23,7 @@ import {
   type ClientProfileRow,
 } from "@workspace/db/schema";
 import { clientRowToApiData } from "../client-profile-api";
+import { z } from "zod";
 
 const router: IRouter = Router();
 
@@ -50,6 +56,41 @@ function replacementProgramNamesFromProfile(profile: unknown): string[] {
 
 function normalizeProgramApiType(type: string | null | undefined): "primary" | "supplemental" {
   return type === "supplemental" ? "supplemental" : "primary";
+}
+
+function programRowToApiData(p: {
+  id: number;
+  companyId: number;
+  name: string;
+  type: string | null;
+  description: string | null;
+}) {
+  return {
+    id: p.id,
+    companyId: p.companyId,
+    name: p.name,
+    type: normalizeProgramApiType(p.type),
+    description: p.description ?? undefined,
+  };
+}
+
+function removeProgramNameFromProfile(profile: ClientProfileRow, programName: string): ClientProfileRow {
+  return {
+    ...profile,
+    replacementPrograms: profile.replacementPrograms.filter((n) => n !== programName),
+  };
+}
+
+function renameProgramNameInProfile(
+  profile: ClientProfileRow,
+  from: string,
+  to: string,
+): ClientProfileRow {
+  if (from === to) return profile;
+  return {
+    ...profile,
+    replacementPrograms: profile.replacementPrograms.map((n) => (n === from ? to : n)),
+  };
 }
 
 async function syncReplacementProgramsFromProfile(
@@ -251,6 +292,199 @@ router.get("/clients/:clientId/programs", async (req, res) => {
     error: null,
   });
 
+  res.json(data);
+});
+
+router.put("/clients/:clientId/programs/:programId", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const params = UpdateClientProgramParams.parse(req.params);
+
+  let body: z.infer<typeof UpdateClientProgramBody>;
+  try {
+    body = UpdateClientProgramBody.parse(req.body);
+  } catch {
+    res.status(400).json({ success: false, error: "Invalid request body", messages: [] });
+    return;
+  }
+
+  const hasUpdate =
+    body.name !== undefined || body.type !== undefined || body.description !== undefined;
+  if (!hasUpdate) {
+    res.status(400).json({
+      success: false,
+      error: "At least one of name, type, or description must be provided",
+      messages: [],
+    });
+    return;
+  }
+
+  const [client] = await db
+    .select()
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)))
+    .limit(1);
+
+  if (!client) {
+    res.status(404).json({ success: false, error: "Client not found", messages: [] });
+    return;
+  }
+
+  const [row] = await db
+    .select({
+      linkId: clientProgramsTable.id,
+      program: programsTable,
+    })
+    .from(clientProgramsTable)
+    .innerJoin(programsTable, eq(clientProgramsTable.programId, programsTable.id))
+    .where(
+      and(
+        eq(clientProgramsTable.clientId, params.clientId),
+        eq(clientProgramsTable.programId, params.programId),
+        eq(programsTable.companyId, companyId),
+      ),
+    )
+    .limit(1);
+
+  if (!row) {
+    res.status(404).json({
+      success: false,
+      error: "Program not found for this client",
+      messages: [],
+    });
+    return;
+  }
+
+  const prevName = row.program.name;
+  const nextName = body.name !== undefined ? body.name.trim() : prevName;
+  if (body.name !== undefined && !nextName) {
+    res.status(400).json({ success: false, error: "name cannot be empty", messages: [] });
+    return;
+  }
+
+  if (nextName !== prevName) {
+    const [nameTaken] = await db
+      .select({ id: programsTable.id })
+      .from(programsTable)
+      .where(
+        and(
+          eq(programsTable.companyId, companyId),
+          eq(programsTable.name, nextName),
+          ne(programsTable.id, params.programId),
+        ),
+      )
+      .limit(1);
+    if (nameTaken) {
+      res.status(409).json({
+        success: false,
+        error: "Another program in your company already uses this name",
+        messages: [],
+      });
+      return;
+    }
+  }
+
+  const nextType =
+    body.type !== undefined ? body.type : normalizeProgramApiType(row.program.type);
+  const nextDescription =
+    body.description === undefined ? row.program.description : body.description;
+
+  const [updatedProgram] = await db
+    .update(programsTable)
+    .set({
+      name: nextName,
+      type: nextType,
+      description: nextDescription,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(programsTable.id, params.programId), eq(programsTable.companyId, companyId)))
+    .returning();
+
+  if (!updatedProgram) {
+    res.status(500).json({ success: false, error: "Failed to update program", messages: [] });
+    return;
+  }
+
+  if (nextName !== prevName) {
+    const stored = (client.profile as ClientProfileRow | null) ?? profileFromNameFallback(client.name);
+    const nextProfile = renameProgramNameInProfile(stored, prevName, nextName);
+    await db
+      .update(clientsTable)
+      .set({ profile: nextProfile, updatedAt: new Date() })
+      .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)));
+  }
+
+  const data = UpdateClientProgramResponse.parse({
+    success: true,
+    data: programRowToApiData(updatedProgram),
+    error: null,
+  });
+  res.json(data);
+});
+
+router.delete("/clients/:clientId/programs/:programId", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const params = DeleteClientProgramParams.parse(req.params);
+
+  const [client] = await db
+    .select()
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)))
+    .limit(1);
+
+  if (!client) {
+    res.status(404).json({ success: false, error: "Client not found", messages: [] });
+    return;
+  }
+
+  const [row] = await db
+    .select({
+      linkId: clientProgramsTable.id,
+      programName: programsTable.name,
+    })
+    .from(clientProgramsTable)
+    .innerJoin(programsTable, eq(clientProgramsTable.programId, programsTable.id))
+    .where(
+      and(
+        eq(clientProgramsTable.clientId, params.clientId),
+        eq(clientProgramsTable.programId, params.programId),
+        eq(programsTable.companyId, companyId),
+      ),
+    )
+    .limit(1);
+
+  if (!row) {
+    res.status(404).json({
+      success: false,
+      error: "Program not found for this client",
+      messages: [],
+    });
+    return;
+  }
+
+  await db.delete(clientProgramsTable).where(eq(clientProgramsTable.id, row.linkId));
+
+  const stored = (client.profile as ClientProfileRow | null) ?? profileFromNameFallback(client.name);
+  const nextProfile = removeProgramNameFromProfile(stored, row.programName);
+  await db
+    .update(clientsTable)
+    .set({ profile: nextProfile, updatedAt: new Date() })
+    .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)));
+
+  const data = DeleteClientProgramResponse.parse({
+    success: true,
+    data: { clientId: params.clientId, programId: params.programId },
+    error: null,
+  });
   res.json(data);
 });
 

@@ -285,6 +285,31 @@ export interface ProgramListResponse {
 }
 
 /**
+ * At least one property must be sent.
+ */
+export interface UpdateClientProgramBody {
+  name?: string;
+  type?: ProgramType;
+  /** Set to null to clear the stored description. */
+  description?: string | null;
+}
+
+export interface UpdateClientProgramResponse {
+  success: boolean;
+  data: Program;
+  error?: string | null;
+}
+
+export interface DeleteClientProgramResponse {
+  success: boolean;
+  data: {
+    clientId: number;
+    programId: number;
+  };
+  error?: string | null;
+}
+
+/**
  * One optional ABC row. Both properties must be non-empty together, or both empty/null — partial rows are invalid.
 
  */

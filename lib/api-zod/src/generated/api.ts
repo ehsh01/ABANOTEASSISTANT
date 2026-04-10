@@ -425,6 +425,58 @@ export const ListClientProgramsResponse = zod.object({
 });
 
 /**
+ * Updates the shared `programs` row (company-scoped). When `name` changes, matching entries in the client's `profile.replacementPrograms` are renamed to stay in sync. At least one body field is required.
+
+ * @summary Update a replacement program linked to a client
+ */
+export const UpdateClientProgramParams = zod.object({
+  clientId: zod.coerce.number(),
+  programId: zod.coerce.number(),
+});
+
+export const UpdateClientProgramBody = zod
+  .object({
+    name: zod.string().optional(),
+    type: zod.enum(["primary", "supplemental"]).optional(),
+    description: zod
+      .string()
+      .nullish()
+      .describe("Set to null to clear the stored description."),
+  })
+  .describe("At least one property must be sent.");
+
+export const UpdateClientProgramResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    id: zod.number(),
+    companyId: zod.number(),
+    name: zod.string(),
+    type: zod.enum(["primary", "supplemental"]),
+    description: zod.string().optional(),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Removes the `client_programs` row. The `programs` row remains for the company. Removes the program name from `profile.replacementPrograms` when it matches the unlinked program so it is not re-linked on the next sync.
+
+ * @summary Unlink a replacement program from a client
+ */
+export const DeleteClientProgramParams = zod.object({
+  clientId: zod.coerce.number(),
+  programId: zod.coerce.number(),
+});
+
+export const DeleteClientProgramResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    clientId: zod.number(),
+    programId: zod.number(),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
  * @summary List session notes for the company
  */
 export const ListNotesResponse = zod.object({

@@ -24,6 +24,7 @@ import type {
   ClientDetailResponse,
   ClientListResponse,
   CreateClientRequest,
+  DeleteClientProgramResponse,
   DeleteNoteResponse,
   ErrorResponse,
   GenerateNoteRequest,
@@ -41,6 +42,8 @@ import type {
   ResendVerificationResponse,
   SaveNoteRequest,
   SaveNoteResponse,
+  UpdateClientProgramBody,
+  UpdateClientProgramResponse,
   UpdateClientRequest,
   UploadClientAssessmentDocumentBody,
   VerifyEmailRequest,
@@ -1237,6 +1240,185 @@ export function useListClientPrograms<
 
   return { ...query, queryKey: queryOptions.queryKey };
 }
+
+/**
+ * @summary Update a replacement program linked to a client
+ */
+export const getUpdateClientProgramUrl = (clientId: number, programId: number) => {
+  return `/api/clients/${clientId}/programs/${programId}`;
+};
+
+export const updateClientProgram = async (
+  clientId: number,
+  programId: number,
+  updateClientProgramBody: UpdateClientProgramBody,
+  options?: RequestInit,
+): Promise<UpdateClientProgramResponse> => {
+  return customFetch<UpdateClientProgramResponse>(
+    getUpdateClientProgramUrl(clientId, programId),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(updateClientProgramBody),
+    },
+  );
+};
+
+export const getUpdateClientProgramMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateClientProgram>>,
+    TError,
+    { clientId: number; programId: number; data: BodyType<UpdateClientProgramBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof updateClientProgram>>,
+  TError,
+  { clientId: number; programId: number; data: BodyType<UpdateClientProgramBody> },
+  TContext
+> => {
+  const mutationKey = ["updateClientProgram"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateClientProgram>>,
+    { clientId: number; programId: number; data: BodyType<UpdateClientProgramBody> }
+  > = (props) => {
+    const { clientId, programId, data } = props ?? {};
+
+    return updateClientProgram(clientId, programId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type UpdateClientProgramMutationResult = NonNullable<
+  Awaited<ReturnType<typeof updateClientProgram>>
+>;
+export type UpdateClientProgramMutationBody = BodyType<UpdateClientProgramBody>;
+export type UpdateClientProgramMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Update a replacement program linked to a client
+ */
+export const useUpdateClientProgram = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof updateClientProgram>>,
+    TError,
+    { clientId: number; programId: number; data: BodyType<UpdateClientProgramBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof updateClientProgram>>,
+  TError,
+  { clientId: number; programId: number; data: BodyType<UpdateClientProgramBody> },
+  TContext
+> => {
+  return useMutation(getUpdateClientProgramMutationOptions(options));
+};
+
+/**
+ * @summary Unlink a replacement program from a client
+ */
+export const getDeleteClientProgramUrl = (clientId: number, programId: number) => {
+  return `/api/clients/${clientId}/programs/${programId}`;
+};
+
+export const deleteClientProgram = async (
+  clientId: number,
+  programId: number,
+  options?: RequestInit,
+): Promise<DeleteClientProgramResponse> => {
+  return customFetch<DeleteClientProgramResponse>(
+    getDeleteClientProgramUrl(clientId, programId),
+    {
+      ...options,
+      method: "DELETE",
+    },
+  );
+};
+
+export const getDeleteClientProgramMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClientProgram>>,
+    TError,
+    { clientId: number; programId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteClientProgram>>,
+  TError,
+  { clientId: number; programId: number },
+  TContext
+> => {
+  const mutationKey = ["deleteClientProgram"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteClientProgram>>,
+    { clientId: number; programId: number }
+  > = (props) => {
+    const { clientId, programId } = props ?? {};
+
+    return deleteClientProgram(clientId, programId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteClientProgramMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteClientProgram>>
+>;
+
+export type DeleteClientProgramMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Unlink a replacement program from a client
+ */
+export const useDeleteClientProgram = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClientProgram>>,
+    TError,
+    { clientId: number; programId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteClientProgram>>,
+  TError,
+  { clientId: number; programId: number },
+  TContext
+> => {
+  return useMutation(getDeleteClientProgramMutationOptions(options));
+};
 
 /**
  * @summary List session notes for the company
