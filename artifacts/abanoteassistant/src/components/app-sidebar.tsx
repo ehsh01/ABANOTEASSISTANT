@@ -78,27 +78,44 @@ export function AppSidebar() {
         className="hidden md:flex fixed left-0 top-0 bottom-0 z-[200] flex-col"
         style={{ width: 220, background: "#C27A8A" }}
       >
-        {/* Logo */}
+        {/* Logo + Logout */}
         <div
-          className="flex flex-col gap-1 px-5 py-6"
+          className="flex items-center justify-between px-5 py-5"
           style={{ borderBottom: "1px solid rgba(255,255,255,0.2)" }}
         >
-          <Link href="/">
-            <span
-              className="font-extrabold tracking-widest uppercase cursor-pointer"
-              style={{ fontSize: 10, color: "#fff", letterSpacing: "0.12em" }}
-            >
-              ABANOTEASSISTANT
-            </span>
-          </Link>
-          <div
+          <div className="flex flex-col gap-1">
+            <Link href="/">
+              <span
+                className="font-extrabold tracking-widest uppercase cursor-pointer"
+                style={{ fontSize: 10, color: "#fff", letterSpacing: "0.12em" }}
+              >
+                ABANOTEASSISTANT
+              </span>
+            </Link>
+            <div
+              style={{
+                width: 36,
+                height: 2,
+                background: "linear-gradient(90deg, rgba(255,255,255,0.7), transparent)",
+                borderRadius: 2,
+              }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors"
             style={{
-              width: 36,
-              height: 2,
-              background: "linear-gradient(90deg, rgba(255,255,255,0.7), transparent)",
-              borderRadius: 2,
+              background: "rgba(0,0,0,0.15)",
+              color: "rgba(255,255,255,0.85)",
+              border: "1px solid rgba(255,255,255,0.2)",
             }}
-          />
+            aria-label="Log out"
+            title="Log out"
+          >
+            <LogOut className="w-3.5 h-3.5 shrink-0" />
+            {t.nav.logOut}
+          </button>
         </div>
 
         {/* Nav */}
@@ -222,6 +239,18 @@ export function AppSidebar() {
             </Link>
           );
         })}
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all"
+          style={{ background: "transparent" }}
+          aria-label="Log out"
+        >
+          <LogOut className="w-5 h-5" style={{ color: "rgba(255,255,255,0.6)" }} />
+          <span className="text-[10px] font-semibold" style={{ color: "rgba(255,255,255,0.65)" }}>
+            {t.nav.logOut}
+          </span>
+        </button>
       </nav>
     </>
   );

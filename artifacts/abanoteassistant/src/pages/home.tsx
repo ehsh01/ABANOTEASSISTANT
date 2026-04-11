@@ -1,9 +1,10 @@
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { motion } from "framer-motion";
-import { Sparkles, Clock, ShieldCheck, FileCheck2, LayoutTemplate, ChevronRight, Zap } from "lucide-react";
+import { Sparkles, Clock, ShieldCheck, FileCheck2, LayoutTemplate, ChevronRight, Zap, LogOut } from "lucide-react";
 import { useAuthStore } from "@/store/auth-store";
 import { useT } from "@/hooks/use-translation";
 import { useLanguageStore } from "@/store/language-store";
+import { useQueryClient } from "@tanstack/react-query";
 
 function HomeLanguageToggle() {
   const { language, setLanguage } = useLanguageStore();
@@ -39,7 +40,16 @@ function HomeLanguageToggle() {
 
 export default function Home() {
   const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+  const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
   const t = useT();
+
+  function handleLogout() {
+    queryClient.clear();
+    logout();
+    setLocation("/login");
+  }
 
   const features = [
     {
@@ -92,6 +102,14 @@ export default function Home() {
 
           <div className="flex items-center gap-3">
             <HomeLanguageToggle />
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-semibold text-[#877870] hover:text-[#2D2523] hover:bg-[#F0E4E1] transition-all"
+              title="Log out"
+            >
+              <LogOut className="w-4 h-4" />
+              <span className="hidden sm:inline">{t.nav.logOut}</span>
+            </button>
             <Link href="/wizard">
               <button className="bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:shadow-[0_12px_28px_rgba(194,122,138,0.35)] hover:-translate-y-0.5 flex items-center gap-2">
                 {t.nav.newNote} <ChevronRight className="w-4 h-4 pop-icon-white" />
