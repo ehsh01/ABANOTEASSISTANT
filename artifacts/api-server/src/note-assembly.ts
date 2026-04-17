@@ -36,9 +36,10 @@ export function formatUsDateFromIso(iso: string): string {
 export const LOCKED_CLOSING_PARAGRAPH =
   'Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., "Good job," "Wow," and "Good attention to detail"), preferred toys, and videos contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned.';
 
-/** @param clientName First name only (product policy: no last name in session notes). */
+/** Session note prose must not contain personal names — use this literal only. */
+export const SESSION_NOTE_CLIENT_REFERRAL = "the client";
+
 export function buildLockedOpening(
-  clientName: string,
   presentPeople: string[],
   hasEnvironmentalChanges: boolean,
   therapySetting: TherapySetting,
@@ -46,20 +47,17 @@ export function buildLockedOpening(
   const caregivers = formatCaregiverList(presentPeople);
   const env = environmentalOpeningSentence(hasEnvironmentalChanges);
   const where = therapySettingLocationPhrase(therapySetting);
-  return `The RBT met with ${clientName} and ${caregivers} ${where} to implement program targets. ${env}`;
+  return `The RBT met with ${SESSION_NOTE_CLIENT_REFERRAL} and ${caregivers} ${where} to implement program targets. ${env}`;
 }
 
-/** @param clientName First name only (matches locked-opening policy). */
-export function buildPerformanceSentence(clientName: string): string {
-  return `${clientName}'s performance during the session was fair.`;
+export function buildPerformanceSentence(): string {
+  return "The client's performance during the session was fair.";
 }
 
-/** @param clientName First name only (matches locked-opening policy). */
-export function buildNextSessionSentence(clientName: string, nextSessionDate: string | undefined): string {
-  const possessive = `${clientName}'s`;
+export function buildNextSessionSentence(nextSessionDate: string | undefined): string {
   if (nextSessionDate && nextSessionDate.trim().length > 0) {
     const formatted = formatUsDateFromIso(nextSessionDate);
-    return `The next session is tentatively scheduled to take place at ${possessive} home on ${formatted}.`;
+    return `The next session is tentatively scheduled to take place at the client's home on ${formatted}.`;
   }
-  return `The next session is tentatively scheduled to take place at ${possessive} home; the date is to be determined.`;
+  return "The next session is tentatively scheduled to take place at the client's home; the date is to be determined.";
 }

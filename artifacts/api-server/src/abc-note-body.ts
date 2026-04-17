@@ -6,7 +6,6 @@
  */
 
 export type AbcBodyInput = {
-  clientName: string;
   /** From client.profile.gender — drives he/she/they in narrative */
   gender?: string | null;
   sessionHours: number;
@@ -23,10 +22,8 @@ function nonEmptyStrings(xs: string[] | undefined | null): string[] {
   return (xs ?? []).map((s) => s.trim()).filter((s) => s.length > 0);
 }
 
-function firstName(full: string): string {
-  const p = full.trim().split(/\s+/).filter(Boolean);
-  return p[0] ?? full;
-}
+/** Session note prose must not contain personal names. */
+const NARRATIVE_CLIENT_REFERRAL = "the client";
 
 function pronouns(gender: string | null | undefined): {
   Subj: string;
@@ -227,7 +224,7 @@ function paragraphGenericChallenging(ctx: ScenarioCtx): string {
 
 export function buildAbcClinicalBody(input: AbcBodyInput): { text: string; warnings: string[] } {
   const warnings: string[] = [];
-  const { clientName, sessionHours, hasEnvironmentalChanges, environmentalChanges, gender } = input;
+  const { sessionHours, hasEnvironmentalChanges, environmentalChanges, gender } = input;
 
   let behaviors = nonEmptyStrings(input.maladaptiveBehaviors);
   let interventions = nonEmptyStrings(input.interventions).map(polishInterventionLabel);
@@ -253,7 +250,7 @@ export function buildAbcClinicalBody(input: AbcBodyInput): { text: string; warni
     );
   }
 
-  const first = firstName(clientName);
+  const first = NARRATIVE_CLIENT_REFERRAL;
   const p = pronouns(gender);
   const isToddler =
     input.clientAgeYears !== null &&

@@ -58,6 +58,7 @@ Required SessionContext sections:
 Generation may not start until SessionContext is complete.
 
 ## Non-Negotiable Generation Rules
+- **No personal names in session note prose:** Refer to the learner only as **the client** (plus appropriate pronouns). Never place first names, last names, nicknames, or initials in the generated note text, including the clinical body and locked assembly — even when the assessment excerpt or profile contains names.
 - Use exact approved terminology only.
 - Do not paraphrase locked program, intervention, replacement, behavior, material, or trigger names.
 - Do not add any item that is not present in the runtime catalogs.

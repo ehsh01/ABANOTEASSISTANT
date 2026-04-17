@@ -13,8 +13,8 @@ These strings are **binding** for any code, prompt, or agent that assembles the 
 
 Every note must **begin** with exactly this structure (fill slots only; do not paraphrase the template):
 
-1. `The RBT met with [ClientFirstName] and [CaregiverList] [SESSION_LOCATION] to implement program targets.`
-   - `[ClientFirstName]` = first name only (no last name in assembled notes or AI clinical body).
+1. `The RBT met with the client and [CaregiverList] [SESSION_LOCATION] to implement program targets.`
+   - Use the literal phrase **the client** — do not substitute a first name, last name, nickname, or initials anywhere in the assembled note or AI clinical body (including text derived from the assessment excerpt).
    - `[CaregiverList]` = people present from session intake (e.g. Mother, Father), joined with natural English (e.g. `Mother and Father`, or `Mother, Father, and Grandmother`). If none documented, use: `the caregiver`.
    - `[SESSION_LOCATION]` = server-assembled phrase from session intake `therapySetting` (approved location label from the wizard/API). Do not paraphrase: mapping lives in `@workspace/therapy-settings` (`therapySettingLocationPhrase`) and must stay aligned with the OpenAPI enum for `therapySetting`. Legacy slugs `home` / `school` / `community` are normalized to `Home` / `School` / `Community` before assembly.
 2. Environmental status sentence (choose one; do not invent facts):
@@ -38,12 +38,12 @@ No extra sentences **between** the body and this paragraph except where a valida
 ## 3. End-of-note sequence (exact order — after the closing paragraph)
 
 1. The closing paragraph above  
-2. **Performance sentence** (locked): `[ClientFirstName]'s performance during the session was fair.`  
+2. **Performance sentence** (locked): `The client's performance during the session was fair.`  
    - Do **not** substitute *poor*, *below expectations*, *unsuccessful*, *limited*, *inadequate*, *minimal engagement*, or *regression* for this note product unless a future policy explicitly overrides this file.
 3. **Next session sentence**:  
-   - If a next session date is provided: `The next session is tentatively scheduled to take place at [ClientFirstName]'s home on [DATE].`  
+   - If a next session date is provided: `The next session is tentatively scheduled to take place at the client's home on [DATE].`  
    - `[DATE]` = US-style display (e.g. `12/10/2025`).  
-   - If no date: `The next session is tentatively scheduled to take place at [ClientFirstName]'s home; the date is to be determined.`
+   - If no date: `The next session is tentatively scheduled to take place at the client's home; the date is to be determined.`
 
 Do not append other sentences after these without product approval.
 
@@ -58,7 +58,7 @@ Highlights for implementers:
 - **ABC**: One complete ABC sequence per hour of service when using ABC narrative; sections flow as continuous narrative unless schema says otherwise. **One maladaptive behavior catalog label per hour** (not two behaviors in the same hour). For broad labels (e.g. tantrum), topography must be observable and consistent with the assessment/BIP behavior definitions—not the label alone.
 - **Behavior rotation (AI clinical body)**: Multi-hour notes **cycle** a catalog built from the client profile **and** verbatim matches in the stored assessment text (`maladaptiveBehaviorForHour` per hour). Standard BIP names may be ordered consistently when they match exactly; each hour cites its assigned label verbatim.
 - **Toddlers / limited verbal**: For very young clients, avoid attributing complex spoken sentences to the client; prefer vocalizations, gestures, and observable actions.
-- **Introduction rule (doc)** mirrors section 1 above.
+- **Introduction rule (doc)** mirrors section 1 above (the client + caregivers + location; no personal name for the learner).
 - **Replacement programs**: Either in antecedent (activity being taught) **or** after behavior in consequence — **not both** in the same ABC.
 - **Consequence phrasing**: Use `To address this/these behavior(s), the RBT implemented/applied [EXACT INTERVENTION NAME]` then describe application.
 - **Physical aggression**: When the manifested catalog behavior indicates person-directed physical aggression (e.g. label contains "Physical Aggression") and the client's approved interventions include **Response Block** (exact BIP string), the **first** intervention described after "To address this behavior" must be Response Block (e.g. immediately blocking to prevent further contact); additional interventions (e.g. environmental manipulation) follow only after the immediate safety response, using exact catalog names throughout.

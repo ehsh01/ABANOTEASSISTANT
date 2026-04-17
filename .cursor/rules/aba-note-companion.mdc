@@ -8,6 +8,9 @@ alwaysApply: true
 ## Best Use
 Use this file next to the main backend rules file. It explains how to split your system so rules do not fight each other.
 
+## Invariant: no learner names in note prose
+Generated session note text (locked assembly, clinical body, and any template path) must refer to the learner only as **the client** (with appropriate pronouns). Never output first names, last names, nicknames, or initials, including from the assessment excerpt.
+
 ## Invariant: rules + client assessment on every note
 For **every** note generation path, treat as mandatory inputs:
 - **This companion file** and **`aba-note-backend.mdc`** (full rules, precedence, pipeline).

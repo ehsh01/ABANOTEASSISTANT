@@ -81,22 +81,16 @@ function formatOpenAINoteGenerationError(err: unknown): string {
 
 const router: IRouter = Router();
 
-function clientFirstName(fullName: string): string {
-  const p = fullName.trim().split(/\s+/).filter(Boolean);
-  return p[0] ?? fullName;
-}
-
 function assembleSessionNote(
-  clientName: string,
   presentPeople: string[],
   hasEnvChanges: boolean,
   therapySetting: TherapySetting,
   clinicalBody: string,
   nextSessionDate: string | undefined,
 ): string {
-  const opening = buildLockedOpening(clientName, presentPeople, hasEnvChanges, therapySetting);
-  const performance = buildPerformanceSentence(clientName);
-  const nextSession = buildNextSessionSentence(clientName, nextSessionDate);
+  const opening = buildLockedOpening(presentPeople, hasEnvChanges, therapySetting);
+  const performance = buildPerformanceSentence();
+  const nextSession = buildNextSessionSentence(nextSessionDate);
 
   return [opening, "", clinicalBody, "", LOCKED_CLOSING_PARAGRAPH, "", performance, "", nextSession].join("\n");
 }
@@ -416,11 +410,10 @@ router.post("/notes/generate", async (req, res) => {
     );
   }
 
-  const clientNameForNote = clientFirstName(client.name);
-
   const oaCtx: NoteGenerationContext = {
-    clientName: clientNameForNote,
-    firstName: clientNameForNote,
+    /** Deliberately not the profile name — session notes must not contain personal names. */
+    clientName: "the client",
+    firstName: "the client",
     gender: profile?.gender,
     sessionHours: body.sessionHours,
     sessionDate: body.sessionDate,
@@ -466,7 +459,6 @@ router.post("/notes/generate", async (req, res) => {
   }
 
   const noteContent = assembleSessionNote(
-    clientNameForNote,
     body.presentPeople,
     body.hasEnvironmentalChanges,
     body.therapySetting,

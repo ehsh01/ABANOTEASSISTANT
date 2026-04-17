@@ -16,8 +16,12 @@ import type { TherapySetting } from "@workspace/therapy-settings";
 export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-5.3-chat-latest";
 
 export type NoteGenerationContext = {
-  /** First name only — used in narratives; do not send full legal name. */
+  /**
+   * Must always be the literal `the client` in requests — session notes must not contain personal names.
+   * Retained for JSON shape / prompts; do not pass profile names.
+   */
   clientName: string;
+  /** Same policy as `clientName` — always `the client` in production requests. */
   firstName: string;
   gender: string | null | undefined;
   sessionHours: number;
@@ -66,6 +70,7 @@ You will receive JSON "session context". Output ONLY the clinical body that goes
 
 CLIENT ASSESSMENT EXCERPT (BIP/FBA text — when provided in JSON):
 - The JSON may include \`clientAssessmentTextExcerpt\`: plain text from the client's uploaded assessment PDF (truncated for this request). \`assessmentReferenceFileName\` is the file name only (reference).
+- **Never copy personal names, initials, or nicknames from the excerpt into your output.** The assessment may name the individual; your clinical body must still refer to them only as **the client** (plus pronouns from JSON gender).
 - When \`clientAssessmentTextExcerpt\` is non-empty: treat it as the authoritative clinical document for **definitions, topography, and contexts** of target/problem behaviors described there. Align observable descriptions and episode context with that document. Do **not** contradict explicit behavior definitions or operational descriptions stated in the excerpt.
 - **Catalog strings still win for labels:** maladaptive behavior names, intervention names, and replacement program names must match the JSON lists **exactly** (exact spelling/capitalization). If the excerpt uses different wording for a behavior than the JSON catalog label, use the **JSON label** when naming the behavior and keep observable detail consistent with the excerpt's meaning.
 - Do not paste long quotes from the excerpt; paraphrase into observable session narrative.
@@ -135,13 +140,13 @@ STRUCTURE (unchanged):
 - Do NOT write the opening ("The RBT met with...") or any closing boilerplate about reinforcers/BIP/performance/next session.
 - Do NOT use markdown headings, bullets, or numbered lists. Prose paragraphs only.
 - Produce exactly sessionHours paragraphs (one per hour of service). Separate paragraphs with a single blank line (\\n\\n).
-- Each paragraph is one continuous ABC-style narrative: rich antecedent (specific setting, materials, demand, timing) → observable client response → "During this activity, [ClientFirstName] manifested [EXACT behavior name from JSON lists]" with concrete topography → "To address this behavior" or "To address these behaviors" with "the RBT implemented" or "the RBT applied" plus EXACT intervention name from JSON and a short, specific description of how it was used in that moment → "Following this intervention..." with observable reduction/re-engagement → exactly one replacement-program sentence using **only** the assigned string \`replacementProgramForHour[h]\` inside the quotes (verbatim, full punctuation including paired parentheses).
+- Each paragraph is one continuous ABC-style narrative: rich antecedent (specific setting, materials, demand, timing) → observable client response → "During this activity, the client manifested [EXACT behavior name from JSON lists]" with concrete topography → "To address this behavior" or "To address these behaviors" with "the RBT implemented" or "the RBT applied" plus EXACT intervention name from JSON and a short, specific description of how it was used in that moment → "Following this intervention..." with observable reduction/re-engagement → exactly one replacement-program sentence using **only** the assigned string \`replacementProgramForHour[h]\` inside the quotes (verbatim, full punctuation including paired parentheses).
 - For replacement program sentences: use "Additionally, the RBT implemented the replacement program \\"...\\" by ..." for hour indices 0,2,4... and "The RBT implemented the replacement program \\"...\\" by ..." for hour indices 1,3,5... (0-based within this body). The \\"...\\" must be **character-identical** to \`replacementProgramForHour[h]\` for that paragraph—not a shortened form, not missing a parenthesis.
 - Use ONLY behavior names, intervention names, and replacement program strings exactly as provided. Do not invent new diagnoses, behaviors, interventions, or program names.
 - Pronouns: use he/him/his if gender indicates male, she/her/hers if female, they/them/their otherwise.
 - If hasEnvironmentalChanges is true and environmentalChanges is non-empty, your FIRST paragraph may begin with one short bridging sentence that references those environmental factors, then continue into the first hour's ABC narrative (do not repeat the system's fixed environmental opening sentence).
 - Tone: professional, specific, observable; no generic filler like "aligned with session targets" without concrete detail.
-- Client names: use **only** the client's first name from JSON (\`firstName\` / \`clientName\` — same value) everywhere in the clinical body. Do not use, repeat, or invent a last name or full name.
+- **Client identity:** Never use a first name, last name, nickname, initials, or any personal name for the learner. Refer to them only as **the client** (and he/she/they pronouns per JSON \`gender\`). Ignore any literal value in JSON \`firstName\` / \`clientName\` if it were not \`the client\`; never output profile or assessment names.
 - VARIETY: For hours where JSON \`activityAntecedentForHour[h]\` is null, each such paragraph MUST use a clearly different activity, setting, materials, social context, or instructional demand from every other null-guided hour. Hours with a non-null \`activityAntecedentForHour[h]\` MUST use that exact string (see ABC BUILDER) and are exempt from differing from each other or from AI-chosen hours except when the user selected the same catalog string twice.
 - The JSON includes requestNonce — treat it only as a uniqueness hint; do not quote it in the note.
 
@@ -251,7 +256,7 @@ Output ONLY the corrected clinical body.`;
 
   const repairSystem = `${SYSTEM_PROMPT}
 
-REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON and with any non-empty \`clientAssessmentTextExcerpt\` in the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; **each paragraph h must use replacementProgramForHour[h] verbatim (full string, including every parenthesis) in the replacement-program quote and must not name any other entry from replacementProgramsInOrder in that paragraph**; exactly one maladaptive behavior catalog label per paragraph; **each paragraph h must use maladaptiveBehaviorForHour[h] verbatim** for the manifested behavior; **when activityAntecedentForHour[h] is a non-null string, paragraph h must contain that exact substring verbatim**; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech to the client; when a paragraph cites physical aggression and JSON interventions include Response Block, describe Response Block immediately first after "To address this behavior," then other interventions; **use only the client's first name** from JSON in all references—never a last name.`;
+REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON and with any non-empty \`clientAssessmentTextExcerpt\` in the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; **each paragraph h must use replacementProgramForHour[h] verbatim (full string, including every parenthesis) in the replacement-program quote and must not name any other entry from replacementProgramsInOrder in that paragraph**; exactly one maladaptive behavior catalog label per paragraph; **each paragraph h must use maladaptiveBehaviorForHour[h] verbatim** for the manifested behavior; **when activityAntecedentForHour[h] is a non-null string, paragraph h must contain that exact substring verbatim**; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech to the client; when a paragraph cites physical aggression and JSON interventions include Response Block, describe Response Block immediately first after "To address this behavior," then other interventions; **never output personal names**—refer only as **the client** (plus appropriate pronouns).`;
 
   return callOpenAI(
     [
