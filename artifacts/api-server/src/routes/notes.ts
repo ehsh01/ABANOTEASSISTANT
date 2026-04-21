@@ -49,6 +49,7 @@ import {
 } from "../note-assembly";
 import { truncateAssessmentTextForNoteContext } from "../assessment-extract";
 import { resolveAbcHintsForNoteGeneration } from "../abc-hints";
+import { isLanguageMaladaptiveBehaviorLabel } from "../language-maladaptive-behavior";
 import { ABC_ACTIVITY_ANTECEDENT_CATALOG } from "../abc-activity-antecedent-catalog";
 
 /** Map OpenAI / transport failures to actionable text (distinct from "missing OPENAI_API_KEY" 503). */
@@ -369,6 +370,9 @@ router.post("/notes/generate", async (req, res) => {
 
   const { maladaptiveBehaviorForHour, activityAntecedentForHour } = abcResolved;
   const replacementProgramForHour = replacementProgramsForSessionHours(programNames, body.sessionHours);
+  const languageMaladaptiveEpisodeForHour = maladaptiveBehaviorForHour.map((b) =>
+    isLanguageMaladaptiveBehaviorLabel(b),
+  );
 
   const complianceCtxBase: NoteComplianceContext = {
     sessionHours: body.sessionHours,
@@ -377,6 +381,7 @@ router.post("/notes/generate", async (req, res) => {
     maladaptiveBehaviors: behaviorCatalog,
     maladaptiveBehaviorForHour,
     activityAntecedentForHour,
+    languageMaladaptiveEpisodeForHour,
     interventions: profile?.interventions ?? [],
     clientAgeYears,
     presentPeople: body.presentPeople,
@@ -432,6 +437,7 @@ router.post("/notes/generate", async (req, res) => {
     clientAssessmentTextExcerpt,
     assessmentReferenceFileName: profile?.assessmentFileName ?? null,
     activityAntecedentForHour,
+    languageMaladaptiveEpisodeForHour,
   };
 
   let clinicalBody: string;

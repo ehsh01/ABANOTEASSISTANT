@@ -6,7 +6,6 @@
  * OpenAPI spec version: 0.1.0
  */
 import * as zod from "zod";
-import { THERAPY_SETTING_ZOD_ENUM } from "@workspace/therapy-settings";
 
 /**
  * Returns server health status
@@ -560,9 +559,39 @@ export const GenerateNoteBody = zod.object({
   sessionHours: zod.number().min(1).max(generateNoteBodySessionHoursMax),
   sessionDate: zod.string(),
   therapySetting: zod
-    .enum(THERAPY_SETTING_ZOD_ENUM)
+    .enum([
+      "Seasonal Residence",
+      "Walk-in Retail Health Clinic",
+      "Neighbor Residence",
+      "Office",
+      "Prescribed Pediatric Extended Care (PPEC) Center",
+      "Relative Residence",
+      "School",
+      "School/Community",
+      "School/Home",
+      "Home",
+      "Home/School",
+      "Home/Community",
+      "Home/Daycare",
+      "Independent Clinic",
+      "Medical Facility",
+      "Member Home",
+      "Comprehensive Outpatient Rehab Facility",
+      "Daycare",
+      "Daycare/Community",
+      "Daycare/Home",
+      "Family Home",
+      "Friend Residence",
+      "Group Home",
+      "Assisted Living Facility (ALF)",
+      "Community Mental Health Center",
+      "Community",
+      "Community/Daycare",
+      "Community/Home",
+      "Community/School",
+    ])
     .describe(
-      "Where therapy was delivered; must match an approved location label. Drives the locked opening location phrase assembled server-side.",
+      "Where therapy was delivered. Must be one of the approved location labels; drives the locked opening location phrase assembled server-side (do not paraphrase the stored label when interpreting setting for the clinical body).\n",
     ),
   presentPeople: zod.array(zod.string()),
   hasEnvironmentalChanges: zod.boolean(),

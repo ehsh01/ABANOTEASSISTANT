@@ -5,11 +5,6 @@
  * ABA Note Assistant API specification
  * OpenAPI spec version: 0.1.0
  */
-import type { TherapySetting } from "@workspace/therapy-settings";
-import { THERAPY_SETTINGS_ORDERED } from "@workspace/therapy-settings";
-
-export type { TherapySetting };
-export { THERAPY_SETTINGS_ORDERED };
 /**
  * Session note clinical body is generated only via OpenAI; there is no server-side template fallback. If your deployed API omits this field, the server is running an older build — redeploy api-server dist and restart the process.
 
@@ -289,12 +284,20 @@ export interface ProgramListResponse {
   error?: string | null;
 }
 
+export type UpdateClientProgramBodyType =
+  (typeof UpdateClientProgramBodyType)[keyof typeof UpdateClientProgramBodyType];
+
+export const UpdateClientProgramBodyType = {
+  primary: "primary",
+  supplemental: "supplemental",
+} as const;
+
 /**
  * At least one property must be sent.
  */
 export interface UpdateClientProgramBody {
   name?: string;
-  type?: ProgramType;
+  type?: UpdateClientProgramBodyType;
   /** Set to null to clear the stored description. */
   description?: string | null;
 }
@@ -305,14 +308,57 @@ export interface UpdateClientProgramResponse {
   error?: string | null;
 }
 
+export type DeleteClientProgramResponseData = {
+  clientId: number;
+  programId: number;
+};
+
 export interface DeleteClientProgramResponse {
   success: boolean;
-  data: {
-    clientId: number;
-    programId: number;
-  };
+  data: DeleteClientProgramResponseData;
   error?: string | null;
 }
+
+/**
+ * Where therapy was delivered. Must be one of the approved location labels; drives the locked opening location phrase assembled server-side (do not paraphrase the stored label when interpreting setting for the clinical body).
+
+ */
+export type GenerateNoteRequestTherapySetting =
+  (typeof GenerateNoteRequestTherapySetting)[keyof typeof GenerateNoteRequestTherapySetting];
+
+export const GenerateNoteRequestTherapySetting = {
+  Seasonal_Residence: "Seasonal Residence",
+  "Walk-in_Retail_Health_Clinic": "Walk-in Retail Health Clinic",
+  Neighbor_Residence: "Neighbor Residence",
+  Office: "Office",
+  "Prescribed_Pediatric_Extended_Care_(PPEC)_Center":
+    "Prescribed Pediatric Extended Care (PPEC) Center",
+  Relative_Residence: "Relative Residence",
+  School: "School",
+  "School/Community": "School/Community",
+  "School/Home": "School/Home",
+  Home: "Home",
+  "Home/School": "Home/School",
+  "Home/Community": "Home/Community",
+  "Home/Daycare": "Home/Daycare",
+  Independent_Clinic: "Independent Clinic",
+  Medical_Facility: "Medical Facility",
+  Member_Home: "Member Home",
+  Comprehensive_Outpatient_Rehab_Facility:
+    "Comprehensive Outpatient Rehab Facility",
+  Daycare: "Daycare",
+  "Daycare/Community": "Daycare/Community",
+  "Daycare/Home": "Daycare/Home",
+  Family_Home: "Family Home",
+  Friend_Residence: "Friend Residence",
+  Group_Home: "Group Home",
+  "Assisted_Living_Facility_(ALF)": "Assisted Living Facility (ALF)",
+  Community_Mental_Health_Center: "Community Mental Health Center",
+  Community: "Community",
+  "Community/Daycare": "Community/Daycare",
+  "Community/Home": "Community/Home",
+  "Community/School": "Community/School",
+} as const;
 
 /**
  * One optional ABC row. Both properties must be non-empty together, or both empty/null — partial rows are invalid.
@@ -333,8 +379,9 @@ export interface GenerateNoteRequest {
    */
   sessionHours: number;
   sessionDate: string;
-  /** Where therapy was delivered; drives the locked opening phrase. */
-  therapySetting: TherapySetting;
+  /** Where therapy was delivered. Must be one of the approved location labels; drives the locked opening location phrase assembled server-side (do not paraphrase the stored label when interpreting setting for the clinical body).
+   */
+  therapySetting: GenerateNoteRequestTherapySetting;
   presentPeople: string[];
   hasEnvironmentalChanges: boolean;
   environmentalChanges?: string;

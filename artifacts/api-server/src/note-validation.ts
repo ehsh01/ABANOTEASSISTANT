@@ -22,6 +22,11 @@ export type NoteComplianceContext = {
    * Optional ABC Builder: per hour, exact activity/antecedent catalog string that must appear verbatim in the paragraph, or null for AI-chosen antecedent.
    */
   activityAntecedentForHour?: (string | null)[] | undefined;
+  /**
+   * When set (length = sessionHours), paragraphs at true indices may include brief attributed client speech
+   * (verbal/language maladaptive topography); toddler speech checks skip those paragraphs.
+   */
+  languageMaladaptiveEpisodeForHour?: boolean[] | undefined;
   /** BIP intervention names (exact strings) — used for physical-aggression / Response Block ordering */
   interventions: string[];
   /** Approximate age in years from DOB + session date; null if unknown */
@@ -349,20 +354,6 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     }
   }
 
-  if (ctx.clientAgeYears !== null && ctx.clientAgeYears <= 3) {
-    let speechHits = 0;
-    for (const re of TODDLER_ATTRIBUTED_SPEECH) {
-      if (re.test(clinicalBody)) {
-        issues.push(
-          `Toddler / limited verbal: for very young clients, minimize complex speech attributed to the client (e.g. avoid "the client said/stated/replied…"); use vocalizations, gestures, and observable actions instead.`,
-        );
-        if (++speechHits >= 1) {
-          break;
-        }
-      }
-    }
-  }
-
   const paragraphs = clinicalBody
     .trim()
     .split(/\n\n+/)
@@ -373,6 +364,26 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     issues.push(
       `Expected exactly ${ctx.sessionHours} clinical paragraph(s) separated by blank lines; found ${paragraphs.length}.`,
     );
+  }
+
+  const langEpisode = ctx.languageMaladaptiveEpisodeForHour ?? [];
+  if (ctx.clientAgeYears !== null && ctx.clientAgeYears <= 3) {
+    let speechHits = 0;
+    for (let i = 0; i < paragraphs.length; i++) {
+      if (langEpisode[i]) continue;
+      const p = paragraphs[i]!;
+      for (const re of TODDLER_ATTRIBUTED_SPEECH) {
+        if (re.test(p)) {
+          issues.push(
+            `Toddler / limited verbal: for very young clients, minimize complex speech attributed to the client (e.g. avoid "the client said/stated/replied…"); use vocalizations, gestures, and observable actions instead.`,
+          );
+          if (++speechHits >= 1) {
+            break;
+          }
+        }
+      }
+      if (speechHits >= 1) break;
+    }
   }
 
   const programs = ctx.replacementProgramsInOrder.filter((p) => p.trim().length > 0);

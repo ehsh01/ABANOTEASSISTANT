@@ -60,6 +60,10 @@ export type NoteGenerationContext = {
    * Optional ABC Builder: length = sessionHours. Non-null entries are exact activity/antecedent catalog strings the RBT selected; null = AI chooses antecedent for that hour.
    */
   activityAntecedentForHour: (string | null)[];
+  /**
+   * Per hour: true when maladaptiveBehaviorForHour[h] is classified as verbal/language-type — narrative must include brief generated client-utterance topography (quoted or reported speech) for that hour.
+   */
+  languageMaladaptiveEpisodeForHour: boolean[];
 };
 
 const SYSTEM_PROMPT = `You write ABA session note clinical narratives for RBT documentation.
@@ -109,9 +113,15 @@ AGE-APPROPRIATE ACTIVITIES:
 - If age is unknown, keep activities broadly appropriate and conservative (simple, concrete tasks).
 
 TODDLER / LIMITED VERBAL SKILLS (when clientAgeYears is 0–3, or ageBand clearly indicates toddler):
-- Do not assume clear expressive language. Minimize "the client said…," "stated…," "replied…," "answered…," "verbally requested…," or quoted full sentences attributed to the client.
+- Do not assume clear expressive language. Minimize "the client said…," "stated…," "replied…," "answered…," "verbally requested…," or quoted full sentences attributed to the client **except** where LANGUAGE / VERBAL MALADAPTIVE EPISODES requires brief quoted utterance for that hour.
 - Prefer observable communication: vocalizing (non-word cries, screams, grunts), gestures, reaching, pushing away, head turning, or following a model without claiming the client produced specific words.
 - Do not add meta-lines about whether the client can speak (e.g. "communication level is unknown"); stay observational.
+
+LANGUAGE / VERBAL MALADAPTIVE EPISODES (JSON \`languageMaladaptiveEpisodeForHour\`):
+- Array length equals \`sessionHours\`. When \`languageMaladaptiveEpisodeForHour[h]\` is **true**, paragraph \`h\` is a **verbal or language-based** maladaptive target (see \`maladaptiveBehaviorForHour[h]\`).
+- For those hours: in the behavior/topography portion (while still citing \`maladaptiveBehaviorForHour[h]\` **verbatim** as the catalog label), you MUST include **brief concrete client wording** consistent with the antecedent and label—same style as the rest of this auto-generated body. Use a **short direct quotation** in straight double quotes (e.g. The client said "…" in a raised voice) or tight reported speech that still gives identifiable words/phrases. Keep it clinically appropriate, observable, and concise; **never** copy personal names, initials, or nicknames from \`clientAssessmentTextExcerpt\`.
+- Do **not** end the behavior description on the catalog label alone for those hours (include the sample utterance or quoted words).
+- When \`languageMaladaptiveEpisodeForHour[h]\` is **false**, follow the usual behavior rules (including toddler minimization when applicable).
 
 INITIATION OF INTERACTION:
 - When an interaction or invitation happens, state WHO initiated it explicitly (e.g. "The therapist presented…", "A peer said…", "The RBT placed…").
@@ -163,6 +173,7 @@ function toComplianceCtx(ctx: NoteGenerationContext): NoteComplianceContext {
     maladaptiveBehaviors: ctx.maladaptiveBehaviors,
     maladaptiveBehaviorForHour: ctx.maladaptiveBehaviorForHour,
     activityAntecedentForHour: ctx.activityAntecedentForHour,
+    languageMaladaptiveEpisodeForHour: ctx.languageMaladaptiveEpisodeForHour,
     interventions: ctx.interventions,
     clientAgeYears: ctx.clientAgeYears,
     presentPeople: ctx.presentPeople,
@@ -256,7 +267,7 @@ Output ONLY the corrected clinical body.`;
 
   const repairSystem = `${SYSTEM_PROMPT}
 
-REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON and with any non-empty \`clientAssessmentTextExcerpt\` in the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; **each paragraph h must use replacementProgramForHour[h] verbatim (full string, including every parenthesis) in the replacement-program quote and must not name any other entry from replacementProgramsInOrder in that paragraph**; exactly one maladaptive behavior catalog label per paragraph; **each paragraph h must use maladaptiveBehaviorForHour[h] verbatim** for the manifested behavior; **when activityAntecedentForHour[h] is a non-null string, paragraph h must contain that exact substring verbatim**; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech to the client; when a paragraph cites physical aggression and JSON interventions include Response Block, describe Response Block immediately first after "To address this behavior," then other interventions; **never output personal names**—refer only as **the client** (plus appropriate pronouns).`;
+REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON and with any non-empty \`clientAssessmentTextExcerpt\` in the JSON; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; **each paragraph h must use replacementProgramForHour[h] verbatim (full string, including every parenthesis) in the replacement-program quote and must not name any other entry from replacementProgramsInOrder in that paragraph**; exactly one maladaptive behavior catalog label per paragraph; **each paragraph h must use maladaptiveBehaviorForHour[h] verbatim** for the manifested behavior; **when activityAntecedentForHour[h] is a non-null string, paragraph h must contain that exact substring verbatim**; **when languageMaladaptiveEpisodeForHour[h] is true, paragraph h must include brief quoted or reported client utterance topography** per LANGUAGE / VERBAL MALADAPTIVE EPISODES; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech except where languageMaladaptiveEpisodeForHour[h] is true for that hour; when a paragraph cites physical aggression and JSON interventions include Response Block, describe Response Block immediately first after "To address this behavior," then other interventions; **never output personal names**—refer only as **the client** (plus appropriate pronouns).`;
 
   return callOpenAI(
     [

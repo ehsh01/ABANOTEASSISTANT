@@ -1242,9 +1242,14 @@ export function useListClientPrograms<
 }
 
 /**
+ * Updates the shared `programs` row (company-scoped). When `name` changes, matching entries in the client's `profile.replacementPrograms` are renamed to stay in sync. At least one body field is required.
+
  * @summary Update a replacement program linked to a client
  */
-export const getUpdateClientProgramUrl = (clientId: number, programId: number) => {
+export const getUpdateClientProgramUrl = (
+  clientId: number,
+  programId: number,
+) => {
   return `/api/clients/${clientId}/programs/${programId}`;
 };
 
@@ -1272,14 +1277,22 @@ export const getUpdateClientProgramMutationOptions = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof updateClientProgram>>,
     TError,
-    { clientId: number; programId: number; data: BodyType<UpdateClientProgramBody> },
+    {
+      clientId: number;
+      programId: number;
+      data: BodyType<UpdateClientProgramBody>;
+    },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationOptions<
   Awaited<ReturnType<typeof updateClientProgram>>,
   TError,
-  { clientId: number; programId: number; data: BodyType<UpdateClientProgramBody> },
+  {
+    clientId: number;
+    programId: number;
+    data: BodyType<UpdateClientProgramBody>;
+  },
   TContext
 > => {
   const mutationKey = ["updateClientProgram"];
@@ -1293,7 +1306,11 @@ export const getUpdateClientProgramMutationOptions = <
 
   const mutationFn: MutationFunction<
     Awaited<ReturnType<typeof updateClientProgram>>,
-    { clientId: number; programId: number; data: BodyType<UpdateClientProgramBody> }
+    {
+      clientId: number;
+      programId: number;
+      data: BodyType<UpdateClientProgramBody>;
+    }
   > = (props) => {
     const { clientId, programId, data } = props ?? {};
 
@@ -1319,23 +1336,36 @@ export const useUpdateClientProgram = <
   mutation?: UseMutationOptions<
     Awaited<ReturnType<typeof updateClientProgram>>,
     TError,
-    { clientId: number; programId: number; data: BodyType<UpdateClientProgramBody> },
+    {
+      clientId: number;
+      programId: number;
+      data: BodyType<UpdateClientProgramBody>;
+    },
     TContext
   >;
   request?: SecondParameter<typeof customFetch>;
 }): UseMutationResult<
   Awaited<ReturnType<typeof updateClientProgram>>,
   TError,
-  { clientId: number; programId: number; data: BodyType<UpdateClientProgramBody> },
+  {
+    clientId: number;
+    programId: number;
+    data: BodyType<UpdateClientProgramBody>;
+  },
   TContext
 > => {
   return useMutation(getUpdateClientProgramMutationOptions(options));
 };
 
 /**
+ * Removes the `client_programs` row. The `programs` row remains for the company. Removes the program name from `profile.replacementPrograms` when it matches the unlinked program so it is not re-linked on the next sync.
+
  * @summary Unlink a replacement program from a client
  */
-export const getDeleteClientProgramUrl = (clientId: number, programId: number) => {
+export const getDeleteClientProgramUrl = (
+  clientId: number,
+  programId: number,
+) => {
   return `/api/clients/${clientId}/programs/${programId}`;
 };
 

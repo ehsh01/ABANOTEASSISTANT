@@ -1100,7 +1100,7 @@ function StepAbcBuilder() {
 
   const updateRow = (index: number, field: keyof AbcHintEntry, value: string | null) => {
     const updated = [...hints];
-    updated[index] = { ...updated[index], [field]: value || null };
+    updated[index] = { ...updated[index]!, [field]: value || null };
     updateData({ abcHints: updated });
   };
 
