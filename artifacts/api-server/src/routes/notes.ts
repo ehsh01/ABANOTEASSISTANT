@@ -88,10 +88,11 @@ function assembleSessionNote(
   therapySetting: TherapySetting,
   clinicalBody: string,
   nextSessionDate: string | undefined,
+  clientFirstName: string | null | undefined,
 ): string {
-  const opening = buildLockedOpening(presentPeople, hasEnvChanges, therapySetting);
+  const opening = buildLockedOpening(presentPeople, hasEnvChanges, therapySetting, clientFirstName);
   const performance = buildPerformanceSentence();
-  const nextSession = buildNextSessionSentence(nextSessionDate);
+  const nextSession = buildNextSessionSentence(nextSessionDate, clientFirstName);
 
   return [opening, "", clinicalBody, "", LOCKED_CLOSING_PARAGRAPH, "", performance, "", nextSession].join("\n");
 }
@@ -470,6 +471,7 @@ router.post("/notes/generate", async (req, res) => {
     body.therapySetting,
     clinicalBody,
     body.nextSessionDate,
+    profile?.firstName,
   );
 
   for (const issue of validateCaregiverMentionRule(noteContent, body.presentPeople)) {

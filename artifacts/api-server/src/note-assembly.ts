@@ -36,28 +36,71 @@ export function formatUsDateFromIso(iso: string): string {
 export const LOCKED_CLOSING_PARAGRAPH =
   'Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., "Good job," "Wow," and "Good attention to detail"), preferred toys, and videos contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned.';
 
-/** Session note prose must not contain personal names — use this literal only. */
+/** Used when the client profile has no first name for locked opening / location lines. */
 export const SESSION_NOTE_CLIENT_REFERRAL = "the client";
+
+/** English possessive for first name in locked prose (e.g. Alex → Alex's, James → James'). */
+export function englishPossessiveFirstName(firstName: string): string {
+  const t = firstName.trim();
+  if (t.length === 0) return "the client's";
+  return /s$/i.test(t) ? `${t}'` : `${t}'s`;
+}
+
+/**
+ * Applies the client's first name to catalog location phrases that refer to the learner's home
+ * (e.g. "at home" → "at Sam's home"). Non-home phrases are unchanged.
+ */
+export function personalizeTherapyLocationPhrase(
+  therapySetting: TherapySetting,
+  clientFirstName: string | null | undefined,
+): string {
+  const base = therapySettingLocationPhrase(therapySetting);
+  const trimmed = clientFirstName?.trim() ?? "";
+  if (trimmed.length === 0) return base;
+
+  const poss = englishPossessiveFirstName(trimmed);
+  let s = base;
+  if (s.includes("at the member's home")) {
+    s = s.replaceAll("at the member's home", `at ${poss} home`);
+  }
+  if (s.includes("at a family home")) {
+    s = s.replaceAll("at a family home", `at ${poss} family home`);
+  }
+  s = s.replace(/\bat home\b/g, `at ${poss} home`);
+  return s;
+}
 
 export function buildLockedOpening(
   presentPeople: string[],
   hasEnvironmentalChanges: boolean,
   therapySetting: TherapySetting,
+  clientFirstName?: string | null,
 ): string {
   const caregivers = formatCaregiverList(presentPeople);
   const env = environmentalOpeningSentence(hasEnvironmentalChanges);
-  const where = therapySettingLocationPhrase(therapySetting);
-  return `The RBT met with ${SESSION_NOTE_CLIENT_REFERRAL} and ${caregivers} ${where} to implement program targets. ${env}`;
+  const trimmed = clientFirstName?.trim() ?? "";
+  const who = trimmed.length > 0 ? trimmed : SESSION_NOTE_CLIENT_REFERRAL;
+  const where =
+    trimmed.length > 0
+      ? personalizeTherapyLocationPhrase(therapySetting, trimmed)
+      : therapySettingLocationPhrase(therapySetting);
+  return `The RBT met with ${who} and ${caregivers} ${where} to implement program targets. ${env}`;
 }
 
 export function buildPerformanceSentence(): string {
   return "The client's performance during the session was fair.";
 }
 
-export function buildNextSessionSentence(nextSessionDate: string | undefined): string {
+export function buildNextSessionSentence(
+  nextSessionDate: string | undefined,
+  clientFirstName?: string | null,
+): string {
+  const trimmed = clientFirstName?.trim() ?? "";
+  const homePoss =
+    trimmed.length > 0 ? englishPossessiveFirstName(trimmed) + " home" : "the client's home";
   if (nextSessionDate && nextSessionDate.trim().length > 0) {
     const formatted = formatUsDateFromIso(nextSessionDate);
-    return `The next session is tentatively scheduled to take place at the client's home on ${formatted}.`;
+    return `The next session is tentatively scheduled to take place at ${homePoss} on ${formatted}.`;
   }
-  return "The next session is tentatively scheduled to take place at the client's home; the date is to be determined.";
+  return `The next session is tentatively scheduled to take place at ${homePoss}; the date is to be determined.`;
 }

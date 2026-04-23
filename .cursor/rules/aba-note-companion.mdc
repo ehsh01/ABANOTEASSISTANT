@@ -8,8 +8,8 @@ alwaysApply: true
 ## Best Use
 Use this file next to the main backend rules file. It explains how to split your system so rules do not fight each other.
 
-## Invariant: no learner names in note prose
-Generated session note text (locked assembly, clinical body, and any template path) must refer to the learner only as **the client** (with appropriate pronouns). Never output first names, last names, nicknames, or initials, including from the assessment excerpt.
+## Invariant: learner naming in note prose
+The **AI clinical body** and all narrative outside the locked first-sentence opening and the locked **next-session** line must refer to the learner only as **the client** (with appropriate pronouns). Never output first names, last names, nicknames, or initials there, including from the assessment excerpt. The **locked opening** (first sentence) and **next-session** line may use the client profile **first name** for the learner and possessive home wording when that field is populated; see `aba-note-locked-prose.mdc` and `artifacts/api-server/src/note-assembly.ts`.
 
 ## Invariant: rules + client assessment on every note
 For **every** note generation path, treat as mandatory inputs:
