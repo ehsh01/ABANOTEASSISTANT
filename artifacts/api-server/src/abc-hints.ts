@@ -3,6 +3,7 @@ import { isValidAbcActivityAntecedent } from "./abc-activity-antecedent-catalog"
 export type AbcHintInput = {
   activityAntecedent?: string | null;
   maladaptiveBehavior?: string | null;
+  replacementProgramId?: number | null;
 };
 
 /**

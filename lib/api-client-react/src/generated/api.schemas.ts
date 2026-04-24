@@ -361,7 +361,7 @@ export const GenerateNoteRequestTherapySetting = {
 } as const;
 
 /**
- * One optional ABC row. Both properties must be non-empty together, or both empty/null — partial rows are invalid.
+ * One optional ABC row. activityAntecedent and maladaptiveBehavior must be non-empty together, or both empty/null — partial pairs are invalid. replacementProgramId may be set alone or with a complete activity/behavior pair.
 
  */
 export interface AbcHintEntry {
@@ -369,6 +369,9 @@ export interface AbcHintEntry {
   activityAntecedent?: string | null;
   /** Exact maladaptive behavior label from the client BIP/profile catalog */
   maladaptiveBehavior?: string | null;
+  /** Optional. ID of a replacement program linked to this client (GET /clients/:id/programs). When set, hour h uses this program in the ABC instead of the default rotation from selectedReplacements. If this id is not in selectedReplacements, the clinical narrative for that hour must describe RBT implementation only and must not state positive or negative client outcomes for that program.
+   */
+  replacementProgramId?: number | null;
 }
 
 export interface GenerateNoteRequest {
@@ -388,7 +391,7 @@ export interface GenerateNoteRequest {
   selectedReplacements: number[];
   nextSessionDate?: string;
   /**
-   * Optional ABC Builder rows, index-aligned with service hours (index 0 = first hour). When both activityAntecedent and maladaptiveBehavior are set for an index, the AI must use those exact strings for that hour; empty rows use default AI rotation. Length must not exceed sessionHours. Omit or send [] for fully automatic ABCs.
+   * Optional ABC Builder rows, index-aligned with service hours (index 0 = first hour). When both activityAntecedent and maladaptiveBehavior are set for an index, the AI must use those exact strings for that hour; empty rows use default AI rotation. Optional replacementProgramId per index assigns which linked replacement program that hour's ABC documents (defaults to server rotation from selectedReplacements). When replacementProgramId is not among selectedReplacements, the narrative must document RBT actions only for that hour—no valenced client outcome. Length must not exceed sessionHours. Omit or send [] for fully automatic ABCs.
 
    * @maxItems 8
    */

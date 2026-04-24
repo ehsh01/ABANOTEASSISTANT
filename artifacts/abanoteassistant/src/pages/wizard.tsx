@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon, UserPlus, Plus, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon, UserPlus, Plus } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
-import type { Client as ApiClient, Program, GenerateNoteRequest, AbcHintEntry, TherapySetting } from "@workspace/api-client-react";
-import { THERAPY_SETTINGS_ORDERED, isTherapySetting } from "@workspace/therapy-settings";
+import type { Client as ApiClient, Program, GenerateNoteRequest, AbcHintEntry } from "@workspace/api-client-react";
+import { THERAPY_SETTINGS_ORDERED, isTherapySetting, type TherapySetting } from "@workspace/therapy-settings";
 import { ApiError } from "@workspace/api-client-react";
 import { useWizardStore, type WizardData } from "@/store/wizard-store";
-import { useClients, useClientPrograms, useGenerateSessionNote, useAbcActivityAntecedents, useClient } from "@/hooks/use-aba-api";
+import {
+  useClients,
+  useClientPrograms,
+  useGenerateSessionNote,
+  useAbcActivityAntecedents,
+  useClient,
+} from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
 import { cn, formatSessionDate } from "@/lib/utils";
 import {
@@ -83,10 +89,18 @@ function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | null {
     const cleaned: AbcHintEntry[] = capped.map((row) => {
       const hasActivity = !!row.activityAntecedent;
       const hasBehavior = !!row.maladaptiveBehavior;
-      if (hasActivity && hasBehavior) return row;
-      return { activityAntecedent: null, maladaptiveBehavior: null };
+      const pid = row.replacementProgramId ?? null;
+      if (hasActivity && hasBehavior) {
+        return { activityAntecedent: row.activityAntecedent, maladaptiveBehavior: row.maladaptiveBehavior, replacementProgramId: pid };
+      }
+      if (hasActivity !== hasBehavior) {
+        return { activityAntecedent: null, maladaptiveBehavior: null, replacementProgramId: pid };
+      }
+      return { activityAntecedent: null, maladaptiveBehavior: null, replacementProgramId: pid };
     });
-    const hasAny = cleaned.some((r) => !!r.activityAntecedent);
+    const hasAny = cleaned.some(
+      (r) => !!r.activityAntecedent || r.replacementProgramId != null,
+    );
     if (hasAny) {
       body.abcHints = cleaned;
     }
@@ -520,7 +534,9 @@ function Step2Hours() {
       
       {data.sessionHours && (
         <p className="text-center text-sm text-muted-foreground bg-secondary/50 p-4 rounded-xl">
-          One ABC block per hour. You'll need at least <strong className="text-foreground">{data.sessionHours}</strong> replacement programs for this session.
+          One ABC block per hour. Select at least one replacement program in the next step; you can assign a{" "}
+          <strong className="text-foreground">different linked program per hour</strong> later in ABC Builder when the
+          session mixed multiple targets.
         </p>
       )}
     </div>
@@ -971,7 +987,7 @@ function Step6Programs() {
   }
 
   const programs = programsRes?.data || [];
-  const minRequired = data.sessionHours || 1; // Fallback to 1 if not set
+  const minRequired = 1;
   const selected = data.selectedReplacements || [];
 
   const toggleProgram = (programId: number) => {
@@ -992,7 +1008,11 @@ function Step6Programs() {
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="text-center mb-8">
         <h2 className="text-3xl font-display font-bold text-foreground">Replacement Programs</h2>
-        <p className="text-muted-foreground mt-2">Select the programs targeted during this session.</p>
+        <p className="text-muted-foreground mt-2">
+          Choose session targets for billing/documentation (at least one). For long sessions that mixed different
+          goals, pick every program you are documenting outcomes for here; use ABC Builder to map other linked
+          programs to specific hours without implying outcomes for those programs.
+        </p>
       </div>
 
       <ProgramsMultiSelectCombobox
@@ -1024,7 +1044,7 @@ function Step6Programs() {
           <span className={cn("text-lg font-bold ml-1", hasEnough ? "text-emerald-600" : "text-amber-600")}>
             {selected.length}
           </span>
-          <span className="text-sm text-muted-foreground"> / {minRequired} required for {data.sessionHours} hrs</span>
+          <span className="text-sm text-muted-foreground"> (minimum {minRequired} required)</span>
         </div>
         <button
           type="button"
@@ -1073,69 +1093,99 @@ function Step6Programs() {
   );
 }
 
+const ABC_EMPTY_ROW = (): AbcHintEntry => ({
+  activityAntecedent: null,
+  maladaptiveBehavior: null,
+  replacementProgramId: null,
+});
+
 function StepAbcBuilder() {
   const { data, updateData } = useWizardStore();
   const sessionHours = data.sessionHours ?? 1;
   const maxRows = Math.min(sessionHours, 8);
-  const defaultRowCount = sessionHours >= 3 ? 3 : sessionHours;
+  const selectedIds = data.selectedReplacements ?? [];
 
   const { data: activitiesRes, isLoading: activitiesLoading } = useAbcActivityAntecedents();
   const { data: clientRes } = useClient(data.clientId);
+  const { data: programsRes, isLoading: programsLoading } = useClientPrograms(data.clientId);
 
   const activities = activitiesRes?.data?.activities ?? [];
   const maladaptiveBehaviors: string[] = clientRes?.data?.profile?.maladaptiveBehaviors ?? [];
-
-  const hints: AbcHintEntry[] = data.abcHints?.length
-    ? data.abcHints
-    : Array.from({ length: defaultRowCount }, () => ({ activityAntecedent: null, maladaptiveBehavior: null }));
+  const linkedPrograms: Program[] = programsRes?.data ?? [];
 
   useEffect(() => {
-    if (!data.abcHints || data.abcHints.length === 0) {
-      updateData({
-        abcHints: Array.from({ length: defaultRowCount }, () => ({ activityAntecedent: null, maladaptiveBehavior: null })),
+    const want = Math.min(sessionHours, 8);
+    const cur = useWizardStore.getState().data.abcHints ?? [];
+    if (cur.length === 0) {
+      useWizardStore.getState().updateData({
+        abcHints: Array.from({ length: want }, () => ABC_EMPTY_ROW()),
       });
+      return;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    if (cur.length < want) {
+      useWizardStore.getState().updateData({
+        abcHints: [...cur, ...Array.from({ length: want - cur.length }, () => ABC_EMPTY_ROW())],
+      });
+    } else if (cur.length > want) {
+      useWizardStore.getState().updateData({ abcHints: cur.slice(0, want) });
+    }
+  }, [sessionHours]);
 
-  const updateRow = (index: number, field: keyof AbcHintEntry, value: string | null) => {
-    const updated = [...hints];
-    updated[index] = { ...updated[index]!, [field]: value || null };
-    updateData({ abcHints: updated });
+  const rawHints = data.abcHints ?? [];
+  const hints: AbcHintEntry[] = Array.from({ length: maxRows }, (_, i) => rawHints[i] ?? ABC_EMPTY_ROW());
+
+  const setAbcHints = (next: AbcHintEntry[]) => {
+    updateData({ abcHints: next });
+  };
+
+  const updateRow = (index: number, field: keyof AbcHintEntry, value: string | number | null) => {
+    const next = Array.from({ length: maxRows }, (_, i) => ({ ...(rawHints[i] ?? ABC_EMPTY_ROW()) }));
+    const row = { ...next[index]! };
+    if (field === "replacementProgramId") {
+      row.replacementProgramId = value === null || value === "" ? null : Number(value);
+    } else if (field === "activityAntecedent") {
+      row.activityAntecedent = (value as string) || null;
+    } else if (field === "maladaptiveBehavior") {
+      row.maladaptiveBehavior = (value as string) || null;
+    }
+    next[index] = row;
+    setAbcHints(next);
   };
 
   const addRow = () => {
-    if (hints.length >= maxRows) return;
-    updateData({ abcHints: [...hints, { activityAntecedent: null, maladaptiveBehavior: null }] });
-  };
-
-  const removeRow = (index: number) => {
-    const updated = hints.filter((_, i) => i !== index);
-    updateData({ abcHints: updated.length > 0 ? updated : [{ activityAntecedent: null, maladaptiveBehavior: null }] });
+    if (rawHints.length >= maxRows) return;
+    setAbcHints([...rawHints, ABC_EMPTY_ROW()]);
   };
 
   const resetRows = () => {
-    updateData({
-      abcHints: Array.from({ length: defaultRowCount }, () => ({ activityAntecedent: null, maladaptiveBehavior: null })),
-    });
+    setAbcHints(Array.from({ length: maxRows }, () => ABC_EMPTY_ROW()));
   };
+
+  const loading = activitiesLoading || programsLoading;
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="text-center mb-8">
         <h2 className="text-3xl font-display font-bold text-foreground">ABC Builder</h2>
-        <p className="text-muted-foreground mt-2">Optional — lock specific activities and behaviors for each session hour.</p>
+        <p className="text-muted-foreground mt-2">Optional — lock activities, behaviors, and programs per hour.</p>
       </div>
 
-      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-muted-foreground leading-relaxed">
-        <p className="font-semibold text-foreground mb-1">How it works</p>
+      <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-muted-foreground leading-relaxed space-y-2">
+        <p className="font-semibold text-foreground">How it works</p>
         <p>
-          Each row represents one session hour. When you fill in both fields, the AI will use your exact activity and maladaptive behavior label for that hour. Consequence and intervention text still follows clinical rules.
-          Leave rows blank to let the AI generate all ABCs automatically.
+          Each row is one service hour. When you fill in both activity and maladaptive behavior, the AI keeps those exact
+          strings for that hour. Use <span className="font-medium text-foreground">Program this hour</span> to pick which
+          linked replacement program that hour&apos;s ABC follows (defaults to rotating the programs you selected on the
+          Replacement Programs step).
+        </p>
+        <p>
+          If you choose a program that you <span className="font-medium text-foreground">did not</span> select on the
+          Replacement Programs step, the note will describe <span className="font-medium text-foreground">what the RBT
+          did</span> for that program only — not positive or negative client outcomes for that program.
         </p>
       </div>
 
-      {activitiesLoading ? (
+      {loading ? (
         <div className="flex justify-center py-12">
           <Loader2 className="w-8 h-8 animate-spin text-primary pop-icon" />
         </div>
@@ -1146,6 +1196,9 @@ function StepAbcBuilder() {
             const hasBehavior = !!row.maladaptiveBehavior;
             const isComplete = hasActivity && hasBehavior;
             const isPartial = hasActivity !== hasBehavior;
+            const pid = row.replacementProgramId;
+            const rbtOnly =
+              typeof pid === "number" && Number.isFinite(pid) && !selectedIds.includes(pid);
             return (
               <div
                 key={i}
@@ -1154,23 +1207,42 @@ function StepAbcBuilder() {
                   isPartial
                     ? "border-amber-400 bg-amber-50/20"
                     : isComplete
-                    ? "border-emerald-400 bg-emerald-50/20"
-                    : "border-border",
+                      ? "border-emerald-400 bg-emerald-50/20"
+                      : "border-border",
                 )}
               >
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">
                     Hour {i + 1}
                   </span>
-                  {hints.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => removeRow(i)}
-                      className="text-muted-foreground hover:text-destructive transition-colors p-1 rounded"
-                      aria-label={`Remove hour ${i + 1}`}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Program this hour</label>
+                  <Select
+                    value={pid != null ? String(pid) : "__auto__"}
+                    onValueChange={(v) =>
+                      updateRow(i, "replacementProgramId", v === "__auto__" ? null : Number(v))
+                    }
+                  >
+                    <SelectTrigger className="h-10 rounded-lg border-border bg-background text-sm">
+                      <SelectValue placeholder="Automatic from session targets" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[min(60vh,22rem)]">
+                      <SelectItem value="__auto__">Automatic (rotate session targets)</SelectItem>
+                      {linkedPrograms.map((p) => (
+                        <SelectItem key={p.id} value={String(p.id)}>
+                          {p.name}
+                          {selectedIds.includes(p.id) ? "" : " — RBT actions only"}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {rbtOnly && (
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      This program is not a selected session target; the narrative will use RBT-action wording only for
+                      its outcome.
+                    </p>
                   )}
                 </div>
 
@@ -1214,7 +1286,7 @@ function StepAbcBuilder() {
                 {isPartial && (
                   <p className="text-xs text-amber-600 font-semibold flex items-center gap-1">
                     <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                    Fill in both fields or leave both empty before continuing.
+                    Fill in both activity fields or leave both empty before continuing.
                   </p>
                 )}
               </div>
@@ -1227,12 +1299,12 @@ function StepAbcBuilder() {
         <button
           type="button"
           onClick={addRow}
-          disabled={hints.length >= maxRows}
+          disabled={rawHints.length >= maxRows}
           className="flex items-center gap-1.5 text-sm font-semibold text-primary hover:text-primary/80 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
         >
           <Plus className="w-4 h-4" />
           Add Row
-          {hints.length >= maxRows && (
+          {rawHints.length >= maxRows && (
             <span className="text-xs font-normal text-muted-foreground ml-1">
               (max {maxRows} for {sessionHours}h session)
             </span>

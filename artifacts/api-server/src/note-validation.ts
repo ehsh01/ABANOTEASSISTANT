@@ -11,6 +11,10 @@ export type NoteComplianceContext = {
    * Clinical body must include this substring verbatim in paragraph h when non-empty.
    */
   replacementProgramForHour: string[];
+  /**
+   * When provided (length = sessionHours), indices that are true use RBT-actions-only outcome rules for that hour.
+   */
+  rbtActionsOnlyOutcomeForHour?: boolean[] | undefined;
   /** BIP maladaptive behavior names (exact strings) — used for one-behavior-per-paragraph checks */
   maladaptiveBehaviors: string[];
   /**

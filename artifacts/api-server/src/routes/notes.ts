@@ -21,6 +21,7 @@ import {
   clientsTable,
   companiesTable,
   programsTable,
+  clientProgramsTable,
   notesTable,
   type ClientProfileRow,
 } from "@workspace/db/schema";
@@ -322,17 +323,59 @@ router.post("/notes/generate", async (req, res) => {
     return;
   }
 
-  let programNames: string[] = [];
-  if (body.selectedReplacements.length > 0) {
-    const programRows = await db
-      .select()
-      .from(programsTable)
-      .where(
-        and(eq(programsTable.companyId, companyId), inArray(programsTable.id, body.selectedReplacements)),
-      );
-    const nameById = new Map(programRows.map((p) => [p.id, p.name]));
-    programNames = body.selectedReplacements.map((id) => nameById.get(id) ?? `Program ${id}`);
+  if (body.selectedReplacements.length === 0) {
+    res.status(422).json({
+      success: false,
+      error: "Programs required",
+      messages: ["Select at least one replacement program for this session before generating a note."],
+    });
+    return;
   }
+
+  let programNames: string[] = [];
+  const programRows = await db
+    .select()
+    .from(programsTable)
+    .where(and(eq(programsTable.companyId, companyId), inArray(programsTable.id, body.selectedReplacements)));
+  const nameById = new Map(programRows.map((p) => [p.id, p.name]));
+  programNames = body.selectedReplacements.map((id) => nameById.get(id) ?? `Program ${id}`);
+
+  const linkedProgramRows = await db
+    .select({ id: programsTable.id, name: programsTable.name })
+    .from(clientProgramsTable)
+    .innerJoin(programsTable, eq(clientProgramsTable.programId, programsTable.id))
+    .where(and(eq(clientProgramsTable.clientId, body.clientId), eq(programsTable.companyId, companyId)));
+
+  const linkedIdToName = new Map(linkedProgramRows.map((r) => [r.id, r.name]));
+  const selectedIdSet = new Set(body.selectedReplacements);
+  const abcHintProgramMessages: string[] = [];
+  const hints = body.abcHints ?? [];
+  for (let h = 0; h < hints.length; h++) {
+    const pid = hints[h]?.replacementProgramId;
+    if (pid == null) continue;
+    if (typeof pid !== "number" || !linkedIdToName.has(pid)) {
+      abcHintProgramMessages.push(
+        `abcHints[${h}]: replacementProgramId must be the id of a replacement program linked to this client (GET /api/clients/:clientId/programs).`,
+      );
+    }
+  }
+  if (abcHintProgramMessages.length > 0) {
+    res.status(400).json({
+      success: false,
+      error: "Invalid ABC Builder input",
+      messages: abcHintProgramMessages,
+    });
+    return;
+  }
+
+  const replacementProgramsCatalog = (() => {
+    const names = linkedProgramRows.map((r) => r.name.trim()).filter((s) => s.length > 0);
+    if (names.length > 0) {
+      return [...new Set(names)].sort((a, b) => b.length - a.length || a.localeCompare(b));
+    }
+    const fromSelected = programNames.map((s) => s.trim()).filter((s) => s.length > 0);
+    return [...new Set(fromSelected)].sort((a, b) => b.length - a.length || a.localeCompare(b));
+  })();
 
   const profile = (client.profile as ClientProfileRow | null | undefined) ?? null;
   const clientAgeYears = approximateAgeYearsAtSession(profile?.dateOfBirth ?? null, body.sessionDate);
@@ -370,15 +413,28 @@ router.post("/notes/generate", async (req, res) => {
   }
 
   const { maladaptiveBehaviorForHour, activityAntecedentForHour } = abcResolved;
-  const replacementProgramForHour = replacementProgramsForSessionHours(programNames, body.sessionHours);
+  const baseReplacementProgramForHour = replacementProgramsForSessionHours(programNames, body.sessionHours);
+  const replacementProgramForHour: string[] = [];
+  const rbtActionsOnlyOutcomeForHour: boolean[] = [];
+  for (let h = 0; h < body.sessionHours; h++) {
+    const pid = hints[h]?.replacementProgramId;
+    if (typeof pid === "number" && linkedIdToName.has(pid)) {
+      replacementProgramForHour.push(linkedIdToName.get(pid)!);
+      rbtActionsOnlyOutcomeForHour.push(!selectedIdSet.has(pid));
+    } else {
+      replacementProgramForHour.push(baseReplacementProgramForHour[h] ?? "");
+      rbtActionsOnlyOutcomeForHour.push(false);
+    }
+  }
   const languageMaladaptiveEpisodeForHour = maladaptiveBehaviorForHour.map((b) =>
     isLanguageMaladaptiveBehaviorLabel(b),
   );
 
   const complianceCtxBase: NoteComplianceContext = {
     sessionHours: body.sessionHours,
-    replacementProgramsInOrder: programNames,
+    replacementProgramsInOrder: replacementProgramsCatalog,
     replacementProgramForHour,
+    rbtActionsOnlyOutcomeForHour,
     maladaptiveBehaviors: behaviorCatalog,
     maladaptiveBehaviorForHour,
     activityAntecedentForHour,
@@ -430,8 +486,9 @@ router.post("/notes/generate", async (req, res) => {
     maladaptiveBehaviors: behaviorCatalog,
     maladaptiveBehaviorForHour,
     interventions: profile?.interventions ?? [],
-    replacementProgramsInOrder: programNames,
+    replacementProgramsInOrder: replacementProgramsCatalog,
     replacementProgramForHour,
+    rbtActionsOnlyOutcomeForHour,
     requestNonce: behaviorRotationSeed,
     clientAgeYears,
     ageBand: client.ageBand,
@@ -480,7 +537,12 @@ router.post("/notes/generate", async (req, res) => {
 
   if (body.selectedReplacements.length < body.sessionHours) {
     warnings.push(
-      `Fewer programs selected than session hours. Some hours reuse or rotate selected replacement programs in the narrative.`,
+      "Fewer programs selected than session hours: default narratives rotate the selected program names across hours. Use ABC Builder → “Program this hour” to assign a different linked program per hour when the session mixed multiple targets.",
+    );
+  }
+  if (rbtActionsOnlyOutcomeForHour.some(Boolean)) {
+    warnings.push(
+      "One or more hours document a replacement program that was not selected for this session; the narrative for those hours must describe RBT implementation only (no valenced client outcome for that program).",
     );
   }
 
