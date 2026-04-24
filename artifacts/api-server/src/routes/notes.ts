@@ -36,7 +36,8 @@ import {
   approximateAgeYearsAtSession,
   maladaptiveBehaviorsCatalogForRotation,
   maladaptiveBehaviorsForSessionHours,
-  replacementProgramsForSessionHours,
+  replacementProgramAssignmentsForSessionHours,
+  replacementProgramPoolOrdered,
   validateCaregiverMentionRule,
   validateClinicalBodyCompliance,
   type NoteComplianceContext,
@@ -413,19 +414,22 @@ router.post("/notes/generate", async (req, res) => {
   }
 
   const { maladaptiveBehaviorForHour, activityAntecedentForHour } = abcResolved;
-  const baseReplacementProgramForHour = replacementProgramsForSessionHours(programNames, body.sessionHours);
-  const replacementProgramForHour: string[] = [];
-  const rbtActionsOnlyOutcomeForHour: boolean[] = [];
-  for (let h = 0; h < body.sessionHours; h++) {
-    const pid = hints[h]?.replacementProgramId;
-    if (typeof pid === "number" && linkedIdToName.has(pid)) {
-      replacementProgramForHour.push(linkedIdToName.get(pid)!);
-      rbtActionsOnlyOutcomeForHour.push(!selectedIdSet.has(pid));
-    } else {
-      replacementProgramForHour.push(baseReplacementProgramForHour[h] ?? "");
-      rbtActionsOnlyOutcomeForHour.push(false);
-    }
-  }
+
+  const linkedIdsUnique = [...new Set(linkedProgramRows.map((r) => r.id))].sort((a, b) => a - b);
+  const idToNameForPrograms = linkedIdToName.size > 0 ? linkedIdToName : nameById;
+  const poolIds = replacementProgramPoolOrdered(
+    body.selectedReplacements,
+    linkedIdsUnique.length > 0 ? linkedIdsUnique : body.selectedReplacements,
+  );
+  const explicitProgramIdByHour = Array.from({ length: body.sessionHours }, (_, h) => hints[h]?.replacementProgramId);
+  const { names: replacementProgramForHour, rbtActionsOnly: rbtActionsOnlyOutcomeForHour } =
+    replacementProgramAssignmentsForSessionHours({
+      sessionHours: body.sessionHours,
+      poolIds,
+      idToName: idToNameForPrograms,
+      selectedIdSet: selectedIdSet,
+      explicitProgramIdByHour,
+    });
   const languageMaladaptiveEpisodeForHour = maladaptiveBehaviorForHour.map((b) =>
     isLanguageMaladaptiveBehaviorLabel(b),
   );
@@ -537,7 +541,7 @@ router.post("/notes/generate", async (req, res) => {
 
   if (body.selectedReplacements.length < body.sessionHours) {
     warnings.push(
-      "Fewer programs selected than session hours: default narratives rotate the selected program names across hours. Use ABC Builder → “Program this hour” to assign a different linked program per hour when the session mixed multiple targets.",
+      "Fewer programs selected than session hours: hours without “Program this hour” in ABC Builder are auto-filled from all client-linked programs (selected first, then others), not by repeating only the selected list. Use ABC Builder to override any hour.",
     );
   }
   if (rbtActionsOnlyOutcomeForHour.some(Boolean)) {

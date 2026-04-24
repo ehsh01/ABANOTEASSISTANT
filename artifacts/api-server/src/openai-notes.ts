@@ -37,10 +37,11 @@ export type NoteGenerationContext = {
    */
   maladaptiveBehaviorForHour: string[];
   interventions: string[];
-  /** Replacement program names in wizard order (one focal program per hour when possible) */
+  /** Authorized replacement program names for this client (compliance / “no extra program names” checks). */
   replacementProgramsInOrder: string[];
   /**
-   * Exact replacement program string for each hour (length = sessionHours), cycling `replacementProgramsInOrder`.
+   * Exact replacement program string for each hour (length = sessionHours); server assigns from linked programs
+   * (selected first, then others) for hours without an explicit ABC Builder program id.
    * The clinical body must use only this name for replacement-program content in paragraph h (verbatim, all punctuation).
    */
   replacementProgramForHour: string[];

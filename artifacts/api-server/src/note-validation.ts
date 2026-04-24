@@ -259,6 +259,83 @@ export function replacementProgramsForSessionHours(programNames: string[], sessi
   return Array.from({ length: sessionHours }, (_, h) => names[h % names.length]!);
 }
 
+/**
+ * Build a pool of program ids: wizard-selected ids that appear in `linkedProgramIds` first (in selection order),
+ * then every other linked id (stable ascending by id). Used so auto-filled hours can draw from **all** linked
+ * programs instead of only cycling the small selected subset.
+ */
+export function replacementProgramPoolOrdered(selectedIdsOrdered: number[], linkedProgramIds: number[]): number[] {
+  const linkedSet = new Set(linkedProgramIds);
+  const seen = new Set<number>();
+  const pool: number[] = [];
+  for (const id of selectedIdsOrdered) {
+    if (linkedSet.has(id) && !seen.has(id)) {
+      seen.add(id);
+      pool.push(id);
+    }
+  }
+  const rest = [...linkedProgramIds].filter((id) => !seen.has(id)).sort((a, b) => a - b);
+  for (const id of rest) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      pool.push(id);
+    }
+  }
+  return pool;
+}
+
+/**
+ * Per-hour replacement program **names** and RBT-only flags. Explicit `replacementProgramId` per hour wins when
+ * present in `idToName`. Other hours consume `poolIds` in order, advancing through the pool so the first
+ * `min(autoHours, pool.length)` auto slots use distinct pool entries when possible; avoids matching the **previous**
+ * hour's program name when `pool.length > 1`. When the pool is exhausted, assignments continue with modulo indexing.
+ */
+export function replacementProgramAssignmentsForSessionHours(params: {
+  sessionHours: number;
+  poolIds: number[];
+  idToName: Map<number, string>;
+  selectedIdSet: Set<number>;
+  explicitProgramIdByHour: (number | null | undefined)[];
+}): { names: string[]; rbtActionsOnly: boolean[] } {
+  const { sessionHours, poolIds, idToName, selectedIdSet, explicitProgramIdByHour } = params;
+  const H = sessionHours;
+  const names: string[] = Array.from({ length: H }, () => "");
+  const rbt: boolean[] = Array.from({ length: H }, () => false);
+
+  for (let h = 0; h < H; h++) {
+    const pid = explicitProgramIdByHour[h];
+    if (typeof pid === "number" && idToName.has(pid)) {
+      names[h] = idToName.get(pid)!;
+      rbt[h] = !selectedIdSet.has(pid);
+    }
+  }
+
+  const pool = poolIds.filter((id) => idToName.has(id));
+  if (pool.length === 0) {
+    return { names, rbtActionsOnly: rbt };
+  }
+
+  let autoSlot = 0;
+  for (let h = 0; h < H; h++) {
+    if (names[h]) continue;
+    let pickIdx = autoSlot % pool.length;
+    let pick = pool[pickIdx]!;
+    if (h > 0 && names[h - 1] === idToName.get(pick) && pool.length > 1) {
+      for (let k = 1; k < pool.length; k++) {
+        const tryPick = pool[(pickIdx + k) % pool.length]!;
+        if (idToName.get(tryPick) !== names[h - 1]) {
+          pick = tryPick;
+          break;
+        }
+      }
+    }
+    names[h] = idToName.get(pick)!;
+    rbt[h] = !selectedIdSet.has(pick);
+    autoSlot++;
+  }
+  return { names, rbtActionsOnly: rbt };
+}
+
 /** Catalog label denotes physical aggression (person-directed); match is on the catalog string, not free text. */
 function isPhysicalAggressionCatalogLabel(behaviorName: string): boolean {
   return /\bphysical\s+aggression\b/i.test(behaviorName.trim());
