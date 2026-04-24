@@ -324,6 +324,9 @@ router.post("/notes/generate", async (req, res) => {
     return;
   }
 
+  const profile = (client.profile as ClientProfileRow | null | undefined) ?? null;
+  const rawAssessmentSnapshot = profile?.assessmentTextSnapshot?.trim() ?? "";
+
   if (body.selectedReplacements.length === 0) {
     res.status(422).json({
       success: false,
@@ -347,16 +350,39 @@ router.post("/notes/generate", async (req, res) => {
     .innerJoin(programsTable, eq(clientProgramsTable.programId, programsTable.id))
     .where(and(eq(clientProgramsTable.clientId, body.clientId), eq(programsTable.companyId, companyId)));
 
-  const linkedIdToName = new Map(linkedProgramRows.map((r) => [r.id, r.name]));
   const selectedIdSet = new Set(body.selectedReplacements);
-  const abcHintProgramMessages: string[] = [];
+  const assessmentReplacementNameSet = new Set(
+    (profile?.replacementPrograms ?? [])
+      .map((n) => String(n).trim())
+      .filter((n) => n.length > 0),
+  );
+
+  /** Linked DB rows authorized for this note: assessment profile list + anything explicitly selected for the session. */
+  const allowedProgramRows =
+    assessmentReplacementNameSet.size > 0
+      ? linkedProgramRows.filter(
+          (r) => selectedIdSet.has(r.id) || assessmentReplacementNameSet.has(r.name.trim()),
+        )
+      : linkedProgramRows;
+
+  const allowedIdToName = new Map(allowedProgramRows.map((r) => [r.id, r.name]));
+  for (const id of body.selectedReplacements) {
+    const n = nameById.get(id);
+    if (n) {
+      allowedIdToName.set(id, n);
+    }
+  }
+
   const hints = body.abcHints ?? [];
+  const abcHintProgramMessages: string[] = [];
   for (let h = 0; h < hints.length; h++) {
     const pid = hints[h]?.replacementProgramId;
     if (pid == null) continue;
-    if (typeof pid !== "number" || !linkedIdToName.has(pid)) {
+    if (typeof pid !== "number" || !allowedIdToName.has(pid)) {
       abcHintProgramMessages.push(
-        `abcHints[${h}]: replacementProgramId must be the id of a replacement program linked to this client (GET /api/clients/:clientId/programs).`,
+        assessmentReplacementNameSet.size > 0
+          ? `abcHints[${h}]: replacementProgramId must be a program selected for this session or one whose exact name is on the client's replacement-program list from the assessment/profile.`
+          : `abcHints[${h}]: replacementProgramId must be the id of a replacement program linked to this client (GET /api/clients/:clientId/programs).`,
       );
     }
   }
@@ -370,18 +396,18 @@ router.post("/notes/generate", async (req, res) => {
   }
 
   const replacementProgramsCatalog = (() => {
-    const names = linkedProgramRows.map((r) => r.name.trim()).filter((s) => s.length > 0);
+    const names = [
+      ...allowedProgramRows.map((r) => r.name.trim()),
+      ...programNames.map((s) => s.trim()),
+    ].filter((s) => s.length > 0);
     if (names.length > 0) {
       return [...new Set(names)].sort((a, b) => b.length - a.length || a.localeCompare(b));
     }
-    const fromSelected = programNames.map((s) => s.trim()).filter((s) => s.length > 0);
-    return [...new Set(fromSelected)].sort((a, b) => b.length - a.length || a.localeCompare(b));
+    return [];
   })();
 
-  const profile = (client.profile as ClientProfileRow | null | undefined) ?? null;
   const clientAgeYears = approximateAgeYearsAtSession(profile?.dateOfBirth ?? null, body.sessionDate);
 
-  const rawAssessmentSnapshot = profile?.assessmentTextSnapshot?.trim() ?? "";
   const { text: clientAssessmentTextExcerpt, truncated: assessmentExcerptForNoteTruncated } =
     truncateAssessmentTextForNoteContext(profile?.assessmentTextSnapshot ?? "");
 
@@ -415,8 +441,8 @@ router.post("/notes/generate", async (req, res) => {
 
   const { maladaptiveBehaviorForHour, activityAntecedentForHour } = abcResolved;
 
-  const linkedIdsUnique = [...new Set(linkedProgramRows.map((r) => r.id))].sort((a, b) => a - b);
-  const idToNameForPrograms = linkedIdToName.size > 0 ? linkedIdToName : nameById;
+  const linkedIdsUnique = [...new Set(allowedProgramRows.map((r) => r.id))].sort((a, b) => a - b);
+  const idToNameForPrograms = allowedIdToName.size > 0 ? allowedIdToName : nameById;
   const poolIds = replacementProgramPoolOrdered(
     body.selectedReplacements,
     linkedIdsUnique.length > 0 ? linkedIdsUnique : body.selectedReplacements,
@@ -449,6 +475,16 @@ router.post("/notes/generate", async (req, res) => {
   };
 
   const warnings: string[] = [];
+  if (assessmentReplacementNameSet.size > 0) {
+    const omitted = linkedProgramRows.filter(
+      (r) => !selectedIdSet.has(r.id) && !assessmentReplacementNameSet.has(r.name.trim()),
+    );
+    if (omitted.length > 0) {
+      warnings.push(
+        `These linked programs are not on the client's assessment/profile replacement-program list and were omitted from hour assignment: ${omitted.map((r) => r.name).join(", ")}.`,
+      );
+    }
+  }
   if (rotationResult.labelsAddedFromAssessmentText.length > 0) {
     warnings.push(
       `Maladaptive behaviors found verbatim in the stored assessment but not on the client profile were included in this note's rotation: ${rotationResult.labelsAddedFromAssessmentText.join(", ")}. Consider adding them to the client profile for consistency.`,
@@ -541,7 +577,7 @@ router.post("/notes/generate", async (req, res) => {
 
   if (body.selectedReplacements.length < body.sessionHours) {
     warnings.push(
-      "Fewer programs selected than session hours: hours without “Program this hour” in ABC Builder are auto-filled from all client-linked programs (selected first, then others), not by repeating only the selected list. Use ABC Builder to override any hour.",
+      "Fewer programs selected than session hours: hours without “Program this hour” in ABC Builder are auto-filled from the client's assessment/profile replacement-program list (selected session targets first, then other assessment-listed programs). Use ABC Builder to override any hour.",
     );
   }
   if (rbtActionsOnlyOutcomeForHour.some(Boolean)) {

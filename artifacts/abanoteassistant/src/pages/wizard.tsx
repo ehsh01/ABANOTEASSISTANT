@@ -1112,6 +1112,17 @@ function StepAbcBuilder() {
   const activities = activitiesRes?.data?.activities ?? [];
   const maladaptiveBehaviors: string[] = clientRes?.data?.profile?.maladaptiveBehaviors ?? [];
   const linkedPrograms: Program[] = programsRes?.data ?? [];
+  const assessmentProgramNames = new Set(
+    (clientRes?.data?.profile?.replacementPrograms ?? [])
+      .map((n) => String(n).trim())
+      .filter((n) => n.length > 0),
+  );
+  const programsForHourPicker =
+    assessmentProgramNames.size > 0
+      ? linkedPrograms.filter(
+          (p) => selectedIds.includes(p.id) || assessmentProgramNames.has(p.name.trim()),
+        )
+      : linkedPrograms;
 
   useEffect(() => {
     const want = Math.min(sessionHours, 8);
@@ -1174,9 +1185,9 @@ function StepAbcBuilder() {
         <p className="font-semibold text-foreground">How it works</p>
         <p>
           Each row is one service hour. When you fill in both activity and maladaptive behavior, the AI keeps those exact
-          strings for that hour. Use <span className="font-medium text-foreground">Program this hour</span> to pick which
-          linked replacement program that hour&apos;s ABC follows (defaults to rotating the programs you selected on the
-          Replacement Programs step).
+          strings for that hour. Use <span className="font-medium text-foreground">Program this hour</span> to override
+          which replacement program that hour uses. Only programs from the client&apos;s assessment/profile list (plus
+          any you selected for this session) are available; hours you leave on Automatic are filled from that same list.
         </p>
         <p>
           If you choose a program that you <span className="font-medium text-foreground">did not</span> select on the
@@ -1230,7 +1241,7 @@ function StepAbcBuilder() {
                     </SelectTrigger>
                     <SelectContent className="max-h-[min(60vh,22rem)]">
                       <SelectItem value="__auto__">Automatic (rotate session targets)</SelectItem>
-                      {linkedPrograms.map((p) => (
+                      {programsForHourPicker.map((p) => (
                         <SelectItem key={p.id} value={String(p.id)}>
                           {p.name}
                           {selectedIds.includes(p.id) ? "" : " — RBT actions only"}
