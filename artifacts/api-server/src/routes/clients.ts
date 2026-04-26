@@ -33,6 +33,9 @@ type AssessmentStatus = "uploaded" | "processing" | "ready" | "missing";
  * Wizard and note generation use `client_programs` + `programs` rows.
  * Replacement program names live on `client.profile.replacementPrograms` from the intake form;
  * ensure each name has a matching program row (per company) and is linked to the client.
+ *
+ * Also **removes** `client_programs` links when a program name is no longer on the profile, so
+ * note creation and GET /programs cannot show stale programs after the profile is edited.
  */
 function replacementProgramNamesFromProfile(profile: unknown): string[] {
   if (profile === null || profile === undefined || typeof profile !== "object") {
@@ -99,7 +102,28 @@ async function syncReplacementProgramsFromProfile(
   profile: unknown,
 ): Promise<void> {
   const names = replacementProgramNamesFromProfile(profile);
-  if (names.length === 0) return;
+  const nameSet = new Set(names);
+
+  const existingLinks = await db
+    .select({
+      linkId: clientProgramsTable.id,
+      programName: programsTable.name,
+    })
+    .from(clientProgramsTable)
+    .innerJoin(programsTable, eq(clientProgramsTable.programId, programsTable.id))
+    .where(
+      and(eq(clientProgramsTable.clientId, clientId), eq(programsTable.companyId, companyId)),
+    );
+
+  for (const row of existingLinks) {
+    if (!nameSet.has(row.programName.trim())) {
+      await db.delete(clientProgramsTable).where(eq(clientProgramsTable.id, row.linkId));
+    }
+  }
+
+  if (names.length === 0) {
+    return;
+  }
 
   for (const name of names) {
     const [existingProg] = await db
