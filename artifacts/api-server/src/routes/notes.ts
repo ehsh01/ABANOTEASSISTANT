@@ -455,6 +455,7 @@ router.post("/notes/generate", async (req, res) => {
       idToName: idToNameForPrograms,
       selectedIdSet: selectedIdSet,
       explicitProgramIdByHour,
+      maladaptiveBehaviorForHour,
     });
   const languageMaladaptiveEpisodeForHour = maladaptiveBehaviorForHour.map((b) =>
     isLanguageMaladaptiveBehaviorLabel(b),

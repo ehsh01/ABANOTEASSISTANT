@@ -3,6 +3,11 @@
  * Complements prompt rules in openai-notes.ts; does not replace clinical judgment by the RBT.
  */
 
+import {
+  pickPreferredPoolProgramId,
+  preferredReplacementProgramNamesForMaladaptiveLabel,
+} from "./maladaptive-replacement-preferences";
+
 export type NoteComplianceContext = {
   sessionHours: number;
   replacementProgramsInOrder: string[];
@@ -296,8 +301,11 @@ export function replacementProgramAssignmentsForSessionHours(params: {
   idToName: Map<number, string>;
   selectedIdSet: Set<number>;
   explicitProgramIdByHour: (number | null | undefined)[];
+  /** When set, auto-filled hours try a clinically preferred replacement program from the pool that matches the hour's maladaptive label (if available). */
+  maladaptiveBehaviorForHour?: string[] | undefined;
 }): { names: string[]; rbtActionsOnly: boolean[] } {
-  const { sessionHours, poolIds, idToName, selectedIdSet, explicitProgramIdByHour } = params;
+  const { sessionHours, poolIds, idToName, selectedIdSet, explicitProgramIdByHour, maladaptiveBehaviorForHour } =
+    params;
   const H = sessionHours;
   const names: string[] = Array.from({ length: H }, () => "");
   const rbt: boolean[] = Array.from({ length: H }, () => false);
@@ -318,6 +326,26 @@ export function replacementProgramAssignmentsForSessionHours(params: {
   let autoSlot = 0;
   for (let h = 0; h < H; h++) {
     if (names[h]) continue;
+
+    const behaviorLabel = maladaptiveBehaviorForHour?.[h];
+    if (typeof behaviorLabel === "string" && behaviorLabel.trim().length > 0) {
+      const preferredOrder = preferredReplacementProgramNamesForMaladaptiveLabel(behaviorLabel);
+      if (preferredOrder && preferredOrder.length > 0) {
+        const preferredId = pickPreferredPoolProgramId({
+          orderedPreferredNames: preferredOrder,
+          pool,
+          idToName,
+          previousHourName: h > 0 ? names[h - 1]! : null,
+        });
+        if (preferredId != null) {
+          names[h] = idToName.get(preferredId)!;
+          rbt[h] = !selectedIdSet.has(preferredId);
+          autoSlot++;
+          continue;
+        }
+      }
+    }
+
     let pickIdx = autoSlot % pool.length;
     let pick = pool[pickIdx]!;
     if (h > 0 && names[h - 1] === idToName.get(pick) && pool.length > 1) {
