@@ -3,11 +3,6 @@
  * Complements prompt rules in openai-notes.ts; does not replace clinical judgment by the RBT.
  */
 
-import {
-  pickPreferredPoolProgramId,
-  preferredReplacementProgramNamesForMaladaptiveLabel,
-} from "./maladaptive-replacement-preferences";
-
 export type NoteComplianceContext = {
   sessionHours: number;
   replacementProgramsInOrder: string[];
@@ -322,8 +317,7 @@ export function replacementProgramPoolForAutoAssignment(
  *
  * When `sessionSelectionCoversHours` is true (wizard selected at least as many programs as hours), auto-filled
  * hours consume the pool **in order**, skipping ids already taken by explicit ABC rows—so each selected program
- * is used at most once before any repeat. Maladaptive "preferred pairing" is **skipped** in that mode because
- * it otherwise favors the same few programs (e.g. "Time on task") that appear early across multiple BIP groups.
+ * is used at most once before any repeat.
  */
 export function replacementProgramAssignmentsForSessionHours(params: {
   sessionHours: number;
@@ -331,23 +325,14 @@ export function replacementProgramAssignmentsForSessionHours(params: {
   idToName: Map<number, string>;
   selectedIdSet: Set<number>;
   explicitProgramIdByHour: (number | null | undefined)[];
-  /** When set, auto-filled hours try a clinically preferred replacement program from the pool that matches the hour's maladaptive label (if available). */
-  maladaptiveBehaviorForHour?: string[] | undefined;
   /**
    * True when `selectedReplacements.length >= sessionHours` (same condition as selection-only pool). Auto hours
-   * then take programs sequentially from the pool in wizard order, excluding explicit picks—no maladaptive-based preferred override.
+   * then take programs sequentially from the pool in wizard order, excluding explicit picks.
    */
   sessionSelectionCoversHours?: boolean | undefined;
 }): { names: string[]; rbtActionsOnly: boolean[] } {
-  const {
-    sessionHours,
-    poolIds,
-    idToName,
-    selectedIdSet,
-    explicitProgramIdByHour,
-    maladaptiveBehaviorForHour,
-    sessionSelectionCoversHours,
-  } = params;
+  const { sessionHours, poolIds, idToName, selectedIdSet, explicitProgramIdByHour, sessionSelectionCoversHours } =
+    params;
   const H = sessionHours;
   const names: string[] = Array.from({ length: H }, () => "");
   const rbt: boolean[] = Array.from({ length: H }, () => false);
@@ -385,27 +370,6 @@ export function replacementProgramAssignmentsForSessionHours(params: {
       rbt[h] = !selectedIdSet.has(pick);
       autoSlot++;
       continue;
-    }
-
-    if (sessionSelectionCoversHours !== true) {
-      const behaviorLabel = maladaptiveBehaviorForHour?.[h];
-      if (typeof behaviorLabel === "string" && behaviorLabel.trim().length > 0) {
-        const preferredOrder = preferredReplacementProgramNamesForMaladaptiveLabel(behaviorLabel);
-        if (preferredOrder && preferredOrder.length > 0) {
-          const preferredId = pickPreferredPoolProgramId({
-            orderedPreferredNames: preferredOrder,
-            pool,
-            idToName,
-            previousHourName: h > 0 ? names[h - 1]! : null,
-          });
-          if (preferredId != null) {
-            names[h] = idToName.get(preferredId)!;
-            rbt[h] = !selectedIdSet.has(preferredId);
-            autoSlot++;
-            continue;
-          }
-        }
-      }
     }
 
     let pickIdx = autoSlot % pool.length;

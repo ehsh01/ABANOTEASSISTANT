@@ -456,7 +456,6 @@ router.post("/notes/generate", async (req, res) => {
       idToName: idToNameForPrograms,
       selectedIdSet: selectedIdSet,
       explicitProgramIdByHour,
-      maladaptiveBehaviorForHour,
       sessionSelectionCoversHours: body.selectedReplacements.length >= body.sessionHours,
     });
   const languageMaladaptiveEpisodeForHour = maladaptiveBehaviorForHour.map((b) =>
