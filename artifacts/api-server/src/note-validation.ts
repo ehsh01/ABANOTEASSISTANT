@@ -295,8 +295,9 @@ export function replacementProgramPoolOrdered(selectedIdsOrdered: number[], link
  * - When **fewer** programs are selected than `sessionHours`, the pool is **selection order first**,
  *   then **other linked** program ids (ascending), so extra hours can draw from the rest of the client catalog.
  * - When the wizard selected **at least as many** programs as `sessionHours`, the pool is **only** those
- *   selections (order preserved, deduped). Maladaptive-based preferred matching and cycling cannot introduce
- *   programs the user did not select for this session.
+ *   selections (order preserved, deduped). Assignment then walks that pool in order for auto-filled hours (see
+ *   `replacementProgramAssignmentsForSessionHours` + `sessionSelectionCoversHours`) so programs the user did not
+ *   select are never introduced.
  */
 export function replacementProgramPoolForAutoAssignment(
   selectedIdsOrdered: number[],
@@ -318,6 +319,11 @@ export function replacementProgramPoolForAutoAssignment(
  * session-selected programs only when selection count ≥ session hours; otherwise selected first then other linked ids)
  * in order, advancing through the pool; avoids matching the **previous** hour's program name when `pool.length > 1`.
  * When the pool is exhausted, assignments continue with modulo indexing.
+ *
+ * When `sessionSelectionCoversHours` is true (wizard selected at least as many programs as hours), auto-filled
+ * hours consume the pool **in order**, skipping ids already taken by explicit ABC rows—so each selected program
+ * is used at most once before any repeat. Maladaptive "preferred pairing" is **skipped** in that mode because
+ * it otherwise favors the same few programs (e.g. "Time on task") that appear early across multiple BIP groups.
  */
 export function replacementProgramAssignmentsForSessionHours(params: {
   sessionHours: number;
@@ -327,9 +333,21 @@ export function replacementProgramAssignmentsForSessionHours(params: {
   explicitProgramIdByHour: (number | null | undefined)[];
   /** When set, auto-filled hours try a clinically preferred replacement program from the pool that matches the hour's maladaptive label (if available). */
   maladaptiveBehaviorForHour?: string[] | undefined;
+  /**
+   * True when `selectedReplacements.length >= sessionHours` (same condition as selection-only pool). Auto hours
+   * then take programs sequentially from the pool in wizard order, excluding explicit picks—no maladaptive-based preferred override.
+   */
+  sessionSelectionCoversHours?: boolean | undefined;
 }): { names: string[]; rbtActionsOnly: boolean[] } {
-  const { sessionHours, poolIds, idToName, selectedIdSet, explicitProgramIdByHour, maladaptiveBehaviorForHour } =
-    params;
+  const {
+    sessionHours,
+    poolIds,
+    idToName,
+    selectedIdSet,
+    explicitProgramIdByHour,
+    maladaptiveBehaviorForHour,
+    sessionSelectionCoversHours,
+  } = params;
   const H = sessionHours;
   const names: string[] = Array.from({ length: H }, () => "");
   const rbt: boolean[] = Array.from({ length: H }, () => false);
@@ -347,25 +365,45 @@ export function replacementProgramAssignmentsForSessionHours(params: {
     return { names, rbtActionsOnly: rbt };
   }
 
+  const usedByExplicit = new Set<number>();
+  for (let h = 0; h < H; h++) {
+    const pid = explicitProgramIdByHour[h];
+    if (typeof pid === "number" && idToName.has(pid)) {
+      usedByExplicit.add(pid);
+    }
+  }
+  const queueForSequential =
+    sessionSelectionCoversHours === true ? pool.filter((id) => !usedByExplicit.has(id)) : [];
+
   let autoSlot = 0;
   for (let h = 0; h < H; h++) {
     if (names[h]) continue;
 
-    const behaviorLabel = maladaptiveBehaviorForHour?.[h];
-    if (typeof behaviorLabel === "string" && behaviorLabel.trim().length > 0) {
-      const preferredOrder = preferredReplacementProgramNamesForMaladaptiveLabel(behaviorLabel);
-      if (preferredOrder && preferredOrder.length > 0) {
-        const preferredId = pickPreferredPoolProgramId({
-          orderedPreferredNames: preferredOrder,
-          pool,
-          idToName,
-          previousHourName: h > 0 ? names[h - 1]! : null,
-        });
-        if (preferredId != null) {
-          names[h] = idToName.get(preferredId)!;
-          rbt[h] = !selectedIdSet.has(preferredId);
-          autoSlot++;
-          continue;
+    if (sessionSelectionCoversHours === true && queueForSequential.length > 0) {
+      const pick = queueForSequential.shift()!;
+      names[h] = idToName.get(pick)!;
+      rbt[h] = !selectedIdSet.has(pick);
+      autoSlot++;
+      continue;
+    }
+
+    if (sessionSelectionCoversHours !== true) {
+      const behaviorLabel = maladaptiveBehaviorForHour?.[h];
+      if (typeof behaviorLabel === "string" && behaviorLabel.trim().length > 0) {
+        const preferredOrder = preferredReplacementProgramNamesForMaladaptiveLabel(behaviorLabel);
+        if (preferredOrder && preferredOrder.length > 0) {
+          const preferredId = pickPreferredPoolProgramId({
+            orderedPreferredNames: preferredOrder,
+            pool,
+            idToName,
+            previousHourName: h > 0 ? names[h - 1]! : null,
+          });
+          if (preferredId != null) {
+            names[h] = idToName.get(preferredId)!;
+            rbt[h] = !selectedIdSet.has(preferredId);
+            autoSlot++;
+            continue;
+          }
         }
       }
     }
