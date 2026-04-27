@@ -37,7 +37,7 @@ import {
   maladaptiveBehaviorsCatalogForRotation,
   maladaptiveBehaviorsForSessionHours,
   replacementProgramAssignmentsForSessionHours,
-  replacementProgramPoolOrdered,
+  replacementProgramPoolForAutoAssignment,
   validateCaregiverMentionRule,
   validateClinicalBodyCompliance,
   type NoteComplianceContext,
@@ -443,9 +443,10 @@ router.post("/notes/generate", async (req, res) => {
 
   const linkedIdsUnique = [...new Set(allowedProgramRows.map((r) => r.id))].sort((a, b) => a - b);
   const idToNameForPrograms = allowedIdToName.size > 0 ? allowedIdToName : nameById;
-  const poolIds = replacementProgramPoolOrdered(
+  const poolIds = replacementProgramPoolForAutoAssignment(
     body.selectedReplacements,
     linkedIdsUnique.length > 0 ? linkedIdsUnique : body.selectedReplacements,
+    body.sessionHours,
   );
   const explicitProgramIdByHour = Array.from({ length: body.sessionHours }, (_, h) => hints[h]?.replacementProgramId);
   const { names: replacementProgramForHour, rbtActionsOnly: rbtActionsOnlyOutcomeForHour } =

@@ -290,10 +290,34 @@ export function replacementProgramPoolOrdered(selectedIdsOrdered: number[], link
 }
 
 /**
+ * Pool used to auto-fill hours that do not have an explicit `replacementProgramId` in ABC hints.
+ *
+ * - When **fewer** programs are selected than `sessionHours`, the pool is **selection order first**,
+ *   then **other linked** program ids (ascending), so extra hours can draw from the rest of the client catalog.
+ * - When the wizard selected **at least as many** programs as `sessionHours`, the pool is **only** those
+ *   selections (order preserved, deduped). Maladaptive-based preferred matching and cycling cannot introduce
+ *   programs the user did not select for this session.
+ */
+export function replacementProgramPoolForAutoAssignment(
+  selectedIdsOrdered: number[],
+  linkedProgramIds: number[],
+  sessionHours: number,
+): number[] {
+  if (sessionHours <= 0) {
+    return [];
+  }
+  if (selectedIdsOrdered.length < sessionHours) {
+    return replacementProgramPoolOrdered(selectedIdsOrdered, linkedProgramIds);
+  }
+  return replacementProgramPoolOrdered(selectedIdsOrdered, selectedIdsOrdered);
+}
+
+/**
  * Per-hour replacement program **names** and RBT-only flags. Explicit `replacementProgramId` per hour wins when
- * present in `idToName`. Other hours consume `poolIds` in order, advancing through the pool so the first
- * `min(autoHours, pool.length)` auto slots use distinct pool entries when possible; avoids matching the **previous**
- * hour's program name when `pool.length > 1`. When the pool is exhausted, assignments continue with modulo indexing.
+ * present in `idToName`. Other hours consume `poolIds` (from `replacementProgramPoolForAutoAssignment` in production:
+ * session-selected programs only when selection count ≥ session hours; otherwise selected first then other linked ids)
+ * in order, advancing through the pool; avoids matching the **previous** hour's program name when `pool.length > 1`.
+ * When the pool is exhausted, assignments continue with modulo indexing.
  */
 export function replacementProgramAssignmentsForSessionHours(params: {
   sessionHours: number;

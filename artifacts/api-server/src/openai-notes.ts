@@ -40,8 +40,9 @@ export type NoteGenerationContext = {
   /** Authorized replacement program names for this client (compliance / “no extra program names” checks). */
   replacementProgramsInOrder: string[];
   /**
-   * Exact replacement program string for each hour (length = sessionHours); server assigns from linked programs
-   * (selected first, then others) for hours without an explicit ABC Builder program id.
+   * Exact replacement program string for each hour (length = sessionHours); server assigns for hours without an
+   * explicit ABC Builder program id: **only** from the session’s selected programs when there are at least as many
+   * selections as hours; when fewer selections than hours, selected programs first then other linked programs.
    * The clinical body must use only this name for replacement-program content in paragraph h (verbatim, all punctuation).
    */
   replacementProgramForHour: string[];
