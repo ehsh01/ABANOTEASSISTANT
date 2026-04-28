@@ -959,9 +959,11 @@ function ProgramsMultiSelectCombobox({
   );
 }
 
+const TRIAL_PCT_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
 function Step6Programs() {
   const [, setLocation] = useLocation();
-  const { data, updateData } = useWizardStore();
+  const { data, updateData, programTrialPercentages, setProgramTrialPercentage, clearProgramTrialPercentage } = useWizardStore();
   const {
     data: programsRes,
     isLoading,
@@ -993,6 +995,7 @@ function Step6Programs() {
   const toggleProgram = (programId: number) => {
     if (selected.includes(programId)) {
       updateData({ selectedReplacements: selected.filter((n) => n !== programId) });
+      clearProgramTrialPercentage(programId);
     } else {
       updateData({ selectedReplacements: [...selected, programId] });
     }
@@ -1059,33 +1062,63 @@ function Step6Programs() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {programs.map(program => {
           const isSelected = selected.includes(program.id);
+          const pct = programTrialPercentages[program.id];
           return (
-            <button
+            <div
               key={program.id}
               onClick={() => toggleProgram(program.id)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') toggleProgram(program.id); }}
               className={cn(
-                "flex items-start text-left p-4 rounded-xl border-2 transition-all hover-elevate",
+                "flex flex-col text-left p-4 rounded-xl border-2 transition-all hover-elevate cursor-pointer select-none",
                 isSelected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/30"
               )}
             >
-              <div className={cn(
-                "mt-0.5 w-5 h-5 rounded flex-shrink-0 flex items-center justify-center mr-3 border transition-colors",
-                isSelected ? "bg-primary border-primary text-white" : "border-muted-foreground/30 bg-background"
-              )}>
-                {isSelected && <Check className="w-3.5 h-3.5 pop-icon-white" />}
-              </div>
-              <div>
-                <div className="font-semibold text-foreground text-sm flex items-center gap-2">
-                  {program.name}
-                  {program.type === 'supplemental' && (
-                    <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">Supp</span>
+              <div className="flex items-start">
+                <div className={cn(
+                  "mt-0.5 w-5 h-5 rounded flex-shrink-0 flex items-center justify-center mr-3 border transition-colors",
+                  isSelected ? "bg-primary border-primary text-white" : "border-muted-foreground/30 bg-background"
+                )}>
+                  {isSelected && <Check className="w-3.5 h-3.5 pop-icon-white" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold text-foreground text-sm flex items-center gap-2">
+                    {program.name}
+                    {program.type === 'supplemental' && (
+                      <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">Supp</span>
+                    )}
+                  </div>
+                  {program.description && (
+                    <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{program.description}</p>
                   )}
                 </div>
-                {program.description && (
-                  <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{program.description}</p>
-                )}
               </div>
-            </button>
+
+              {isSelected && (
+                <div
+                  className="mt-3 flex items-center gap-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
+                    % of trials:
+                  </label>
+                  <select
+                    value={pct ?? ""}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value, 10);
+                      if (!isNaN(val)) setProgramTrialPercentage(program.id, val);
+                    }}
+                    className="flex-1 text-sm font-semibold rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all cursor-pointer"
+                  >
+                    <option value="">— select —</option>
+                    {TRIAL_PCT_OPTIONS.map(opt => (
+                      <option key={opt} value={opt}>{opt}%</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
@@ -1433,7 +1466,7 @@ function Step8Review() {
 
 export default function Wizard() {
   const [, setLocation] = useLocation();
-  const { step, setStep, data, setGeneratedNote, resetWizardForm } = useWizardStore();
+  const { step, setStep, data, setGeneratedNote, resetWizardForm, programTrialPercentages } = useWizardStore();
   const generateMutation = useGenerateSessionNote();
   const t = useT();
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -1472,7 +1505,10 @@ export default function Wizard() {
       );
       return;
     }
-    generateMutation.mutate(payload, {
+    const payloadWithPercentages = Object.keys(programTrialPercentages).length > 0
+      ? { ...payload, programTrialPercentages } as typeof payload
+      : payload;
+    generateMutation.mutate(payloadWithPercentages, {
       onSuccess: (res) => {
         setGeneratedNote(res.data, res.warnings);
         setLocation("/result");
