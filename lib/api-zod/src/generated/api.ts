@@ -554,6 +554,9 @@ export const generateNoteBodySessionHoursMax = 8;
 
 export const generateNoteBodyAbcHintsMax = 8;
 
+export const generateNoteBodyProgramTrialPercentagesMinOne = 10;
+export const generateNoteBodyProgramTrialPercentagesMaxOne = 100;
+
 export const GenerateNoteBody = zod.object({
   clientId: zod.number(),
   sessionHours: zod.number().min(1).max(generateNoteBodySessionHoursMax),
@@ -629,6 +632,18 @@ export const GenerateNoteBody = zod.object({
     .optional()
     .describe(
       "Optional ABC Builder rows, index-aligned with service hours (index 0 = first hour). When both activityAntecedent and maladaptiveBehavior are set for an index, the AI must use those exact strings for that hour; empty rows use default AI rotation. Optional replacementProgramId per index assigns which linked replacement program that hour's ABC documents (defaults to server rotation from selectedReplacements). When replacementProgramId is not among selectedReplacements, the narrative must document RBT actions only for that hour—no valenced client outcome. Length must not exceed sessionHours. Omit or send [] for fully automatic ABCs.\n",
+    ),
+  programTrialPercentages: zod
+    .record(
+      zod.string(),
+      zod
+        .number()
+        .min(generateNoteBodyProgramTrialPercentagesMinOne)
+        .max(generateNoteBodyProgramTrialPercentagesMaxOne),
+    )
+    .optional()
+    .describe(
+      "Optional. Maps replacement program id to the percent of trials in which the client met criterion for that program (values 10–100; client sends multiples of 10). JSON object keys are program ids as strings. Only programs listed here should mention that percentage in the clinical narrative for the hour that uses that program; omitting a program means no percentage line for it. Ignored for hours that document RBT-only replacement programs (not selected session targets).\n",
     ),
 });
 

@@ -1433,6 +1433,14 @@ components:
           maxItems: 8
           items:
             $ref: "#/components/schemas/AbcHintEntry"
+        programTrialPercentages:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 10
+            maximum: 100
+          description: >
+            Optional. Maps replacement program id to the percent of trials in which the client met criterion for that program (values 10–100; client sends multiples of 10). JSON object keys are program ids as strings. Only programs listed here should mention that percentage in the clinical narrative for the hour that uses that program; omitting a program means no percentage line for it. Ignored for hours that document RBT-only replacement programs (not selected session targets).
       required:
         - clientId
         - sessionHours

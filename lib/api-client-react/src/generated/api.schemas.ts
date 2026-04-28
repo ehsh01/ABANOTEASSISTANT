@@ -361,6 +361,14 @@ export const GenerateNoteRequestTherapySetting = {
 } as const;
 
 /**
+ * Optional. Maps replacement program id to the percent of trials in which the client met criterion for that program (values 10–100; client sends multiples of 10). JSON object keys are program ids as strings. Only programs listed here should mention that percentage in the clinical narrative for the hour that uses that program; omitting a program means no percentage line for it. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+
+ */
+export type GenerateNoteRequestProgramTrialPercentages = {
+  [key: string]: number;
+};
+
+/**
  * One optional ABC row. activityAntecedent and maladaptiveBehavior must be non-empty together, or both empty/null — partial pairs are invalid. replacementProgramId may be set alone or with a complete activity/behavior pair.
 
  */
@@ -396,6 +404,9 @@ export interface GenerateNoteRequest {
    * @maxItems 8
    */
   abcHints?: AbcHintEntry[];
+  /** Optional. Maps replacement program id to the percent of trials in which the client met criterion for that program (values 10–100; client sends multiples of 10). JSON object keys are program ids as strings. Only programs listed here should mention that percentage in the clinical narrative for the hour that uses that program; omitting a program means no percentage line for it. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+   */
+  programTrialPercentages?: GenerateNoteRequestProgramTrialPercentages;
 }
 
 export type AbcActivityAntecedentListResponseData = {

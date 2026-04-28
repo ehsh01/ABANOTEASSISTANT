@@ -449,15 +449,32 @@ router.post("/notes/generate", async (req, res) => {
     body.sessionHours,
   );
   const explicitProgramIdByHour = Array.from({ length: body.sessionHours }, (_, h) => hints[h]?.replacementProgramId);
-  const { names: replacementProgramForHour, rbtActionsOnly: rbtActionsOnlyOutcomeForHour } =
-    replacementProgramAssignmentsForSessionHours({
-      sessionHours: body.sessionHours,
-      poolIds,
-      idToName: idToNameForPrograms,
-      selectedIdSet: selectedIdSet,
-      explicitProgramIdByHour,
-      sessionSelectionCoversHours: body.selectedReplacements.length >= body.sessionHours,
+  const {
+    names: replacementProgramForHour,
+    rbtActionsOnly: rbtActionsOnlyOutcomeForHour,
+    programIdForHour,
+  } = replacementProgramAssignmentsForSessionHours({
+    sessionHours: body.sessionHours,
+    poolIds,
+    idToName: idToNameForPrograms,
+    selectedIdSet: selectedIdSet,
+    explicitProgramIdByHour,
+    sessionSelectionCoversHours: body.selectedReplacements.length >= body.sessionHours,
+  });
+
+  const trialPercentageForReplacementHour: (number | null)[] = (() => {
+    const raw = body.programTrialPercentages;
+    if (!raw || Object.keys(raw).length === 0) {
+      return Array.from({ length: body.sessionHours }, () => null);
+    }
+    return programIdForHour.map((id, h) => {
+      if (id == null || rbtActionsOnlyOutcomeForHour[h]) return null;
+      const v = raw[String(id)];
+      if (typeof v !== "number" || Number.isNaN(v) || v < 10 || v > 100) return null;
+      if (v % 10 !== 0) return null;
+      return v;
     });
+  })();
   const languageMaladaptiveEpisodeForHour = maladaptiveBehaviorForHour.map((b) =>
     isLanguageMaladaptiveBehaviorLabel(b),
   );
@@ -538,6 +555,7 @@ router.post("/notes/generate", async (req, res) => {
     assessmentReferenceFileName: profile?.assessmentFileName ?? null,
     activityAntecedentForHour,
     languageMaladaptiveEpisodeForHour,
+    trialPercentageForReplacementHour,
   };
 
   let clinicalBody: string;

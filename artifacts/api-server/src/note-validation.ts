@@ -330,24 +330,31 @@ export function replacementProgramAssignmentsForSessionHours(params: {
    * then take programs sequentially from the pool in wizard order, excluding explicit picks.
    */
   sessionSelectionCoversHours?: boolean | undefined;
-}): { names: string[]; rbtActionsOnly: boolean[] } {
+}): {
+  names: string[];
+  rbtActionsOnly: boolean[];
+  /** Program id assigned for hour h (for mapping therapist-entered trial percentages); null if unassigned. */
+  programIdForHour: (number | null)[];
+} {
   const { sessionHours, poolIds, idToName, selectedIdSet, explicitProgramIdByHour, sessionSelectionCoversHours } =
     params;
   const H = sessionHours;
   const names: string[] = Array.from({ length: H }, () => "");
   const rbt: boolean[] = Array.from({ length: H }, () => false);
+  const programIdForHour: (number | null)[] = Array.from({ length: H }, () => null);
 
   for (let h = 0; h < H; h++) {
     const pid = explicitProgramIdByHour[h];
     if (typeof pid === "number" && idToName.has(pid)) {
       names[h] = idToName.get(pid)!;
       rbt[h] = !selectedIdSet.has(pid);
+      programIdForHour[h] = pid;
     }
   }
 
   const pool = poolIds.filter((id) => idToName.has(id));
   if (pool.length === 0) {
-    return { names, rbtActionsOnly: rbt };
+    return { names, rbtActionsOnly: rbt, programIdForHour };
   }
 
   const usedByExplicit = new Set<number>();
@@ -368,6 +375,7 @@ export function replacementProgramAssignmentsForSessionHours(params: {
       const pick = queueForSequential.shift()!;
       names[h] = idToName.get(pick)!;
       rbt[h] = !selectedIdSet.has(pick);
+      programIdForHour[h] = pick;
       autoSlot++;
       continue;
     }
@@ -385,9 +393,10 @@ export function replacementProgramAssignmentsForSessionHours(params: {
     }
     names[h] = idToName.get(pick)!;
     rbt[h] = !selectedIdSet.has(pick);
+    programIdForHour[h] = pick;
     autoSlot++;
   }
-  return { names, rbtActionsOnly: rbt };
+  return { names, rbtActionsOnly: rbt, programIdForHour };
 }
 
 /** Catalog label denotes physical aggression (person-directed); match is on the catalog string, not free text. */
