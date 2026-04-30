@@ -959,11 +959,11 @@ function ProgramsMultiSelectCombobox({
   );
 }
 
-const TRIAL_PCT_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+const TRIAL_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
 function Step6Programs() {
   const [, setLocation] = useLocation();
-  const { data, updateData, programTrialPercentages, setProgramTrialPercentage, clearProgramTrialPercentage } = useWizardStore();
+  const { data, updateData, programTrialData, setProgramTrialCount, toggleProgramEffectiveTrial, clearProgramTrialData } = useWizardStore();
   const {
     data: programsRes,
     isLoading,
@@ -995,7 +995,7 @@ function Step6Programs() {
   const toggleProgram = (programId: number) => {
     if (selected.includes(programId)) {
       updateData({ selectedReplacements: selected.filter((n) => n !== programId) });
-      clearProgramTrialPercentage(programId);
+      clearProgramTrialData(programId);
     } else {
       updateData({ selectedReplacements: [...selected, programId] });
     }
@@ -1062,7 +1062,10 @@ function Step6Programs() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {programs.map(program => {
           const isSelected = selected.includes(program.id);
-          const pct = programTrialPercentages[program.id];
+          const trialInfo = programTrialData[program.id] ?? { count: null, effectiveTrials: [] };
+          const trialCount = trialInfo.count;
+          const effectiveTrials = trialInfo.effectiveTrials;
+
           return (
             <div
               key={program.id}
@@ -1097,25 +1100,77 @@ function Step6Programs() {
 
               {isSelected && (
                 <div
-                  className="mt-3 flex items-center gap-2"
+                  className="mt-3 space-y-2"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                    % of trials:
-                  </label>
-                  <select
-                    value={pct ?? ""}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      if (!isNaN(val)) setProgramTrialPercentage(program.id, val);
-                    }}
-                    className="flex-1 text-sm font-semibold rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all cursor-pointer"
-                  >
-                    <option value="">— select —</option>
-                    {TRIAL_PCT_OPTIONS.map(opt => (
-                      <option key={opt} value={opt}>{opt}%</option>
-                    ))}
-                  </select>
+                  <div className="flex gap-2">
+                    {/* Left: total number of trials */}
+                    <div className="flex flex-col gap-1 flex-1">
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        # of trials
+                      </label>
+                      <select
+                        value={trialCount ?? ""}
+                        onChange={(e) => {
+                          const val = e.target.value === "" ? null : parseInt(e.target.value, 10);
+                          setProgramTrialCount(program.id, val);
+                        }}
+                        className="text-sm font-semibold rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all cursor-pointer w-full"
+                      >
+                        <option value="">—</option>
+                        {TRIAL_COUNT_OPTIONS.map(n => (
+                          <option key={n} value={n}>{n}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Right: which trials were effective */}
+                    <div className="flex flex-col gap-1 flex-1">
+                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                        Effective trials
+                      </label>
+                      <select
+                        value=""
+                        disabled={!trialCount}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val)) toggleProgramEffectiveTrial(program.id, val);
+                        }}
+                        className="text-sm font-semibold rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all cursor-pointer w-full disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        <option value="" disabled>
+                          {trialCount ? "Add trial…" : "Set # first"}
+                        </option>
+                        {Array.from({ length: trialCount ?? 0 }, (_, i) => i + 1).map(n => (
+                          <option key={n} value={n}>
+                            {effectiveTrials.includes(n) ? `✓ Trial ${n}` : `Trial ${n}`}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Chips showing selected effective trials */}
+                  {effectiveTrials.length > 0 && (
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {effectiveTrials.map(n => (
+                        <span
+                          key={n}
+                          className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20"
+                        >
+                          Trial {n}
+                          <button
+                            type="button"
+                            onClick={() => toggleProgramEffectiveTrial(program.id, n)}
+                            className="text-primary/60 hover:text-primary transition-colors leading-none"
+                            aria-label={`Remove trial ${n}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1466,7 +1521,7 @@ function Step8Review() {
 
 export default function Wizard() {
   const [, setLocation] = useLocation();
-  const { step, setStep, data, setGeneratedNote, resetWizardForm, programTrialPercentages } = useWizardStore();
+  const { step, setStep, data, setGeneratedNote, resetWizardForm, programTrialData } = useWizardStore();
   const generateMutation = useGenerateSessionNote();
   const t = useT();
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -1505,10 +1560,10 @@ export default function Wizard() {
       );
       return;
     }
-    const payloadWithPercentages = Object.keys(programTrialPercentages).length > 0
-      ? { ...payload, programTrialPercentages } as typeof payload
+    const payloadWithTrialData = Object.keys(programTrialData).length > 0
+      ? { ...payload, programTrialData } as typeof payload
       : payload;
-    generateMutation.mutate(payloadWithPercentages, {
+    generateMutation.mutate(payloadWithTrialData, {
       onSuccess: (res) => {
         setGeneratedNote(res.data, res.warnings);
         setLocation("/result");
