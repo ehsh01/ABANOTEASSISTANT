@@ -140,6 +140,51 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function stripStraightDoubleQuotes(s: string): string {
+  return s.replace(/"/g, "");
+}
+
+function normInterventionWhitespace(s: string): string {
+  return s.trim().replace(/\s+/g, " ");
+}
+
+/**
+ * Two distinct approved intervention strings appear as one adjacent phrase
+ * (comma or "and" only between them), which breaks exact per-intervention
+ * documentation. Uses a de-quoted scan so `"A" and "B"` is still detected.
+ * Skips when some catalog entry is literally a single label equal to
+ * "A and B" / "A, B" so legitimate multi-word intervention names are not flagged.
+ */
+function findJoinedInterventionPairPhrase(
+  text: string,
+  interventionNames: string[],
+): { a: string; b: string } | null {
+  const list = [...new Set(interventionNames.map((s) => s.trim()).filter((s) => s.length > 1))].sort(
+    (a, b) => b.length - a.length,
+  );
+  if (list.length < 2) return null;
+  const scan = stripStraightDoubleQuotes(text);
+  for (let i = 0; i < list.length; i++) {
+    for (let j = 0; j < list.length; j++) {
+      if (i === j) continue;
+      const a = list[i]!;
+      const b = list[j]!;
+      const andJoined = normInterventionWhitespace(`${a} and ${b}`);
+      if (list.some((c) => normInterventionWhitespace(c) === andJoined)) {
+        continue;
+      }
+      const commaJoined = normInterventionWhitespace(`${a}, ${b}`);
+      if (list.some((c) => normInterventionWhitespace(c) === commaJoined)) {
+        continue;
+      }
+      const between = String.raw`\s*(?:,\s*|\s+and\s+)\s*`;
+      const re = new RegExp(escapeRegExp(a) + between + escapeRegExp(b));
+      if (re.test(scan)) return { a, b };
+    }
+  }
+  return null;
+}
+
 /** Canonical rotation order for common BIP maladaptive behavior names (exact spelling for substring match in assessment text). */
 export const STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER: readonly string[] = [
   "Physical Aggression",
@@ -711,6 +756,18 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         `Tantrum topography: paragraph ${i + 1} mentions tantrum/meltdown without enough observable detail; describe what the client did (sounds, movements, materials) consistent with the assessment behavior definitions.`,
       );
       break;
+    }
+  }
+
+  const interventionCatalog = (ctx.interventions ?? []).map((s) => s.trim()).filter((s) => s.length > 0);
+  if (interventionCatalog.length >= 2) {
+    for (let i = 0; i < paragraphs.length; i++) {
+      const joined = findJoinedInterventionPairPhrase(paragraphs[i]!, interventionCatalog);
+      if (joined) {
+        issues.push(
+          `Interventions: paragraph ${i + 1} joins two catalog interventions ("${joined.a}" and "${joined.b}") in one phrase (comma or "and" between bare names). Use separate sentences with exact labels only, e.g. The RBT implemented "${joined.a}", by …. The RBT also implemented "${joined.b}", by …. Do not combine two catalog names into one noun phrase.`,
+        );
+      }
     }
   }
 
