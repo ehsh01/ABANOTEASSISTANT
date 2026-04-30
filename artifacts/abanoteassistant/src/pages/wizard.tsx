@@ -4,7 +4,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon, UserPlus, Plus } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
-import type { Client as ApiClient, Program, GenerateNoteRequest, AbcHintEntry } from "@workspace/api-client-react";
+import type {
+  Client as ApiClient,
+  Program,
+  GenerateNoteRequest,
+  AbcHintEntry,
+  ProgramTrialDataEntry,
+} from "@workspace/api-client-react";
 import { THERAPY_SETTINGS_ORDERED, isTherapySetting, type TherapySetting } from "@workspace/therapy-settings";
 import { ApiError } from "@workspace/api-client-react";
 import { useWizardStore, type WizardData } from "@/store/wizard-store";
@@ -109,6 +115,20 @@ function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | null {
     body.programTrialData = data.programTrialData;
   }
   return body;
+}
+
+/** How many trials show as toggles before we switch to a comma-separated field. */
+const MAX_TRIAL_CHECKBOXES = 24;
+
+function parseCommaSeparatedTrialInts(raw: string): number[] {
+  const out: number[] = [];
+  for (const part of raw.split(",")) {
+    const t = parseInt(part.trim(), 10);
+    if (!Number.isNaN(t) && Number.isFinite(t)) {
+      out.push(t);
+    }
+  }
+  return out;
 }
 
 // ─── Environmental change options ────────────────────────────────────────────
@@ -992,10 +1012,33 @@ function Step6Programs() {
   const programs = programsRes?.data || [];
   const minRequired = 1;
   const selected = data.selectedReplacements || [];
+  const trialMap = data.programTrialData ?? {};
+
+  const updateProgramTrial = (programId: number, updater: (prev: ProgramTrialDataEntry) => ProgramTrialDataEntry) => {
+    const key = String(programId);
+    const prev: ProgramTrialDataEntry = trialMap[key] ?? { effectiveTrials: [] };
+    const entry = updater(prev);
+    const count = entry.count ?? null;
+    const effectiveTrials = [...entry.effectiveTrials].sort((a, b) => a - b);
+    const next = { ...trialMap };
+    const empty = (count == null || count < 1) && effectiveTrials.length === 0;
+    if (empty) {
+      delete next[key];
+    } else {
+      next[key] = { count: count != null && count >= 1 ? count : null, effectiveTrials };
+    }
+    updateData({ programTrialData: Object.keys(next).length > 0 ? next : undefined });
+  };
 
   const toggleProgram = (programId: number) => {
     if (selected.includes(programId)) {
-      updateData({ selectedReplacements: selected.filter((n) => n !== programId) });
+      const newSelected = selected.filter((n) => n !== programId);
+      const nextTrials = { ...trialMap };
+      delete nextTrials[String(programId)];
+      updateData({
+        selectedReplacements: newSelected,
+        programTrialData: Object.keys(nextTrials).length > 0 ? nextTrials : undefined,
+      });
     } else {
       updateData({ selectedReplacements: [...selected, programId] });
     }
@@ -1060,32 +1103,40 @@ function Step6Programs() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {programs.map(program => {
+        {programs.map((program) => {
           const isSelected = selected.includes(program.id);
+          const trialEntry: ProgramTrialDataEntry = trialMap[String(program.id)] ?? { effectiveTrials: [] };
+          const trialCount = typeof trialEntry.count === "number" && trialEntry.count >= 1 ? trialEntry.count : null;
           return (
             <div
               key={program.id}
               onClick={() => toggleProgram(program.id)}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') toggleProgram(program.id); }}
+              onKeyDown={(e) => {
+                if (e.key === " " || e.key === "Enter") toggleProgram(program.id);
+              }}
               className={cn(
                 "flex flex-col text-left p-4 rounded-xl border-2 transition-all hover-elevate cursor-pointer select-none",
-                isSelected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/30"
+                isSelected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/30",
               )}
             >
               <div className="flex items-start">
-                <div className={cn(
-                  "mt-0.5 w-5 h-5 rounded flex-shrink-0 flex items-center justify-center mr-3 border transition-colors",
-                  isSelected ? "bg-primary border-primary text-white" : "border-muted-foreground/30 bg-background"
-                )}>
+                <div
+                  className={cn(
+                    "mt-0.5 w-5 h-5 rounded flex-shrink-0 flex items-center justify-center mr-3 border transition-colors",
+                    isSelected ? "bg-primary border-primary text-white" : "border-muted-foreground/30 bg-background",
+                  )}
+                >
                   {isSelected && <Check className="w-3.5 h-3.5 pop-icon-white" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-foreground text-sm flex items-center gap-2">
                     {program.name}
-                    {program.type === 'supplemental' && (
-                      <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">Supp</span>
+                    {program.type === "supplemental" && (
+                      <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">
+                        Supp
+                      </span>
                     )}
                   </div>
                   {program.description && (
@@ -1093,6 +1144,107 @@ function Step6Programs() {
                   )}
                 </div>
               </div>
+
+              {isSelected && (
+                <div
+                  className="mt-3 space-y-3 border-t border-border/60 pt-3 text-left cursor-default"
+                  onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  role="group"
+                  aria-label="Trial counts for this program"
+                >
+                  <div className="space-y-1">
+                    <label htmlFor={`trial-count-${program.id}`} className="text-xs font-semibold text-muted-foreground">
+                      How many trials did you run?
+                    </label>
+                    <input
+                      id={`trial-count-${program.id}`}
+                      type="number"
+                      min={1}
+                      max={99}
+                      inputMode="numeric"
+                      placeholder="Optional"
+                      value={trialCount ?? ""}
+                      onChange={(e) => {
+                        const raw = e.target.value.trim();
+                        if (raw === "") {
+                          updateProgramTrial(program.id, () => ({ count: null, effectiveTrials: [] }));
+                          return;
+                        }
+                        const n = parseInt(raw, 10);
+                        if (Number.isNaN(n) || n < 1) {
+                          updateProgramTrial(program.id, (prev) => ({ ...prev, count: null, effectiveTrials: [] }));
+                          return;
+                        }
+                        const capped = Math.min(99, n);
+                        updateProgramTrial(program.id, (prev) => ({
+                          count: capped,
+                          effectiveTrials: prev.effectiveTrials.filter((t) => t >= 1 && t <= capped),
+                        }));
+                      }}
+                      className="w-full text-sm rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                    />
+                  </div>
+
+                  {trialCount != null && (
+                    <div className="space-y-1">
+                      <p className="text-xs font-semibold text-muted-foreground">Which trials met criterion?</p>
+                      {trialCount <= MAX_TRIAL_CHECKBOXES ? (
+                        <div className="flex flex-wrap gap-2">
+                          {Array.from({ length: trialCount }, (_, i) => i + 1).map((num) => (
+                            <label
+                              key={num}
+                              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-foreground cursor-pointer hover:bg-secondary/50"
+                            >
+                              <input
+                                type="checkbox"
+                                className="rounded border-border"
+                                checked={trialEntry.effectiveTrials.includes(num)}
+                                onChange={() => {
+                                  updateProgramTrial(program.id, (prev) => {
+                                    const c = typeof prev.count === "number" && prev.count >= 1 ? prev.count : trialCount;
+                                    const has = prev.effectiveTrials.includes(num);
+                                    const effectiveTrials = has
+                                      ? prev.effectiveTrials.filter((t) => t !== num)
+                                      : [...prev.effectiveTrials, num].sort((a, b) => a - b);
+                                    return { count: c, effectiveTrials };
+                                  });
+                                }}
+                              />
+                              Trial {num}
+                            </label>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="space-y-1">
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="off"
+                            placeholder="e.g. 2, 4, 5"
+                            aria-label="Trial numbers that met criterion, comma-separated"
+                            value={trialEntry.effectiveTrials.join(", ")}
+                            onChange={(e) => {
+                              const parsed = parseCommaSeparatedTrialInts(e.target.value);
+                              const filtered = [...new Set(parsed.filter((t) => t >= 1 && t <= trialCount))].sort(
+                                (a, b) => a - b,
+                              );
+                              updateProgramTrial(program.id, () => ({
+                                count: trialCount,
+                                effectiveTrials: filtered,
+                              }));
+                            }}
+                            className="w-full text-sm rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            Enter trial numbers from 1 to {trialCount}, separated by commas.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
