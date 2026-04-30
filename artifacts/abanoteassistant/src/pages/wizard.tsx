@@ -112,23 +112,40 @@ function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | null {
     }
   }
   if (data.programTrialData != null && Object.keys(data.programTrialData).length > 0) {
-    body.programTrialData = data.programTrialData;
+    const clamped: NonNullable<GenerateNoteRequest["programTrialData"]> = {};
+    for (const [k, v] of Object.entries(data.programTrialData)) {
+      clamped[k] = normalizeProgramTrialEntry(v);
+    }
+    body.programTrialData = clamped;
   }
   return body;
 }
 
-/** How many trials show as toggles before we switch to a comma-separated field. */
-const MAX_TRIAL_CHECKBOXES = 24;
+/** Wizard + generate request: total trials and per-trial indices are capped at 10. */
+const MAX_PROGRAM_TRIALS = 10;
 
-function parseCommaSeparatedTrialInts(raw: string): number[] {
-  const out: number[] = [];
-  for (const part of raw.split(",")) {
-    const t = parseInt(part.trim(), 10);
-    if (!Number.isNaN(t) && Number.isFinite(t)) {
-      out.push(t);
+const TRIAL_TOTAL_CHOICES = Array.from({ length: MAX_PROGRAM_TRIALS }, (_, i) => i + 1);
+
+function normalizeProgramTrialEntry(entry: ProgramTrialDataEntry): ProgramTrialDataEntry {
+  let count = entry.count ?? null;
+  if (count != null) {
+    if (!Number.isFinite(count) || !Number.isInteger(count)) {
+      count = null;
+    } else {
+      count = Math.min(MAX_PROGRAM_TRIALS, Math.max(1, count));
     }
   }
-  return out;
+  const cap = count ?? MAX_PROGRAM_TRIALS;
+  const effectiveTrials = [...entry.effectiveTrials]
+    .filter((t) => typeof t === "number" && Number.isInteger(t) && t >= 1 && t <= cap)
+    .sort((a, b) => a - b);
+  return { count, effectiveTrials };
+}
+
+function effectiveTrialsForSuccessCount(total: number, successCount: number): number[] {
+  if (total < 1 || successCount < 1) return [];
+  const k = Math.min(successCount, total, MAX_PROGRAM_TRIALS);
+  return Array.from({ length: k }, (_, i) => i + 1);
 }
 
 /** Keep in sync with `replacementProgramSlotCount` in `artifacts/api-server/src/note-validation.ts`. */
@@ -1024,7 +1041,7 @@ function Step6Programs() {
   const updateProgramTrial = (programId: number, updater: (prev: ProgramTrialDataEntry) => ProgramTrialDataEntry) => {
     const key = String(programId);
     const prev: ProgramTrialDataEntry = trialMap[key] ?? { effectiveTrials: [] };
-    const entry = updater(prev);
+    const entry = normalizeProgramTrialEntry(updater(prev));
     const count = entry.count ?? null;
     const effectiveTrials = [...entry.effectiveTrials].sort((a, b) => a - b);
     const next = { ...trialMap };
@@ -1115,8 +1132,16 @@ function Step6Programs() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {programs.map((program) => {
           const isSelected = selected.includes(program.id);
-          const trialEntry: ProgramTrialDataEntry = trialMap[String(program.id)] ?? { effectiveTrials: [] };
+          const trialEntry = normalizeProgramTrialEntry(
+            trialMap[String(program.id)] ?? { effectiveTrials: [] },
+          );
           const trialCount = typeof trialEntry.count === "number" && trialEntry.count >= 1 ? trialEntry.count : null;
+          const successSelectValue =
+            trialCount == null
+              ? ""
+              : trialEntry.effectiveTrials.length === 0
+                ? ""
+                : String(trialEntry.effectiveTrials.length);
           return (
             <div
               key={program.id}
@@ -1167,90 +1192,77 @@ function Step6Programs() {
                     <label htmlFor={`trial-count-${program.id}`} className="text-xs font-semibold text-muted-foreground">
                       How many trials did you run?
                     </label>
-                    <input
+                    <select
                       id={`trial-count-${program.id}`}
-                      type="number"
-                      min={1}
-                      max={99}
-                      inputMode="numeric"
-                      placeholder="Optional"
                       value={trialCount ?? ""}
                       onChange={(e) => {
-                        const raw = e.target.value.trim();
+                        const raw = e.target.value;
                         if (raw === "") {
                           updateProgramTrial(program.id, () => ({ count: null, effectiveTrials: [] }));
                           return;
                         }
-                        const n = parseInt(raw, 10);
-                        if (Number.isNaN(n) || n < 1) {
-                          updateProgramTrial(program.id, (prev) => ({ ...prev, count: null, effectiveTrials: [] }));
+                        const capped = Math.min(MAX_PROGRAM_TRIALS, parseInt(raw, 10));
+                        if (Number.isNaN(capped) || capped < 1) {
+                          updateProgramTrial(program.id, () => ({ count: null, effectiveTrials: [] }));
                           return;
                         }
-                        const capped = Math.min(99, n);
-                        updateProgramTrial(program.id, (prev) => ({
-                          count: capped,
-                          effectiveTrials: prev.effectiveTrials.filter((t) => t >= 1 && t <= capped),
-                        }));
+                        updateProgramTrial(program.id, (prev) => {
+                          const prevSuccess = prev.effectiveTrials.length;
+                          const nextSuccess =
+                            prevSuccess > 0 ? Math.min(prevSuccess, capped) : 0;
+                          return {
+                            count: capped,
+                            effectiveTrials: effectiveTrialsForSuccessCount(capped, nextSuccess),
+                          };
+                        });
                       }}
                       className="w-full text-sm rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                    />
+                    >
+                      <option value="">Optional</option>
+                      {TRIAL_TOTAL_CHOICES.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {trialCount != null && (
                     <div className="space-y-1">
-                      <p className="text-xs font-semibold text-muted-foreground">Which trials met criterion?</p>
-                      {trialCount <= MAX_TRIAL_CHECKBOXES ? (
-                        <div className="flex flex-wrap gap-2">
-                          {Array.from({ length: trialCount }, (_, i) => i + 1).map((num) => (
-                            <label
-                              key={num}
-                              className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium text-foreground cursor-pointer hover:bg-secondary/50"
-                            >
-                              <input
-                                type="checkbox"
-                                className="rounded border-border"
-                                checked={trialEntry.effectiveTrials.includes(num)}
-                                onChange={() => {
-                                  updateProgramTrial(program.id, (prev) => {
-                                    const c = typeof prev.count === "number" && prev.count >= 1 ? prev.count : trialCount;
-                                    const has = prev.effectiveTrials.includes(num);
-                                    const effectiveTrials = has
-                                      ? prev.effectiveTrials.filter((t) => t !== num)
-                                      : [...prev.effectiveTrials, num].sort((a, b) => a - b);
-                                    return { count: c, effectiveTrials };
-                                  });
-                                }}
-                              />
-                              Trial {num}
-                            </label>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="space-y-1">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            autoComplete="off"
-                            placeholder="e.g. 2, 4, 5"
-                            aria-label="Trial numbers that met criterion, comma-separated"
-                            value={trialEntry.effectiveTrials.join(", ")}
-                            onChange={(e) => {
-                              const parsed = parseCommaSeparatedTrialInts(e.target.value);
-                              const filtered = [...new Set(parsed.filter((t) => t >= 1 && t <= trialCount))].sort(
-                                (a, b) => a - b,
-                              );
-                              updateProgramTrial(program.id, () => ({
-                                count: trialCount,
-                                effectiveTrials: filtered,
-                              }));
-                            }}
-                            className="w-full text-sm rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                          />
-                          <p className="text-[11px] text-muted-foreground">
-                            Enter trial numbers from 1 to {trialCount}, separated by commas.
-                          </p>
-                        </div>
-                      )}
+                      <label htmlFor={`trial-success-${program.id}`} className="text-xs font-semibold text-muted-foreground">
+                        How many met criterion?
+                      </label>
+                      <select
+                        id={`trial-success-${program.id}`}
+                        value={successSelectValue}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === "") {
+                            updateProgramTrial(program.id, () => ({
+                              count: trialCount,
+                              effectiveTrials: [],
+                            }));
+                            return;
+                          }
+                          const s = parseInt(raw, 10);
+                          if (Number.isNaN(s) || s < 0 || s > trialCount) return;
+                          updateProgramTrial(program.id, () => ({
+                            count: trialCount,
+                            effectiveTrials: effectiveTrialsForSuccessCount(trialCount, s),
+                          }));
+                        }}
+                        className="w-full text-sm rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                      >
+                        <option value="">Optional</option>
+                        {Array.from({ length: trialCount + 1 }, (_, s) => (
+                          <option key={s} value={String(s)}>
+                            {s === 0 ? "0 (none)" : s}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-muted-foreground">
+                        Up to {MAX_PROGRAM_TRIALS} trials. Trials 1 through the count you pick are treated as successful (e.g. 3 of 5 → trials 1, 2, 3).
+                      </p>
                     </div>
                   )}
                 </div>
