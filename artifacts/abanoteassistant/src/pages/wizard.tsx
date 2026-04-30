@@ -131,6 +131,13 @@ function parseCommaSeparatedTrialInts(raw: string): number[] {
   return out;
 }
 
+/** Keep in sync with `replacementProgramSlotCount` in `artifacts/api-server/src/note-validation.ts`. */
+function replacementProgramSlotCountWizard(sessionHours: number): number {
+  if (sessionHours <= 0) return 0;
+  if (sessionHours === 2) return 2;
+  return Math.floor(((sessionHours - 1) * 60) / 90) + 1;
+}
+
 // ─── Environmental change options ────────────────────────────────────────────
 const ENV_CHANGE_OPTIONS: { group: string; items: string[] }[] = [
   {
@@ -1055,9 +1062,12 @@ function Step6Programs() {
       <div className="text-center mb-8">
         <h2 className="text-3xl font-display font-bold text-foreground">Replacement Programs</h2>
         <p className="text-muted-foreground mt-2">
-          Choose session targets for billing/documentation (at least one). For long sessions that mixed different
-          goals, pick every program you are documenting outcomes for here; use ABC Builder to map other linked
-          programs to specific hours without implying outcomes for those programs.
+          Choose session targets for billing/documentation (at least one). After you set session length: a{" "}
+          <strong>2-hour</strong> visit uses <strong>one program per hour</strong>; <strong>3+ hours</strong> use
+          about <strong>one program per 90 minutes</strong> of session time (calendar hours in the same window share a
+          program unless ABC Builder assigns a different program to an hour). Pick enough selected programs to cover
+          those slots when you want only session targets—otherwise the server may pull other assessment-linked
+          programs for empty slots.
         </p>
       </div>
 
@@ -1568,6 +1578,10 @@ function Step8Review() {
     </div>
   );
 
+  const sh = data.sessionHours ?? 0;
+  const slotNeed = replacementProgramSlotCountWizard(sh);
+  const progCount = data.selectedReplacements?.length ?? 0;
+
   return (
     <div className="space-y-8 max-w-2xl mx-auto">
       <div className="text-center mb-8">
@@ -1582,7 +1596,21 @@ function Step8Review() {
         <Item label="Present" value={data.presentPeople?.length ? data.presentPeople.join(", ") : "Therapist only"} />
         <Item label={t.wizard.therapySettingReviewLabel} value={data.therapySetting ?? "—"} />
         <Item label="Env Changes" value={data.hasEnvironmentalChanges ? "Yes" : "No"} />
-        <Item label="Programs" value={<span className="text-primary">{data.selectedReplacements?.length} selected</span>} />
+        <Item
+          label="Programs"
+          value={
+            <span className="text-primary">
+              {progCount} selected
+              {sh > 0 ? (
+                <span className="block text-xs text-muted-foreground font-normal mt-1">
+                  Server uses {slotNeed} replacement-program slot{slotNeed === 1 ? "" : "s"} for this duration
+                  {progCount < slotNeed ? " (fewer than recommended — extra slots may use other linked programs)" : ""}
+                  .
+                </span>
+              ) : null}
+            </span>
+          }
+        />
         <Item label="Next Session" value={formatSessionDate(data.nextSessionDate, "Not scheduled")} />
       </div>
     </div>

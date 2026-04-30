@@ -285,12 +285,40 @@ export function replacementProgramPoolOrdered(selectedIdsOrdered: number[], link
 }
 
 /**
+ * Replacement program rotation buckets session time into **slots**:
+ * - **Exactly 2 session hours:** two slots (one per hour) so each hour can document a different selected program.
+ * - **All other lengths:** one slot per **90 minutes** of session time; consecutive calendar hours in the same
+ *   bucket share the same replacement program unless ABC Builder sets an explicit `replacementProgramId` for an hour.
+ */
+export function replacementProgramSlotIdForHour(sessionHours: number, hourIndex: number): number {
+  if (sessionHours <= 0 || hourIndex < 0 || hourIndex >= sessionHours) {
+    return 0;
+  }
+  if (sessionHours === 2) {
+    return hourIndex;
+  }
+  return Math.floor((hourIndex * 60) / 90);
+}
+
+/** Number of replacement-program slots for `sessionHours` (see `replacementProgramSlotIdForHour`). */
+export function replacementProgramSlotCount(sessionHours: number): number {
+  if (sessionHours <= 0) {
+    return 0;
+  }
+  if (sessionHours === 2) {
+    return 2;
+  }
+  return Math.floor(((sessionHours - 1) * 60) / 90) + 1;
+}
+
+/**
  * Pool used to auto-fill hours that do not have an explicit `replacementProgramId` in ABC hints.
  *
- * - When **fewer** programs are selected than `sessionHours`, the pool is **selection order first**,
- *   then **other linked** program ids (ascending), so extra hours can draw from the rest of the client catalog.
- * - When the wizard selected **at least as many** programs as `sessionHours`, the pool is **only** those
- *   selections (order preserved, deduped). Assignment then walks that pool in order for auto-filled hours (see
+ * - When **fewer** programs are selected than **replacement-program slots** for this session (see
+ *   `replacementProgramSlotCount`), the pool is **selection order first**, then **other linked** program ids
+ *   (ascending), so extra slots can draw from the rest of the client catalog.
+ * - When the wizard selected **at least as many** programs as **slot count**, the pool is **only** those
+ *   selections (order preserved, deduped). Assignment walks that pool in slot order for auto-filled hours (see
  *   `replacementProgramAssignmentsForSessionHours` + `sessionSelectionCoversHours`) so programs the user did not
  *   select are never introduced.
  */
@@ -302,7 +330,8 @@ export function replacementProgramPoolForAutoAssignment(
   if (sessionHours <= 0) {
     return [];
   }
-  if (selectedIdsOrdered.length < sessionHours) {
+  const slotNeed = replacementProgramSlotCount(sessionHours);
+  if (selectedIdsOrdered.length < slotNeed) {
     return replacementProgramPoolOrdered(selectedIdsOrdered, linkedProgramIds);
   }
   return replacementProgramPoolOrdered(selectedIdsOrdered, selectedIdsOrdered);
@@ -310,14 +339,16 @@ export function replacementProgramPoolForAutoAssignment(
 
 /**
  * Per-hour replacement program **names** and RBT-only flags. Explicit `replacementProgramId` per hour wins when
- * present in `idToName`. Other hours consume `poolIds` (from `replacementProgramPoolForAutoAssignment` in production:
- * session-selected programs only when selection count ≥ session hours; otherwise selected first then other linked ids)
- * in order, advancing through the pool; avoids matching the **previous** hour's program name when `pool.length > 1`.
- * When the pool is exhausted, assignments continue with modulo indexing.
+ * present in `idToName`. Other hours share a program when they fall in the same **90-minute slot** (except a
+ * **2-hour** session, which uses one program per hour). See `replacementProgramSlotIdForHour`.
  *
- * When `sessionSelectionCoversHours` is true (wizard selected at least as many programs as hours), auto-filled
- * hours consume the pool **in order**, skipping ids already taken by explicit ABC rows—so each selected program
- * is used at most once before any repeat.
+ * Pool comes from `replacementProgramPoolForAutoAssignment`: session-selected programs only when selection count ≥
+ * replacement-program **slot** count; otherwise selected first then other linked ids. Avoids matching the **previous**
+ * calendar hour's program name when `pool.length > 1` at slot boundaries.
+ *
+ * When `sessionSelectionCoversHours` is true (wizard selected at least as many programs as **slots**), each
+ * auto-filled **slot** consumes the next id from the queue (all auto hours in that slot get the same program),
+ * skipping ids already taken by explicit ABC rows—so each selected program is used at most once before any repeat.
  */
 export function replacementProgramAssignmentsForSessionHours(params: {
   sessionHours: number;
@@ -326,8 +357,8 @@ export function replacementProgramAssignmentsForSessionHours(params: {
   selectedIdSet: Set<number>;
   explicitProgramIdByHour: (number | null | undefined)[];
   /**
-   * True when `selectedReplacements.length >= sessionHours` (same condition as selection-only pool). Auto hours
-   * then take programs sequentially from the pool in wizard order, excluding explicit picks.
+   * True when `selectedReplacements.length >= replacementProgramSlotCount(sessionHours)` (selection-only pool).
+   * Auto-filled **slots** then take programs sequentially from the pool in wizard order, excluding explicit picks.
    */
   sessionSelectionCoversHours?: boolean | undefined;
 }): {
@@ -367,33 +398,52 @@ export function replacementProgramAssignmentsForSessionHours(params: {
   const queueForSequential =
     sessionSelectionCoversHours === true ? pool.filter((id) => !usedByExplicit.has(id)) : [];
 
-  let autoSlot = 0;
+  const slotIdForHour = (h: number) => replacementProgramSlotIdForHour(H, h);
+  const slotsNeeding = new Set<number>();
   for (let h = 0; h < H; h++) {
-    if (names[h]) continue;
+    if (!names[h]) {
+      slotsNeeding.add(slotIdForHour(h));
+    }
+  }
+  const uniqueSlots = [...slotsNeeding].sort((a, b) => a - b);
 
-    if (sessionSelectionCoversHours === true && queueForSequential.length > 0) {
-      const pick = queueForSequential.shift()!;
-      names[h] = idToName.get(pick)!;
-      rbt[h] = !selectedIdSet.has(pick);
-      programIdForHour[h] = pick;
-      autoSlot++;
+  let autoSlot = 0;
+  for (const slot of uniqueSlots) {
+    const hoursToFill: number[] = [];
+    for (let h = 0; h < H; h++) {
+      if (names[h]) continue;
+      if (slotIdForHour(h) !== slot) continue;
+      hoursToFill.push(h);
+    }
+    if (hoursToFill.length === 0) {
       continue;
     }
 
-    let pickIdx = autoSlot % pool.length;
-    let pick = pool[pickIdx]!;
-    if (h > 0 && names[h - 1] === idToName.get(pick) && pool.length > 1) {
-      for (let k = 1; k < pool.length; k++) {
-        const tryPick = pool[(pickIdx + k) % pool.length]!;
-        if (idToName.get(tryPick) !== names[h - 1]) {
-          pick = tryPick;
-          break;
+    let pick: number;
+    if (sessionSelectionCoversHours === true && queueForSequential.length > 0) {
+      pick = queueForSequential.shift()!;
+    } else {
+      let pickIdx = autoSlot % pool.length;
+      pick = pool[pickIdx]!;
+      const prevH = hoursToFill[0]! - 1;
+      if (prevH >= 0 && names[prevH] === idToName.get(pick) && pool.length > 1) {
+        for (let k = 1; k < pool.length; k++) {
+          const tryPick = pool[(pickIdx + k) % pool.length]!;
+          if (idToName.get(tryPick) !== names[prevH]) {
+            pick = tryPick;
+            break;
+          }
         }
       }
     }
-    names[h] = idToName.get(pick)!;
-    rbt[h] = !selectedIdSet.has(pick);
-    programIdForHour[h] = pick;
+
+    const label = idToName.get(pick)!;
+    const rbtFlag = !selectedIdSet.has(pick);
+    for (const h of hoursToFill) {
+      names[h] = label;
+      rbt[h] = rbtFlag;
+      programIdForHour[h] = pick;
+    }
     autoSlot++;
   }
   return { names, rbtActionsOnly: rbt, programIdForHour };

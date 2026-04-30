@@ -38,6 +38,7 @@ import {
   maladaptiveBehaviorsForSessionHours,
   replacementProgramAssignmentsForSessionHours,
   replacementProgramPoolForAutoAssignment,
+  replacementProgramSlotCount,
   validateCaregiverMentionRule,
   validateClinicalBodyCompliance,
   type NoteComplianceContext,
@@ -493,7 +494,8 @@ router.post("/notes/generate", async (req, res) => {
     idToName: idToNameForPrograms,
     selectedIdSet: selectedIdSet,
     explicitProgramIdByHour,
-    sessionSelectionCoversHours: body.selectedReplacements.length >= body.sessionHours,
+    sessionSelectionCoversHours:
+      body.selectedReplacements.length >= replacementProgramSlotCount(body.sessionHours),
   });
 
   const therapistTrialSummaryForReplacementHour = buildTherapistTrialSummaryForReplacementHour({
@@ -622,9 +624,10 @@ router.post("/notes/generate", async (req, res) => {
     warnings.push(`Full-note check: ${issue}`);
   }
 
-  if (body.selectedReplacements.length < body.sessionHours) {
+  const programSlotNeed = replacementProgramSlotCount(body.sessionHours);
+  if (body.selectedReplacements.length < programSlotNeed) {
     warnings.push(
-      "Fewer programs selected than session hours: hours without “Program this hour” in ABC Builder are auto-filled from the client's assessment/profile replacement-program list (selected session targets first, then other assessment-listed programs). Use ABC Builder to override any hour.",
+      `Fewer programs selected than replacement-program slots for this session (${programSlotNeed} slot(s) for ${body.sessionHours} hour(s); 2-hour sessions use one program per hour, longer sessions use about one program per 90 minutes). Slots without a matching selection in ABC Builder are auto-filled from the client's assessment/profile replacement-program list (selected session targets first, then other assessment-listed programs). Use ABC Builder to override any hour.`,
     );
   }
   if (rbtActionsOnlyOutcomeForHour.some(Boolean)) {
