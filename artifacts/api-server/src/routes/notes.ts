@@ -41,6 +41,7 @@ import {
   replacementProgramSlotCount,
   validateCaregiverMentionRule,
   validateClinicalBodyCompliance,
+  collapseHourlyNoteNarrativeToSegments,
   type NoteComplianceContext,
 } from "../note-validation";
 import {
@@ -498,25 +499,36 @@ router.post("/notes/generate", async (req, res) => {
       body.selectedReplacements.length >= replacementProgramSlotCount(body.sessionHours),
   });
 
-  const therapistTrialSummaryForReplacementHour = buildTherapistTrialSummaryForReplacementHour({
+  const therapistTrialSummaryHourly = buildTherapistTrialSummaryForReplacementHour({
     sessionHours: body.sessionHours,
     programIdForHour,
     rbtActionsOnlyOutcomeForHour,
     programTrialData: body.programTrialData,
   });
-  const languageMaladaptiveEpisodeForHour = maladaptiveBehaviorForHour.map((b) =>
+  const languageMaladaptiveEpisodeHourly = maladaptiveBehaviorForHour.map((b) =>
     isLanguageMaladaptiveBehaviorLabel(b),
   );
 
-  const complianceCtxBase: NoteComplianceContext = {
+  const narrativeCollapsed = collapseHourlyNoteNarrativeToSegments({
     sessionHours: body.sessionHours,
-    replacementProgramsInOrder: replacementProgramsCatalog,
+    maladaptiveBehaviorForHour,
     replacementProgramForHour,
     rbtActionsOnlyOutcomeForHour,
-    maladaptiveBehaviors: behaviorCatalog,
-    maladaptiveBehaviorForHour,
     activityAntecedentForHour,
-    languageMaladaptiveEpisodeForHour,
+    languageMaladaptiveEpisodeForHour: languageMaladaptiveEpisodeHourly,
+    therapistTrialSummaryForReplacementHour: therapistTrialSummaryHourly,
+  });
+
+  const complianceCtxBase: NoteComplianceContext = {
+    sessionHours: body.sessionHours,
+    narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
+    replacementProgramsInOrder: replacementProgramsCatalog,
+    replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
+    rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
+    maladaptiveBehaviors: behaviorCatalog,
+    maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
+    activityAntecedentForHour: narrativeCollapsed.activityAntecedentForHour,
+    languageMaladaptiveEpisodeForHour: narrativeCollapsed.languageMaladaptiveEpisodeForHour,
     interventions: profile?.interventions ?? [],
     clientAgeYears,
     presentPeople: body.presentPeople,
@@ -566,25 +578,26 @@ router.post("/notes/generate", async (req, res) => {
     firstName: "the client",
     gender: profile?.gender,
     sessionHours: body.sessionHours,
+    narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
     sessionDate: body.sessionDate,
     therapySetting: body.therapySetting,
     presentPeople: body.presentPeople,
     hasEnvironmentalChanges: body.hasEnvironmentalChanges,
     environmentalChanges: body.environmentalChanges ?? "",
     maladaptiveBehaviors: behaviorCatalog,
-    maladaptiveBehaviorForHour,
+    maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
     interventions: profile?.interventions ?? [],
     replacementProgramsInOrder: replacementProgramsCatalog,
-    replacementProgramForHour,
-    rbtActionsOnlyOutcomeForHour,
+    replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
+    rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
     requestNonce: behaviorRotationSeed,
     clientAgeYears,
     ageBand: client.ageBand,
     clientAssessmentTextExcerpt,
     assessmentReferenceFileName: profile?.assessmentFileName ?? null,
-    activityAntecedentForHour,
-    languageMaladaptiveEpisodeForHour,
-    therapistTrialSummaryForReplacementHour,
+    activityAntecedentForHour: narrativeCollapsed.activityAntecedentForHour,
+    languageMaladaptiveEpisodeForHour: narrativeCollapsed.languageMaladaptiveEpisodeForHour,
+    therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
   };
 
   let clinicalBody: string;
@@ -630,9 +643,9 @@ router.post("/notes/generate", async (req, res) => {
       `Fewer programs selected than replacement-program slots for this session (${programSlotNeed} slot(s) for ${body.sessionHours} hour(s); 2-hour sessions use one program per hour, longer sessions use about one program per 90 minutes). Slots without a matching selection in ABC Builder are auto-filled from the client's assessment/profile replacement-program list (selected session targets first, then other assessment-listed programs). Use ABC Builder to override any hour.`,
     );
   }
-  if (rbtActionsOnlyOutcomeForHour.some(Boolean)) {
+  if (narrativeCollapsed.rbtActionsOnlyOutcomeForHour.some(Boolean)) {
     warnings.push(
-      "One or more hours document a replacement program that was not selected for this session; the narrative for those hours must describe RBT implementation only (no valenced client outcome for that program).",
+      "One or more narrative segments document a replacement program that was not selected for this session; the narrative for those segments must describe RBT implementation only (no valenced client outcome for that program).",
     );
   }
 

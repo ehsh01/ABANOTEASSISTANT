@@ -4,30 +4,35 @@
  */
 
 export type NoteComplianceContext = {
+  /** Billable session duration from the wizard (integer hours). */
   sessionHours: number;
+  /**
+   * Number of ABC paragraphs expected in the clinical body (aligned with ~90-minute narrative/program slots).
+   * When omitted, validators fall back to `sessionHours` for backward compatibility.
+   */
+  narrativeSegmentCount?: number | undefined;
   replacementProgramsInOrder: string[];
   /**
-   * Exact replacement program name for each hour (length = sessionHours), cycling `replacementProgramsInOrder`.
-   * Clinical body must include this substring verbatim in paragraph h when non-empty.
+   * Exact replacement program name per **narrative segment** (length = `narrativeSegmentCount ?? sessionHours`).
+   * Clinical body must include this substring verbatim in paragraph index `i` when non-empty.
    */
   replacementProgramForHour: string[];
   /**
-   * When provided (length = sessionHours), indices that are true use RBT-actions-only outcome rules for that hour.
+   * When provided (length matches replacement program array), indices that are true use RBT-actions-only outcome rules for that segment.
    */
   rbtActionsOnlyOutcomeForHour?: boolean[] | undefined;
   /** BIP maladaptive behavior names (exact strings) — used for one-behavior-per-paragraph checks */
   maladaptiveBehaviors: string[];
   /**
-   * Exact catalog label assigned to each hour (length = sessionHours), cycling the full client list in order.
-   * Used to enforce rotation across all listed behaviors over multi-hour sessions.
+   * Exact catalog label assigned to each **narrative segment** (same length contract as `replacementProgramForHour`).
    */
   maladaptiveBehaviorForHour: string[];
   /**
-   * Optional ABC Builder: per hour, exact activity/antecedent catalog string that must appear verbatim in the paragraph, or null for AI-chosen antecedent.
+   * Optional ABC Builder: per segment, exact activity/antecedent catalog string that must appear verbatim in the paragraph, or null for AI-chosen antecedent.
    */
   activityAntecedentForHour?: (string | null)[] | undefined;
   /**
-   * When set (length = sessionHours), paragraphs at true indices may include brief attributed client speech
+   * When set (same length contract), paragraphs at true indices may include brief attributed client speech
    * (verbal/language maladaptive topography); toddler speech checks skip those paragraphs.
    */
   languageMaladaptiveEpisodeForHour?: boolean[] | undefined;
@@ -311,6 +316,75 @@ export function replacementProgramSlotCount(sessionHours: number): number {
   return Math.floor(((sessionHours - 1) * 60) / 90) + 1;
 }
 
+/** Calendar-hour indices (0 … sessionHours−1) that belong to `slotId` for replacement-program rotation. */
+export function replacementProgramSlotHours(sessionHours: number, slotId: number): number[] {
+  const out: number[] = [];
+  for (let h = 0; h < sessionHours; h++) {
+    if (replacementProgramSlotIdForHour(sessionHours, h) === slotId) {
+      out.push(h);
+    }
+  }
+  return out;
+}
+
+export type TherapistTrialSummaryForHourEntry = {
+  totalTrials: number;
+  successfulTrialNumbers: number[];
+} | null;
+
+/**
+ * Collapse per-calendar-hour narrative inputs to one row per **replacement-program slot** (~90 minutes, except
+ * 2-hour sessions = two hourly slots). OpenAI and compliance use the collapsed arrays; `sessionHours` stays the
+ * billable duration for context elsewhere.
+ */
+export function collapseHourlyNoteNarrativeToSegments(params: {
+  sessionHours: number;
+  maladaptiveBehaviorForHour: string[];
+  replacementProgramForHour: string[];
+  rbtActionsOnlyOutcomeForHour: boolean[];
+  activityAntecedentForHour: (string | null)[];
+  languageMaladaptiveEpisodeForHour: boolean[];
+  therapistTrialSummaryForReplacementHour: TherapistTrialSummaryForHourEntry[];
+}): {
+  narrativeSegmentCount: number;
+  maladaptiveBehaviorForHour: string[];
+  replacementProgramForHour: string[];
+  rbtActionsOnlyOutcomeForHour: boolean[];
+  activityAntecedentForHour: (string | null)[];
+  languageMaladaptiveEpisodeForHour: boolean[];
+  therapistTrialSummaryForReplacementHour: TherapistTrialSummaryForHourEntry[];
+} {
+  const H = params.sessionHours;
+  const S = replacementProgramSlotCount(H);
+  const firstHourInSlot = (s: number): number => {
+    const xs = replacementProgramSlotHours(H, s);
+    return xs.length > 0 ? xs[0]! : 0;
+  };
+  const firstNonNullActivityInSlot = (s: number): string | null => {
+    for (const h of replacementProgramSlotHours(H, s)) {
+      const a = params.activityAntecedentForHour[h];
+      if (typeof a === "string" && a.length > 0) {
+        return a;
+      }
+    }
+    return null;
+  };
+  return {
+    narrativeSegmentCount: S,
+    maladaptiveBehaviorForHour: Array.from({ length: S }, (_, s) => params.maladaptiveBehaviorForHour[firstHourInSlot(s)]!),
+    replacementProgramForHour: Array.from({ length: S }, (_, s) => params.replacementProgramForHour[firstHourInSlot(s)]!),
+    rbtActionsOnlyOutcomeForHour: Array.from({ length: S }, (_, s) => params.rbtActionsOnlyOutcomeForHour[firstHourInSlot(s)]!),
+    activityAntecedentForHour: Array.from({ length: S }, (_, s) => firstNonNullActivityInSlot(s)),
+    languageMaladaptiveEpisodeForHour: Array.from({ length: S }, (_, s) =>
+      replacementProgramSlotHours(H, s).some((h) => params.languageMaladaptiveEpisodeForHour[h]),
+    ),
+    therapistTrialSummaryForReplacementHour: Array.from({ length: S }, (_, s) => {
+      const h0 = firstHourInSlot(s);
+      return params.therapistTrialSummaryForReplacementHour[h0] ?? null;
+    }),
+  };
+}
+
 /**
  * Pool used to auto-fill hours that do not have an explicit `replacementProgramId` in ABC hints.
  *
@@ -554,9 +628,10 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     .map((p) => p.trim())
     .filter(Boolean);
 
-  if (paragraphs.length !== ctx.sessionHours) {
+  const expectedParagraphs = ctx.narrativeSegmentCount ?? ctx.sessionHours;
+  if (paragraphs.length !== expectedParagraphs) {
     issues.push(
-      `Expected exactly ${ctx.sessionHours} clinical paragraph(s) separated by blank lines; found ${paragraphs.length}.`,
+      `Expected exactly ${expectedParagraphs} clinical paragraph(s) separated by blank lines (aligned with narrative segments for this session duration); found ${paragraphs.length}.`,
     );
   }
 
@@ -592,13 +667,13 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     const progCount = countDistinctCatalogLabelsInParagraph(p, programs);
     if (progCount > 1) {
       issues.push(
-        `One program per ABC: paragraph ${i + 1} references more than one distinct replacement program name from the catalog; that hour must name only the assigned program and must not describe or cite a second program from the list.`,
+        `One program per ABC: paragraph ${i + 1} references more than one distinct replacement program name from the catalog; that segment must name only the assigned program and must not describe or cite a second program from the list.`,
       );
     }
     const assignedRp = replacementPerHour[i]?.trim() ?? "";
     if (assignedRp.length > 0 && !p.includes(assignedRp)) {
       issues.push(
-        `Replacement program for hour ${i + 1}: include the assigned program exactly as given (character-for-character, including every "(" and ")"): "${assignedRp}".`,
+        `Replacement program for paragraph ${i + 1}: include the assigned program exactly as given (character-for-character, including every "(" and ")"): "${assignedRp}".`,
       );
     }
   }
@@ -619,7 +694,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const bCount = countCatalogBehaviorsInParagraph(p, behaviorCatalog);
       if (bCount > 1) {
         issues.push(
-          `One maladaptive behavior per ABC: paragraph ${i + 1} references more than one behavior name from the client catalog; use exactly one catalog behavior per hour.`,
+          `One maladaptive behavior per ABC: paragraph ${i + 1} references more than one behavior name from the client catalog; use exactly one catalog behavior per narrative segment.`,
         );
         break;
       }
