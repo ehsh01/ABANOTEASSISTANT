@@ -54,6 +54,40 @@ import { resolveAbcHintsForNoteGeneration } from "../abc-hints";
 import { isLanguageMaladaptiveBehaviorLabel } from "../language-maladaptive-behavior";
 import { ABC_ACTIVITY_ANTECEDENT_CATALOG } from "../abc-activity-antecedent-catalog";
 
+/**
+ * Per-hour trial summary for the AI when `programTrialData` has a usable entry for that hour's program id.
+ * Indices outside 1..count are dropped; duplicates removed; list sorted ascending.
+ */
+function buildTherapistTrialSummaryForReplacementHour(params: {
+  sessionHours: number;
+  programIdForHour: (number | null)[];
+  rbtActionsOnlyOutcomeForHour: boolean[];
+  programTrialData:
+    | Record<string, { count?: number | null; effectiveTrials?: number[] }>
+    | undefined;
+}): NoteGenerationContext["therapistTrialSummaryForReplacementHour"] {
+  const { sessionHours, programIdForHour, rbtActionsOnlyOutcomeForHour, programTrialData } = params;
+  return Array.from({ length: sessionHours }, (_, h) => {
+    if (rbtActionsOnlyOutcomeForHour[h]) return null;
+    const id = programIdForHour[h];
+    if (id == null) return null;
+    const entry = programTrialData?.[String(id)];
+    if (!entry) return null;
+    const count = entry.count;
+    const trials = entry.effectiveTrials;
+    if (count == null || trials == null || trials.length === 0) return null;
+    if (typeof count !== "number" || !Number.isFinite(count) || !Number.isInteger(count) || count < 1) {
+      return null;
+    }
+    const inRange = trials.filter(
+      (t): t is number => typeof t === "number" && Number.isInteger(t) && t >= 1 && t <= count,
+    );
+    if (inRange.length === 0) return null;
+    const uniqueSorted = [...new Set(inRange)].sort((a, b) => a - b);
+    return { totalTrials: count, successfulTrialNumbers: uniqueSorted };
+  });
+}
+
 /** Map OpenAI / transport failures to actionable text (distinct from "missing OPENAI_API_KEY" 503). */
 function formatOpenAINoteGenerationError(err: unknown): string {
   const status = err instanceof APIError ? err.status : undefined;
@@ -462,19 +496,12 @@ router.post("/notes/generate", async (req, res) => {
     sessionSelectionCoversHours: body.selectedReplacements.length >= body.sessionHours,
   });
 
-  const trialPercentageForReplacementHour: (number | null)[] = (() => {
-    const raw = body.programTrialPercentages;
-    if (!raw || Object.keys(raw).length === 0) {
-      return Array.from({ length: body.sessionHours }, () => null);
-    }
-    return programIdForHour.map((id, h) => {
-      if (id == null || rbtActionsOnlyOutcomeForHour[h]) return null;
-      const v = raw[String(id)];
-      if (typeof v !== "number" || Number.isNaN(v) || v < 10 || v > 100) return null;
-      if (v % 10 !== 0) return null;
-      return v;
-    });
-  })();
+  const therapistTrialSummaryForReplacementHour = buildTherapistTrialSummaryForReplacementHour({
+    sessionHours: body.sessionHours,
+    programIdForHour,
+    rbtActionsOnlyOutcomeForHour,
+    programTrialData: body.programTrialData,
+  });
   const languageMaladaptiveEpisodeForHour = maladaptiveBehaviorForHour.map((b) =>
     isLanguageMaladaptiveBehaviorLabel(b),
   );
@@ -555,7 +582,7 @@ router.post("/notes/generate", async (req, res) => {
     assessmentReferenceFileName: profile?.assessmentFileName ?? null,
     activityAntecedentForHour,
     languageMaladaptiveEpisodeForHour,
-    trialPercentageForReplacementHour,
+    therapistTrialSummaryForReplacementHour,
   };
 
   let clinicalBody: string;

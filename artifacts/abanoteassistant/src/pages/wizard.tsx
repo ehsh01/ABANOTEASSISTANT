@@ -105,6 +105,9 @@ function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | null {
       body.abcHints = cleaned;
     }
   }
+  if (data.programTrialData != null && Object.keys(data.programTrialData).length > 0) {
+    body.programTrialData = data.programTrialData;
+  }
   return body;
 }
 
@@ -959,11 +962,9 @@ function ProgramsMultiSelectCombobox({
   );
 }
 
-const TRIAL_PCT_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
-
 function Step6Programs() {
   const [, setLocation] = useLocation();
-  const { data, updateData, programTrialPercentages, setProgramTrialPercentage, clearProgramTrialPercentage } = useWizardStore();
+  const { data, updateData } = useWizardStore();
   const {
     data: programsRes,
     isLoading,
@@ -995,7 +996,6 @@ function Step6Programs() {
   const toggleProgram = (programId: number) => {
     if (selected.includes(programId)) {
       updateData({ selectedReplacements: selected.filter((n) => n !== programId) });
-      clearProgramTrialPercentage(programId);
     } else {
       updateData({ selectedReplacements: [...selected, programId] });
     }
@@ -1062,7 +1062,6 @@ function Step6Programs() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {programs.map(program => {
           const isSelected = selected.includes(program.id);
-          const pct = programTrialPercentages[program.id];
           return (
             <div
               key={program.id}
@@ -1094,30 +1093,6 @@ function Step6Programs() {
                   )}
                 </div>
               </div>
-
-              {isSelected && (
-                <div
-                  className="mt-3 flex items-center gap-2"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">
-                    % of trials:
-                  </label>
-                  <select
-                    value={pct ?? ""}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value, 10);
-                      if (!isNaN(val)) setProgramTrialPercentage(program.id, val);
-                    }}
-                    className="flex-1 text-sm font-semibold rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all cursor-pointer"
-                  >
-                    <option value="">— select —</option>
-                    {TRIAL_PCT_OPTIONS.map(opt => (
-                      <option key={opt} value={opt}>{opt}%</option>
-                    ))}
-                  </select>
-                </div>
-              )}
             </div>
           );
         })}
@@ -1466,7 +1441,7 @@ function Step8Review() {
 
 export default function Wizard() {
   const [, setLocation] = useLocation();
-  const { step, setStep, data, setGeneratedNote, resetWizardForm, programTrialPercentages } = useWizardStore();
+  const { step, setStep, data, setGeneratedNote, resetWizardForm } = useWizardStore();
   const generateMutation = useGenerateSessionNote();
   const t = useT();
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -1505,10 +1480,7 @@ export default function Wizard() {
       );
       return;
     }
-    const payloadWithPercentages = Object.keys(programTrialPercentages).length > 0
-      ? { ...payload, programTrialPercentages } as typeof payload
-      : payload;
-    generateMutation.mutate(payloadWithPercentages, {
+    generateMutation.mutate(payload, {
       onSuccess: (res) => {
         setGeneratedNote(res.data, res.warnings);
         setLocation("/result");

@@ -360,12 +360,21 @@ export const GenerateNoteRequestTherapySetting = {
   "Community/School": "Community/School",
 } as const;
 
+export interface ProgramTrialDataEntry {
+  /** Total trials conducted for this replacement program when known; when null, the server does not inject therapist-entered trial-count prose (use default quantified language).
+   */
+  count?: number | null;
+  /** 1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty, therapist-entered trial-detail prose is not used for that program.
+   */
+  effectiveTrials: number[];
+}
+
 /**
- * Optional. Maps replacement program id to the percent of trials in which the client met criterion for that program (values 10–100; client sends multiples of 10). JSON object keys are program ids as strings. Only programs listed here should mention that percentage in the clinical narrative for the hour that uses that program; omitting a program means no percentage line for it. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+ * Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is non-null and `effectiveTrials` is non-empty for a program assigned to an hour, the clinical narrative for that hour must incorporate that exact count and those trial indices in natural prose for the verbatim replacement program name. When `count` is null or `effectiveTrials` is empty, use default quantified replacement-program language for that hour. Ignored for hours that document RBT-only replacement programs (not selected session targets).
 
  */
-export type GenerateNoteRequestProgramTrialPercentages = {
-  [key: string]: number;
+export type GenerateNoteRequestProgramTrialData = {
+  [key: string]: ProgramTrialDataEntry;
 };
 
 /**
@@ -404,9 +413,9 @@ export interface GenerateNoteRequest {
    * @maxItems 8
    */
   abcHints?: AbcHintEntry[];
-  /** Optional. Maps replacement program id to the percent of trials in which the client met criterion for that program (values 10–100; client sends multiples of 10). JSON object keys are program ids as strings. Only programs listed here should mention that percentage in the clinical narrative for the hour that uses that program; omitting a program means no percentage line for it. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+  /** Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is non-null and `effectiveTrials` is non-empty for a program assigned to an hour, the clinical narrative for that hour must incorporate that exact count and those trial indices in natural prose for the verbatim replacement program name. When `count` is null or `effectiveTrials` is empty, use default quantified replacement-program language for that hour. Ignored for hours that document RBT-only replacement programs (not selected session targets).
    */
-  programTrialPercentages?: GenerateNoteRequestProgramTrialPercentages;
+  programTrialData?: GenerateNoteRequestProgramTrialData;
 }
 
 export type AbcActivityAntecedentListResponseData = {

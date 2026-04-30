@@ -1433,14 +1433,12 @@ components:
           maxItems: 8
           items:
             $ref: "#/components/schemas/AbcHintEntry"
-        programTrialPercentages:
+        programTrialData:
           type: object
           additionalProperties:
-            type: integer
-            minimum: 10
-            maximum: 100
+            $ref: "#/components/schemas/ProgramTrialDataEntry"
           description: >
-            Optional. Maps replacement program id to the percent of trials in which the client met criterion for that program (values 10–100; client sends multiples of 10). JSON object keys are program ids as strings. Only programs listed here should mention that percentage in the clinical narrative for the hour that uses that program; omitting a program means no percentage line for it. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+            Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is non-null and `effectiveTrials` is non-empty for a program assigned to an hour, the clinical narrative for that hour must incorporate that exact count and those trial indices in natural prose for the verbatim replacement program name. When `count` is null or `effectiveTrials` is empty, use default quantified replacement-program language for that hour. Ignored for hours that document RBT-only replacement programs (not selected session targets).
       required:
         - clientId
         - sessionHours
@@ -1449,6 +1447,23 @@ components:
         - presentPeople
         - hasEnvironmentalChanges
         - selectedReplacements
+
+    ProgramTrialDataEntry:
+      type: object
+      properties:
+        count:
+          type: integer
+          nullable: true
+          description: >
+            Total trials conducted for this replacement program when known; when null, the server does not inject therapist-entered trial-count prose (use default quantified language).
+        effectiveTrials:
+          type: array
+          items:
+            type: integer
+          description: >
+            1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty, therapist-entered trial-detail prose is not used for that program.
+      required:
+        - effectiveTrials
 
     AbcHintEntry:
       type: object

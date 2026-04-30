@@ -333,7 +333,7 @@ export function replacementProgramAssignmentsForSessionHours(params: {
 }): {
   names: string[];
   rbtActionsOnly: boolean[];
-  /** Program id assigned for hour h (for mapping therapist-entered trial percentages); null if unassigned. */
+  /** Program id assigned for hour h (for mapping therapist-entered trial metadata); null if unassigned. */
   programIdForHour: (number | null)[];
 } {
   const { sessionHours, poolIds, idToName, selectedIdSet, explicitProgramIdByHour, sessionSelectionCoversHours } =

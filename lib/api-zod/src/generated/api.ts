@@ -554,9 +554,6 @@ export const generateNoteBodySessionHoursMax = 8;
 
 export const generateNoteBodyAbcHintsMax = 8;
 
-export const generateNoteBodyProgramTrialPercentagesMinOne = 10;
-export const generateNoteBodyProgramTrialPercentagesMaxOne = 100;
-
 export const GenerateNoteBody = zod.object({
   clientId: zod.number(),
   sessionHours: zod.number().min(1).max(generateNoteBodySessionHoursMax),
@@ -633,17 +630,26 @@ export const GenerateNoteBody = zod.object({
     .describe(
       "Optional ABC Builder rows, index-aligned with service hours (index 0 = first hour). When both activityAntecedent and maladaptiveBehavior are set for an index, the AI must use those exact strings for that hour; empty rows use default AI rotation. Optional replacementProgramId per index assigns which linked replacement program that hour's ABC documents (defaults to server rotation from selectedReplacements). When replacementProgramId is not among selectedReplacements, the narrative must document RBT actions only for that hour—no valenced client outcome. Length must not exceed sessionHours. Omit or send [] for fully automatic ABCs.\n",
     ),
-  programTrialPercentages: zod
+  programTrialData: zod
     .record(
       zod.string(),
-      zod
-        .number()
-        .min(generateNoteBodyProgramTrialPercentagesMinOne)
-        .max(generateNoteBodyProgramTrialPercentagesMaxOne),
+      zod.object({
+        count: zod
+          .number()
+          .nullish()
+          .describe(
+            "Total trials conducted for this replacement program when known; when null, the server does not inject therapist-entered trial-count prose (use default quantified language).\n",
+          ),
+        effectiveTrials: zod
+          .array(zod.number())
+          .describe(
+            "1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty, therapist-entered trial-detail prose is not used for that program.\n",
+          ),
+      }),
     )
     .optional()
     .describe(
-      "Optional. Maps replacement program id to the percent of trials in which the client met criterion for that program (values 10–100; client sends multiples of 10). JSON object keys are program ids as strings. Only programs listed here should mention that percentage in the clinical narrative for the hour that uses that program; omitting a program means no percentage line for it. Ignored for hours that document RBT-only replacement programs (not selected session targets).\n",
+      'Optional. Maps replacement program id (string keys, e.g. \"42\") to trial metadata. When `count` is non-null and `effectiveTrials` is non-empty for a program assigned to an hour, the clinical narrative for that hour must incorporate that exact count and those trial indices in natural prose for the verbatim replacement program name. When `count` is null or `effectiveTrials` is empty, use default quantified replacement-program language for that hour. Ignored for hours that document RBT-only replacement programs (not selected session targets).\n',
     ),
 });
 
