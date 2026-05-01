@@ -530,6 +530,7 @@ router.post("/notes/generate", async (req, res) => {
     activityAntecedentForHour: narrativeCollapsed.activityAntecedentForHour,
     languageMaladaptiveEpisodeForHour: narrativeCollapsed.languageMaladaptiveEpisodeForHour,
     interventions: profile?.interventions ?? [],
+    therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
     clientAgeYears,
     presentPeople: body.presentPeople,
   };

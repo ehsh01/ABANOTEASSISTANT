@@ -38,6 +38,11 @@ export type NoteComplianceContext = {
   languageMaladaptiveEpisodeForHour?: boolean[] | undefined;
   /** BIP intervention names (exact strings) — used for physical-aggression / Response Block ordering */
   interventions: string[];
+  /**
+   * Per narrative segment: therapist-entered discrete-trial rollup for `replacementProgramForHour[s]`.
+   * When set, the clinical paragraph must state success counts as **N out of M trials were/was successful** (see validators).
+   */
+  therapistTrialSummaryForReplacementHour?: TherapistTrialSummaryForHourEntry[] | undefined;
   /** Approximate age in years from DOB + session date; null if unknown */
   clientAgeYears: number | null;
   presentPeople: string[];
@@ -593,6 +598,64 @@ function isPhysicalAggressionCatalogLabel(behaviorName: string): boolean {
   return /\bphysical\s+aggression\b/i.test(behaviorName.trim());
 }
 
+/**
+ * Assigned maladaptive labels where, if **Response Block** is on the client's intervention list, the narrative may
+ * document Response Block first and then **additional** separate intervention sentences (safety chain).
+ */
+function assignedBehaviorAllowsResponseBlockSafetyChain(behaviorName: string): boolean {
+  const t = behaviorName.trim();
+  if (isPhysicalAggressionCatalogLabel(t)) return true;
+  const u = t.toLowerCase();
+  return (
+    /\bwandering\b/.test(u) ||
+    /\belope/.test(u) ||
+    /\bbaiting\b/.test(u) ||
+    /\bbolting\b/.test(u) ||
+    /\brunning\s+away\b/.test(u)
+  );
+}
+
+/**
+ * Count distinct catalog interventions documented with **implemented** / **applied** … **by** (longest catalog
+ * strings first to avoid double-counting a shorter label inside a longer one).
+ */
+export function countInterventionImplementationsInParagraph(
+  paragraph: string,
+  interventionCatalog: string[],
+): number {
+  const names = [...new Set(interventionCatalog.map((s) => s.trim()).filter((s) => s.length > 0))].sort(
+    (a, b) => b.length - a.length,
+  );
+  const spans: { start: number; end: number }[] = [];
+  for (const name of names) {
+    const re = new RegExp(`(?:implemented|applied)\\s+${escapeRegExp(name)}\\s+by\\b`, "gi");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(paragraph)) !== null) {
+      const start = m.index;
+      const end = start + m[0].length;
+      const overlaps = spans.some((s) => !(end <= s.start || start >= s.end));
+      if (!overlaps) {
+        spans.push({ start, end });
+      }
+    }
+  }
+  return spans.length;
+}
+
+function therapistTrialRollupPhrasePresent(
+  paragraph: string,
+  successfulTrialCount: number,
+  totalTrials: number,
+): boolean {
+  const n = successfulTrialCount;
+  const m = totalTrials;
+  if (!Number.isFinite(n) || !Number.isFinite(m) || m < 1 || n < 0) return false;
+  const wasWere = n === 1 ? "(?:was|were)" : "were";
+  const outOf = new RegExp(`\\b${n}\\s+out\\s+of\\s+${m}\\s+trials?\\s+${wasWere}\\s+successful\\b`, "i");
+  const ofOnly = new RegExp(`\\b${n}\\s+of\\s+${m}\\s+trials?\\s+${wasWere}\\s+successful\\b`, "i");
+  return outOf.test(paragraph) || ofOnly.test(paragraph);
+}
+
 /** Exact intervention string from the client's list when it is the canonical Response Block label. */
 function findResponseBlockInterventionLabel(interventions: string[]): string | null {
   for (const raw of interventions) {
@@ -785,7 +848,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const joined = findJoinedInterventionPairPhrase(paragraphs[i]!, interventionCatalog);
       if (joined) {
         issues.push(
-          `Interventions: paragraph ${i + 1} joins two catalog interventions (${joined.a} and ${joined.b}) in one phrase (comma or "and" between names). Use separate sentences with exact JSON labels only—no quotes, no comma before by—e.g. The RBT implemented ${joined.a} by …. The RBT also implemented ${joined.b} by …. Do not combine two catalog names into one noun phrase.`,
+          `Interventions: paragraph ${i + 1} joins two catalog interventions (${joined.a} and ${joined.b}) in one phrase (comma or "and" between names). Do not combine two catalog names into one noun phrase; use exact JSON labels with no quotes and no comma before by. For most ABC segments document **one** intervention only—only safety-priority segments with Response Block on the client's list may use multiple **separate** sentences (never a compound label).`,
         );
       }
     }
@@ -808,28 +871,64 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     }
   }
 
+  const trialSummaries = ctx.therapistTrialSummaryForReplacementHour;
   const responseBlockLabel = findResponseBlockInterventionLabel(ctx.interventions ?? []);
-  const paBehaviorLabels = behaviorCatalog.filter(isPhysicalAggressionCatalogLabel);
-  if (responseBlockLabel && paBehaviorLabels.length > 0) {
-    const interventionList = ctx.interventions ?? [];
+  const interventionList = ctx.interventions ?? [];
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const p = paragraphs[i]!;
+    const assignedBehavior = assignedPerHour[i]?.trim() ?? "";
+    const trialEntry = trialSummaries?.[i];
+    if (trialEntry && trialEntry.totalTrials >= 1) {
+      const successN = trialEntry.successfulTrialNumbers.length;
+      if (!therapistTrialRollupPhrasePresent(p, successN, trialEntry.totalTrials)) {
+        issues.push(
+          `Therapist trial counts: paragraph ${i + 1} must state discrete-trial outcomes as "${successN} out of ${trialEntry.totalTrials} trials were successful" (use "was" instead of "were" when ${successN} is 1 if you prefer standard agreement). Do not use "trials were conducted" plus separate "trial … was successful" / "trials … and … were successful" wording.`,
+        );
+      }
+    }
+
+    if (interventionCatalog.length === 0) {
+      continue;
+    }
+    const implCount = countInterventionImplementationsInParagraph(p, interventionCatalog);
+    const safetyChainAllowed =
+      Boolean(responseBlockLabel) &&
+      assignedBehavior.length > 0 &&
+      assignedBehaviorAllowsResponseBlockSafetyChain(assignedBehavior);
+
+    if (!safetyChainAllowed && implCount > 1) {
+      issues.push(
+        `Interventions: paragraph ${i + 1} must document **one** catalog intervention for this ABC segment (one "… implemented [exact JSON label] by …" or "… applied … by …" chain). Pick the single best-matching entry from JSON interventions unless the segment is a safety-priority behavior with Response Block on the client's list (physical aggression, wandering, elopement, baiting, bolting, running away)—then Response Block may be first with additional interventions in separate sentences.`,
+      );
+    }
+    if (implCount === 0) {
+      issues.push(
+        `Interventions: paragraph ${i + 1} must document at least one catalog intervention using the exact JSON label with "implemented … by" or "applied … by".`,
+      );
+    }
+  }
+
+  if (responseBlockLabel) {
     for (let i = 0; i < paragraphs.length; i++) {
       const p = paragraphs[i]!;
-      const citesPa = paBehaviorLabels.some((label) => p.includes(label));
-      if (!citesPa) continue;
+      const assignedBehavior = assignedPerHour[i]?.trim() ?? "";
+      if (!assignedBehavior || !assignedBehaviorAllowsResponseBlockSafetyChain(assignedBehavior)) {
+        continue;
+      }
       const m = /\bto address this behavior\b|\bto address these behaviors\b/i.exec(p);
       if (!m || m.index === undefined) {
         issues.push(
-          `Physical aggression: paragraph ${i + 1} cites a physical-aggression catalog behavior; use "To address this behavior" or "To address these behaviors" before consequence interventions.`,
+          `Safety-priority behavior (${assignedBehavior}): paragraph ${i + 1} must use "To address this behavior" or "To address these behaviors" before the first consequence intervention when Response Block is on the client's intervention list.`,
         );
-        break;
+        continue;
       }
       const tail = p.slice(m.index);
       const firstNamed = firstInterventionMentionInText(tail, interventionList);
       if (firstNamed !== responseBlockLabel) {
         issues.push(
-          `Physical aggression: paragraph ${i + 1} must describe "${responseBlockLabel}" as the first implemented intervention after "To address this behavior" (before other listed interventions such as environmental manipulation).`,
+          `Safety-priority behavior (${assignedBehavior}): paragraph ${i + 1} must describe "${responseBlockLabel}" as the first implemented intervention after "To address this behavior" (before other listed interventions such as environmental manipulation).`,
         );
-        break;
       }
     }
   }
