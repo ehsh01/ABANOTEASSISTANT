@@ -74,9 +74,9 @@ Every note must begin with:
 
 ## 20. Session performance language rule
 
-Must include the server-assembled performance line after the closing paragraph: the client completed **N** program(s) (N = replacement-program narrative segments for the session) with varying levels of prompting and successful responding in the majority of trials across skill acquisition and behavior reduction targets (see locked prose rules).
+Must include the server-assembled performance line after the closing paragraph. When therapist-entered discrete-trial rows exist for one or more narrative segments, that line must state **pooled X out of Y** successful discrete-trial counts, **approximately P%** where **P** is `round((X/Y)*100)` from the same integers, and a **fixed neutral interpretation** band (no subjective *majority*, *good*, or *fair* unless tied to those numbers). When no trial rows are entered, the server uses a neutral fallback that references program segment count only (see locked prose rules and `buildPerformanceSentence` in `artifacts/api-server/src/note-assembly.ts`).
 
-**Prohibited terms:** poor, below expectations, unsuccessful, limited, inadequate, minimal engagement, regression.
+**Prohibited terms (unless product policy changes):** poor, below expectations, unsuccessful, limited, inadequate, minimal engagement, regression.
 
 ## 21. Mandatory closing paragraph (verbatim)
 

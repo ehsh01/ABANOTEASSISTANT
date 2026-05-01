@@ -39,10 +39,10 @@ No extra sentences **between** the body and this paragraph except where a valida
 ## 3. End-of-note sequence (exact order — after the closing paragraph)
 
 1. The closing paragraph above  
-2. **Performance sentence** (locked template — server fills `N` from narrative program segment count for the session, aligned with replacement-program slots / collapsed segments):  
-   `The client completed N program(s) with varying levels of prompting and demonstrated successful responding in the majority of trials across skill acquisition and behavior reduction targets.`  
-   - Use **program** when N is 1 and **programs** when N is greater than 1.  
-   - Implementation: `artifacts/api-server/src/note-assembly.ts` (`buildPerformanceSentence`).
+2. **Performance sentence** (server-assembled from intake + collapsed narrative segments — no subjective *majority* / *good* / *fair* unless numerically grounded):  
+   - **When** at least one narrative segment has therapist-entered discrete trials (`therapistTrialSummaryForReplacementHour[s]` with `totalTrials >= 1` after collapse): one sentence that includes **(a)** pooled **X out of Y** successful discrete-trial counts across those segments, **(b)** `approximately P%` where **P** is `round((X/Y)*100)` from the same integers, and **(c)** a **fixed neutral interpretation** clause from `neutralDiscreteTrialPerformanceClause` in `artifacts/api-server/src/note-assembly.ts` (banded by **P** only — no LLM prose).  
+   - **When** no such trial rows exist: a fallback sentence that states the narrative program segment count (**N** `program` / `programs`) and that a session-wide percentage cannot be computed from entered discrete-trial data (see `buildPerformanceSentence` / `buildPerformanceSentenceWithoutTrialAggregate`).  
+   - Implementation: `artifacts/api-server/src/note-assembly.ts` (`buildPerformanceSentence`, `aggregateTherapistTrialSummariesForPerformanceLine`, `discreteTrialSuccessPercent`, `neutralDiscreteTrialPerformanceClause`).
 3. **Next session sentence**:  
    - If a next session date is provided: `The next session is tentatively scheduled to take place at [POSSESSIVE_HOME] on [DATE].`  
    - `[POSSESSIVE_HOME]` = **`[FirstName]'s home`** (possessive per `englishPossessiveFirstName` in `note-assembly.ts`) when the client profile first name is present; otherwise **`the client's home`** (unchanged legacy wording).  

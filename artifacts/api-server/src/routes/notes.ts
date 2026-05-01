@@ -44,6 +44,7 @@ import {
   validateClinicalBodyCompliance,
   collapseHourlyNoteNarrativeToSegments,
   type NoteComplianceContext,
+  type TherapistTrialSummaryForHourEntry,
 } from "../note-validation";
 import {
   buildLockedOpening,
@@ -129,9 +130,13 @@ function assembleSessionNote(
   nextSessionDate: string | undefined,
   clientFirstName: string | null | undefined,
   narrativeProgramSegmentCount: number,
+  therapistTrialSummaryForReplacementHour: TherapistTrialSummaryForHourEntry[] | undefined,
 ): string {
   const opening = buildLockedOpening(presentPeople, hasEnvChanges, therapySetting, clientFirstName);
-  const performance = buildPerformanceSentence(narrativeProgramSegmentCount);
+  const performance = buildPerformanceSentence(
+    narrativeProgramSegmentCount,
+    therapistTrialSummaryForReplacementHour,
+  );
   const nextSession = buildNextSessionSentence(nextSessionDate, clientFirstName);
 
   return [opening, "", clinicalBody, "", LOCKED_CLOSING_PARAGRAPH, "", performance, "", nextSession].join("\n");
@@ -640,6 +645,7 @@ router.post("/notes/generate", async (req, res) => {
     body.nextSessionDate,
     profile?.firstName,
     narrativeCollapsed.narrativeSegmentCount,
+    narrativeCollapsed.therapistTrialSummaryForReplacementHour,
   );
 
   for (const issue of validateCaregiverMentionRule(noteContent, body.presentPeople)) {

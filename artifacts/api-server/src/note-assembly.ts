@@ -3,6 +3,7 @@
  * Source of truth for wording: .cursor/rules/aba-note-locked-prose.mdc
  */
 
+import type { TherapistTrialSummaryForHourEntry } from "./note-validation";
 import type { TherapySetting } from "@workspace/therapy-settings";
 import { therapySettingLocationPhrase } from "@workspace/therapy-settings";
 
@@ -88,14 +89,88 @@ export function buildLockedOpening(
 }
 
 /**
+ * Pools per-segment therapist-entered discrete-trial rows (same contract as `therapistTrialSummaryForReplacementHour`
+ * after narrative collapse). Returns null when no segment has `totalTrials >= 1`.
+ */
+export function aggregateTherapistTrialSummariesForPerformanceLine(
+  summaries: TherapistTrialSummaryForHourEntry[] | undefined,
+): { successes: number; trials: number; segmentsWithData: number } | null {
+  if (!summaries?.length) return null;
+  let successes = 0;
+  let trials = 0;
+  let segmentsWithData = 0;
+  for (const entry of summaries) {
+    if (!entry || !Number.isFinite(entry.totalTrials) || entry.totalTrials < 1) continue;
+    const rawN = Array.isArray(entry.successfulTrialNumbers) ? entry.successfulTrialNumbers.length : 0;
+    if (!Number.isFinite(rawN) || rawN < 0) continue;
+    const capped = Math.min(rawN, entry.totalTrials);
+    successes += capped;
+    trials += entry.totalTrials;
+    segmentsWithData++;
+  }
+  if (trials < 1 || segmentsWithData < 1) return null;
+  return { successes, trials, segmentsWithData };
+}
+
+/** Rounded percentage for prose; matches (successes / trials) * 100 with standard rounding. */
+export function discreteTrialSuccessPercent(successes: number, trials: number): number {
+  if (trials < 1) return 0;
+  return Math.round((successes / trials) * 100);
+}
+
+/**
+ * Clinically neutral clause tied to the computed percentage (no subjective good/fair/majority language).
+ */
+export function neutralDiscreteTrialPerformanceClause(percentRounded: number): string {
+  const p = Math.max(0, Math.min(100, Math.round(percentRounded)));
+  if (p <= 0) {
+    return "indicating minimal criterion-accurate responding during recorded trials, supporting continued systematic prompting and acquisition-focused teaching";
+  }
+  if (p <= 30) {
+    return "indicating emerging acquisition with continued need for graded prompting and repetition";
+  }
+  if (p <= 50) {
+    return "indicating variable acquisition with ongoing prompt-fading practice";
+  }
+  if (p <= 70) {
+    return "indicating developing stability of criterion-accurate responding with continued practice";
+  }
+  if (p <= 90) {
+    return "indicating strong acquisition patterns during recorded trials, consistent with progression toward maintenance or next-step targets";
+  }
+  return "indicating very high rates of criterion-accurate responding during recorded trials relative to entered discrete-trial samples";
+}
+
+function buildPerformanceSentenceWithoutTrialAggregate(programSlotCount: number): string {
+  const n = Math.max(1, Math.floor(programSlotCount));
+  const programsWord = n === 1 ? "program" : "programs";
+  return `The client completed ${n} ${programsWord}. Discrete-trial success counts were not entered for enough narrative segments to compute a session-wide percentage from intake data; continue acquisition and behavior-reduction documentation per the Behavior Plan and session-specific data collection.`;
+}
+
+/**
  * End-of-note performance line after the mandatory closing paragraph.
  * `programSlotCount` = number of replacement-program narrative segments for this session (aligned with
  * `replacementProgramSlotCount(sessionHours)` / collapsed narrative segments).
+ *
+ * When `therapistTrialSummaryForReplacementHour` contains at least one segment with `totalTrials >= 1`, the line
+ * includes the pooled **X out of Y** discrete-trial counts, the **rounded percentage** derived from that ratio, and a
+ * fixed neutral interpretation band (no subjective majority/good/fair language).
  */
-export function buildPerformanceSentence(programSlotCount: number): string {
-  const n = Math.max(1, Math.floor(programSlotCount));
-  const programsWord = n === 1 ? "program" : "programs";
-  return `The client completed ${n} ${programsWord} with varying levels of prompting and demonstrated successful responding in the majority of trials across skill acquisition and behavior reduction targets.`;
+export function buildPerformanceSentence(
+  programSlotCount: number,
+  therapistTrialSummaryForReplacementHour?: TherapistTrialSummaryForHourEntry[] | undefined,
+): string {
+  const agg = aggregateTherapistTrialSummariesForPerformanceLine(therapistTrialSummaryForReplacementHour);
+  if (!agg) {
+    return buildPerformanceSentenceWithoutTrialAggregate(programSlotCount);
+  }
+  const pct = discreteTrialSuccessPercent(agg.successes, agg.trials);
+  const interpretation = neutralDiscreteTrialPerformanceClause(pct);
+  const trialPhrase =
+    agg.segmentsWithData === 1
+      ? `${agg.successes} out of ${agg.trials} trials for the narrative segment with entered discrete-trial data`
+      : `${agg.successes} out of ${agg.trials} trials aggregated across ${agg.segmentsWithData} narrative segments with entered discrete-trial data`;
+  return `The client demonstrated approximately ${pct}% successful discrete-trial responding (${trialPhrase}), ${interpretation}.`;
 }
 
 export function buildNextSessionSentence(

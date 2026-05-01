@@ -10,6 +10,6 @@ Later during the session, Bradley was engaged in coloring with markers at the ar
 
 Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., "Good job," "Wow," and "Good attention to detail"), preferred toys, and videos contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned, with the caregiver present during implementation.
 
-The client completed 2 programs with varying levels of prompting and demonstrated successful responding in the majority of trials across skill acquisition and behavior reduction targets.
+The client demonstrated approximately 45% successful discrete-trial responding (9 out of 20 trials aggregated across 2 narrative segments with entered discrete-trial data), indicating developing stability of criterion-accurate responding with continued practice.
 
 The next session is tentatively scheduled to take place at Bradley's home on 12/10/2025.
