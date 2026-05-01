@@ -39,8 +39,10 @@ No extra sentences **between** the body and this paragraph except where a valida
 ## 3. End-of-note sequence (exact order — after the closing paragraph)
 
 1. The closing paragraph above  
-2. **Performance sentence** (locked): `The client's performance during the session was fair.`  
-   - Do **not** substitute *poor*, *below expectations*, *unsuccessful*, *limited*, *inadequate*, *minimal engagement*, or *regression* for this note product unless a future policy explicitly overrides this file.
+2. **Performance sentence** (locked template — server fills `N` from narrative program segment count for the session, aligned with replacement-program slots / collapsed segments):  
+   `The client completed N program(s) with varying levels of prompting and demonstrated successful responding in the majority of trials across skill acquisition and behavior reduction targets.`  
+   - Use **program** when N is 1 and **programs** when N is greater than 1.  
+   - Implementation: `artifacts/api-server/src/note-assembly.ts` (`buildPerformanceSentence`).
 3. **Next session sentence**:  
    - If a next session date is provided: `The next session is tentatively scheduled to take place at [POSSESSIVE_HOME] on [DATE].`  
    - `[POSSESSIVE_HOME]` = **`[FirstName]'s home`** (possessive per `englishPossessiveFirstName` in `note-assembly.ts`) when the client profile first name is present; otherwise **`the client's home`** (unchanged legacy wording).  
