@@ -45,21 +45,50 @@ export function sanitizeMaladaptiveBehaviorTargetsInput(
   return out;
 }
 
-/** Targets aligned to `behaviors` order; topography from `patchTargets` by first name match. */
+/** Targets aligned to `behaviors` order; topography from `patchTargets` by name match (exact, then case-insensitive). */
 export function orderTargetsToBehaviors(
   behaviors: string[],
   patchTargets: MaladaptiveBehaviorProfileEntry[],
 ): MaladaptiveBehaviorProfileEntry[] {
   const map = new Map<string, string | null>();
+  const mapByLower = new Map<string, string | null>();
   for (const t of patchTargets) {
     const k = t.name.trim();
-    if (!k || map.has(k)) continue;
-    map.set(k, t.topography ?? null);
+    if (!k) continue;
+    const v = t.topography ?? null;
+    if (!map.has(k)) map.set(k, v);
+    const kl = k.toLowerCase();
+    if (!mapByLower.has(kl)) mapByLower.set(kl, v);
   }
-  return behaviors.map((name) => ({
-    name,
-    topography: map.get(name.trim()) ?? null,
-  }));
+  return behaviors.map((name) => {
+    const t = name.trim();
+    return {
+      name,
+      topography: map.get(t) ?? mapByLower.get(t.toLowerCase()) ?? null,
+    };
+  });
+}
+
+/**
+ * Normalize stored `maladaptiveBehaviorTargets` from DB: array of `{ name, topography }`, or legacy
+ * record of behavior name → topography string.
+ */
+export function coerceStoredMaladaptiveTargetsFromUnknown(stored: unknown): MaladaptiveBehaviorProfileEntry[] {
+  if (Array.isArray(stored)) {
+    return sanitizeMaladaptiveBehaviorTargetsInput(stored);
+  }
+  if (stored !== null && typeof stored === "object" && !Array.isArray(stored)) {
+    const out: MaladaptiveBehaviorProfileEntry[] = [];
+    for (const [k, v] of Object.entries(stored as Record<string, unknown>)) {
+      const name = k.trim();
+      if (!name) continue;
+      const topography =
+        v === null || v === undefined ? null : clampTopography(String(v));
+      out.push({ name, topography });
+    }
+    return out;
+  }
+  return [];
 }
 
 /** Expand stored profile into one target row per `maladaptiveBehaviors` entry (null topography when missing). */
@@ -67,9 +96,9 @@ export function expandMaladaptiveTargetsFromProfile(
   profile: ClientProfileRow,
 ): MaladaptiveBehaviorProfileEntry[] {
   const behaviors = dedupePreserveOrder(trimNonEmptyStrings(profile.maladaptiveBehaviors ?? []));
-  const stored = profile.maladaptiveBehaviorTargets;
-  if (Array.isArray(stored) && stored.length > 0) {
-    return orderTargetsToBehaviors(behaviors, sanitizeMaladaptiveBehaviorTargetsInput(stored));
+  const coerced = coerceStoredMaladaptiveTargetsFromUnknown(profile.maladaptiveBehaviorTargets);
+  if (coerced.length > 0) {
+    return orderTargetsToBehaviors(behaviors, coerced);
   }
   return behaviors.map((name) => ({ name, topography: null }));
 }

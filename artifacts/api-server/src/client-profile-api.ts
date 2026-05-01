@@ -25,13 +25,14 @@ export type ClientProfilePublic = {
 };
 
 export function sanitizeClientProfileForApi(profile: ClientProfileRow): ClientProfilePublic {
+  const mal = expandMaladaptiveTargetsFromProfile(profile);
   return {
     firstName: profile.firstName,
     lastName: profile.lastName,
     dateOfBirth: profile.dateOfBirth,
     gender: profile.gender,
-    maladaptiveBehaviors: profile.maladaptiveBehaviors,
-    maladaptiveBehaviorTargets: expandMaladaptiveTargetsFromProfile(profile),
+    maladaptiveBehaviors: mal.map((t) => t.name),
+    maladaptiveBehaviorTargets: mal,
     replacementPrograms: profile.replacementPrograms,
     interventions: profile.interventions,
     assessmentFileName: profile.assessmentFileName ?? null,
