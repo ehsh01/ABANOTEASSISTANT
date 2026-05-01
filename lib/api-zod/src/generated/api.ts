@@ -230,6 +230,25 @@ export const ListClientsResponse = zod.object({
           dateOfBirth: zod.string(),
           gender: zod.string(),
           maladaptiveBehaviors: zod.array(zod.string()),
+          maladaptiveBehaviorTargets: zod
+            .array(
+              zod
+                .object({
+                  name: zod.string(),
+                  topography: zod
+                    .string()
+                    .nullable()
+                    .describe(
+                      "Operational definition; may be null when not entered.",
+                    ),
+                })
+                .describe(
+                  "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+                ),
+            )
+            .describe(
+              "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
+            ),
           replacementPrograms: zod.array(zod.string()),
           interventions: zod.array(zod.string()),
           assessmentFileName: zod.string().nullish(),
@@ -253,6 +272,24 @@ export const CreateClientBody = zod.object({
   assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
   assessmentFileName: zod.string().nullish(),
   maladaptiveBehaviors: zod.array(zod.string()),
+  maladaptiveBehaviorTargets: zod
+    .array(
+      zod
+        .object({
+          name: zod.string(),
+          topography: zod
+            .string()
+            .nullable()
+            .describe("Operational definition; may be null when not entered."),
+        })
+        .describe(
+          "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+        ),
+    )
+    .optional()
+    .describe(
+      "Optional. When sent, topographies are stored per behavior name; server aligns rows to `maladaptiveBehaviors`.\n",
+    ),
   replacementPrograms: zod.array(zod.string()),
   interventions: zod.array(zod.string()),
 });
@@ -273,6 +310,25 @@ export const CreateClientResponse = zod.object({
         dateOfBirth: zod.string(),
         gender: zod.string(),
         maladaptiveBehaviors: zod.array(zod.string()),
+        maladaptiveBehaviorTargets: zod
+          .array(
+            zod
+              .object({
+                name: zod.string(),
+                topography: zod
+                  .string()
+                  .nullable()
+                  .describe(
+                    "Operational definition; may be null when not entered.",
+                  ),
+              })
+              .describe(
+                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+              ),
+          )
+          .describe(
+            "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
+          ),
         replacementPrograms: zod.array(zod.string()),
         interventions: zod.array(zod.string()),
         assessmentFileName: zod.string().nullish(),
@@ -305,6 +361,25 @@ export const GetClientResponse = zod.object({
         dateOfBirth: zod.string(),
         gender: zod.string(),
         maladaptiveBehaviors: zod.array(zod.string()),
+        maladaptiveBehaviorTargets: zod
+          .array(
+            zod
+              .object({
+                name: zod.string(),
+                topography: zod
+                  .string()
+                  .nullable()
+                  .describe(
+                    "Operational definition; may be null when not entered.",
+                  ),
+              })
+              .describe(
+                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+              ),
+          )
+          .describe(
+            "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
+          ),
         replacementPrograms: zod.array(zod.string()),
         interventions: zod.array(zod.string()),
         assessmentFileName: zod.string().nullish(),
@@ -333,6 +408,24 @@ export const UpdateClientBody = zod.object({
     .optional(),
   assessmentFileName: zod.string().nullish(),
   maladaptiveBehaviors: zod.array(zod.string()).optional(),
+  maladaptiveBehaviorTargets: zod
+    .array(
+      zod
+        .object({
+          name: zod.string(),
+          topography: zod
+            .string()
+            .nullable()
+            .describe("Operational definition; may be null when not entered."),
+        })
+        .describe(
+          "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+        ),
+    )
+    .optional()
+    .describe(
+      "Optional. When sent without `maladaptiveBehaviors`, names are taken from these entries in order.\n",
+    ),
   replacementPrograms: zod.array(zod.string()).optional(),
   interventions: zod.array(zod.string()).optional(),
 });
@@ -353,6 +446,25 @@ export const UpdateClientResponse = zod.object({
         dateOfBirth: zod.string(),
         gender: zod.string(),
         maladaptiveBehaviors: zod.array(zod.string()),
+        maladaptiveBehaviorTargets: zod
+          .array(
+            zod
+              .object({
+                name: zod.string(),
+                topography: zod
+                  .string()
+                  .nullable()
+                  .describe(
+                    "Operational definition; may be null when not entered.",
+                  ),
+              })
+              .describe(
+                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+              ),
+          )
+          .describe(
+            "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
+          ),
         replacementPrograms: zod.array(zod.string()),
         interventions: zod.array(zod.string()),
         assessmentFileName: zod.string().nullish(),
@@ -393,6 +505,25 @@ export const UploadClientAssessmentDocumentResponse = zod.object({
         dateOfBirth: zod.string(),
         gender: zod.string(),
         maladaptiveBehaviors: zod.array(zod.string()),
+        maladaptiveBehaviorTargets: zod
+          .array(
+            zod
+              .object({
+                name: zod.string(),
+                topography: zod
+                  .string()
+                  .nullable()
+                  .describe(
+                    "Operational definition; may be null when not entered.",
+                  ),
+              })
+              .describe(
+                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+              ),
+          )
+          .describe(
+            "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
+          ),
         replacementPrograms: zod.array(zod.string()),
         interventions: zod.array(zod.string()),
         assessmentFileName: zod.string().nullish(),

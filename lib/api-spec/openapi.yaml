@@ -1109,6 +1109,22 @@ components:
         - success
         - data
 
+    MaladaptiveBehaviorProfileEntry:
+      type: object
+      description: >
+        Client-profile maladaptive target. `name` is the exact BIP/catalog label; `topography` is optional
+        RBT-authored operational text (what the behavior looks like for this learner).
+      properties:
+        name:
+          type: string
+        topography:
+          type: string
+          nullable: true
+          description: Operational definition; may be null when not entered.
+      required:
+        - name
+        - topography
+
     ClientProfile:
       type: object
       properties:
@@ -1124,6 +1140,12 @@ components:
           type: array
           items:
             type: string
+        maladaptiveBehaviorTargets:
+          type: array
+          items:
+            $ref: "#/components/schemas/MaladaptiveBehaviorProfileEntry"
+          description: >
+            One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.
         replacementPrograms:
           type: array
           items:
@@ -1141,6 +1163,7 @@ components:
         - dateOfBirth
         - gender
         - maladaptiveBehaviors
+        - maladaptiveBehaviorTargets
         - replacementPrograms
         - interventions
 
@@ -1169,6 +1192,12 @@ components:
           type: array
           items:
             type: string
+        maladaptiveBehaviorTargets:
+          type: array
+          items:
+            $ref: "#/components/schemas/MaladaptiveBehaviorProfileEntry"
+          description: >
+            Optional. When sent, topographies are stored per behavior name; server aligns rows to `maladaptiveBehaviors`.
         replacementPrograms:
           type: array
           items:
@@ -1213,6 +1242,12 @@ components:
           type: array
           items:
             type: string
+        maladaptiveBehaviorTargets:
+          type: array
+          items:
+            $ref: "#/components/schemas/MaladaptiveBehaviorProfileEntry"
+          description: >
+            Optional. When sent without `maladaptiveBehaviors`, names are taken from these entries in order.
         replacementPrograms:
           type: array
           items:

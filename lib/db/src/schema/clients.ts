@@ -11,6 +11,13 @@ import { z } from "zod/v4";
 import { abanote } from "./abanote";
 import { companiesTable } from "./companies";
 
+/** One maladaptive target from the client profile (BIP label + optional RBT-authored operational text). */
+export type MaladaptiveBehaviorProfileEntry = {
+  name: string;
+  /** Operational definition / topography for this exact catalog name; may be null when unset. */
+  topography: string | null;
+};
+
 /** Extended client fields stored in Postgres (UI wizard + edit). */
 export type ClientProfileRow = {
   firstName: string;
@@ -18,6 +25,11 @@ export type ClientProfileRow = {
   dateOfBirth: string;
   gender: string;
   maladaptiveBehaviors: string[];
+  /**
+   * Optional per-behavior topography; when stored, should align to `maladaptiveBehaviors` order (same names).
+   * Older rows may omit this field (treat as no saved topographies).
+   */
+  maladaptiveBehaviorTargets?: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms: string[];
   interventions: string[];
   assessmentFileName?: string;

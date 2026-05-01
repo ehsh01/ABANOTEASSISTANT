@@ -96,6 +96,7 @@ router.post(
       dateOfBirth: "",
       gender: "",
       maladaptiveBehaviors: [],
+      maladaptiveBehaviorTargets: [],
       replacementPrograms: [],
       interventions: [],
     };

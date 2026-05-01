@@ -171,12 +171,25 @@ export interface LoginResponse {
   error?: string | null;
 }
 
+/**
+ * Client-profile maladaptive target. `name` is the exact BIP/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).
+
+ */
+export interface MaladaptiveBehaviorProfileEntry {
+  name: string;
+  /** Operational definition; may be null when not entered. */
+  topography: string | null;
+}
+
 export interface ClientProfile {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
   gender: string;
   maladaptiveBehaviors: string[];
+  /** One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.
+   */
+  maladaptiveBehaviorTargets: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms: string[];
   interventions: string[];
   assessmentFileName?: string | null;
@@ -202,6 +215,9 @@ export interface CreateClientRequest {
   assessmentStatus: CreateClientRequestAssessmentStatus;
   assessmentFileName?: string | null;
   maladaptiveBehaviors: string[];
+  /** Optional. When sent, topographies are stored per behavior name; server aligns rows to `maladaptiveBehaviors`.
+   */
+  maladaptiveBehaviorTargets?: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms: string[];
   interventions: string[];
 }
@@ -226,6 +242,9 @@ export interface UpdateClientRequest {
   assessmentStatus?: UpdateClientRequestAssessmentStatus;
   assessmentFileName?: string | null;
   maladaptiveBehaviors?: string[];
+  /** Optional. When sent without `maladaptiveBehaviors`, names are taken from these entries in order.
+   */
+  maladaptiveBehaviorTargets?: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms?: string[];
   interventions?: string[];
 }

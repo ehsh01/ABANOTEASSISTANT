@@ -23,6 +23,7 @@ import {
   type ClientProfileRow,
 } from "@workspace/db/schema";
 import { clientRowToApiData } from "../client-profile-api";
+import { mergeMaladaptiveProfileFields } from "../client-profile-maladaptive";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -174,10 +175,22 @@ function profileFromNameFallback(name: string): ClientProfileRow {
     dateOfBirth: "",
     gender: "",
     maladaptiveBehaviors: [],
+    maladaptiveBehaviorTargets: [],
     replacementPrograms: [],
     interventions: [],
   };
 }
+
+const emptyMaladaptiveBase: ClientProfileRow = {
+  firstName: "",
+  lastName: "",
+  dateOfBirth: "",
+  gender: "",
+  maladaptiveBehaviors: [],
+  maladaptiveBehaviorTargets: [],
+  replacementPrograms: [],
+  interventions: [],
+};
 
 router.get("/clients", async (req, res) => {
   const companyId = req.companyId;
@@ -212,12 +225,18 @@ router.post("/clients", async (req, res) => {
     return;
   }
 
+  const mal = mergeMaladaptiveProfileFields({
+    base: emptyMaladaptiveBase,
+    behaviorsInput: body.maladaptiveBehaviors,
+    targetsInput: body.maladaptiveBehaviorTargets,
+  });
   const profile: ClientProfileRow = {
     firstName: body.firstName.trim(),
     lastName: body.lastName.trim(),
     dateOfBirth: body.dateOfBirth,
     gender: body.gender,
-    maladaptiveBehaviors: body.maladaptiveBehaviors,
+    maladaptiveBehaviors: mal.maladaptiveBehaviors,
+    maladaptiveBehaviorTargets: mal.maladaptiveBehaviorTargets,
     replacementPrograms: body.replacementPrograms,
     interventions: body.interventions,
     assessmentFileName: body.assessmentFileName ?? undefined,
@@ -584,13 +603,26 @@ router.patch("/clients/:clientId", async (req, res) => {
       body.assessmentFileName === null ? undefined : body.assessmentFileName;
   }
 
+  let maladaptiveBehaviors = base.maladaptiveBehaviors;
+  let maladaptiveBehaviorTargets = base.maladaptiveBehaviorTargets;
+  if (body.maladaptiveBehaviors !== undefined || body.maladaptiveBehaviorTargets !== undefined) {
+    const mal = mergeMaladaptiveProfileFields({
+      base,
+      behaviorsInput: body.maladaptiveBehaviors,
+      targetsInput: body.maladaptiveBehaviorTargets,
+    });
+    maladaptiveBehaviors = mal.maladaptiveBehaviors;
+    maladaptiveBehaviorTargets = mal.maladaptiveBehaviorTargets;
+  }
+
   const nextProfile: ClientProfileRow = {
     ...base,
     firstName: body.firstName?.trim() ?? base.firstName,
     lastName: body.lastName?.trim() ?? base.lastName,
     dateOfBirth: body.dateOfBirth ?? base.dateOfBirth,
     gender: body.gender ?? base.gender,
-    maladaptiveBehaviors: body.maladaptiveBehaviors ?? base.maladaptiveBehaviors,
+    maladaptiveBehaviors,
+    maladaptiveBehaviorTargets,
     replacementPrograms: body.replacementPrograms ?? base.replacementPrograms,
     interventions: body.interventions ?? base.interventions,
     assessmentFileName,

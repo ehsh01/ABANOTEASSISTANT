@@ -32,6 +32,7 @@ import {
   resolvedOpenAIModel,
   type NoteGenerationContext,
 } from "../openai-notes";
+import { maladaptiveBehaviorTargetsForNoteCatalog } from "../client-profile-maladaptive";
 import {
   approximateAgeYearsAtSession,
   maladaptiveBehaviorsCatalogForRotation,
@@ -453,6 +454,10 @@ router.post("/notes/generate", async (req, res) => {
     rawAssessmentSnapshot,
   );
   const behaviorCatalog = rotationResult.catalog;
+  const maladaptiveBehaviorTargetsForNote = maladaptiveBehaviorTargetsForNoteCatalog(
+    behaviorCatalog,
+    profile ?? undefined,
+  );
   const behaviorRotationSeed = randomUUID();
   const baseMaladaptiveForHour = maladaptiveBehaviorsForSessionHours(
     behaviorCatalog,
@@ -586,6 +591,7 @@ router.post("/notes/generate", async (req, res) => {
     hasEnvironmentalChanges: body.hasEnvironmentalChanges,
     environmentalChanges: body.environmentalChanges ?? "",
     maladaptiveBehaviors: behaviorCatalog,
+    maladaptiveBehaviorTargets: maladaptiveBehaviorTargetsForNote,
     maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
     interventions: profile?.interventions ?? [],
     replacementProgramsInOrder: replacementProgramsCatalog,
