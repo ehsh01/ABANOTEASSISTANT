@@ -4,7 +4,13 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon, UserPlus, Plus } from "lucide-react";
 import { format, parseISO, isValid } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
-import type { Client as ApiClient, Program, GenerateNoteRequest, AbcHintEntry } from "@workspace/api-client-react";
+import type {
+  Client as ApiClient,
+  Program,
+  GenerateNoteRequest,
+  AbcHintEntry,
+  ProgramTrialDataEntry,
+} from "@workspace/api-client-react";
 import { THERAPY_SETTINGS_ORDERED, isTherapySetting, type TherapySetting } from "@workspace/therapy-settings";
 import { ApiError } from "@workspace/api-client-react";
 import { useWizardStore, type WizardData } from "@/store/wizard-store";
@@ -105,7 +111,50 @@ function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | null {
       body.abcHints = cleaned;
     }
   }
+  if (data.programTrialData != null && Object.keys(data.programTrialData).length > 0) {
+    const clamped: NonNullable<GenerateNoteRequest["programTrialData"]> = {};
+    for (const [k, v] of Object.entries(data.programTrialData)) {
+      clamped[k] = normalizeProgramTrialEntry(v);
+    }
+    body.programTrialData = clamped;
+  }
   return body;
+}
+
+/** Wizard + generate request: total trials and per-trial indices are capped at 10. */
+const MAX_PROGRAM_TRIALS = 10;
+
+const TRIAL_TOTAL_CHOICES = Array.from({ length: MAX_PROGRAM_TRIALS }, (_, i) => i + 1);
+
+function normalizeProgramTrialEntry(
+  entry: Partial<ProgramTrialDataEntry> & { effectiveTrials?: number[] },
+): ProgramTrialDataEntry {
+  let count = entry.count ?? null;
+  if (count != null) {
+    if (!Number.isFinite(count) || !Number.isInteger(count)) {
+      count = null;
+    } else {
+      count = Math.min(MAX_PROGRAM_TRIALS, Math.max(1, count));
+    }
+  }
+  const cap = count ?? MAX_PROGRAM_TRIALS;
+  const effectiveTrials = [...(entry.effectiveTrials ?? [])]
+    .filter((t) => typeof t === "number" && Number.isInteger(t) && t >= 1 && t <= cap)
+    .sort((a, b) => a - b);
+  return { count, effectiveTrials };
+}
+
+function effectiveTrialsForSuccessCount(total: number, successCount: number): number[] {
+  if (total < 1 || successCount < 1) return [];
+  const k = Math.min(successCount, total, MAX_PROGRAM_TRIALS);
+  return Array.from({ length: k }, (_, i) => i + 1);
+}
+
+/** Keep in sync with `replacementProgramSlotCount` in `artifacts/api-server/src/note-validation.ts`. */
+function replacementProgramSlotCountWizard(sessionHours: number): number {
+  if (sessionHours <= 0) return 0;
+  if (sessionHours === 2) return 2;
+  return Math.floor(((sessionHours - 1) * 60) / 90) + 1;
 }
 
 // ─── Environmental change options ────────────────────────────────────────────
@@ -959,11 +1008,9 @@ function ProgramsMultiSelectCombobox({
   );
 }
 
-const TRIAL_COUNT_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-
 function Step6Programs() {
   const [, setLocation] = useLocation();
-  const { data, updateData, programTrialData, setProgramTrialCount, toggleProgramEffectiveTrial, clearProgramTrialData } = useWizardStore();
+  const { data, updateData } = useWizardStore();
   const {
     data: programsRes,
     isLoading,
@@ -991,11 +1038,33 @@ function Step6Programs() {
   const programs = programsRes?.data || [];
   const minRequired = 1;
   const selected = data.selectedReplacements || [];
+  const trialMap = data.programTrialData ?? {};
+
+  const updateProgramTrial = (programId: number, updater: (prev: ProgramTrialDataEntry) => ProgramTrialDataEntry) => {
+    const key = String(programId);
+    const prev: ProgramTrialDataEntry = trialMap[key] ?? { count: null, effectiveTrials: [] };
+    const entry = normalizeProgramTrialEntry(updater(prev));
+    const count = entry.count ?? null;
+    const effectiveTrials = [...entry.effectiveTrials].sort((a, b) => a - b);
+    const next = { ...trialMap };
+    const empty = (count == null || count < 1) && effectiveTrials.length === 0;
+    if (empty) {
+      delete next[key];
+    } else {
+      next[key] = { count: count != null && count >= 1 ? count : null, effectiveTrials };
+    }
+    updateData({ programTrialData: Object.keys(next).length > 0 ? next : undefined });
+  };
 
   const toggleProgram = (programId: number) => {
     if (selected.includes(programId)) {
-      updateData({ selectedReplacements: selected.filter((n) => n !== programId) });
-      clearProgramTrialData(programId);
+      const newSelected = selected.filter((n) => n !== programId);
+      const nextTrials = { ...trialMap };
+      delete nextTrials[String(programId)];
+      updateData({
+        selectedReplacements: newSelected,
+        programTrialData: Object.keys(nextTrials).length > 0 ? nextTrials : undefined,
+      });
     } else {
       updateData({ selectedReplacements: [...selected, programId] });
     }
@@ -1012,9 +1081,12 @@ function Step6Programs() {
       <div className="text-center mb-8">
         <h2 className="text-3xl font-display font-bold text-foreground">Replacement Programs</h2>
         <p className="text-muted-foreground mt-2">
-          Choose session targets for billing/documentation (at least one). For long sessions that mixed different
-          goals, pick every program you are documenting outcomes for here; use ABC Builder to map other linked
-          programs to specific hours without implying outcomes for those programs.
+          Choose session targets for billing/documentation (at least one). After you set session length: a{" "}
+          <strong>2-hour</strong> visit uses <strong>one program per hour</strong>; <strong>3+ hours</strong> use
+          about <strong>one program per 90 minutes</strong> of session time (calendar hours in the same window share a
+          program unless ABC Builder assigns a different program to an hour). Pick enough selected programs to cover
+          those slots when you want only session targets—otherwise the server may pull other assessment-linked
+          programs for empty slots.
         </p>
       </div>
 
@@ -1060,36 +1132,48 @@ function Step6Programs() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {programs.map(program => {
+        {programs.map((program) => {
           const isSelected = selected.includes(program.id);
-          const trialInfo = programTrialData[program.id] ?? { count: null, effectiveTrials: [] };
-          const trialCount = trialInfo.count;
-          const effectiveTrials = trialInfo.effectiveTrials;
-
+          const trialEntry = normalizeProgramTrialEntry(
+            trialMap[String(program.id)] ?? { count: null, effectiveTrials: [] },
+          );
+          const trialCount = typeof trialEntry.count === "number" && trialEntry.count >= 1 ? trialEntry.count : null;
+          const successSelectValue =
+            trialCount == null
+              ? ""
+              : trialEntry.effectiveTrials.length === 0
+                ? ""
+                : String(trialEntry.effectiveTrials.length);
           return (
             <div
               key={program.id}
               onClick={() => toggleProgram(program.id)}
               role="button"
               tabIndex={0}
-              onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') toggleProgram(program.id); }}
+              onKeyDown={(e) => {
+                if (e.key === " " || e.key === "Enter") toggleProgram(program.id);
+              }}
               className={cn(
                 "flex flex-col text-left p-4 rounded-xl border-2 transition-all hover-elevate cursor-pointer select-none",
-                isSelected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/30"
+                isSelected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-primary/30",
               )}
             >
               <div className="flex items-start">
-                <div className={cn(
-                  "mt-0.5 w-5 h-5 rounded flex-shrink-0 flex items-center justify-center mr-3 border transition-colors",
-                  isSelected ? "bg-primary border-primary text-white" : "border-muted-foreground/30 bg-background"
-                )}>
+                <div
+                  className={cn(
+                    "mt-0.5 w-5 h-5 rounded flex-shrink-0 flex items-center justify-center mr-3 border transition-colors",
+                    isSelected ? "bg-primary border-primary text-white" : "border-muted-foreground/30 bg-background",
+                  )}
+                >
                   {isSelected && <Check className="w-3.5 h-3.5 pop-icon-white" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="font-semibold text-foreground text-sm flex items-center gap-2">
                     {program.name}
-                    {program.type === 'supplemental' && (
-                      <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">Supp</span>
+                    {program.type === "supplemental" && (
+                      <span className="text-[10px] uppercase tracking-wider font-bold px-1.5 py-0.5 rounded bg-secondary text-secondary-foreground">
+                        Supp
+                      </span>
                     )}
                   </div>
                   {program.description && (
@@ -1100,75 +1184,87 @@ function Step6Programs() {
 
               {isSelected && (
                 <div
-                  className="mt-3 space-y-2"
+                  className="mt-3 space-y-3 border-t border-border/60 pt-3 text-left cursor-default"
                   onClick={(e) => e.stopPropagation()}
+                  onKeyDown={(e) => e.stopPropagation()}
+                  role="group"
+                  aria-label="Trial counts for this program"
                 >
-                  <div className="flex gap-2">
-                    {/* Left: total number of trials */}
-                    <div className="flex flex-col gap-1 flex-1">
-                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                        # of trials
-                      </label>
-                      <select
-                        value={trialCount ?? ""}
-                        onChange={(e) => {
-                          const val = e.target.value === "" ? null : parseInt(e.target.value, 10);
-                          setProgramTrialCount(program.id, val);
-                        }}
-                        className="text-sm font-semibold rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all cursor-pointer w-full"
-                      >
-                        <option value="">—</option>
-                        {TRIAL_COUNT_OPTIONS.map(n => (
-                          <option key={n} value={n}>{n}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {/* Right: which trials were effective */}
-                    <div className="flex flex-col gap-1 flex-1">
-                      <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
-                        Effective trials
-                      </label>
-                      <select
-                        value=""
-                        disabled={!trialCount}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value, 10);
-                          if (!isNaN(val)) toggleProgramEffectiveTrial(program.id, val);
-                        }}
-                        className="text-sm font-semibold rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary transition-all cursor-pointer w-full disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        <option value="" disabled>
-                          {trialCount ? "Add trial…" : "Set # first"}
+                  <div className="space-y-1">
+                    <label htmlFor={`trial-count-${program.id}`} className="text-xs font-semibold text-muted-foreground">
+                      How many trials did you run?
+                    </label>
+                    <select
+                      id={`trial-count-${program.id}`}
+                      value={trialCount ?? ""}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        if (raw === "") {
+                          updateProgramTrial(program.id, () => ({ count: null, effectiveTrials: [] }));
+                          return;
+                        }
+                        const capped = Math.min(MAX_PROGRAM_TRIALS, parseInt(raw, 10));
+                        if (Number.isNaN(capped) || capped < 1) {
+                          updateProgramTrial(program.id, () => ({ count: null, effectiveTrials: [] }));
+                          return;
+                        }
+                        updateProgramTrial(program.id, (prev) => {
+                          const prevSuccess = prev.effectiveTrials.length;
+                          const nextSuccess =
+                            prevSuccess > 0 ? Math.min(prevSuccess, capped) : 0;
+                          return {
+                            count: capped,
+                            effectiveTrials: effectiveTrialsForSuccessCount(capped, nextSuccess),
+                          };
+                        });
+                      }}
+                      className="w-full text-sm rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                    >
+                      <option value="">Optional</option>
+                      {TRIAL_TOTAL_CHOICES.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
                         </option>
-                        {Array.from({ length: trialCount ?? 0 }, (_, i) => i + 1).map(n => (
-                          <option key={n} value={n}>
-                            {effectiveTrials.includes(n) ? `✓ Trial ${n}` : `Trial ${n}`}
+                      ))}
+                    </select>
+                  </div>
+
+                  {trialCount != null && (
+                    <div className="space-y-1">
+                      <label htmlFor={`trial-success-${program.id}`} className="text-xs font-semibold text-muted-foreground">
+                        How many met criterion?
+                      </label>
+                      <select
+                        id={`trial-success-${program.id}`}
+                        value={successSelectValue}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          if (raw === "") {
+                            updateProgramTrial(program.id, () => ({
+                              count: trialCount,
+                              effectiveTrials: [],
+                            }));
+                            return;
+                          }
+                          const s = parseInt(raw, 10);
+                          if (Number.isNaN(s) || s < 0 || s > trialCount) return;
+                          updateProgramTrial(program.id, () => ({
+                            count: trialCount,
+                            effectiveTrials: effectiveTrialsForSuccessCount(trialCount, s),
+                          }));
+                        }}
+                        className="w-full text-sm rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+                      >
+                        <option value="">Optional</option>
+                        {Array.from({ length: trialCount + 1 }, (_, s) => (
+                          <option key={s} value={String(s)}>
+                            {s === 0 ? "0 (none)" : s}
                           </option>
                         ))}
                       </select>
-                    </div>
-                  </div>
-
-                  {/* Chips showing selected effective trials */}
-                  {effectiveTrials.length > 0 && (
-                    <div className="flex flex-wrap gap-1 pt-0.5">
-                      {effectiveTrials.map(n => (
-                        <span
-                          key={n}
-                          className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20"
-                        >
-                          Trial {n}
-                          <button
-                            type="button"
-                            onClick={() => toggleProgramEffectiveTrial(program.id, n)}
-                            className="text-primary/60 hover:text-primary transition-colors leading-none"
-                            aria-label={`Remove trial ${n}`}
-                          >
-                            ×
-                          </button>
-                        </span>
-                      ))}
+                      <p className="text-[11px] text-muted-foreground">
+                        Up to {MAX_PROGRAM_TRIALS} trials. Trials 1 through the count you pick are treated as successful (e.g. 3 of 5 → trials 1, 2, 3).
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1496,6 +1592,10 @@ function Step8Review() {
     </div>
   );
 
+  const sh = data.sessionHours ?? 0;
+  const slotNeed = replacementProgramSlotCountWizard(sh);
+  const progCount = data.selectedReplacements?.length ?? 0;
+
   return (
     <div className="space-y-8 max-w-2xl mx-auto">
       <div className="text-center mb-8">
@@ -1510,7 +1610,21 @@ function Step8Review() {
         <Item label="Present" value={data.presentPeople?.length ? data.presentPeople.join(", ") : "Therapist only"} />
         <Item label={t.wizard.therapySettingReviewLabel} value={data.therapySetting ?? "—"} />
         <Item label="Env Changes" value={data.hasEnvironmentalChanges ? "Yes" : "No"} />
-        <Item label="Programs" value={<span className="text-primary">{data.selectedReplacements?.length} selected</span>} />
+        <Item
+          label="Programs"
+          value={
+            <span className="text-primary">
+              {progCount} selected
+              {sh > 0 ? (
+                <span className="block text-xs text-muted-foreground font-normal mt-1">
+                  Server uses {slotNeed} replacement-program slot{slotNeed === 1 ? "" : "s"} for this duration
+                  {progCount < slotNeed ? " (fewer than recommended — extra slots may use other linked programs)" : ""}
+                  .
+                </span>
+              ) : null}
+            </span>
+          }
+        />
         <Item label="Next Session" value={formatSessionDate(data.nextSessionDate, "Not scheduled")} />
       </div>
     </div>
@@ -1521,7 +1635,7 @@ function Step8Review() {
 
 export default function Wizard() {
   const [, setLocation] = useLocation();
-  const { step, setStep, data, setGeneratedNote, resetWizardForm, programTrialData } = useWizardStore();
+  const { step, setStep, data, setGeneratedNote, resetWizardForm } = useWizardStore();
   const generateMutation = useGenerateSessionNote();
   const t = useT();
   const [generateError, setGenerateError] = useState<string | null>(null);
@@ -1560,10 +1674,7 @@ export default function Wizard() {
       );
       return;
     }
-    const payloadWithTrialData = Object.keys(programTrialData).length > 0
-      ? { ...payload, programTrialData } as typeof payload
-      : payload;
-    generateMutation.mutate(payloadWithTrialData, {
+    generateMutation.mutate(payload, {
       onSuccess: (res) => {
         setGeneratedNote(res.data, res.warnings);
         setLocation("/result");

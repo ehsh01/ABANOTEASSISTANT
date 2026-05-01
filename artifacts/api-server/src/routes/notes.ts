@@ -32,14 +32,17 @@ import {
   resolvedOpenAIModel,
   type NoteGenerationContext,
 } from "../openai-notes";
+import { maladaptiveBehaviorTargetsForNoteCatalog } from "../client-profile-maladaptive";
 import {
   approximateAgeYearsAtSession,
   maladaptiveBehaviorsCatalogForRotation,
   maladaptiveBehaviorsForSessionHours,
   replacementProgramAssignmentsForSessionHours,
   replacementProgramPoolForAutoAssignment,
+  replacementProgramSlotCount,
   validateCaregiverMentionRule,
   validateClinicalBodyCompliance,
+  collapseHourlyNoteNarrativeToSegments,
   type NoteComplianceContext,
 } from "../note-validation";
 import {
@@ -53,6 +56,40 @@ import { truncateAssessmentTextForNoteContext } from "../assessment-extract";
 import { resolveAbcHintsForNoteGeneration } from "../abc-hints";
 import { isLanguageMaladaptiveBehaviorLabel } from "../language-maladaptive-behavior";
 import { ABC_ACTIVITY_ANTECEDENT_CATALOG } from "../abc-activity-antecedent-catalog";
+
+/**
+ * Per-hour trial summary for the AI when `programTrialData` has a usable entry for that hour's program id.
+ * Indices outside 1..count are dropped; duplicates removed; list sorted ascending.
+ */
+function buildTherapistTrialSummaryForReplacementHour(params: {
+  sessionHours: number;
+  programIdForHour: (number | null)[];
+  rbtActionsOnlyOutcomeForHour: boolean[];
+  programTrialData:
+    | Record<string, { count: number | null; effectiveTrials: number[] }>
+    | undefined;
+}): NoteGenerationContext["therapistTrialSummaryForReplacementHour"] {
+  const { sessionHours, programIdForHour, rbtActionsOnlyOutcomeForHour, programTrialData } = params;
+  return Array.from({ length: sessionHours }, (_, h) => {
+    if (rbtActionsOnlyOutcomeForHour[h]) return null;
+    const id = programIdForHour[h];
+    if (id == null) return null;
+    const entry = programTrialData?.[String(id)];
+    if (!entry) return null;
+    const count = entry.count;
+    const trials = entry.effectiveTrials;
+    if (count == null || trials.length === 0) return null;
+    if (typeof count !== "number" || !Number.isFinite(count) || !Number.isInteger(count) || count < 1) {
+      return null;
+    }
+    const inRange = trials.filter(
+      (t): t is number => typeof t === "number" && Number.isInteger(t) && t >= 1 && t <= count,
+    );
+    if (inRange.length === 0) return null;
+    const uniqueSorted = [...new Set(inRange)].sort((a, b) => a - b);
+    return { totalTrials: count, successfulTrialNumbers: uniqueSorted };
+  });
+}
 
 /** Map OpenAI / transport failures to actionable text (distinct from "missing OPENAI_API_KEY" 503). */
 function formatOpenAINoteGenerationError(err: unknown): string {
@@ -417,6 +454,10 @@ router.post("/notes/generate", async (req, res) => {
     rawAssessmentSnapshot,
   );
   const behaviorCatalog = rotationResult.catalog;
+  const maladaptiveBehaviorTargetsForNote = maladaptiveBehaviorTargetsForNoteCatalog(
+    behaviorCatalog,
+    profile ?? undefined,
+  );
   const behaviorRotationSeed = randomUUID();
   const baseMaladaptiveForHour = maladaptiveBehaviorsForSessionHours(
     behaviorCatalog,
@@ -459,36 +500,42 @@ router.post("/notes/generate", async (req, res) => {
     idToName: idToNameForPrograms,
     selectedIdSet: selectedIdSet,
     explicitProgramIdByHour,
-    sessionSelectionCoversHours: body.selectedReplacements.length >= body.sessionHours,
+    sessionSelectionCoversHours:
+      body.selectedReplacements.length >= replacementProgramSlotCount(body.sessionHours),
   });
 
-  const trialPercentageForReplacementHour: (number | null)[] = (() => {
-    const raw = body.programTrialPercentages;
-    if (!raw || Object.keys(raw).length === 0) {
-      return Array.from({ length: body.sessionHours }, () => null);
-    }
-    return programIdForHour.map((id, h) => {
-      if (id == null || rbtActionsOnlyOutcomeForHour[h]) return null;
-      const v = raw[String(id)];
-      if (typeof v !== "number" || Number.isNaN(v) || v < 10 || v > 100) return null;
-      if (v % 10 !== 0) return null;
-      return v;
-    });
-  })();
-  const languageMaladaptiveEpisodeForHour = maladaptiveBehaviorForHour.map((b) =>
+  const therapistTrialSummaryHourly = buildTherapistTrialSummaryForReplacementHour({
+    sessionHours: body.sessionHours,
+    programIdForHour,
+    rbtActionsOnlyOutcomeForHour,
+    programTrialData: body.programTrialData,
+  });
+  const languageMaladaptiveEpisodeHourly = maladaptiveBehaviorForHour.map((b) =>
     isLanguageMaladaptiveBehaviorLabel(b),
   );
 
-  const complianceCtxBase: NoteComplianceContext = {
+  const narrativeCollapsed = collapseHourlyNoteNarrativeToSegments({
     sessionHours: body.sessionHours,
-    replacementProgramsInOrder: replacementProgramsCatalog,
+    maladaptiveBehaviorForHour,
     replacementProgramForHour,
     rbtActionsOnlyOutcomeForHour,
-    maladaptiveBehaviors: behaviorCatalog,
-    maladaptiveBehaviorForHour,
     activityAntecedentForHour,
-    languageMaladaptiveEpisodeForHour,
+    languageMaladaptiveEpisodeForHour: languageMaladaptiveEpisodeHourly,
+    therapistTrialSummaryForReplacementHour: therapistTrialSummaryHourly,
+  });
+
+  const complianceCtxBase: NoteComplianceContext = {
+    sessionHours: body.sessionHours,
+    narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
+    replacementProgramsInOrder: replacementProgramsCatalog,
+    replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
+    rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
+    maladaptiveBehaviors: behaviorCatalog,
+    maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
+    activityAntecedentForHour: narrativeCollapsed.activityAntecedentForHour,
+    languageMaladaptiveEpisodeForHour: narrativeCollapsed.languageMaladaptiveEpisodeForHour,
     interventions: profile?.interventions ?? [],
+    therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
     clientAgeYears,
     presentPeople: body.presentPeople,
   };
@@ -537,25 +584,27 @@ router.post("/notes/generate", async (req, res) => {
     firstName: "the client",
     gender: profile?.gender,
     sessionHours: body.sessionHours,
+    narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
     sessionDate: body.sessionDate,
     therapySetting: body.therapySetting,
     presentPeople: body.presentPeople,
     hasEnvironmentalChanges: body.hasEnvironmentalChanges,
     environmentalChanges: body.environmentalChanges ?? "",
     maladaptiveBehaviors: behaviorCatalog,
-    maladaptiveBehaviorForHour,
+    maladaptiveBehaviorTargets: maladaptiveBehaviorTargetsForNote,
+    maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
     interventions: profile?.interventions ?? [],
     replacementProgramsInOrder: replacementProgramsCatalog,
-    replacementProgramForHour,
-    rbtActionsOnlyOutcomeForHour,
+    replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
+    rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
     requestNonce: behaviorRotationSeed,
     clientAgeYears,
     ageBand: client.ageBand,
     clientAssessmentTextExcerpt,
     assessmentReferenceFileName: profile?.assessmentFileName ?? null,
-    activityAntecedentForHour,
-    languageMaladaptiveEpisodeForHour,
-    trialPercentageForReplacementHour,
+    activityAntecedentForHour: narrativeCollapsed.activityAntecedentForHour,
+    languageMaladaptiveEpisodeForHour: narrativeCollapsed.languageMaladaptiveEpisodeForHour,
+    therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
   };
 
   let clinicalBody: string;
@@ -595,14 +644,15 @@ router.post("/notes/generate", async (req, res) => {
     warnings.push(`Full-note check: ${issue}`);
   }
 
-  if (body.selectedReplacements.length < body.sessionHours) {
+  const programSlotNeed = replacementProgramSlotCount(body.sessionHours);
+  if (body.selectedReplacements.length < programSlotNeed) {
     warnings.push(
-      "Fewer programs selected than session hours: hours without “Program this hour” in ABC Builder are auto-filled from the client's assessment/profile replacement-program list (selected session targets first, then other assessment-listed programs). Use ABC Builder to override any hour.",
+      `Fewer programs selected than replacement-program slots for this session (${programSlotNeed} slot(s) for ${body.sessionHours} hour(s); 2-hour sessions use one program per hour, longer sessions use about one program per 90 minutes). Slots without a matching selection in ABC Builder are auto-filled from the client's assessment/profile replacement-program list (selected session targets first, then other assessment-listed programs). Use ABC Builder to override any hour.`,
     );
   }
-  if (rbtActionsOnlyOutcomeForHour.some(Boolean)) {
+  if (narrativeCollapsed.rbtActionsOnlyOutcomeForHour.some(Boolean)) {
     warnings.push(
-      "One or more hours document a replacement program that was not selected for this session; the narrative for those hours must describe RBT implementation only (no valenced client outcome for that program).",
+      "One or more narrative segments document a replacement program that was not selected for this session; the narrative for those segments must describe RBT implementation only (no valenced client outcome for that program).",
     );
   }
 

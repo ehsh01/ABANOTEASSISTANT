@@ -171,12 +171,25 @@ export interface LoginResponse {
   error?: string | null;
 }
 
+/**
+ * Client-profile maladaptive target. `name` is the exact BIP/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).
+
+ */
+export interface MaladaptiveBehaviorProfileEntry {
+  name: string;
+  /** Operational definition; may be null when not entered. */
+  topography: string | null;
+}
+
 export interface ClientProfile {
   firstName: string;
   lastName: string;
   dateOfBirth: string;
   gender: string;
   maladaptiveBehaviors: string[];
+  /** One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.
+   */
+  maladaptiveBehaviorTargets: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms: string[];
   interventions: string[];
   assessmentFileName?: string | null;
@@ -202,6 +215,9 @@ export interface CreateClientRequest {
   assessmentStatus: CreateClientRequestAssessmentStatus;
   assessmentFileName?: string | null;
   maladaptiveBehaviors: string[];
+  /** Optional. When sent, topographies are stored per behavior name; server aligns rows to `maladaptiveBehaviors`.
+   */
+  maladaptiveBehaviorTargets?: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms: string[];
   interventions: string[];
 }
@@ -226,6 +242,9 @@ export interface UpdateClientRequest {
   assessmentStatus?: UpdateClientRequestAssessmentStatus;
   assessmentFileName?: string | null;
   maladaptiveBehaviors?: string[];
+  /** Optional. When sent without `maladaptiveBehaviors`, names are taken from these entries in order.
+   */
+  maladaptiveBehaviorTargets?: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms?: string[];
   interventions?: string[];
 }
@@ -360,12 +379,21 @@ export const GenerateNoteRequestTherapySetting = {
   "Community/School": "Community/School",
 } as const;
 
+export interface ProgramTrialDataEntry {
+  /** Total trials conducted for this replacement program when known; when null, the server does not inject therapist-entered trial-count prose (use default quantified language).
+   */
+  count: number | null;
+  /** 1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty, therapist-entered trial-detail prose is not used for that program.
+   */
+  effectiveTrials: number[];
+}
+
 /**
- * Optional. Maps replacement program id to the percent of trials in which the client met criterion for that program (values 10–100; client sends multiples of 10). JSON object keys are program ids as strings. Only programs listed here should mention that percentage in the clinical narrative for the hour that uses that program; omitting a program means no percentage line for it. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+ * Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is non-null and `effectiveTrials` is non-empty for a program assigned to an hour, the clinical narrative for that hour must incorporate that exact count and those trial indices in natural prose for the verbatim replacement program name. When `count` is null or `effectiveTrials` is empty, use default quantified replacement-program language for that hour. Ignored for hours that document RBT-only replacement programs (not selected session targets).
 
  */
-export type GenerateNoteRequestProgramTrialPercentages = {
-  [key: string]: number;
+export type GenerateNoteRequestProgramTrialData = {
+  [key: string]: ProgramTrialDataEntry;
 };
 
 /**
@@ -404,9 +432,9 @@ export interface GenerateNoteRequest {
    * @maxItems 8
    */
   abcHints?: AbcHintEntry[];
-  /** Optional. Maps replacement program id to the percent of trials in which the client met criterion for that program (values 10–100; client sends multiples of 10). JSON object keys are program ids as strings. Only programs listed here should mention that percentage in the clinical narrative for the hour that uses that program; omitting a program means no percentage line for it. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+  /** Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is non-null and `effectiveTrials` is non-empty for a program assigned to an hour, the clinical narrative for that hour must incorporate that exact count and those trial indices in natural prose for the verbatim replacement program name. When `count` is null or `effectiveTrials` is empty, use default quantified replacement-program language for that hour. Ignored for hours that document RBT-only replacement programs (not selected session targets).
    */
-  programTrialPercentages?: GenerateNoteRequestProgramTrialPercentages;
+  programTrialData?: GenerateNoteRequestProgramTrialData;
 }
 
 export type AbcActivityAntecedentListResponseData = {

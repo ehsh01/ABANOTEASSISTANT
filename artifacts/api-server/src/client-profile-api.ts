@@ -1,4 +1,9 @@
-import type { Client, ClientProfileRow } from "@workspace/db/schema";
+import type {
+  Client,
+  ClientProfileRow,
+  MaladaptiveBehaviorProfileEntry,
+} from "@workspace/db/schema";
+import { expandMaladaptiveTargetsFromProfile } from "./client-profile-maladaptive";
 
 type AssessmentStatus = "uploaded" | "processing" | "ready" | "missing";
 
@@ -9,6 +14,8 @@ export type ClientProfilePublic = {
   dateOfBirth: string;
   gender: string;
   maladaptiveBehaviors: string[];
+  /** Per-behavior topography aligned to `maladaptiveBehaviors` names (null when not set). */
+  maladaptiveBehaviorTargets: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms: string[];
   interventions: string[];
   assessmentFileName?: string | null;
@@ -21,6 +28,7 @@ export function sanitizeClientProfileForApi(profile: ClientProfileRow): ClientPr
     dateOfBirth: profile.dateOfBirth,
     gender: profile.gender,
     maladaptiveBehaviors: profile.maladaptiveBehaviors,
+    maladaptiveBehaviorTargets: expandMaladaptiveTargetsFromProfile(profile),
     replacementPrograms: profile.replacementPrograms,
     interventions: profile.interventions,
     assessmentFileName: profile.assessmentFileName ?? null,
