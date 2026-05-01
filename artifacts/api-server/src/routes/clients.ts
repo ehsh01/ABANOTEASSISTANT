@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Response } from "express";
 import { and, eq, inArray, ne } from "drizzle-orm";
 import {
   ListClientsResponse,
@@ -214,39 +214,80 @@ async function selectLinkedProgramsForClient(
     );
 }
 
+function isMissingBehaviorApprovalsTable(err: unknown): boolean {
+  const code =
+    typeof err === "object" && err !== null && "code" in err
+      ? String((err as { code: unknown }).code)
+      : "";
+  const msg = err instanceof Error ? err.message : String(err);
+  return (
+    code === "42P01" ||
+    (/does not exist/i.test(msg) && /client_behavior_program_approvals/i.test(msg))
+  );
+}
+
 /** Remove approvals when the behavior or program link no longer exists on the client. */
 async function pruneClientBehaviorProgramApprovals(
   clientId: number,
   profile: ClientProfileRow,
 ): Promise<void> {
-  const allowedBehaviors = new Set(
-    expandMaladaptiveTargetsFromProfile(profile).map((t) => t.name),
-  );
-  const linkRows = await db
-    .select({ programId: clientProgramsTable.programId })
-    .from(clientProgramsTable)
-    .where(eq(clientProgramsTable.clientId, clientId));
-  const allowedProgramIds = new Set(linkRows.map((r) => r.programId));
+  try {
+    const allowedBehaviors = new Set(
+      expandMaladaptiveTargetsFromProfile(profile).map((t) => t.name),
+    );
+    const linkRows = await db
+      .select({ programId: clientProgramsTable.programId })
+      .from(clientProgramsTable)
+      .where(eq(clientProgramsTable.clientId, clientId));
+    const allowedProgramIds = new Set(linkRows.map((r) => r.programId));
 
-  const existing = await db
-    .select({
-      id: clientBehaviorProgramApprovalsTable.id,
-      behaviorLabel: clientBehaviorProgramApprovalsTable.behaviorLabel,
-      programId: clientBehaviorProgramApprovalsTable.programId,
-    })
-    .from(clientBehaviorProgramApprovalsTable)
-    .where(eq(clientBehaviorProgramApprovalsTable.clientId, clientId));
+    const existing = await db
+      .select({
+        id: clientBehaviorProgramApprovalsTable.id,
+        behaviorLabel: clientBehaviorProgramApprovalsTable.behaviorLabel,
+        programId: clientBehaviorProgramApprovalsTable.programId,
+      })
+      .from(clientBehaviorProgramApprovalsTable)
+      .where(eq(clientBehaviorProgramApprovalsTable.clientId, clientId));
 
-  const staleIds = existing
-    .filter(
-      (r) =>
-        !allowedBehaviors.has(r.behaviorLabel) || !allowedProgramIds.has(r.programId),
-    )
-    .map((r) => r.id);
-  if (staleIds.length === 0) return;
-  await db
-    .delete(clientBehaviorProgramApprovalsTable)
-    .where(inArray(clientBehaviorProgramApprovalsTable.id, staleIds));
+    const staleIds = existing
+      .filter(
+        (r) =>
+          !allowedBehaviors.has(r.behaviorLabel) || !allowedProgramIds.has(r.programId),
+      )
+      .map((r) => r.id);
+    if (staleIds.length === 0) return;
+    await db
+      .delete(clientBehaviorProgramApprovalsTable)
+      .where(inArray(clientBehaviorProgramApprovalsTable.id, staleIds));
+  } catch (err) {
+    if (isMissingBehaviorApprovalsTable(err)) {
+      console.warn("[pruneClientBehaviorProgramApprovals] table missing; skip until migration");
+      return;
+    }
+    throw err;
+  }
+}
+
+/** Postgres `undefined_table` or driver message when `drizzle-kit push` was not run. */
+function sendBehaviorApprovalsDbError(res: Response, err: unknown, context: string): void {
+  const msg = err instanceof Error ? err.message : String(err);
+  const missingTable = isMissingBehaviorApprovalsTable(err);
+  console.error(`[${context}]`, err);
+  if (missingTable) {
+    res.status(503).json({
+      success: false,
+      error:
+        "The behavior–program approvals table is missing in this database. On a machine with DATABASE_URL set to this environment, run: cd lib/db && pnpm exec drizzle-kit push --config ./drizzle.config.ts --force",
+      messages: [],
+    });
+    return;
+  }
+  res.status(500).json({
+    success: false,
+    error: "Database error while processing behavior program approvals.",
+    messages: [msg.length > 400 ? `${msg.slice(0, 400)}…` : msg],
+  });
 }
 
 function resolveCanonicalBehaviorLabel(rawPath: string, profile: ClientProfileRow): string | null {
@@ -661,22 +702,28 @@ router.get("/clients/:clientId/behavior-program-approvals", async (req, res) => 
     return;
   }
 
-  const rows = await db
-    .select({
-      behaviorLabel: clientBehaviorProgramApprovalsTable.behaviorLabel,
-      programId: clientBehaviorProgramApprovalsTable.programId,
-      programName: programsTable.name,
-      matchType: clientBehaviorProgramApprovalsTable.matchType,
-      requiresBcbaReview: clientBehaviorProgramApprovalsTable.requiresBcbaReview,
-    })
-    .from(clientBehaviorProgramApprovalsTable)
-    .innerJoin(programsTable, eq(clientBehaviorProgramApprovalsTable.programId, programsTable.id))
-    .where(
-      and(
-        eq(clientBehaviorProgramApprovalsTable.clientId, params.clientId),
-        eq(programsTable.companyId, companyId),
-      ),
-    );
+  let rows;
+  try {
+    rows = await db
+      .select({
+        behaviorLabel: clientBehaviorProgramApprovalsTable.behaviorLabel,
+        programId: clientBehaviorProgramApprovalsTable.programId,
+        programName: programsTable.name,
+        matchType: clientBehaviorProgramApprovalsTable.matchType,
+        requiresBcbaReview: clientBehaviorProgramApprovalsTable.requiresBcbaReview,
+      })
+      .from(clientBehaviorProgramApprovalsTable)
+      .innerJoin(programsTable, eq(clientBehaviorProgramApprovalsTable.programId, programsTable.id))
+      .where(
+        and(
+          eq(clientBehaviorProgramApprovalsTable.clientId, params.clientId),
+          eq(programsTable.companyId, companyId),
+        ),
+      );
+  } catch (err) {
+    sendBehaviorApprovalsDbError(res, err, "GET /clients/:id/behavior-program-approvals");
+    return;
+  }
 
   const data = ListClientBehaviorProgramApprovalsResponse.parse({
     success: true,
@@ -817,45 +864,51 @@ router.put("/clients/:clientId/behaviors/:behaviorLabel/approved-programs", asyn
   }
 
   const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx
-      .delete(clientBehaviorProgramApprovalsTable)
+  let saved;
+  try {
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(clientBehaviorProgramApprovalsTable)
+        .where(
+          and(
+            eq(clientBehaviorProgramApprovalsTable.clientId, params.clientId),
+            eq(clientBehaviorProgramApprovalsTable.behaviorLabel, canonicalBehavior),
+          ),
+        );
+      for (const row of byPid.values()) {
+        await tx.insert(clientBehaviorProgramApprovalsTable).values({
+          clientId: params.clientId,
+          behaviorLabel: canonicalBehavior,
+          programId: row.programId,
+          matchType: row.matchType,
+          requiresBcbaReview: row.requiresBcbaReview,
+          createdAt: now,
+          updatedAt: now,
+        });
+      }
+    });
+
+    saved = await db
+      .select({
+        behaviorLabel: clientBehaviorProgramApprovalsTable.behaviorLabel,
+        programId: clientBehaviorProgramApprovalsTable.programId,
+        programName: programsTable.name,
+        matchType: clientBehaviorProgramApprovalsTable.matchType,
+        requiresBcbaReview: clientBehaviorProgramApprovalsTable.requiresBcbaReview,
+      })
+      .from(clientBehaviorProgramApprovalsTable)
+      .innerJoin(programsTable, eq(clientBehaviorProgramApprovalsTable.programId, programsTable.id))
       .where(
         and(
           eq(clientBehaviorProgramApprovalsTable.clientId, params.clientId),
           eq(clientBehaviorProgramApprovalsTable.behaviorLabel, canonicalBehavior),
+          eq(programsTable.companyId, companyId),
         ),
       );
-    for (const row of byPid.values()) {
-      await tx.insert(clientBehaviorProgramApprovalsTable).values({
-        clientId: params.clientId,
-        behaviorLabel: canonicalBehavior,
-        programId: row.programId,
-        matchType: row.matchType,
-        requiresBcbaReview: row.requiresBcbaReview,
-        createdAt: now,
-        updatedAt: now,
-      });
-    }
-  });
-
-  const saved = await db
-    .select({
-      behaviorLabel: clientBehaviorProgramApprovalsTable.behaviorLabel,
-      programId: clientBehaviorProgramApprovalsTable.programId,
-      programName: programsTable.name,
-      matchType: clientBehaviorProgramApprovalsTable.matchType,
-      requiresBcbaReview: clientBehaviorProgramApprovalsTable.requiresBcbaReview,
-    })
-    .from(clientBehaviorProgramApprovalsTable)
-    .innerJoin(programsTable, eq(clientBehaviorProgramApprovalsTable.programId, programsTable.id))
-    .where(
-      and(
-        eq(clientBehaviorProgramApprovalsTable.clientId, params.clientId),
-        eq(clientBehaviorProgramApprovalsTable.behaviorLabel, canonicalBehavior),
-        eq(programsTable.companyId, companyId),
-      ),
-    );
+  } catch (err) {
+    sendBehaviorApprovalsDbError(res, err, "PUT /clients/:id/behaviors/.../approved-programs");
+    return;
+  }
 
   const data = PutClientBehaviorApprovedProgramsResponse.parse({
     success: true,
