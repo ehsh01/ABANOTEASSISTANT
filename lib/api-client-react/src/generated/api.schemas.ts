@@ -181,6 +181,50 @@ export interface MaladaptiveBehaviorProfileEntry {
   topography: string | null;
 }
 
+export type AssessmentStructuredReplacementProgramFunctionsItem =
+  (typeof AssessmentStructuredReplacementProgramFunctionsItem)[keyof typeof AssessmentStructuredReplacementProgramFunctionsItem];
+
+export const AssessmentStructuredReplacementProgramFunctionsItem = {
+  escape: "escape",
+  attention: "attention",
+  tangible: "tangible",
+  automatic: "automatic",
+} as const;
+
+export type AssessmentStructuredBehaviorToReplacementsMap = {
+  [key: string]: string[];
+};
+
+export type AssessmentStructuredBehaviorToInterventionsMap = {
+  [key: string]: string[];
+};
+
+/**
+ * Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.
+
+ */
+export type AssessmentStructuredReplacementProgramFunctions = {
+  [key: string]: AssessmentStructuredReplacementProgramFunctionsItem[];
+};
+
+/**
+ * Exact strings authorized on the client assessment. Maps must only reference keys/values present in the arrays.
+
+ */
+export interface AssessmentStructured {
+  behaviors: string[];
+  replacement_programs: string[];
+  interventions: string[];
+  behavior_to_replacements_map: AssessmentStructuredBehaviorToReplacementsMap;
+  behavior_to_interventions_map: AssessmentStructuredBehaviorToInterventionsMap;
+  /** Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.
+   */
+  replacement_program_functions?: AssessmentStructuredReplacementProgramFunctions;
+  /** Optional interventions allowed when a behavior has no behavior_to_interventions_map entry (must be subset of interventions).
+   */
+  general_interventions?: string[];
+}
+
 export interface ClientProfile {
   firstName: string;
   lastName: string;
@@ -193,6 +237,54 @@ export interface ClientProfile {
   replacementPrograms: string[];
   interventions: string[];
   assessmentFileName?: string | null;
+  /** Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST /notes/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST /clients/{clientId}/recommendations uses them for audit-safe suggestions.
+   */
+  assessmentStructured?: AssessmentStructured | null;
+}
+
+export type ClinicalRecommendationRequestFunction =
+  (typeof ClinicalRecommendationRequestFunction)[keyof typeof ClinicalRecommendationRequestFunction];
+
+export const ClinicalRecommendationRequestFunction = {
+  escape: "escape",
+  attention: "attention",
+  tangible: "tangible",
+  automatic: "automatic",
+} as const;
+
+export type ClinicalRecommendationRequestSeverityLevel =
+  (typeof ClinicalRecommendationRequestSeverityLevel)[keyof typeof ClinicalRecommendationRequestSeverityLevel];
+
+export const ClinicalRecommendationRequestSeverityLevel = {
+  low: "low",
+  moderate: "moderate",
+  high: "high",
+} as const;
+
+export interface ClinicalRecommendationRequest {
+  /** Exact maladaptive behavior label from assessmentStructured.behaviors */
+  behavior: string;
+  behavior_topography?: string;
+  operational_definition?: string;
+  function: ClinicalRecommendationRequestFunction;
+  severity_level: ClinicalRecommendationRequestSeverityLevel;
+  is_dangerous: boolean;
+}
+
+export interface ClinicalRecommendationData {
+  behavior: string;
+  function: string;
+  replacement_programs: string[];
+  recommended_interventions: string[];
+  risk_level: string;
+  notes: string;
+}
+
+export interface ClinicalRecommendationResponse {
+  success: boolean;
+  data: ClinicalRecommendationData | null;
+  error: string | null;
+  messages?: string[];
 }
 
 export type CreateClientRequestAssessmentStatus =
@@ -220,6 +312,7 @@ export interface CreateClientRequest {
   maladaptiveBehaviorTargets?: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms: string[];
   interventions: string[];
+  assessmentStructured?: AssessmentStructured | null;
 }
 
 export type UpdateClientRequestAssessmentStatus =
@@ -247,6 +340,7 @@ export interface UpdateClientRequest {
   maladaptiveBehaviorTargets?: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms?: string[];
   interventions?: string[];
+  assessmentStructured?: AssessmentStructured | null;
 }
 
 export type ClientAssessmentStatus =
@@ -335,6 +429,63 @@ export type DeleteClientProgramResponseData = {
 export interface DeleteClientProgramResponse {
   success: boolean;
   data: DeleteClientProgramResponseData;
+  error?: string | null;
+}
+
+export type BehaviorProgramMatchType =
+  (typeof BehaviorProgramMatchType)[keyof typeof BehaviorProgramMatchType];
+
+export const BehaviorProgramMatchType = {
+  Direct_Match: "Direct Match",
+  "Function-Based_Match": "Function-Based Match",
+  Safety_Skill_Match: "Safety Skill Match",
+  General_Skill_Support: "General Skill Support",
+  Requires_BCBA_Review: "Requires BCBA Review",
+} as const;
+
+export interface BehaviorProgramApprovalItem {
+  behaviorLabel: string;
+  programId: number;
+  programName: string;
+  matchType: BehaviorProgramMatchType;
+  requiresBcbaReview: boolean;
+}
+
+export type ListBehaviorProgramApprovalsResponseData = {
+  items: BehaviorProgramApprovalItem[];
+};
+
+export interface ListBehaviorProgramApprovalsResponse {
+  success: boolean;
+  data: ListBehaviorProgramApprovalsResponseData;
+  error?: string | null;
+}
+
+export interface ReplacementProgramListResponse {
+  success: boolean;
+  data: Program[];
+  error?: string | null;
+}
+
+export interface PutBehaviorApprovedProgramInput {
+  programId: number;
+  matchType: BehaviorProgramMatchType;
+  requiresBcbaReview?: boolean;
+}
+
+export interface PutBehaviorApprovedProgramsRequest {
+  /** @maxItems 200 */
+  programs: PutBehaviorApprovedProgramInput[];
+}
+
+export type PutBehaviorApprovedProgramsResponseData = {
+  behaviorLabel: string;
+  items: BehaviorProgramApprovalItem[];
+};
+
+export interface PutBehaviorApprovedProgramsResponse {
+  success: boolean;
+  data: PutBehaviorApprovedProgramsResponseData;
   error?: string | null;
 }
 

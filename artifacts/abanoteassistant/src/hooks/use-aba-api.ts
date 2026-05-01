@@ -3,6 +3,8 @@ import type {
   ClientListResponse,
   ClientDetailResponse,
   ProgramListResponse,
+  ListBehaviorProgramApprovalsResponse,
+  ReplacementProgramListResponse,
   GenerateNoteRequest,
   GenerateNoteResponse,
   NoteListResponse,
@@ -13,12 +15,17 @@ import type {
   DeleteClientProgramResponse,
   UpdateClientProgramBody,
   UpdateClientProgramResponse,
+  PutBehaviorApprovedProgramsRequest,
+  PutBehaviorApprovedProgramsResponse,
   AbcActivityAntecedentListResponse,
 } from "@workspace/api-client-react";
 import {
   listClients,
   getClient,
   listClientPrograms,
+  listClientBehaviorProgramApprovals,
+  listClientReplacementPrograms,
+  putClientBehaviorApprovedPrograms,
   listNotes,
   getNote,
   generateNote,
@@ -56,6 +63,48 @@ export function useClientPrograms(clientId: number | undefined) {
     queryKey: ["/api/clients", clientId, "programs", token],
     enabled: !!token && clientId !== undefined && clientId !== null,
     queryFn: async (): Promise<ProgramListResponse> => listClientPrograms(clientId!),
+  });
+}
+
+export function useClientBehaviorProgramApprovals(clientId: number | undefined) {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: ["/api/clients", clientId, "behavior-program-approvals", token],
+    enabled: !!token && clientId !== undefined && clientId !== null,
+    queryFn: async (): Promise<ListBehaviorProgramApprovalsResponse> =>
+      listClientBehaviorProgramApprovals(clientId!),
+  });
+}
+
+export function useClientReplacementProgramsList(clientId: number | undefined) {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: ["/api/clients", clientId, "replacement-programs", token],
+    enabled: !!token && clientId !== undefined && clientId !== null,
+    queryFn: async (): Promise<ReplacementProgramListResponse> =>
+      listClientReplacementPrograms(clientId!),
+  });
+}
+
+export function usePutClientBehaviorApprovedPrograms() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (vars: {
+      clientId: number;
+      behaviorLabel: string;
+      data: PutBehaviorApprovedProgramsRequest;
+    }): Promise<PutBehaviorApprovedProgramsResponse> =>
+      putClientBehaviorApprovedPrograms(
+        vars.clientId,
+        encodeURIComponent(vars.behaviorLabel),
+        vars.data,
+      ),
+    onSuccess: (_res, vars) => {
+      queryClient.invalidateQueries({
+        queryKey: ["/api/clients", vars.clientId, "behavior-program-approvals"],
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/clients", vars.clientId] });
+    },
   });
 }
 
@@ -123,6 +172,12 @@ export function useUpdateClientProgram() {
       updateClientProgram(vars.clientId, vars.programId, vars.data),
     onSuccess: (_res, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/clients", vars.clientId, "programs"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/clients", vars.clientId, "replacement-programs"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/clients", vars.clientId, "behavior-program-approvals"],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/clients", vars.clientId] });
     },
   });
@@ -138,6 +193,12 @@ export function useDeleteClientProgram() {
       deleteClientProgram(vars.clientId, vars.programId),
     onSuccess: (_res, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/clients", vars.clientId, "programs"] });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/clients", vars.clientId, "replacement-programs"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["/api/clients", vars.clientId, "behavior-program-approvals"],
+      });
       queryClient.invalidateQueries({ queryKey: ["/api/clients", vars.clientId] });
     },
   });

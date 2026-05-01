@@ -435,6 +435,60 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /clients/{clientId}/recommendations:
+    post:
+      operationId: createClientClinicalRecommendation
+      tags: [clients]
+      summary: Recommend programs and interventions from structured assessment only
+      description: >
+        Uses `profile.assessmentStructured` on the client. Does not invent labels: outputs are subsets of
+        assessment allow-lists, filtered by FBA function when `replacement_program_functions` is populated.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ClinicalRecommendationRequest"
+      responses:
+        "200":
+          description: Recommendation or structured error in body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClinicalRecommendationResponse"
+        "400":
+          description: Invalid request body
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Missing or invalid structured assessment on profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /clients/{clientId}/programs:
     get:
       operationId: listClientPrograms
@@ -556,6 +610,130 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Client or program link not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clients/{clientId}/behavior-program-approvals:
+    get:
+      operationId: listClientBehaviorProgramApprovals
+      tags: [clients]
+      summary: List maladaptive-behavior to replacement-program approvals for a client
+      description: >
+        Returns rows linking each profile maladaptive behavior label to approved replacement `programs`
+        (same IDs as GET /clients/{clientId}/programs). Empty when none configured; the note wizard then
+        does not restrict programs by behavior.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Approval rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListBehaviorProgramApprovalsResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clients/{clientId}/replacement-programs:
+    get:
+      operationId: listClientReplacementPrograms
+      tags: [clients]
+      summary: List replacement programs linked to the client (same data as /programs without sessionHours)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of programs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplacementProgramListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clients/{clientId}/behaviors/{behaviorLabel}/approved-programs:
+    put:
+      operationId: putClientBehaviorApprovedPrograms
+      tags: [clients]
+      summary: Replace approved replacement programs for one maladaptive behavior
+      description: >
+        `behaviorLabel` must be URL-encoded (e.g. `encodeURIComponent` in the browser). Replaces all
+        approvals for this client + behavior with the provided list. Each `programId` must be linked to
+        the client via GET /clients/{clientId}/programs.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: behaviorLabel
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutBehaviorApprovedProgramsRequest"
+      responses:
+        "200":
+          description: Saved approvals for this behavior
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PutBehaviorApprovedProgramsResponse"
+        "400":
+          description: Invalid body or unknown program for client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found or behavior not on client profile
           content:
             application/json:
               schema:
@@ -1157,6 +1335,13 @@ components:
         assessmentFileName:
           type: string
           nullable: true
+        assessmentStructured:
+          $ref: "#/components/schemas/AssessmentStructured"
+          nullable: true
+          description: >
+            Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST /notes/generate
+            intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and
+            POST /clients/{clientId}/recommendations uses them for audit-safe suggestions.
       required:
         - firstName
         - lastName
@@ -1166,6 +1351,128 @@ components:
         - maladaptiveBehaviorTargets
         - replacementPrograms
         - interventions
+
+    AssessmentStructured:
+      type: object
+      description: >
+        Exact strings authorized on the client assessment. Maps must only reference keys/values present in the arrays.
+      required:
+        - behaviors
+        - replacement_programs
+        - interventions
+        - behavior_to_replacements_map
+        - behavior_to_interventions_map
+      properties:
+        behaviors:
+          type: array
+          items:
+            type: string
+        replacement_programs:
+          type: array
+          items:
+            type: string
+        interventions:
+          type: array
+          items:
+            type: string
+        behavior_to_replacements_map:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        behavior_to_interventions_map:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+        replacement_program_functions:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+              enum: [escape, attention, tangible, automatic]
+          description: >
+            Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.
+        general_interventions:
+          type: array
+          items:
+            type: string
+          description: >
+            Optional interventions allowed when a behavior has no behavior_to_interventions_map entry (must be subset of interventions).
+
+    ClinicalRecommendationRequest:
+      type: object
+      required:
+        - behavior
+        - function
+        - severity_level
+        - is_dangerous
+      properties:
+        behavior:
+          type: string
+          description: Exact maladaptive behavior label from assessmentStructured.behaviors
+        behavior_topography:
+          type: string
+        operational_definition:
+          type: string
+        function:
+          type: string
+          enum: [escape, attention, tangible, automatic]
+        severity_level:
+          type: string
+          enum: [low, moderate, high]
+        is_dangerous:
+          type: boolean
+
+    ClinicalRecommendationData:
+      type: object
+      required:
+        - behavior
+        - function
+        - replacement_programs
+        - recommended_interventions
+        - risk_level
+        - notes
+      properties:
+        behavior:
+          type: string
+        function:
+          type: string
+        replacement_programs:
+          type: array
+          items:
+            type: string
+        recommended_interventions:
+          type: array
+          items:
+            type: string
+        risk_level:
+          type: string
+        notes:
+          type: string
+
+    ClinicalRecommendationResponse:
+      type: object
+      required:
+        - success
+        - data
+        - error
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/ClinicalRecommendationData"
+          nullable: true
+        error:
+          type: string
+          nullable: true
+        messages:
+          type: array
+          items:
+            type: string
 
     CreateClientRequest:
       type: object
@@ -1206,6 +1513,9 @@ components:
           type: array
           items:
             type: string
+        assessmentStructured:
+          $ref: "#/components/schemas/AssessmentStructured"
+          nullable: true
       required:
         - firstName
         - lastName
@@ -1256,6 +1566,9 @@ components:
           type: array
           items:
             type: string
+        assessmentStructured:
+          $ref: "#/components/schemas/AssessmentStructured"
+          nullable: true
 
     Client:
       type: object
@@ -1395,6 +1708,121 @@ components:
           required:
             - clientId
             - programId
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    BehaviorProgramMatchType:
+      type: string
+      enum:
+        - Direct Match
+        - Function-Based Match
+        - Safety Skill Match
+        - General Skill Support
+        - Requires BCBA Review
+
+    BehaviorProgramApprovalItem:
+      type: object
+      properties:
+        behaviorLabel:
+          type: string
+        programId:
+          type: integer
+        programName:
+          type: string
+        matchType:
+          $ref: "#/components/schemas/BehaviorProgramMatchType"
+        requiresBcbaReview:
+          type: boolean
+      required:
+        - behaviorLabel
+        - programId
+        - programName
+        - matchType
+        - requiresBcbaReview
+
+    ListBehaviorProgramApprovalsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/BehaviorProgramApprovalItem"
+          required:
+            - items
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    ReplacementProgramListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Program"
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    PutBehaviorApprovedProgramInput:
+      type: object
+      properties:
+        programId:
+          type: integer
+        matchType:
+          $ref: "#/components/schemas/BehaviorProgramMatchType"
+        requiresBcbaReview:
+          type: boolean
+          default: false
+      required:
+        - programId
+        - matchType
+
+    PutBehaviorApprovedProgramsRequest:
+      type: object
+      properties:
+        programs:
+          type: array
+          items:
+            $ref: "#/components/schemas/PutBehaviorApprovedProgramInput"
+          maxItems: 200
+      required:
+        - programs
+
+    PutBehaviorApprovedProgramsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            behaviorLabel:
+              type: string
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/BehaviorProgramApprovalItem"
+          required:
+            - behaviorLabel
+            - items
         error:
           type: string
           nullable: true

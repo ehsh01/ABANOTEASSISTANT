@@ -167,8 +167,9 @@ export default function ClientDetail() {
   const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
 
   const behaviors = p?.maladaptiveBehaviors ?? [];
+  const targets = p?.maladaptiveBehaviorTargets ?? [];
   const behaviorTopographyMap = Object.fromEntries(
-    (p?.maladaptiveBehaviorTargets ?? []).map((e) => [e.name, e.topography ?? ""])
+    targets.map((e) => [e.name, (e.topography ?? "").trim()])
   );
   const replacements = p?.replacementPrograms ?? [];
   const interventions = p?.interventions ?? [];
@@ -408,16 +409,32 @@ export default function ClientDetail() {
                   <p className="text-sm text-[#877870] italic">{t.clientDetail.noBehaviors}</p>
                 ) : (
                   <div className="space-y-2">
-                    {behaviors.map((behavior) => {
-                      const topo = behaviorTopographyMap[behavior];
+                    {behaviors.map((behavior, idx) => {
+                      const topo =
+                        behaviorTopographyMap[behavior]?.trim() ||
+                        targets[idx]?.topography?.trim() ||
+                        "";
                       return (
-                        <div key={behavior} className="rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] px-4 py-3">
-                          <p className="text-sm font-semibold text-[#2D2523]">{behavior}</p>
-                          {topo ? (
-                            <p className="text-xs text-[#877870] mt-1 leading-relaxed">{topo}</p>
-                          ) : (
-                            <p className="text-xs text-[#877870]/50 mt-1 italic">No topography entered</p>
-                          )}
+                        <div
+                          key={`${behavior}-${idx}`}
+                          className="rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] px-4 py-3"
+                        >
+                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                            <span className="text-sm font-semibold text-[#2D2523]">{behavior}</span>
+                            {topo ? (
+                              <>
+                                <span className="text-[#877870] text-xs shrink-0" aria-hidden>
+                                  ·
+                                </span>
+                                <span className="text-xs text-[#877870] leading-relaxed min-w-0 flex-1">
+                                  <span className="font-medium text-[#877870]/90 not-italic">Topography: </span>
+                                  {topo}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-xs text-[#877870]/50 italic">No topography entered</span>
+                            )}
+                          </div>
                         </div>
                       );
                     })}

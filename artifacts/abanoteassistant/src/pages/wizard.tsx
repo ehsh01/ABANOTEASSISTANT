@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Check, AlertCircle, Wand2, Loader2, X, ChevronsUpDown, CalendarIcon, UserPlus, Plus } from "lucide-react";
@@ -17,6 +17,7 @@ import { useWizardStore, type WizardData } from "@/store/wizard-store";
 import {
   useClients,
   useClientPrograms,
+  useClientBehaviorProgramApprovals,
   useGenerateSessionNote,
   useAbcActivityAntecedents,
   useClient,
@@ -1292,6 +1293,7 @@ function StepAbcBuilder() {
   const { data: activitiesRes, isLoading: activitiesLoading } = useAbcActivityAntecedents();
   const { data: clientRes } = useClient(data.clientId);
   const { data: programsRes, isLoading: programsLoading } = useClientPrograms(data.clientId);
+  const { data: approvalsRes } = useClientBehaviorProgramApprovals(data.clientId);
 
   const activities = activitiesRes?.data?.activities ?? [];
   const maladaptiveBehaviors: string[] = clientRes?.data?.profile?.maladaptiveBehaviors ?? [];
@@ -1307,6 +1309,29 @@ function StepAbcBuilder() {
           (p) => selectedIds.includes(p.id) || assessmentProgramNames.has(p.name.trim()),
         )
       : linkedPrograms;
+
+  const approvalItems = approvalsRes?.data?.items ?? [];
+  const programIdsByBehavior = useMemo(() => {
+    const m = new Map<string, Set<number>>();
+    for (const it of approvalItems) {
+      const key = it.behaviorLabel.trim();
+      if (!m.has(key)) m.set(key, new Set());
+      m.get(key)!.add(it.programId);
+    }
+    return m;
+  }, [approvalItems]);
+
+  function approvedProgramIdsForBehavior(behavior: string | null | undefined): Set<number> | null {
+    if (!behavior?.trim()) return null;
+    const b = behavior.trim();
+    if (programIdsByBehavior.size === 0) return null;
+    for (const [k, set] of programIdsByBehavior.entries()) {
+      if (k === b || k.toLowerCase() === b.toLowerCase()) {
+        return set.size > 0 ? set : null;
+      }
+    }
+    return null;
+  }
 
   useEffect(() => {
     const want = Math.min(sessionHours, 8);
@@ -1394,6 +1419,11 @@ function StepAbcBuilder() {
             const pid = row.replacementProgramId;
             const rbtOnly =
               typeof pid === "number" && Number.isFinite(pid) && !selectedIds.includes(pid);
+            const strictApproved = approvedProgramIdsForBehavior(row.maladaptiveBehavior);
+            const programsForRowPicker =
+              strictApproved !== null
+                ? programsForHourPicker.filter((p) => strictApproved.has(p.id))
+                : programsForHourPicker;
             return (
               <div
                 key={i}
@@ -1425,7 +1455,7 @@ function StepAbcBuilder() {
                     </SelectTrigger>
                     <SelectContent className="max-h-[min(60vh,22rem)]">
                       <SelectItem value="__auto__">Automatic (rotate session targets)</SelectItem>
-                      {programsForHourPicker.map((p) => (
+                      {programsForRowPicker.map((p) => (
                         <SelectItem key={p.id} value={String(p.id)}>
                           {p.name}
                           {selectedIds.includes(p.id) ? "" : " — RBT actions only"}
@@ -1433,6 +1463,13 @@ function StepAbcBuilder() {
                       ))}
                     </SelectContent>
                   </Select>
+                  {strictApproved !== null && programsForRowPicker.length === 0 && row.maladaptiveBehavior && (
+                    <p className="text-xs text-amber-600 mt-1.5">
+                      No replacement programs are approved for this behavior in client setup. Link programs under
+                      Clients → Edit behaviors → Approved Programs for This Behavior, or clear the maladaptive behavior
+                      to use the full program list.
+                    </p>
+                  )}
                   {rbtOnly && (
                     <p className="text-xs text-muted-foreground mt-1.5">
                       This program is not a selected session target; the narrative will use RBT-action wording only for

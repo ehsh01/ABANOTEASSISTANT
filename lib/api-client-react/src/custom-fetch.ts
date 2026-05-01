@@ -149,9 +149,26 @@ function buildErrorMessage(response: Response, data: unknown): string {
     getStringField(data, "error_description") ??
     getStringField(data, "error");
 
+  const messagesField =
+    data && typeof data === "object" && Array.isArray((data as Record<string, unknown>).messages)
+      ? ((data as Record<string, unknown>).messages as unknown[])
+      : null;
+  const firstApiMessage =
+    messagesField &&
+    messagesField.length > 0 &&
+    typeof messagesField[0] === "string" &&
+    messagesField[0].trim()
+      ? truncate(messagesField[0].trim(), 220)
+      : undefined;
+
   if (title && detail) return `${prefix}: ${title} — ${detail}`;
   if (detail) return `${prefix}: ${detail}`;
-  if (message) return `${prefix}: ${message}`;
+  if (message) {
+    if (firstApiMessage && !message.includes(firstApiMessage)) {
+      return `${prefix}: ${message} — ${firstApiMessage}`;
+    }
+    return `${prefix}: ${message}`;
+  }
   if (title) return `${prefix}: ${title}`;
 
   return prefix;

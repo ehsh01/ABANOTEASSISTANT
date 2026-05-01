@@ -252,6 +252,41 @@ export const ListClientsResponse = zod.object({
           replacementPrograms: zod.array(zod.string()),
           interventions: zod.array(zod.string()),
           assessmentFileName: zod.string().nullish(),
+          assessmentStructured: zod
+            .object({
+              behaviors: zod.array(zod.string()),
+              replacement_programs: zod.array(zod.string()),
+              interventions: zod.array(zod.string()),
+              behavior_to_replacements_map: zod.record(
+                zod.string(),
+                zod.array(zod.string()),
+              ),
+              behavior_to_interventions_map: zod.record(
+                zod.string(),
+                zod.array(zod.string()),
+              ),
+              replacement_program_functions: zod
+                .record(
+                  zod.string(),
+                  zod.array(
+                    zod.enum(["escape", "attention", "tangible", "automatic"]),
+                  ),
+                )
+                .optional()
+                .describe(
+                  "Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.\n",
+                ),
+              general_interventions: zod
+                .array(zod.string())
+                .optional()
+                .describe(
+                  "Optional interventions allowed when a behavior has no behavior_to_interventions_map entry (must be subset of interventions).\n",
+                ),
+            })
+            .nullish()
+            .describe(
+              "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+            ),
         })
         .nullish(),
     }),
@@ -292,6 +327,39 @@ export const CreateClientBody = zod.object({
     ),
   replacementPrograms: zod.array(zod.string()),
   interventions: zod.array(zod.string()),
+  assessmentStructured: zod
+    .object({
+      behaviors: zod.array(zod.string()),
+      replacement_programs: zod.array(zod.string()),
+      interventions: zod.array(zod.string()),
+      behavior_to_replacements_map: zod.record(
+        zod.string(),
+        zod.array(zod.string()),
+      ),
+      behavior_to_interventions_map: zod.record(
+        zod.string(),
+        zod.array(zod.string()),
+      ),
+      replacement_program_functions: zod
+        .record(
+          zod.string(),
+          zod.array(zod.enum(["escape", "attention", "tangible", "automatic"])),
+        )
+        .optional()
+        .describe(
+          "Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.\n",
+        ),
+      general_interventions: zod
+        .array(zod.string())
+        .optional()
+        .describe(
+          "Optional interventions allowed when a behavior has no behavior_to_interventions_map entry (must be subset of interventions).\n",
+        ),
+    })
+    .nullish()
+    .describe(
+      "Exact strings authorized on the client assessment. Maps must only reference keys\/values present in the arrays.\n",
+    ),
 });
 
 export const CreateClientResponse = zod.object({
@@ -332,6 +400,41 @@ export const CreateClientResponse = zod.object({
         replacementPrograms: zod.array(zod.string()),
         interventions: zod.array(zod.string()),
         assessmentFileName: zod.string().nullish(),
+        assessmentStructured: zod
+          .object({
+            behaviors: zod.array(zod.string()),
+            replacement_programs: zod.array(zod.string()),
+            interventions: zod.array(zod.string()),
+            behavior_to_replacements_map: zod.record(
+              zod.string(),
+              zod.array(zod.string()),
+            ),
+            behavior_to_interventions_map: zod.record(
+              zod.string(),
+              zod.array(zod.string()),
+            ),
+            replacement_program_functions: zod
+              .record(
+                zod.string(),
+                zod.array(
+                  zod.enum(["escape", "attention", "tangible", "automatic"]),
+                ),
+              )
+              .optional()
+              .describe(
+                "Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.\n",
+              ),
+            general_interventions: zod
+              .array(zod.string())
+              .optional()
+              .describe(
+                "Optional interventions allowed when a behavior has no behavior_to_interventions_map entry (must be subset of interventions).\n",
+              ),
+          })
+          .nullish()
+          .describe(
+            "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+          ),
       })
       .nullish(),
   }),
@@ -383,6 +486,41 @@ export const GetClientResponse = zod.object({
         replacementPrograms: zod.array(zod.string()),
         interventions: zod.array(zod.string()),
         assessmentFileName: zod.string().nullish(),
+        assessmentStructured: zod
+          .object({
+            behaviors: zod.array(zod.string()),
+            replacement_programs: zod.array(zod.string()),
+            interventions: zod.array(zod.string()),
+            behavior_to_replacements_map: zod.record(
+              zod.string(),
+              zod.array(zod.string()),
+            ),
+            behavior_to_interventions_map: zod.record(
+              zod.string(),
+              zod.array(zod.string()),
+            ),
+            replacement_program_functions: zod
+              .record(
+                zod.string(),
+                zod.array(
+                  zod.enum(["escape", "attention", "tangible", "automatic"]),
+                ),
+              )
+              .optional()
+              .describe(
+                "Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.\n",
+              ),
+            general_interventions: zod
+              .array(zod.string())
+              .optional()
+              .describe(
+                "Optional interventions allowed when a behavior has no behavior_to_interventions_map entry (must be subset of interventions).\n",
+              ),
+          })
+          .nullish()
+          .describe(
+            "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+          ),
       })
       .nullish(),
   }),
@@ -428,6 +566,39 @@ export const UpdateClientBody = zod.object({
     ),
   replacementPrograms: zod.array(zod.string()).optional(),
   interventions: zod.array(zod.string()).optional(),
+  assessmentStructured: zod
+    .object({
+      behaviors: zod.array(zod.string()),
+      replacement_programs: zod.array(zod.string()),
+      interventions: zod.array(zod.string()),
+      behavior_to_replacements_map: zod.record(
+        zod.string(),
+        zod.array(zod.string()),
+      ),
+      behavior_to_interventions_map: zod.record(
+        zod.string(),
+        zod.array(zod.string()),
+      ),
+      replacement_program_functions: zod
+        .record(
+          zod.string(),
+          zod.array(zod.enum(["escape", "attention", "tangible", "automatic"])),
+        )
+        .optional()
+        .describe(
+          "Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.\n",
+        ),
+      general_interventions: zod
+        .array(zod.string())
+        .optional()
+        .describe(
+          "Optional interventions allowed when a behavior has no behavior_to_interventions_map entry (must be subset of interventions).\n",
+        ),
+    })
+    .nullish()
+    .describe(
+      "Exact strings authorized on the client assessment. Maps must only reference keys\/values present in the arrays.\n",
+    ),
 });
 
 export const UpdateClientResponse = zod.object({
@@ -468,6 +639,41 @@ export const UpdateClientResponse = zod.object({
         replacementPrograms: zod.array(zod.string()),
         interventions: zod.array(zod.string()),
         assessmentFileName: zod.string().nullish(),
+        assessmentStructured: zod
+          .object({
+            behaviors: zod.array(zod.string()),
+            replacement_programs: zod.array(zod.string()),
+            interventions: zod.array(zod.string()),
+            behavior_to_replacements_map: zod.record(
+              zod.string(),
+              zod.array(zod.string()),
+            ),
+            behavior_to_interventions_map: zod.record(
+              zod.string(),
+              zod.array(zod.string()),
+            ),
+            replacement_program_functions: zod
+              .record(
+                zod.string(),
+                zod.array(
+                  zod.enum(["escape", "attention", "tangible", "automatic"]),
+                ),
+              )
+              .optional()
+              .describe(
+                "Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.\n",
+              ),
+            general_interventions: zod
+              .array(zod.string())
+              .optional()
+              .describe(
+                "Optional interventions allowed when a behavior has no behavior_to_interventions_map entry (must be subset of interventions).\n",
+              ),
+          })
+          .nullish()
+          .describe(
+            "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+          ),
       })
       .nullish(),
   }),
@@ -527,10 +733,83 @@ export const UploadClientAssessmentDocumentResponse = zod.object({
         replacementPrograms: zod.array(zod.string()),
         interventions: zod.array(zod.string()),
         assessmentFileName: zod.string().nullish(),
+        assessmentStructured: zod
+          .object({
+            behaviors: zod.array(zod.string()),
+            replacement_programs: zod.array(zod.string()),
+            interventions: zod.array(zod.string()),
+            behavior_to_replacements_map: zod.record(
+              zod.string(),
+              zod.array(zod.string()),
+            ),
+            behavior_to_interventions_map: zod.record(
+              zod.string(),
+              zod.array(zod.string()),
+            ),
+            replacement_program_functions: zod
+              .record(
+                zod.string(),
+                zod.array(
+                  zod.enum(["escape", "attention", "tangible", "automatic"]),
+                ),
+              )
+              .optional()
+              .describe(
+                "Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.\n",
+              ),
+            general_interventions: zod
+              .array(zod.string())
+              .optional()
+              .describe(
+                "Optional interventions allowed when a behavior has no behavior_to_interventions_map entry (must be subset of interventions).\n",
+              ),
+          })
+          .nullish()
+          .describe(
+            "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+          ),
       })
       .nullish(),
   }),
   error: zod.string().nullish(),
+});
+
+/**
+ * Uses `profile.assessmentStructured` on the client. Does not invent labels: outputs are subsets of assessment allow-lists, filtered by FBA function when `replacement_program_functions` is populated.
+
+ * @summary Recommend programs and interventions from structured assessment only
+ */
+export const CreateClientClinicalRecommendationParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const CreateClientClinicalRecommendationBody = zod.object({
+  behavior: zod
+    .string()
+    .describe(
+      "Exact maladaptive behavior label from assessmentStructured.behaviors",
+    ),
+  behavior_topography: zod.string().optional(),
+  operational_definition: zod.string().optional(),
+  function: zod.enum(["escape", "attention", "tangible", "automatic"]),
+  severity_level: zod.enum(["low", "moderate", "high"]),
+  is_dangerous: zod.boolean(),
+});
+
+export const CreateClientClinicalRecommendationResponse = zod.object({
+  success: zod.boolean(),
+  data: zod
+    .object({
+      behavior: zod.string(),
+      function: zod.string(),
+      replacement_programs: zod.array(zod.string()),
+      recommended_interventions: zod.array(zod.string()),
+      risk_level: zod.string(),
+      notes: zod.string(),
+    })
+    .nullable(),
+  error: zod.string().nullable(),
+  messages: zod.array(zod.string()).optional(),
 });
 
 /**
@@ -603,6 +882,116 @@ export const DeleteClientProgramResponse = zod.object({
   data: zod.object({
     clientId: zod.number(),
     programId: zod.number(),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Returns rows linking each profile maladaptive behavior label to approved replacement `programs` (same IDs as GET /clients/{clientId}/programs). Empty when none configured; the note wizard then does not restrict programs by behavior.
+
+ * @summary List maladaptive-behavior to replacement-program approvals for a client
+ */
+export const ListClientBehaviorProgramApprovalsParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const ListClientBehaviorProgramApprovalsResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    items: zod.array(
+      zod.object({
+        behaviorLabel: zod.string(),
+        programId: zod.number(),
+        programName: zod.string(),
+        matchType: zod.enum([
+          "Direct Match",
+          "Function-Based Match",
+          "Safety Skill Match",
+          "General Skill Support",
+          "Requires BCBA Review",
+        ]),
+        requiresBcbaReview: zod.boolean(),
+      }),
+    ),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * @summary List replacement programs linked to the client (same data as /programs without sessionHours)
+ */
+export const ListClientReplacementProgramsParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const ListClientReplacementProgramsResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.array(
+    zod.object({
+      id: zod.number(),
+      companyId: zod.number(),
+      name: zod.string(),
+      type: zod.enum(["primary", "supplemental"]),
+      description: zod.string().optional(),
+    }),
+  ),
+  error: zod.string().nullish(),
+});
+
+/**
+ * `behaviorLabel` must be URL-encoded (e.g. `encodeURIComponent` in the browser). Replaces all approvals for this client + behavior with the provided list. Each `programId` must be linked to the client via GET /clients/{clientId}/programs.
+
+ * @summary Replace approved replacement programs for one maladaptive behavior
+ */
+export const PutClientBehaviorApprovedProgramsParams = zod.object({
+  clientId: zod.coerce.number(),
+  behaviorLabel: zod.coerce.string(),
+});
+
+export const putClientBehaviorApprovedProgramsBodyProgramsItemRequiresBcbaReviewDefault = false;
+export const putClientBehaviorApprovedProgramsBodyProgramsMax = 200;
+
+export const PutClientBehaviorApprovedProgramsBody = zod.object({
+  programs: zod
+    .array(
+      zod.object({
+        programId: zod.number(),
+        matchType: zod.enum([
+          "Direct Match",
+          "Function-Based Match",
+          "Safety Skill Match",
+          "General Skill Support",
+          "Requires BCBA Review",
+        ]),
+        requiresBcbaReview: zod
+          .boolean()
+          .default(
+            putClientBehaviorApprovedProgramsBodyProgramsItemRequiresBcbaReviewDefault,
+          ),
+      }),
+    )
+    .max(putClientBehaviorApprovedProgramsBodyProgramsMax),
+});
+
+export const PutClientBehaviorApprovedProgramsResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    behaviorLabel: zod.string(),
+    items: zod.array(
+      zod.object({
+        behaviorLabel: zod.string(),
+        programId: zod.number(),
+        programName: zod.string(),
+        matchType: zod.enum([
+          "Direct Match",
+          "Function-Based Match",
+          "Safety Skill Match",
+          "General Skill Support",
+          "Requires BCBA Review",
+        ]),
+        requiresBcbaReview: zod.boolean(),
+      }),
+    ),
   }),
   error: zod.string().nullish(),
 });
