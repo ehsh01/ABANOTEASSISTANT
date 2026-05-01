@@ -74,7 +74,7 @@ Every note must begin with:
 
 ## 20. Session performance language rule
 
-Must include: "[Client]'s performance during the session was fair."
+Must include the server-assembled performance line after the closing paragraph: the client completed **N** program(s) (N = replacement-program narrative segments for the session) with varying levels of prompting and successful responding in the majority of trials across skill acquisition and behavior reduction targets (see locked prose rules).
 
 **Prohibited terms:** poor, below expectations, unsuccessful, limited, inadequate, minimal engagement, regression.
 

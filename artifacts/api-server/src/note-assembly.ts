@@ -87,8 +87,15 @@ export function buildLockedOpening(
   return `The RBT met with ${who} and ${caregivers} ${where} to implement program targets. ${env}`;
 }
 
-export function buildPerformanceSentence(): string {
-  return "The client's performance during the session was fair.";
+/**
+ * End-of-note performance line after the mandatory closing paragraph.
+ * `programSlotCount` = number of replacement-program narrative segments for this session (aligned with
+ * `replacementProgramSlotCount(sessionHours)` / collapsed narrative segments).
+ */
+export function buildPerformanceSentence(programSlotCount: number): string {
+  const n = Math.max(1, Math.floor(programSlotCount));
+  const programsWord = n === 1 ? "program" : "programs";
+  return `The client completed ${n} ${programsWord} with varying levels of prompting and demonstrated successful responding in the majority of trials across skill acquisition and behavior reduction targets.`;
 }
 
 export function buildNextSessionSentence(
