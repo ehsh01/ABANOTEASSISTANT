@@ -167,6 +167,9 @@ export default function ClientDetail() {
   const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
 
   const behaviors = p?.maladaptiveBehaviors ?? [];
+  const behaviorTopographyMap = Object.fromEntries(
+    (p?.maladaptiveBehaviorTargets ?? []).map((e) => [e.name, e.topography ?? ""])
+  );
   const replacements = p?.replacementPrograms ?? [];
   const interventions = p?.interventions ?? [];
 
@@ -404,12 +407,20 @@ export default function ClientDetail() {
                 {behaviors.length === 0 ? (
                   <p className="text-sm text-[#877870] italic">{t.clientDetail.noBehaviors}</p>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {behaviors.map((behavior) => (
-                      <span key={behavior} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-[#F9EEF1] text-[#C27A8A] border-[#F0D6DC]">
-                        {behavior}
-                      </span>
-                    ))}
+                  <div className="space-y-2">
+                    {behaviors.map((behavior) => {
+                      const topo = behaviorTopographyMap[behavior];
+                      return (
+                        <div key={behavior} className="rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] px-4 py-3">
+                          <p className="text-sm font-semibold text-[#2D2523]">{behavior}</p>
+                          {topo ? (
+                            <p className="text-xs text-[#877870] mt-1 leading-relaxed">{topo}</p>
+                          ) : (
+                            <p className="text-xs text-[#877870]/50 mt-1 italic">No topography entered</p>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </TabsContent>
