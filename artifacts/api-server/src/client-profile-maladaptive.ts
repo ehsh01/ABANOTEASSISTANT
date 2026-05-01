@@ -63,7 +63,7 @@ export function orderTargetsToBehaviors(
   return behaviors.map((name) => {
     const t = name.trim();
     return {
-      name,
+      name: t,
       topography: map.get(t) ?? mapByLower.get(t.toLowerCase()) ?? null,
     };
   });
@@ -100,7 +100,7 @@ export function expandMaladaptiveTargetsFromProfile(
   if (coerced.length > 0) {
     return orderTargetsToBehaviors(behaviors, coerced);
   }
-  return behaviors.map((name) => ({ name, topography: null }));
+  return behaviors.map((name) => ({ name: name.trim(), topography: null }));
 }
 
 /**

@@ -272,8 +272,13 @@ function BehaviorSection({
     const rowItems = approvalsQ.data?.data?.items ?? [];
     const next: Record<string, BehaviorApprovalDraft[]> = {};
     for (const name of names) {
+      const nl = name.trim();
+      const nll = nl.toLowerCase();
       next[name] = rowItems
-        .filter((a) => a.behaviorLabel === name)
+        .filter((a) => {
+          const al = a.behaviorLabel.trim();
+          return al === nl || al.toLowerCase() === nll;
+        })
         .map((a) => ({
           programId: a.programId,
           matchType: a.matchType,

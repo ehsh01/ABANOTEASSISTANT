@@ -334,11 +334,11 @@ function resolveCanonicalBehaviorLabel(rawPath: string, profile: ClientProfileRo
   const t = decoded.trim();
   const rows = expandMaladaptiveTargetsFromProfile(profile);
   for (const { name } of rows) {
-    if (name === t) return name;
+    if (name.trim() === t) return name.trim();
   }
   const tl = t.toLowerCase();
   for (const { name } of rows) {
-    if (name.toLowerCase() === tl) return name;
+    if (name.trim().toLowerCase() === tl) return name.trim();
   }
   return null;
 }
@@ -763,7 +763,7 @@ router.get("/clients/:clientId/behavior-program-approvals", async (req, res) => 
     success: true,
     data: {
       items: rows.map((r) => ({
-        behaviorLabel: r.behaviorLabel,
+        behaviorLabel: r.behaviorLabel.trim(),
         programId: r.programId,
         programName: r.programName,
         matchType: r.matchType,
@@ -947,9 +947,9 @@ router.put("/clients/:clientId/behaviors/:behaviorLabel/approved-programs", asyn
   const data = PutClientBehaviorApprovedProgramsResponse.parse({
     success: true,
     data: {
-      behaviorLabel: canonicalBehavior,
+      behaviorLabel: canonicalBehavior.trim(),
       items: saved.map((r) => ({
-        behaviorLabel: r.behaviorLabel,
+        behaviorLabel: r.behaviorLabel.trim(),
         programId: r.programId,
         programName: r.programName,
         matchType: r.matchType,

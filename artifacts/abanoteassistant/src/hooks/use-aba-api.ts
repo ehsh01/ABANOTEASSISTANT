@@ -99,7 +99,30 @@ export function usePutClientBehaviorApprovedPrograms() {
         encodeURIComponent(vars.behaviorLabel),
         vars.data,
       ),
-    onSuccess: (_res, vars) => {
+    onSuccess: (res, vars) => {
+      const canonical = res.data.behaviorLabel.trim();
+      const fresh = res.data.items;
+
+      queryClient.setQueriesData(
+        { queryKey: ["/api/clients", vars.clientId, "behavior-program-approvals"] },
+        (old: ListBehaviorProgramApprovalsResponse | undefined) => {
+          if (!old?.data?.items) {
+            return old;
+          }
+          const cl = canonical.toLowerCase();
+          const rest = old.data.items.filter((row) => {
+            const rl = row.behaviorLabel.trim().toLowerCase();
+            return rl !== cl;
+          });
+          return {
+            ...old,
+            data: {
+              items: [...rest, ...fresh],
+            },
+          };
+        },
+      );
+
       queryClient.invalidateQueries({
         queryKey: ["/api/clients", vars.clientId, "behavior-program-approvals"],
       });
