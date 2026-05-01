@@ -1498,6 +1498,7 @@ components:
           description: >
             1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty, therapist-entered trial-detail prose is not used for that program.
       required:
+        - count
         - effectiveTrials
 
     AbcHintEntry:

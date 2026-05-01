@@ -126,7 +126,9 @@ const MAX_PROGRAM_TRIALS = 10;
 
 const TRIAL_TOTAL_CHOICES = Array.from({ length: MAX_PROGRAM_TRIALS }, (_, i) => i + 1);
 
-function normalizeProgramTrialEntry(entry: ProgramTrialDataEntry): ProgramTrialDataEntry {
+function normalizeProgramTrialEntry(
+  entry: Partial<ProgramTrialDataEntry> & { effectiveTrials?: number[] },
+): ProgramTrialDataEntry {
   let count = entry.count ?? null;
   if (count != null) {
     if (!Number.isFinite(count) || !Number.isInteger(count)) {
@@ -136,7 +138,7 @@ function normalizeProgramTrialEntry(entry: ProgramTrialDataEntry): ProgramTrialD
     }
   }
   const cap = count ?? MAX_PROGRAM_TRIALS;
-  const effectiveTrials = [...entry.effectiveTrials]
+  const effectiveTrials = [...(entry.effectiveTrials ?? [])]
     .filter((t) => typeof t === "number" && Number.isInteger(t) && t >= 1 && t <= cap)
     .sort((a, b) => a - b);
   return { count, effectiveTrials };
@@ -1040,7 +1042,7 @@ function Step6Programs() {
 
   const updateProgramTrial = (programId: number, updater: (prev: ProgramTrialDataEntry) => ProgramTrialDataEntry) => {
     const key = String(programId);
-    const prev: ProgramTrialDataEntry = trialMap[key] ?? { effectiveTrials: [] };
+    const prev: ProgramTrialDataEntry = trialMap[key] ?? { count: null, effectiveTrials: [] };
     const entry = normalizeProgramTrialEntry(updater(prev));
     const count = entry.count ?? null;
     const effectiveTrials = [...entry.effectiveTrials].sort((a, b) => a - b);
@@ -1133,7 +1135,7 @@ function Step6Programs() {
         {programs.map((program) => {
           const isSelected = selected.includes(program.id);
           const trialEntry = normalizeProgramTrialEntry(
-            trialMap[String(program.id)] ?? { effectiveTrials: [] },
+            trialMap[String(program.id)] ?? { count: null, effectiveTrials: [] },
           );
           const trialCount = typeof trialEntry.count === "number" && trialEntry.count >= 1 ? trialEntry.count : null;
           const successSelectValue =

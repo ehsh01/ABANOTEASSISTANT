@@ -767,7 +767,7 @@ export const GenerateNoteBody = zod.object({
       zod.object({
         count: zod
           .number()
-          .nullish()
+          .nullable()
           .describe(
             "Total trials conducted for this replacement program when known; when null, the server does not inject therapist-entered trial-count prose (use default quantified language).\n",
           ),

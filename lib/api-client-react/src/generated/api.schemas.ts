@@ -382,7 +382,7 @@ export const GenerateNoteRequestTherapySetting = {
 export interface ProgramTrialDataEntry {
   /** Total trials conducted for this replacement program when known; when null, the server does not inject therapist-entered trial-count prose (use default quantified language).
    */
-  count?: number | null;
+  count: number | null;
   /** 1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty, therapist-entered trial-detail prose is not used for that program.
    */
   effectiveTrials: number[];

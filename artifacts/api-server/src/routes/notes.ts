@@ -66,7 +66,7 @@ function buildTherapistTrialSummaryForReplacementHour(params: {
   programIdForHour: (number | null)[];
   rbtActionsOnlyOutcomeForHour: boolean[];
   programTrialData:
-    | Record<string, { count?: number | null; effectiveTrials?: number[] }>
+    | Record<string, { count: number | null; effectiveTrials: number[] }>
     | undefined;
 }): NoteGenerationContext["therapistTrialSummaryForReplacementHour"] {
   const { sessionHours, programIdForHour, rbtActionsOnlyOutcomeForHour, programTrialData } = params;
@@ -78,7 +78,7 @@ function buildTherapistTrialSummaryForReplacementHour(params: {
     if (!entry) return null;
     const count = entry.count;
     const trials = entry.effectiveTrials;
-    if (count == null || trials == null || trials.length === 0) return null;
+    if (count == null || trials.length === 0) return null;
     if (typeof count !== "number" || !Number.isFinite(count) || !Number.isInteger(count) || count < 1) {
       return null;
     }
