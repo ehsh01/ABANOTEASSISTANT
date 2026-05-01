@@ -9,7 +9,8 @@
   },
   "scripts": {
     "push": "node ./scripts/ensure-abanote-schema.mjs && drizzle-kit push --config ./drizzle.config.ts",
-    "push-force": "node ./scripts/ensure-abanote-schema.mjs && drizzle-kit push --force --config ./drizzle.config.ts"
+    "push-force": "node ./scripts/ensure-abanote-schema.mjs && drizzle-kit push --force --config ./drizzle.config.ts",
+    "push:from-api-env": "node ./scripts/push-using-api-server-env.mjs"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",
