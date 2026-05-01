@@ -10,7 +10,8 @@
   "scripts": {
     "push": "node ./scripts/ensure-abanote-schema.mjs && drizzle-kit push --config ./drizzle.config.ts",
     "push-force": "node ./scripts/ensure-abanote-schema.mjs && drizzle-kit push --force --config ./drizzle.config.ts",
-    "push:from-api-env": "node ./scripts/push-using-api-server-env.mjs"
+    "ensure:behavior-approvals-table": "node ./scripts/ensure-client-behavior-program-approvals-table.mjs",
+    "push:from-api-env": "node ./scripts/ensure-client-behavior-program-approvals-table.mjs"
   },
   "dependencies": {
     "drizzle-orm": "catalog:",

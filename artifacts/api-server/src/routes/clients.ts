@@ -312,7 +312,7 @@ function sendBehaviorApprovalsDbError(res: Response, err: unknown, context: stri
     res.status(503).json({
       success: false,
       error:
-        "The behavior–program approvals table is missing in this database. On a machine with DATABASE_URL set to this environment, run: cd lib/db && pnpm exec drizzle-kit push --config ./drizzle.config.ts --force",
+        "The behavior–program approvals table is missing in this database. From repo root (with artifacts/api-server/.env for this DB): pnpm --filter @workspace/db run ensure:behavior-approvals-table",
       messages: [],
     });
     return;
