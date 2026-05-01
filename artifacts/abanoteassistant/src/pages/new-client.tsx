@@ -57,6 +57,8 @@ interface Step2Data {
 // ── Step 3 data ─────────────────────────────────────────────────────────────
 interface Step3Data {
   maladaptiveBehaviors: string[];
+  /** Maps behavior name → optional topography / operational definition text. */
+  maladaptiveBehaviorTargets: Record<string, string>;
   replacementPrograms: string[];
   interventions: string[];
 }
@@ -205,6 +207,89 @@ function TagSection({
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
           placeholder={placeholder}
+          className="flex-1 px-4 py-2.5 rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] text-sm text-[#2D2523] placeholder:text-[#877870] focus:outline-none focus:ring-2 focus:ring-[#C27A8A]/30 focus:border-[#C27A8A] transition-all"
+        />
+        <button
+          onClick={commit}
+          disabled={!draft.trim()}
+          className="w-10 h-10 rounded-xl bg-[#C27A8A] text-white flex items-center justify-center hover:bg-[#b06a79] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
+        >
+          <Plus className="w-5 h-5 pop-icon-white" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Behaviors section with per-behavior topography/operational definition fields. */
+function BehaviorSection({
+  items,
+  targets,
+  onAdd,
+  onRemove,
+  onTopographyChange,
+}: {
+  items: string[];
+  targets: Record<string, string>;
+  onAdd: (val: string) => void;
+  onRemove: (i: number) => void;
+  onTopographyChange: (name: string, val: string) => void;
+}) {
+  const [draft, setDraft] = useState("");
+
+  function commit() {
+    const v = draft.trim();
+    if (v && !items.includes(v)) onAdd(v);
+    setDraft("");
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-[#F0E4E1] p-6">
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-9 h-9 rounded-xl flex items-center justify-center bg-rose-50">
+          <AlertTriangle className="w-5 h-5 pop-icon text-rose-600" />
+        </div>
+        <h3 className="font-bold text-[#2D2523] text-base">Maladaptive Behaviors</h3>
+        <span className="ml-auto text-xs text-[#877870] font-medium">{items.length} added</span>
+      </div>
+
+      {/* Per-behavior rows */}
+      <div className="space-y-3 mb-4">
+        {items.length === 0 && (
+          <span className="text-sm text-[#877870] italic">None added yet</span>
+        )}
+        {items.map((name, i) => (
+          <div key={i} className="rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold text-[#2D2523] flex-1">{name}</span>
+              <button
+                type="button"
+                onClick={() => onRemove(i)}
+                className="text-[#877870] hover:text-rose-600 transition-colors shrink-0"
+                aria-label={`Remove ${name}`}
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <textarea
+              value={targets[name] ?? ""}
+              onChange={(e) => onTopographyChange(name, e.target.value)}
+              placeholder="Topography / operational definition (optional) — what this behavior looks like for this learner"
+              rows={2}
+              className="w-full px-3 py-2 rounded-lg border border-[#F0E4E1] bg-white text-xs text-[#2D2523] placeholder:text-[#877870]/70 focus:outline-none focus:ring-2 focus:ring-[#C27A8A]/30 focus:border-[#C27A8A] transition-all resize-none"
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Add input */}
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }}
+          placeholder="e.g. Aggression, Self-injurious behavior..."
           className="flex-1 px-4 py-2.5 rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] text-sm text-[#2D2523] placeholder:text-[#877870] focus:outline-none focus:ring-2 focus:ring-[#C27A8A]/30 focus:border-[#C27A8A] transition-all"
         />
         <button
@@ -559,12 +644,29 @@ function Step3({
   data: Step3Data;
   onChange: (d: Step3Data) => void;
 }) {
-  function addTo(key: keyof Step3Data, val: string) {
+  function addTo(key: "replacementPrograms" | "interventions", val: string) {
     onChange({ ...data, [key]: [...data[key], val] });
   }
 
-  function removeFrom(key: keyof Step3Data, i: number) {
+  function removeFrom(key: "replacementPrograms" | "interventions", i: number) {
     onChange({ ...data, [key]: data[key].filter((_, idx) => idx !== i) });
+  }
+
+  function addBehavior(val: string) {
+    onChange({ ...data, maladaptiveBehaviors: [...data.maladaptiveBehaviors, val] });
+  }
+  function removeBehavior(i: number) {
+    const name = data.maladaptiveBehaviors[i];
+    const next = { ...data.maladaptiveBehaviorTargets };
+    delete next[name];
+    onChange({
+      ...data,
+      maladaptiveBehaviors: data.maladaptiveBehaviors.filter((_, idx) => idx !== i),
+      maladaptiveBehaviorTargets: next,
+    });
+  }
+  function setTopography(name: string, val: string) {
+    onChange({ ...data, maladaptiveBehaviorTargets: { ...data.maladaptiveBehaviorTargets, [name]: val } });
   }
 
   return (
@@ -573,15 +675,12 @@ function Step3({
         Add the client's documented behaviors, goals, and intervention strategies. These will be available when generating session notes.
       </p>
 
-      <TagSection
-        title="Maladaptive Behaviors"
-        icon={AlertTriangle}
-        iconColor="text-rose-600"
-        iconBg="bg-rose-50"
-        placeholder="e.g. Aggression, Self-injurious behavior..."
+      <BehaviorSection
         items={data.maladaptiveBehaviors}
-        onAdd={(v) => addTo("maladaptiveBehaviors", v)}
-        onRemove={(i) => removeFrom("maladaptiveBehaviors", i)}
+        targets={data.maladaptiveBehaviorTargets}
+        onAdd={addBehavior}
+        onRemove={removeBehavior}
+        onTopographyChange={setTopography}
       />
 
       <TagSection
@@ -619,24 +718,37 @@ function Step3SingleSection({
   data: Step3Data;
   onChange: (d: Step3Data) => void;
 }) {
-  function addTo(key: keyof Step3Data, val: string) {
+  function addTo(key: "replacementPrograms" | "interventions", val: string) {
     onChange({ ...data, [key]: [...data[key], val] });
   }
-  function removeFrom(key: keyof Step3Data, i: number) {
+  function removeFrom(key: "replacementPrograms" | "interventions", i: number) {
     onChange({ ...data, [key]: data[key].filter((_, idx) => idx !== i) });
+  }
+  function addBehavior(val: string) {
+    onChange({ ...data, maladaptiveBehaviors: [...data.maladaptiveBehaviors, val] });
+  }
+  function removeBehavior(i: number) {
+    const name = data.maladaptiveBehaviors[i];
+    const next = { ...data.maladaptiveBehaviorTargets };
+    delete next[name];
+    onChange({
+      ...data,
+      maladaptiveBehaviors: data.maladaptiveBehaviors.filter((_, idx) => idx !== i),
+      maladaptiveBehaviorTargets: next,
+    });
+  }
+  function setTopography(name: string, val: string) {
+    onChange({ ...data, maladaptiveBehaviorTargets: { ...data.maladaptiveBehaviorTargets, [name]: val } });
   }
 
   if (section === "behaviors") {
     return (
-      <TagSection
-        title="Maladaptive Behaviors"
-        icon={AlertTriangle}
-        iconColor="text-rose-600"
-        iconBg="bg-rose-50"
-        placeholder="e.g. Aggression, Self-injurious behavior..."
+      <BehaviorSection
         items={data.maladaptiveBehaviors}
-        onAdd={(v) => addTo("maladaptiveBehaviors", v)}
-        onRemove={(i) => removeFrom("maladaptiveBehaviors", i)}
+        targets={data.maladaptiveBehaviorTargets}
+        onAdd={addBehavior}
+        onRemove={removeBehavior}
+        onTopographyChange={setTopography}
       />
     );
   }
@@ -796,6 +908,7 @@ function NewClientForm({
 
   const [step3, setStep3] = useState<Step3Data>({
     maladaptiveBehaviors: [],
+    maladaptiveBehaviorTargets: {},
     replacementPrograms: [],
     interventions: [],
   });
@@ -822,6 +935,7 @@ function NewClientForm({
     }));
     setStep3((s) => ({
       maladaptiveBehaviors: appendDedupedTags(s.maladaptiveBehaviors, e.maladaptiveBehaviors),
+      maladaptiveBehaviorTargets: s.maladaptiveBehaviorTargets,
       replacementPrograms: appendDedupedTags(s.replacementPrograms, e.replacementPrograms),
       interventions: appendDedupedTags(s.interventions, e.interventions),
     }));
@@ -883,6 +997,9 @@ function NewClientForm({
     setStep2({ file: null });
     setStep3({
       maladaptiveBehaviors: [...(p?.maladaptiveBehaviors ?? [])],
+      maladaptiveBehaviorTargets: Object.fromEntries(
+        (p?.maladaptiveBehaviorTargets ?? []).map((e) => [e.name, e.topography ?? ""])
+      ),
       replacementPrograms: [...(p?.replacementPrograms ?? [])],
       interventions: [...(p?.interventions ?? [])],
     });
@@ -947,7 +1064,13 @@ function NewClientForm({
           gender: step1.gender,
         };
       } else if (editSection === "behaviors") {
-        payload = { maladaptiveBehaviors: step3.maladaptiveBehaviors };
+        payload = {
+          maladaptiveBehaviors: step3.maladaptiveBehaviors,
+          maladaptiveBehaviorTargets: step3.maladaptiveBehaviors.map((name) => ({
+            name,
+            topography: step3.maladaptiveBehaviorTargets[name]?.trim() || null,
+          })),
+        };
       } else if (editSection === "programs") {
         payload = { replacementPrograms: step3.replacementPrograms };
       } else {
@@ -981,6 +1104,10 @@ function NewClientForm({
           dateOfBirth: step1.dateOfBirth,
           gender: step1.gender,
           maladaptiveBehaviors: step3.maladaptiveBehaviors,
+          maladaptiveBehaviorTargets: step3.maladaptiveBehaviors.map((name) => ({
+            name,
+            topography: step3.maladaptiveBehaviorTargets[name]?.trim() || null,
+          })),
           replacementPrograms: step3.replacementPrograms,
           interventions: step3.interventions,
         };
@@ -1003,6 +1130,10 @@ function NewClientForm({
           assessmentStatus: step2.file ? "uploaded" : "missing",
           assessmentFileName: step2.file?.name ?? null,
           maladaptiveBehaviors: step3.maladaptiveBehaviors,
+          maladaptiveBehaviorTargets: step3.maladaptiveBehaviors.map((name) => ({
+            name,
+            topography: step3.maladaptiveBehaviorTargets[name]?.trim() || null,
+          })),
           replacementPrograms: step3.replacementPrograms,
           interventions: step3.interventions,
         });
