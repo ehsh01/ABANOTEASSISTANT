@@ -74,7 +74,7 @@ Every note must begin with:
 
 ## 20. Session performance language rule
 
-Must include the server-assembled performance line after the closing paragraph. When therapist-entered discrete-trial rows exist for one or more narrative segments, that line must state **pooled X out of Y** successful discrete-trial counts, **approximately P%** where **P** is `round((X/Y)*100)` from the same integers, and a **fixed neutral interpretation** band (no subjective *majority*, *good*, or *fair* unless tied to those numbers). When no trial rows are entered, the server uses a neutral fallback that references program segment count only (see locked prose rules and `buildPerformanceSentence` in `artifacts/api-server/src/note-assembly.ts`).
+Must include the server-assembled performance line after the closing paragraph. When therapist-entered discrete-trial rows exist for one or more narrative segments, that line must state **pooled X out of Y** trial counts in parentheses (**per program** when one segment contributes, **across N programs** when several do), **approximately P% independent responding** where **P** is `round((X/Y)*100)` from the same integers (counts reflect criterion successes from intake), and a **fixed neutral interpretation** band (no subjective *majority*, *good*, or *fair* unless tied to those numbers). When no trial rows are entered, the server uses a neutral fallback that references program segment count only (see locked prose rules and `buildPerformanceSentence` in `artifacts/api-server/src/note-assembly.ts`).
 
 **Prohibited terms (unless product policy changes):** poor, below expectations, unsuccessful, limited, inadequate, minimal engagement, regression.
 

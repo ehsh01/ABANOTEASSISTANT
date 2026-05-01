@@ -120,25 +120,26 @@ export function discreteTrialSuccessPercent(successes: number, trials: number): 
 
 /**
  * Clinically neutral clause tied to the computed percentage (no subjective good/fair/majority language).
+ * Wording aligns with the locked end-of-note performance template (independent responding; "across all targets" where applicable).
  */
 export function neutralDiscreteTrialPerformanceClause(percentRounded: number): string {
   const p = Math.max(0, Math.min(100, Math.round(percentRounded)));
   if (p <= 0) {
-    return "indicating minimal criterion-accurate responding during recorded trials, supporting continued systematic prompting and acquisition-focused teaching";
+    return "indicating limited independent responding during recorded trials and need for intensive systematic prompting across all targets";
   }
   if (p <= 30) {
-    return "indicating emerging acquisition with continued need for graded prompting and repetition";
+    return "indicating emerging skill acquisition and need for continued prompting across all targets";
   }
   if (p <= 50) {
-    return "indicating variable acquisition with ongoing prompt-fading practice";
+    return "indicating variable acquisition with ongoing need for prompt fading across all targets";
   }
   if (p <= 70) {
-    return "indicating developing stability of criterion-accurate responding with continued practice";
+    return "indicating developing consistency of independent responding with continued practice across all targets";
   }
   if (p <= 90) {
-    return "indicating strong acquisition patterns during recorded trials, consistent with progression toward maintenance or next-step targets";
+    return "indicating strong acquisition trends during recorded trials, consistent with progression toward maintenance or next-step targets across programs";
   }
-  return "indicating very high rates of criterion-accurate responding during recorded trials relative to entered discrete-trial samples";
+  return "indicating very high rates of independent responding during recorded trials across targets";
 }
 
 function buildPerformanceSentenceWithoutTrialAggregate(programSlotCount: number): string {
@@ -153,8 +154,9 @@ function buildPerformanceSentenceWithoutTrialAggregate(programSlotCount: number)
  * `replacementProgramSlotCount(sessionHours)` / collapsed narrative segments).
  *
  * When `therapistTrialSummaryForReplacementHour` contains at least one segment with `totalTrials >= 1`, the line
- * includes the pooled **X out of Y** discrete-trial counts, the **rounded percentage** derived from that ratio, and a
- * fixed neutral interpretation band (no subjective majority/good/fair language).
+ * includes the pooled **X out of Y** trial counts, the **rounded percentage** derived from that ratio, and a
+ * fixed neutral interpretation band (no subjective majority/good/fair language). Prose uses **independent responding**
+ * as the product phrase; numerators/denominators still come from therapist-entered criterion trial successes in JSON.
  */
 export function buildPerformanceSentence(
   programSlotCount: number,
@@ -168,9 +170,9 @@ export function buildPerformanceSentence(
   const interpretation = neutralDiscreteTrialPerformanceClause(pct);
   const trialPhrase =
     agg.segmentsWithData === 1
-      ? `${agg.successes} out of ${agg.trials} trials for the narrative segment with entered discrete-trial data`
-      : `${agg.successes} out of ${agg.trials} trials aggregated across ${agg.segmentsWithData} narrative segments with entered discrete-trial data`;
-  return `The client demonstrated approximately ${pct}% successful discrete-trial responding (${trialPhrase}), ${interpretation}.`;
+      ? `${agg.successes} out of ${agg.trials} trials per program`
+      : `${agg.successes} out of ${agg.trials} trials across ${agg.segmentsWithData} programs`;
+  return `The client demonstrated approximately ${pct}% independent responding (${trialPhrase}), ${interpretation}.`;
 }
 
 export function buildNextSessionSentence(
