@@ -214,16 +214,50 @@ async function selectLinkedProgramsForClient(
     );
 }
 
+/** Walk `Error.cause` — Drizzle wraps node-postgres so `code` / relation text are often on the inner error only. */
+function walkErrorCauseChain(err: unknown): unknown[] {
+  const out: unknown[] = [];
+  const seen = new Set<unknown>();
+  let cur: unknown = err;
+  while (cur !== null && cur !== undefined) {
+    if (typeof cur === "object") {
+      if (seen.has(cur)) break;
+      seen.add(cur);
+    }
+    out.push(cur);
+    const next =
+      cur instanceof Error && cur.cause !== undefined && cur.cause !== null ? cur.cause : undefined;
+    cur = next;
+  }
+  return out;
+}
+
 function isMissingBehaviorApprovalsTable(err: unknown): boolean {
-  const code =
-    typeof err === "object" && err !== null && "code" in err
-      ? String((err as { code: unknown }).code)
-      : "";
-  const msg = err instanceof Error ? err.message : String(err);
-  return (
-    code === "42P01" ||
-    (/does not exist/i.test(msg) && /client_behavior_program_approvals/i.test(msg))
-  );
+  for (const e of walkErrorCauseChain(err)) {
+    const code =
+      typeof e === "object" && e !== null && "code" in e
+        ? String((e as { code: unknown }).code)
+        : "";
+    const msg = e instanceof Error ? e.message : String(e);
+    if (code === "42P01" && /client_behavior_program_approvals/i.test(msg)) return true;
+    if (/does not exist/i.test(msg) && /client_behavior_program_approvals/i.test(msg)) return true;
+  }
+  return false;
+}
+
+/** Prefer the innermost Postgres-style error message for API `messages` and logs. */
+function extractDeepestDriverMessage(err: unknown): string {
+  let best = err instanceof Error ? err.message : String(err);
+  for (const e of walkErrorCauseChain(err)) {
+    const code =
+      typeof e === "object" && e !== null && "code" in e
+        ? String((e as { code: unknown }).code)
+        : "";
+    if (code.length === 5 && /^[0-9A-Z]+$/.test(code) && e instanceof Error && e.message.trim()) {
+      best = e.message;
+    }
+  }
+  return best;
 }
 
 /** Remove approvals when the behavior or program link no longer exists on the client. */
@@ -271,7 +305,7 @@ async function pruneClientBehaviorProgramApprovals(
 
 /** Postgres `undefined_table` or driver message when `drizzle-kit push` was not run. */
 function sendBehaviorApprovalsDbError(res: Response, err: unknown, context: string): void {
-  const msg = err instanceof Error ? err.message : String(err);
+  const detail = extractDeepestDriverMessage(err);
   const missingTable = isMissingBehaviorApprovalsTable(err);
   console.error(`[${context}]`, err);
   if (missingTable) {
@@ -286,7 +320,7 @@ function sendBehaviorApprovalsDbError(res: Response, err: unknown, context: stri
   res.status(500).json({
     success: false,
     error: "Database error while processing behavior program approvals.",
-    messages: [msg.length > 400 ? `${msg.slice(0, 400)}…` : msg],
+    messages: [detail.length > 400 ? `${detail.slice(0, 400)}…` : detail],
   });
 }
 
