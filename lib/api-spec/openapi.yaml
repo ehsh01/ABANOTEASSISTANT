@@ -615,6 +615,130 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /clients/{clientId}/behavior-program-approvals:
+    get:
+      operationId: listClientBehaviorProgramApprovals
+      tags: [clients]
+      summary: List maladaptive-behavior to replacement-program approvals for a client
+      description: >
+        Returns rows linking each profile maladaptive behavior label to approved replacement `programs`
+        (same IDs as GET /clients/{clientId}/programs). Empty when none configured; the note wizard then
+        does not restrict programs by behavior.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Approval rows
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListBehaviorProgramApprovalsResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clients/{clientId}/replacement-programs:
+    get:
+      operationId: listClientReplacementPrograms
+      tags: [clients]
+      summary: List replacement programs linked to the client (same data as /programs without sessionHours)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: List of programs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReplacementProgramListResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clients/{clientId}/behaviors/{behaviorLabel}/approved-programs:
+    put:
+      operationId: putClientBehaviorApprovedPrograms
+      tags: [clients]
+      summary: Replace approved replacement programs for one maladaptive behavior
+      description: >
+        `behaviorLabel` must be URL-encoded (e.g. `encodeURIComponent` in the browser). Replaces all
+        approvals for this client + behavior with the provided list. Each `programId` must be linked to
+        the client via GET /clients/{clientId}/programs.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: behaviorLabel
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PutBehaviorApprovedProgramsRequest"
+      responses:
+        "200":
+          description: Saved approvals for this behavior
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PutBehaviorApprovedProgramsResponse"
+        "400":
+          description: Invalid body or unknown program for client
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found or behavior not on client profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /notes:
     get:
       operationId: listNotes
@@ -1584,6 +1708,121 @@ components:
           required:
             - clientId
             - programId
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    BehaviorProgramMatchType:
+      type: string
+      enum:
+        - Direct Match
+        - Function-Based Match
+        - Safety Skill Match
+        - General Skill Support
+        - Requires BCBA Review
+
+    BehaviorProgramApprovalItem:
+      type: object
+      properties:
+        behaviorLabel:
+          type: string
+        programId:
+          type: integer
+        programName:
+          type: string
+        matchType:
+          $ref: "#/components/schemas/BehaviorProgramMatchType"
+        requiresBcbaReview:
+          type: boolean
+      required:
+        - behaviorLabel
+        - programId
+        - programName
+        - matchType
+        - requiresBcbaReview
+
+    ListBehaviorProgramApprovalsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/BehaviorProgramApprovalItem"
+          required:
+            - items
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    ReplacementProgramListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Program"
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    PutBehaviorApprovedProgramInput:
+      type: object
+      properties:
+        programId:
+          type: integer
+        matchType:
+          $ref: "#/components/schemas/BehaviorProgramMatchType"
+        requiresBcbaReview:
+          type: boolean
+          default: false
+      required:
+        - programId
+        - matchType
+
+    PutBehaviorApprovedProgramsRequest:
+      type: object
+      properties:
+        programs:
+          type: array
+          items:
+            $ref: "#/components/schemas/PutBehaviorApprovedProgramInput"
+          maxItems: 200
+      required:
+        - programs
+
+    PutBehaviorApprovedProgramsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            behaviorLabel:
+              type: string
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/BehaviorProgramApprovalItem"
+          required:
+            - behaviorLabel
+            - items
         error:
           type: string
           nullable: true

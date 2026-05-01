@@ -432,6 +432,63 @@ export interface DeleteClientProgramResponse {
   error?: string | null;
 }
 
+export type BehaviorProgramMatchType =
+  (typeof BehaviorProgramMatchType)[keyof typeof BehaviorProgramMatchType];
+
+export const BehaviorProgramMatchType = {
+  Direct_Match: "Direct Match",
+  "Function-Based_Match": "Function-Based Match",
+  Safety_Skill_Match: "Safety Skill Match",
+  General_Skill_Support: "General Skill Support",
+  Requires_BCBA_Review: "Requires BCBA Review",
+} as const;
+
+export interface BehaviorProgramApprovalItem {
+  behaviorLabel: string;
+  programId: number;
+  programName: string;
+  matchType: BehaviorProgramMatchType;
+  requiresBcbaReview: boolean;
+}
+
+export type ListBehaviorProgramApprovalsResponseData = {
+  items: BehaviorProgramApprovalItem[];
+};
+
+export interface ListBehaviorProgramApprovalsResponse {
+  success: boolean;
+  data: ListBehaviorProgramApprovalsResponseData;
+  error?: string | null;
+}
+
+export interface ReplacementProgramListResponse {
+  success: boolean;
+  data: Program[];
+  error?: string | null;
+}
+
+export interface PutBehaviorApprovedProgramInput {
+  programId: number;
+  matchType: BehaviorProgramMatchType;
+  requiresBcbaReview?: boolean;
+}
+
+export interface PutBehaviorApprovedProgramsRequest {
+  /** @maxItems 200 */
+  programs: PutBehaviorApprovedProgramInput[];
+}
+
+export type PutBehaviorApprovedProgramsResponseData = {
+  behaviorLabel: string;
+  items: BehaviorProgramApprovalItem[];
+};
+
+export interface PutBehaviorApprovedProgramsResponse {
+  success: boolean;
+  data: PutBehaviorApprovedProgramsResponseData;
+  error?: string | null;
+}
+
 /**
  * Where therapy was delivered. Must be one of the approved location labels; drives the locked opening location phrase assembled server-side (do not paraphrase the stored label when interpreting setting for the clinical body).
 

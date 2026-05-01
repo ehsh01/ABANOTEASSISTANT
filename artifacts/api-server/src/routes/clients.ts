@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, inArray, ne } from "drizzle-orm";
 import {
   ListClientsResponse,
   GetClientParams,
@@ -9,6 +9,13 @@ import {
   UpdateClientBody,
   ListClientProgramsParams,
   ListClientProgramsResponse,
+  ListClientBehaviorProgramApprovalsParams,
+  ListClientBehaviorProgramApprovalsResponse,
+  ListClientReplacementProgramsParams,
+  ListClientReplacementProgramsResponse,
+  PutClientBehaviorApprovedProgramsParams,
+  PutClientBehaviorApprovedProgramsBody,
+  PutClientBehaviorApprovedProgramsResponse,
   UpdateClientProgramParams,
   UpdateClientProgramBody,
   UpdateClientProgramResponse,
@@ -23,10 +30,11 @@ import {
   clientsTable,
   programsTable,
   clientProgramsTable,
+  clientBehaviorProgramApprovalsTable,
   type ClientProfileRow,
 } from "@workspace/db/schema";
 import { clientRowToApiData } from "../client-profile-api";
-import { mergeMaladaptiveProfileFields } from "../client-profile-maladaptive";
+import { expandMaladaptiveTargetsFromProfile, mergeMaladaptiveProfileFields } from "../client-profile-maladaptive";
 import {
   getAssessmentStructuredFromProfile,
   parseAssessmentStructured,
@@ -176,6 +184,90 @@ async function syncReplacementProgramsFromProfile(
   }
 }
 
+async function selectLinkedProgramsForClient(
+  clientId: number,
+  companyId: number,
+): Promise<
+  Array<{
+    id: number;
+    companyId: number;
+    name: string;
+    type: string;
+    description: string | null;
+  }>
+> {
+  return db
+    .select({
+      id: programsTable.id,
+      companyId: programsTable.companyId,
+      name: programsTable.name,
+      type: programsTable.type,
+      description: programsTable.description,
+    })
+    .from(clientProgramsTable)
+    .innerJoin(programsTable, eq(clientProgramsTable.programId, programsTable.id))
+    .where(
+      and(
+        eq(clientProgramsTable.clientId, clientId),
+        eq(programsTable.companyId, companyId),
+      ),
+    );
+}
+
+/** Remove approvals when the behavior or program link no longer exists on the client. */
+async function pruneClientBehaviorProgramApprovals(
+  clientId: number,
+  profile: ClientProfileRow,
+): Promise<void> {
+  const allowedBehaviors = new Set(
+    expandMaladaptiveTargetsFromProfile(profile).map((t) => t.name),
+  );
+  const linkRows = await db
+    .select({ programId: clientProgramsTable.programId })
+    .from(clientProgramsTable)
+    .where(eq(clientProgramsTable.clientId, clientId));
+  const allowedProgramIds = new Set(linkRows.map((r) => r.programId));
+
+  const existing = await db
+    .select({
+      id: clientBehaviorProgramApprovalsTable.id,
+      behaviorLabel: clientBehaviorProgramApprovalsTable.behaviorLabel,
+      programId: clientBehaviorProgramApprovalsTable.programId,
+    })
+    .from(clientBehaviorProgramApprovalsTable)
+    .where(eq(clientBehaviorProgramApprovalsTable.clientId, clientId));
+
+  const staleIds = existing
+    .filter(
+      (r) =>
+        !allowedBehaviors.has(r.behaviorLabel) || !allowedProgramIds.has(r.programId),
+    )
+    .map((r) => r.id);
+  if (staleIds.length === 0) return;
+  await db
+    .delete(clientBehaviorProgramApprovalsTable)
+    .where(inArray(clientBehaviorProgramApprovalsTable.id, staleIds));
+}
+
+function resolveCanonicalBehaviorLabel(rawPath: string, profile: ClientProfileRow): string | null {
+  let decoded = rawPath;
+  try {
+    decoded = decodeURIComponent(rawPath);
+  } catch {
+    decoded = rawPath;
+  }
+  const t = decoded.trim();
+  const rows = expandMaladaptiveTargetsFromProfile(profile);
+  for (const { name } of rows) {
+    if (name === t) return name;
+  }
+  const tl = t.toLowerCase();
+  for (const { name } of rows) {
+    if (name.toLowerCase() === tl) return name;
+  }
+  return null;
+}
+
 function profileFromNameFallback(name: string): ClientProfileRow {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   return {
@@ -291,6 +383,7 @@ router.post("/clients", async (req, res) => {
   }
 
   await syncReplacementProgramsFromProfile(row.id, companyId, profile);
+  await pruneClientBehaviorProgramApprovals(row.id, profile);
 
   const data = GetClientResponse.parse({
     success: true,
@@ -335,22 +428,7 @@ router.get("/clients/:clientId/programs", async (req, res) => {
   const sessionHours = Number(req.query.sessionHours) || 1;
   const minimumRequired = Math.max(sessionHours, 1);
 
-  const programRows = await db
-    .select({
-      id: programsTable.id,
-      companyId: programsTable.companyId,
-      name: programsTable.name,
-      type: programsTable.type,
-      description: programsTable.description,
-    })
-    .from(clientProgramsTable)
-    .innerJoin(programsTable, eq(clientProgramsTable.programId, programsTable.id))
-    .where(
-      and(
-        eq(clientProgramsTable.clientId, params.clientId),
-        eq(programsTable.companyId, companyId),
-      ),
-    );
+  const programRows = await selectLinkedProgramsForClient(params.clientId, companyId);
 
   const data = ListClientProgramsResponse.parse({
     success: true,
@@ -553,9 +631,244 @@ router.delete("/clients/:clientId/programs/:programId", async (req, res) => {
     .set({ profile: nextProfile, updatedAt: new Date() })
     .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)));
 
+  await pruneClientBehaviorProgramApprovals(params.clientId, nextProfile);
+
   const data = DeleteClientProgramResponse.parse({
     success: true,
     data: { clientId: params.clientId, programId: params.programId },
+    error: null,
+  });
+  res.json(data);
+});
+
+router.get("/clients/:clientId/behavior-program-approvals", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const params = ListClientBehaviorProgramApprovalsParams.parse(req.params);
+
+  const [client] = await db
+    .select()
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)))
+    .limit(1);
+
+  if (!client) {
+    res.status(404).json({ success: false, error: "Client not found", messages: [] });
+    return;
+  }
+
+  const rows = await db
+    .select({
+      behaviorLabel: clientBehaviorProgramApprovalsTable.behaviorLabel,
+      programId: clientBehaviorProgramApprovalsTable.programId,
+      programName: programsTable.name,
+      matchType: clientBehaviorProgramApprovalsTable.matchType,
+      requiresBcbaReview: clientBehaviorProgramApprovalsTable.requiresBcbaReview,
+    })
+    .from(clientBehaviorProgramApprovalsTable)
+    .innerJoin(programsTable, eq(clientBehaviorProgramApprovalsTable.programId, programsTable.id))
+    .where(
+      and(
+        eq(clientBehaviorProgramApprovalsTable.clientId, params.clientId),
+        eq(programsTable.companyId, companyId),
+      ),
+    );
+
+  const data = ListClientBehaviorProgramApprovalsResponse.parse({
+    success: true,
+    data: {
+      items: rows.map((r) => ({
+        behaviorLabel: r.behaviorLabel,
+        programId: r.programId,
+        programName: r.programName,
+        matchType: r.matchType,
+        requiresBcbaReview: r.requiresBcbaReview,
+      })),
+    },
+    error: null,
+  });
+  res.json(data);
+});
+
+router.get("/clients/:clientId/replacement-programs", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const params = ListClientReplacementProgramsParams.parse(req.params);
+
+  const [client] = await db
+    .select()
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)))
+    .limit(1);
+
+  if (!client) {
+    res.status(404).json({ success: false, error: "Client not found", messages: [] });
+    return;
+  }
+
+  try {
+    await syncReplacementProgramsFromProfile(client.id, companyId, client.profile);
+  } catch (err) {
+    console.error("[GET /clients/:id/replacement-programs] sync", err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to sync replacement programs from client profile",
+      messages: [],
+    });
+    return;
+  }
+
+  const programRows = await selectLinkedProgramsForClient(params.clientId, companyId);
+
+  const data = ListClientReplacementProgramsResponse.parse({
+    success: true,
+    data: programRows.map((p) => ({
+      id: p.id,
+      companyId: p.companyId,
+      name: p.name,
+      type: normalizeProgramApiType(p.type),
+      description: p.description ?? undefined,
+    })),
+    error: null,
+  });
+  res.json(data);
+});
+
+router.put("/clients/:clientId/behaviors/:behaviorLabel/approved-programs", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const params = PutClientBehaviorApprovedProgramsParams.parse(req.params);
+
+  let body: z.infer<typeof PutClientBehaviorApprovedProgramsBody>;
+  try {
+    body = PutClientBehaviorApprovedProgramsBody.parse(req.body);
+  } catch {
+    res.status(400).json({ success: false, error: "Invalid request body", messages: [] });
+    return;
+  }
+
+  const [client] = await db
+    .select()
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)))
+    .limit(1);
+
+  if (!client) {
+    res.status(404).json({ success: false, error: "Client not found", messages: [] });
+    return;
+  }
+
+  const profile = (client.profile as ClientProfileRow | null) ?? profileFromNameFallback(client.name);
+  const canonicalBehavior = resolveCanonicalBehaviorLabel(params.behaviorLabel, profile);
+  if (!canonicalBehavior) {
+    res.status(404).json({
+      success: false,
+      error: "Behavior not found on this client's profile",
+      messages: [],
+    });
+    return;
+  }
+
+  try {
+    await syncReplacementProgramsFromProfile(client.id, companyId, client.profile);
+  } catch (err) {
+    console.error("[PUT behavior approved programs] sync", err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to sync replacement programs from client profile",
+      messages: [],
+    });
+    return;
+  }
+
+  const linked = await selectLinkedProgramsForClient(params.clientId, companyId);
+  const linkedIds = new Set(linked.map((p) => p.id));
+
+  const byPid = new Map<
+    number,
+    { programId: number; matchType: string; requiresBcbaReview: boolean }
+  >();
+  for (const p of body.programs) {
+    if (!linkedIds.has(p.programId)) {
+      res.status(400).json({
+        success: false,
+        error: `Program ${p.programId} is not linked to this client`,
+        messages: [],
+      });
+      return;
+    }
+    byPid.set(p.programId, {
+      programId: p.programId,
+      matchType: p.matchType,
+      requiresBcbaReview: p.requiresBcbaReview ?? false,
+    });
+  }
+
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(clientBehaviorProgramApprovalsTable)
+      .where(
+        and(
+          eq(clientBehaviorProgramApprovalsTable.clientId, params.clientId),
+          eq(clientBehaviorProgramApprovalsTable.behaviorLabel, canonicalBehavior),
+        ),
+      );
+    for (const row of byPid.values()) {
+      await tx.insert(clientBehaviorProgramApprovalsTable).values({
+        clientId: params.clientId,
+        behaviorLabel: canonicalBehavior,
+        programId: row.programId,
+        matchType: row.matchType,
+        requiresBcbaReview: row.requiresBcbaReview,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+  });
+
+  const saved = await db
+    .select({
+      behaviorLabel: clientBehaviorProgramApprovalsTable.behaviorLabel,
+      programId: clientBehaviorProgramApprovalsTable.programId,
+      programName: programsTable.name,
+      matchType: clientBehaviorProgramApprovalsTable.matchType,
+      requiresBcbaReview: clientBehaviorProgramApprovalsTable.requiresBcbaReview,
+    })
+    .from(clientBehaviorProgramApprovalsTable)
+    .innerJoin(programsTable, eq(clientBehaviorProgramApprovalsTable.programId, programsTable.id))
+    .where(
+      and(
+        eq(clientBehaviorProgramApprovalsTable.clientId, params.clientId),
+        eq(clientBehaviorProgramApprovalsTable.behaviorLabel, canonicalBehavior),
+        eq(programsTable.companyId, companyId),
+      ),
+    );
+
+  const data = PutClientBehaviorApprovedProgramsResponse.parse({
+    success: true,
+    data: {
+      behaviorLabel: canonicalBehavior,
+      items: saved.map((r) => ({
+        behaviorLabel: r.behaviorLabel,
+        programId: r.programId,
+        programName: r.programName,
+        matchType: r.matchType,
+        requiresBcbaReview: r.requiresBcbaReview,
+      })),
+    },
     error: null,
   });
   res.json(data);
@@ -787,6 +1100,7 @@ router.patch("/clients/:clientId", async (req, res) => {
   }
 
   await syncReplacementProgramsFromProfile(updated.id, companyId, nextProfile);
+  await pruneClientBehaviorProgramApprovals(updated.id, nextProfile);
 
   const data = GetClientResponse.parse({
     success: true,

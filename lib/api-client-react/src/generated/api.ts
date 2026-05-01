@@ -32,14 +32,18 @@ import type {
   GenerateNoteRequest,
   GenerateNoteResponse,
   HealthStatus,
+  ListBehaviorProgramApprovalsResponse,
   LoginRequest,
   LoginResponse,
   NoteDetailResponse,
   NoteListResponse,
   PatchAdminCompanyRequest,
   ProgramListResponse,
+  PutBehaviorApprovedProgramsRequest,
+  PutBehaviorApprovedProgramsResponse,
   RegisterRequest,
   RegisterResponse,
+  ReplacementProgramListResponse,
   ResendVerificationRequest,
   ResendVerificationResponse,
   SaveNoteRequest,
@@ -1546,6 +1550,328 @@ export const useDeleteClientProgram = <
   TContext
 > => {
   return useMutation(getDeleteClientProgramMutationOptions(options));
+};
+
+/**
+ * Returns rows linking each profile maladaptive behavior label to approved replacement `programs` (same IDs as GET /clients/{clientId}/programs). Empty when none configured; the note wizard then does not restrict programs by behavior.
+
+ * @summary List maladaptive-behavior to replacement-program approvals for a client
+ */
+export const getListClientBehaviorProgramApprovalsUrl = (clientId: number) => {
+  return `/api/clients/${clientId}/behavior-program-approvals`;
+};
+
+export const listClientBehaviorProgramApprovals = async (
+  clientId: number,
+  options?: RequestInit,
+): Promise<ListBehaviorProgramApprovalsResponse> => {
+  return customFetch<ListBehaviorProgramApprovalsResponse>(
+    getListClientBehaviorProgramApprovalsUrl(clientId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListClientBehaviorProgramApprovalsQueryKey = (
+  clientId: number,
+) => {
+  return [`/api/clients/${clientId}/behavior-program-approvals`] as const;
+};
+
+export const getListClientBehaviorProgramApprovalsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listClientBehaviorProgramApprovals>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  clientId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClientBehaviorProgramApprovals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getListClientBehaviorProgramApprovalsQueryKey(clientId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listClientBehaviorProgramApprovals>>
+  > = ({ signal }) =>
+    listClientBehaviorProgramApprovals(clientId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clientId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listClientBehaviorProgramApprovals>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListClientBehaviorProgramApprovalsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listClientBehaviorProgramApprovals>>
+>;
+export type ListClientBehaviorProgramApprovalsQueryError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary List maladaptive-behavior to replacement-program approvals for a client
+ */
+
+export function useListClientBehaviorProgramApprovals<
+  TData = Awaited<ReturnType<typeof listClientBehaviorProgramApprovals>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  clientId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClientBehaviorProgramApprovals>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListClientBehaviorProgramApprovalsQueryOptions(
+    clientId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary List replacement programs linked to the client (same data as /programs without sessionHours)
+ */
+export const getListClientReplacementProgramsUrl = (clientId: number) => {
+  return `/api/clients/${clientId}/replacement-programs`;
+};
+
+export const listClientReplacementPrograms = async (
+  clientId: number,
+  options?: RequestInit,
+): Promise<ReplacementProgramListResponse> => {
+  return customFetch<ReplacementProgramListResponse>(
+    getListClientReplacementProgramsUrl(clientId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getListClientReplacementProgramsQueryKey = (clientId: number) => {
+  return [`/api/clients/${clientId}/replacement-programs`] as const;
+};
+
+export const getListClientReplacementProgramsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listClientReplacementPrograms>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  clientId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClientReplacementPrograms>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ??
+    getListClientReplacementProgramsQueryKey(clientId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listClientReplacementPrograms>>
+  > = ({ signal }) =>
+    listClientReplacementPrograms(clientId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!clientId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof listClientReplacementPrograms>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListClientReplacementProgramsQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listClientReplacementPrograms>>
+>;
+export type ListClientReplacementProgramsQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary List replacement programs linked to the client (same data as /programs without sessionHours)
+ */
+
+export function useListClientReplacementPrograms<
+  TData = Awaited<ReturnType<typeof listClientReplacementPrograms>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  clientId: number,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof listClientReplacementPrograms>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListClientReplacementProgramsQueryOptions(
+    clientId,
+    options,
+  );
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * `behaviorLabel` must be URL-encoded (e.g. `encodeURIComponent` in the browser). Replaces all approvals for this client + behavior with the provided list. Each `programId` must be linked to the client via GET /clients/{clientId}/programs.
+
+ * @summary Replace approved replacement programs for one maladaptive behavior
+ */
+export const getPutClientBehaviorApprovedProgramsUrl = (
+  clientId: number,
+  behaviorLabel: string,
+) => {
+  return `/api/clients/${clientId}/behaviors/${behaviorLabel}/approved-programs`;
+};
+
+export const putClientBehaviorApprovedPrograms = async (
+  clientId: number,
+  behaviorLabel: string,
+  putBehaviorApprovedProgramsRequest: PutBehaviorApprovedProgramsRequest,
+  options?: RequestInit,
+): Promise<PutBehaviorApprovedProgramsResponse> => {
+  return customFetch<PutBehaviorApprovedProgramsResponse>(
+    getPutClientBehaviorApprovedProgramsUrl(clientId, behaviorLabel),
+    {
+      ...options,
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(putBehaviorApprovedProgramsRequest),
+    },
+  );
+};
+
+export const getPutClientBehaviorApprovedProgramsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putClientBehaviorApprovedPrograms>>,
+    TError,
+    {
+      clientId: number;
+      behaviorLabel: string;
+      data: BodyType<PutBehaviorApprovedProgramsRequest>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof putClientBehaviorApprovedPrograms>>,
+  TError,
+  {
+    clientId: number;
+    behaviorLabel: string;
+    data: BodyType<PutBehaviorApprovedProgramsRequest>;
+  },
+  TContext
+> => {
+  const mutationKey = ["putClientBehaviorApprovedPrograms"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof putClientBehaviorApprovedPrograms>>,
+    {
+      clientId: number;
+      behaviorLabel: string;
+      data: BodyType<PutBehaviorApprovedProgramsRequest>;
+    }
+  > = (props) => {
+    const { clientId, behaviorLabel, data } = props ?? {};
+
+    return putClientBehaviorApprovedPrograms(
+      clientId,
+      behaviorLabel,
+      data,
+      requestOptions,
+    );
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type PutClientBehaviorApprovedProgramsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof putClientBehaviorApprovedPrograms>>
+>;
+export type PutClientBehaviorApprovedProgramsMutationBody =
+  BodyType<PutBehaviorApprovedProgramsRequest>;
+export type PutClientBehaviorApprovedProgramsMutationError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary Replace approved replacement programs for one maladaptive behavior
+ */
+export const usePutClientBehaviorApprovedPrograms = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof putClientBehaviorApprovedPrograms>>,
+    TError,
+    {
+      clientId: number;
+      behaviorLabel: string;
+      data: BodyType<PutBehaviorApprovedProgramsRequest>;
+    },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof putClientBehaviorApprovedPrograms>>,
+  TError,
+  {
+    clientId: number;
+    behaviorLabel: string;
+    data: BodyType<PutBehaviorApprovedProgramsRequest>;
+  },
+  TContext
+> => {
+  return useMutation(
+    getPutClientBehaviorApprovedProgramsMutationOptions(options),
+  );
 };
 
 /**

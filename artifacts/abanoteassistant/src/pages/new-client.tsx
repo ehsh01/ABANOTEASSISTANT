@@ -15,12 +15,20 @@ import {
   Shield,
   CalendarIcon,
   ChevronsUpDown,
+  ChevronDown,
   Loader2,
 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { format, parse, parseISO, isValid } from "date-fns";
 import { useWizardStore } from "@/store/wizard-store";
-import { useClients, useClient, useExtractAssessmentFromPdf } from "@/hooks/use-aba-api";
+import {
+  useClients,
+  useClient,
+  useExtractAssessmentFromPdf,
+  useClientBehaviorProgramApprovals,
+  useClientReplacementProgramsList,
+  usePutClientBehaviorApprovedPrograms,
+} from "@/hooks/use-aba-api";
 import { ApiError, type AssessmentExtractResultPayload } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -29,9 +37,12 @@ import {
   createClient,
   updateClient,
   uploadClientAssessmentDocument,
+  BehaviorProgramMatchType,
   type Client as ApiClient,
+  type PutBehaviorApprovedProgramInput,
   type UpdateClientRequest,
 } from "@workspace/api-client-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Command,
   CommandEmpty,
@@ -221,27 +232,118 @@ function TagSection({
   );
 }
 
-/** Behaviors section with per-behavior topography/operational definition fields. */
+type BehaviorApprovalDraft = PutBehaviorApprovedProgramInput;
+
+const BEHAVIOR_MATCH_TYPE_VALUES = Object.values(BehaviorProgramMatchType) as NonNullable<
+  PutBehaviorApprovedProgramInput["matchType"]
+>[];
+
+/** Behaviors section with per-behavior topography and optional approved-program links (saved when client exists). */
 function BehaviorSection({
   items,
   targets,
   onAdd,
   onRemove,
   onTopographyChange,
+  clientId,
 }: {
   items: string[];
   targets: Record<string, string>;
   onAdd: (val: string) => void;
   onRemove: (i: number) => void;
   onTopographyChange: (name: string, val: string) => void;
+  /** When set (edit client), show “Approved programs for this behavior” and persist links to the API. */
+  clientId?: number;
 }) {
   const [draft, setDraft] = useState("");
+  const approvalsQ = useClientBehaviorProgramApprovals(clientId);
+  const programsQ = useClientReplacementProgramsList(clientId);
+  const putMutation = usePutClientBehaviorApprovedPrograms();
+  const programOptions = programsQ.data?.data ?? [];
+  const approvalItems = approvalsQ.data?.data?.items ?? [];
+  const [draftByBehavior, setDraftByBehavior] = useState<Record<string, BehaviorApprovalDraft[]>>({});
+  const [openPrograms, setOpenPrograms] = useState<Record<string, boolean>>({});
+  const [saveErrorByBehavior, setSaveErrorByBehavior] = useState<Record<string, string | undefined>>({});
+
+  const behaviorNamesKey = items.join("\u0001");
+  useEffect(() => {
+    if (clientId == null) return;
+    const next: Record<string, BehaviorApprovalDraft[]> = {};
+    for (const name of items) {
+      next[name] = approvalItems
+        .filter((a) => a.behaviorLabel === name)
+        .map((a) => ({
+          programId: a.programId,
+          matchType: a.matchType,
+          requiresBcbaReview: a.requiresBcbaReview,
+        }));
+    }
+    setDraftByBehavior(next);
+  }, [clientId, behaviorNamesKey, approvalItems]);
 
   function commit() {
     const v = draft.trim();
     if (v && !items.includes(v)) onAdd(v);
     setDraft("");
   }
+
+  function toggleProgramSelection(behaviorName: string, programId: number, checked: boolean) {
+    setDraftByBehavior((prev) => {
+      const cur = [...(prev[behaviorName] ?? [])];
+      if (checked) {
+        if (cur.some((e) => e.programId === programId)) return prev;
+        return {
+          ...prev,
+          [behaviorName]: [
+            ...cur,
+            {
+              programId,
+              matchType: BehaviorProgramMatchType.Direct_Match,
+              requiresBcbaReview: false,
+            },
+          ],
+        };
+      }
+      return {
+        ...prev,
+        [behaviorName]: cur.filter((e) => e.programId !== programId),
+      };
+    });
+  }
+
+  function updateDraftEntry(
+    behaviorName: string,
+    programId: number,
+    patch: Partial<Pick<BehaviorApprovalDraft, "requiresBcbaReview">> & {
+      matchType?: PutBehaviorApprovedProgramInput["matchType"];
+    },
+  ) {
+    setDraftByBehavior((prev) => {
+      const cur = [...(prev[behaviorName] ?? [])];
+      const idx = cur.findIndex((e) => e.programId === programId);
+      if (idx < 0) return prev;
+      cur[idx] = { ...cur[idx]!, ...patch };
+      return { ...prev, [behaviorName]: cur };
+    });
+  }
+
+  async function saveApprovalsForBehavior(behaviorName: string) {
+    if (clientId == null) return;
+    setSaveErrorByBehavior((s) => ({ ...s, [behaviorName]: undefined }));
+    const rows = draftByBehavior[behaviorName] ?? [];
+    try {
+      await putMutation.mutateAsync({
+        clientId,
+        behaviorLabel: behaviorName,
+        data: { programs: rows },
+      });
+    } catch (e) {
+      const msg = e instanceof ApiError ? String(e.message) : e instanceof Error ? e.message : "Save failed";
+      setSaveErrorByBehavior((s) => ({ ...s, [behaviorName]: msg }));
+    }
+  }
+
+  const showApprovals = clientId != null && clientId > 0;
 
   return (
     <div className="bg-white rounded-2xl border border-[#F0E4E1] p-6">
@@ -258,28 +360,139 @@ function BehaviorSection({
         {items.length === 0 && (
           <span className="text-sm text-[#877870] italic">None added yet</span>
         )}
-        {items.map((name, i) => (
-          <div key={i} className="rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] p-3 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold text-[#2D2523] flex-1">{name}</span>
-              <button
-                type="button"
-                onClick={() => onRemove(i)}
-                className="text-[#877870] hover:text-rose-600 transition-colors shrink-0"
-                aria-label={`Remove ${name}`}
-              >
-                <X className="w-4 h-4" />
-              </button>
+        {items.map((name, i) => {
+          const drafts = draftByBehavior[name] ?? [];
+          const selectedIds = new Set(drafts.map((d) => d.programId));
+          return (
+            <div key={`${name}-${i}`} className="rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-semibold text-[#2D2523] flex-1">{name}</span>
+                <button
+                  type="button"
+                  onClick={() => onRemove(i)}
+                  className="text-[#877870] hover:text-rose-600 transition-colors shrink-0"
+                  aria-label={`Remove ${name}`}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <textarea
+                value={targets[name] ?? ""}
+                onChange={(e) => onTopographyChange(name, e.target.value)}
+                placeholder="Topography / operational definition (optional) — what this behavior looks like for this learner"
+                rows={2}
+                className="w-full px-3 py-2 rounded-lg border border-[#F0E4E1] bg-white text-xs text-[#2D2523] placeholder:text-[#877870]/70 focus:outline-none focus:ring-2 focus:ring-[#C27A8A]/30 focus:border-[#C27A8A] transition-all resize-none"
+              />
+
+              {showApprovals && (
+                <Collapsible
+                  open={openPrograms[name] ?? false}
+                  onOpenChange={(o) => setOpenPrograms((prev) => ({ ...prev, [name]: o }))}
+                  className="pt-1 border-t border-[#F0E4E1] mt-2"
+                >
+                  <CollapsibleTrigger className="flex w-full items-center justify-between gap-2 py-2 text-left text-xs font-semibold text-[#877870] hover:text-[#C27A8A] transition-colors">
+                    <span>Approved Programs for This Behavior</span>
+                    <ChevronDown
+                      className={`w-4 h-4 shrink-0 transition-transform ${openPrograms[name] ? "rotate-180" : ""}`}
+                    />
+                  </CollapsibleTrigger>
+                  <CollapsibleContent className="space-y-3 pb-1">
+                    <p className="text-[11px] text-[#877870] leading-relaxed">
+                      These programs will be available when generating notes for this maladaptive behavior. Uses this
+                      client&apos;s replacement program list only.
+                    </p>
+                    {programsQ.isLoading || approvalsQ.isLoading ? (
+                      <div className="flex items-center gap-2 text-xs text-[#877870] py-2">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading programs…
+                      </div>
+                    ) : programOptions.length === 0 ? (
+                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5">
+                        Add replacement programs for this client first (Programs step), then return here to link them.
+                      </p>
+                    ) : (
+                      <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                        {programOptions.map((p) => {
+                          const checked = selectedIds.has(p.id);
+                          const row = drafts.find((d) => d.programId === p.id);
+                          const showBcbaBadge =
+                            row?.requiresBcbaReview || row?.matchType === BehaviorProgramMatchType.Requires_BCBA_Review;
+                          return (
+                            <div
+                              key={p.id}
+                              className="rounded-lg border border-[#F0E4E1] bg-white px-2 py-2 space-y-1.5"
+                            >
+                              <label className="flex items-start gap-2 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={(e) => toggleProgramSelection(name, p.id, e.target.checked)}
+                                  className="mt-0.5 rounded border-[#F0E4E1] text-[#C27A8A] focus:ring-[#C27A8A]/30"
+                                />
+                                <span className="text-xs font-medium text-[#2D2523] flex-1">{p.name}</span>
+                                {showBcbaBadge && (
+                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-800 bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded shrink-0">
+                                    BCBA review
+                                  </span>
+                                )}
+                              </label>
+                              {checked && row && (
+                                <div className="pl-6 space-y-1.5">
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-[10px] font-semibold uppercase text-[#877870]">
+                                      Match type
+                                    </span>
+                                    <select
+                                      value={row.matchType}
+                                      onChange={(e) =>
+                                        updateDraftEntry(name, p.id, {
+                                          matchType: e.target
+                                            .value as PutBehaviorApprovedProgramInput["matchType"],
+                                        })
+                                      }
+                                      className="w-full text-xs rounded-md border border-[#F0E4E1] bg-[#FDFAF7] px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-[#C27A8A]/30"
+                                    >
+                                      {BEHAVIOR_MATCH_TYPE_VALUES.map((mt) => (
+                                        <option key={mt} value={mt}>
+                                          {mt}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <label className="flex items-center gap-2 text-[11px] text-[#2D2523] cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={row.requiresBcbaReview}
+                                      onChange={(e) =>
+                                        updateDraftEntry(name, p.id, { requiresBcbaReview: e.target.checked })
+                                      }
+                                      className="rounded border-[#F0E4E1] text-[#C27A8A] focus:ring-[#C27A8A]/30"
+                                    />
+                                    Requires BCBA review (flag)
+                                  </label>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {saveErrorByBehavior[name] && (
+                      <p className="text-xs text-rose-600 font-medium">{saveErrorByBehavior[name]}</p>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void saveApprovalsForBehavior(name)}
+                      disabled={putMutation.isPending || programsQ.isLoading}
+                      className="w-full sm:w-auto px-4 py-2 rounded-lg bg-[#C27A8A] text-white text-xs font-semibold hover:bg-[#b06a79] disabled:opacity-50 transition-colors"
+                    >
+                      {putMutation.isPending ? "Saving…" : "Save approved programs"}
+                    </button>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
             </div>
-            <textarea
-              value={targets[name] ?? ""}
-              onChange={(e) => onTopographyChange(name, e.target.value)}
-              placeholder="Topography / operational definition (optional) — what this behavior looks like for this learner"
-              rows={2}
-              className="w-full px-3 py-2 rounded-lg border border-[#F0E4E1] bg-white text-xs text-[#2D2523] placeholder:text-[#877870]/70 focus:outline-none focus:ring-2 focus:ring-[#C27A8A]/30 focus:border-[#C27A8A] transition-all resize-none"
-            />
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Add input */}
@@ -293,6 +506,7 @@ function BehaviorSection({
           className="flex-1 px-4 py-2.5 rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] text-sm text-[#2D2523] placeholder:text-[#877870] focus:outline-none focus:ring-2 focus:ring-[#C27A8A]/30 focus:border-[#C27A8A] transition-all"
         />
         <button
+          type="button"
           onClick={commit}
           disabled={!draft.trim()}
           className="w-10 h-10 rounded-xl bg-[#C27A8A] text-white flex items-center justify-center hover:bg-[#b06a79] transition-colors disabled:opacity-40 disabled:cursor-not-allowed shrink-0"
@@ -640,9 +854,12 @@ function Step2({
 function Step3({
   data,
   onChange,
+  clientId,
 }: {
   data: Step3Data;
   onChange: (d: Step3Data) => void;
+  /** Present in edit flow so behavior→program links can be saved from this step. */
+  clientId?: number;
 }) {
   function addTo(key: "replacementPrograms" | "interventions", val: string) {
     onChange({ ...data, [key]: [...data[key], val] });
@@ -681,6 +898,7 @@ function Step3({
         onAdd={addBehavior}
         onRemove={removeBehavior}
         onTopographyChange={setTopography}
+        clientId={clientId}
       />
 
       <TagSection
@@ -713,10 +931,12 @@ function Step3SingleSection({
   section,
   data,
   onChange,
+  clientId,
 }: {
   section: Exclude<EditSection, "personal">;
   data: Step3Data;
   onChange: (d: Step3Data) => void;
+  clientId?: number;
 }) {
   function addTo(key: "replacementPrograms" | "interventions", val: string) {
     onChange({ ...data, [key]: [...data[key], val] });
@@ -749,6 +969,7 @@ function Step3SingleSection({
         onAdd={addBehavior}
         onRemove={removeBehavior}
         onTopographyChange={setTopography}
+        clientId={clientId}
       />
     );
   }
@@ -1079,6 +1300,12 @@ function NewClientForm({
       await updateClient(numericId, payload);
       await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       await queryClient.invalidateQueries({ queryKey: ["/api/clients", numericId] });
+      await queryClient.invalidateQueries({
+        queryKey: ["/api/clients", numericId, "behavior-program-approvals"],
+      });
+      await queryClient.invalidateQueries({
+        queryKey: ["/api/clients", numericId, "replacement-programs"],
+      });
       setSaving(false);
       setLocation("/clients");
     } catch (e) {
@@ -1198,7 +1425,12 @@ function NewClientForm({
                   <p className="text-[#877870] text-sm leading-relaxed">
                     These details are used when generating session notes.
                   </p>
-                  <Step3SingleSection section={editSection} data={step3} onChange={setStep3} />
+                  <Step3SingleSection
+                    section={editSection}
+                    data={step3}
+                    onChange={setStep3}
+                    clientId={numericId}
+                  />
                 </div>
               )}
 
@@ -1314,7 +1546,13 @@ function NewClientForm({
                 onExtractFromPdf={handleExtractFromPdf}
               />
             )}
-            {step === 3 && <Step3 data={step3} onChange={setStep3} />}
+            {step === 3 && (
+              <Step3
+                data={step3}
+                onChange={setStep3}
+                clientId={isEdit ? numericId : undefined}
+              />
+            )}
 
             <div className="mt-8 flex flex-col gap-2">
               {saveError && (
