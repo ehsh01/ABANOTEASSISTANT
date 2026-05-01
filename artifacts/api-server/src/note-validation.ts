@@ -185,6 +185,26 @@ function findJoinedInterventionPairPhrase(
   return null;
 }
 
+/** Catalog intervention immediately followed by comma before "by" (breaks exact-match phrasing). */
+function firstInterventionWithCommaBeforeBy(paragraph: string, interventionNames: string[]): string | null {
+  const list = interventionNames.map((s) => s.trim()).filter((s) => s.length > 1);
+  for (const name of list) {
+    const re = new RegExp(escapeRegExp(name) + String.raw`,\s*by\b`);
+    if (re.test(paragraph)) return name;
+  }
+  return null;
+}
+
+/** Catalog intervention wrapped in straight double quotes (breaks plain substring checks). */
+function firstQuotedCatalogIntervention(paragraph: string, interventionNames: string[]): string | null {
+  const list = interventionNames.map((s) => s.trim()).filter((s) => s.length > 1);
+  for (const name of list) {
+    const re = new RegExp(`"${escapeRegExp(name)}"`);
+    if (re.test(paragraph)) return name;
+  }
+  return null;
+}
+
 /** Canonical rotation order for common BIP maladaptive behavior names (exact spelling for substring match in assessment text). */
 export const STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER: readonly string[] = [
   "Physical Aggression",
@@ -765,7 +785,24 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const joined = findJoinedInterventionPairPhrase(paragraphs[i]!, interventionCatalog);
       if (joined) {
         issues.push(
-          `Interventions: paragraph ${i + 1} joins two catalog interventions ("${joined.a}" and "${joined.b}") in one phrase (comma or "and" between bare names). Use separate sentences with exact labels only, e.g. The RBT implemented "${joined.a}", by …. The RBT also implemented "${joined.b}", by …. Do not combine two catalog names into one noun phrase.`,
+          `Interventions: paragraph ${i + 1} joins two catalog interventions (${joined.a} and ${joined.b}) in one phrase (comma or "and" between names). Use separate sentences with exact JSON labels only—no quotes, no comma before by—e.g. The RBT implemented ${joined.a} by …. The RBT also implemented ${joined.b} by …. Do not combine two catalog names into one noun phrase.`,
+        );
+      }
+    }
+  }
+  if (interventionCatalog.length >= 1) {
+    for (let i = 0; i < paragraphs.length; i++) {
+      const p = paragraphs[i]!;
+      const commaAfter = firstInterventionWithCommaBeforeBy(p, interventionCatalog);
+      if (commaAfter) {
+        issues.push(
+          `Interventions: paragraph ${i + 1}: remove the comma between "${commaAfter}" and by; use a single space only (… ${commaAfter} by …) with exact JSON casing.`,
+        );
+      }
+      const quoted = firstQuotedCatalogIntervention(p, interventionCatalog);
+      if (quoted) {
+        issues.push(
+          `Interventions: paragraph ${i + 1}: remove double quotes around "${quoted}"; write the catalog intervention as a plain exact substring matching JSON (… ${quoted} by …).`,
         );
       }
     }
