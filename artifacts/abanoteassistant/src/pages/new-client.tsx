@@ -338,20 +338,27 @@ function BehaviorSection({
   }
 
   async function saveApprovalsForBehavior(behaviorName: string) {
-    if (clientId == null) return;
+    console.log("[saveApprovals] called", { behaviorName, clientId });
+    if (clientId == null) {
+      console.warn("[saveApprovals] early exit: clientId is null/undefined");
+      return;
+    }
     setSaveErrorByBehavior((s) => ({ ...s, [behaviorName]: undefined }));
     setSavedByBehavior((s) => ({ ...s, [behaviorName]: false }));
     setSavingByBehavior((s) => ({ ...s, [behaviorName]: true }));
     const rows = draftByBehavior[behaviorName] ?? [];
+    console.log("[saveApprovals] sending PUT", { clientId, behaviorName, rows });
     try {
-      await putMutation.mutateAsync({
+      const result = await putMutation.mutateAsync({
         clientId,
         behaviorLabel: behaviorName,
         data: { programs: rows },
       });
+      console.log("[saveApprovals] success", result);
       setSavedByBehavior((s) => ({ ...s, [behaviorName]: true }));
       setTimeout(() => setSavedByBehavior((s) => ({ ...s, [behaviorName]: false })), 3000);
     } catch (e) {
+      console.error("[saveApprovals] error", e);
       const msg = e instanceof ApiError ? String(e.message) : e instanceof Error ? e.message : "Save failed";
       setSaveErrorByBehavior((s) => ({ ...s, [behaviorName]: msg }));
     } finally {
