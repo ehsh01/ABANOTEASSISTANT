@@ -260,17 +260,19 @@ function BehaviorSection({
   const programsQ = useClientReplacementProgramsList(clientId);
   const putMutation = usePutClientBehaviorApprovedPrograms();
   const programOptions = programsQ.data?.data ?? [];
-  const approvalItems = approvalsQ.data?.data?.items ?? [];
   const [draftByBehavior, setDraftByBehavior] = useState<Record<string, BehaviorApprovalDraft[]>>({});
   const [openPrograms, setOpenPrograms] = useState<Record<string, boolean>>({});
   const [saveErrorByBehavior, setSaveErrorByBehavior] = useState<Record<string, string | undefined>>({});
 
   const behaviorNamesKey = items.join("\u0001");
+  /** TanStack `data` is referentially stable until a fetch replaces it; do NOT depend on derived `items ?? []` arrays (new reference every render) or checkboxes reset immediately. */
   useEffect(() => {
     if (clientId == null) return;
+    const names = behaviorNamesKey.length > 0 ? behaviorNamesKey.split("\u0001") : [];
+    const rowItems = approvalsQ.data?.data?.items ?? [];
     const next: Record<string, BehaviorApprovalDraft[]> = {};
-    for (const name of items) {
-      next[name] = approvalItems
+    for (const name of names) {
+      next[name] = rowItems
         .filter((a) => a.behaviorLabel === name)
         .map((a) => ({
           programId: a.programId,
@@ -279,7 +281,7 @@ function BehaviorSection({
         }));
     }
     setDraftByBehavior(next);
-  }, [clientId, behaviorNamesKey, approvalItems]);
+  }, [clientId, behaviorNamesKey, approvalsQ.data]);
 
   function commit() {
     const v = draft.trim();
