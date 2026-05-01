@@ -215,6 +215,21 @@ function firstQuotedCatalogIntervention(paragraph: string, interventionNames: st
   return null;
 }
 
+/** Legacy / invalid: catalog name immediately followed by **by** in the same clause as implemented/applied. */
+function firstInterventionNameWithAttachedByClause(
+  paragraph: string,
+  interventionNames: string[],
+): string | null {
+  const list = [...new Set(interventionNames.map((s) => s.trim()).filter((s) => s.length > 1))].sort(
+    (a, b) => b.length - a.length,
+  );
+  for (const name of list) {
+    const re = new RegExp(`(?:implemented|applied)\\s+${escapeRegExp(name)}\\s+by\\b`, "i");
+    if (re.test(paragraph)) return name;
+  }
+  return null;
+}
+
 /** Canonical rotation order for common BIP maladaptive behavior names (exact spelling for substring match in assessment text). */
 export const STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER: readonly string[] = [
   "Physical Aggression",
@@ -621,8 +636,9 @@ function assignedBehaviorAllowsResponseBlockSafetyChain(behaviorName: string): b
 }
 
 /**
- * Count distinct catalog interventions documented with **implemented** / **applied** … **by** (longest catalog
- * strings first to avoid double-counting a shorter label inside a longer one).
+ * Count distinct catalog interventions documented with **implemented** / **applied** + exact catalog name,
+ * where the **naming sentence ends with a period** immediately after the name (no **by** clause in that sentence).
+ * Longest catalog strings first to avoid double-counting a shorter label inside a longer one.
  */
 export function countInterventionImplementationsInParagraph(
   paragraph: string,
@@ -633,7 +649,7 @@ export function countInterventionImplementationsInParagraph(
   );
   const spans: { start: number; end: number }[] = [];
   for (const name of names) {
-    const re = new RegExp(`(?:implemented|applied)\\s+${escapeRegExp(name)}\\s+by\\b`, "gi");
+    const re = new RegExp(`(?:implemented|applied)\\s+${escapeRegExp(name)}\\s*\\.`, "gi");
     let m: RegExpExecArray | null;
     while ((m = re.exec(paragraph)) !== null) {
       const start = m.index;
@@ -863,7 +879,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const joined = findJoinedInterventionPairPhrase(paragraphs[i]!, interventionCatalog);
       if (joined) {
         issues.push(
-          `Interventions: paragraph ${i + 1} joins two catalog interventions (${joined.a} and ${joined.b}) in one phrase (comma or "and" between names). Do not combine two catalog names into one noun phrase; use exact JSON labels with no quotes and no comma before by. For most ABC segments document **one** intervention only—only safety-priority segments with Response Block on the client's list may use multiple **separate** sentences (never a compound label).`,
+          `Interventions: paragraph ${i + 1} joins two catalog interventions (${joined.a} and ${joined.b}) in one phrase (comma or "and" between names). Do not combine two catalog names into one noun phrase; use exact JSON labels in separate naming sentences (each ending with a period after the name). For most ABC segments document **one** intervention only—only safety-priority segments with Response Block on the client's list may use multiple **separate** naming sentences (never a compound label).`,
         );
       }
     }
@@ -874,13 +890,19 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const commaAfter = firstInterventionWithCommaBeforeBy(p, interventionCatalog);
       if (commaAfter) {
         issues.push(
-          `Interventions: paragraph ${i + 1}: remove the comma between "${commaAfter}" and by; use a single space only (… ${commaAfter} by …) with exact JSON casing.`,
+          `Interventions: paragraph ${i + 1}: remove the comma between "${commaAfter}" and "by" (do not use a "…, by …" clause attached to the catalog name). End the naming sentence after the exact catalog name with a period, then describe implementation in a new sentence.`,
         );
       }
       const quoted = firstQuotedCatalogIntervention(p, interventionCatalog);
       if (quoted) {
         issues.push(
-          `Interventions: paragraph ${i + 1}: remove double quotes around "${quoted}"; write the catalog intervention as a plain exact substring matching JSON (… ${quoted} by …).`,
+          `Interventions: paragraph ${i + 1}: remove double quotes around "${quoted}"; write the catalog intervention as plain text matching JSON exactly, in its own sentence ending with a period after the name.`,
+        );
+      }
+      const attachedBy = firstInterventionNameWithAttachedByClause(p, interventionCatalog);
+      if (attachedBy) {
+        issues.push(
+          `Interventions: paragraph ${i + 1}: do not attach "by …" to "${attachedBy}" in the same sentence as implemented/applied. Use two sentences: (1) "The RBT implemented ${attachedBy}." or "To address this behavior, the RBT implemented ${attachedBy}." with the exact JSON string and a period immediately after the name; (2) a separate sentence describing what was done (for example beginning with "Following this intervention, …").`,
         );
       }
     }
@@ -915,12 +937,12 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
 
     if (!safetyChainAllowed && implCount > 1) {
       issues.push(
-        `Interventions: paragraph ${i + 1} must document **one** catalog intervention for this ABC segment (one "… implemented [exact JSON label] by …" or "… applied … by …" chain). Pick the single best-matching entry from JSON interventions unless the segment is a safety-priority behavior with Response Block on the client's list (physical aggression, wandering, elopement, baiting, bolting, running away)—then Response Block may be first with additional interventions in separate sentences.`,
+        `Interventions: paragraph ${i + 1} must document **one** catalog intervention for this ABC segment (one naming sentence: "… implemented [exact JSON label]." or "… applied [exact JSON label]." with a period immediately after the name, then separate sentences for detail). Pick the single best-matching entry from JSON interventions unless the segment is a safety-priority behavior with Response Block on the client's list (physical aggression, wandering, elopement, baiting, bolting, running away)—then Response Block may be first with additional interventions in separate naming sentences.`,
       );
     }
     if (implCount === 0) {
       issues.push(
-        `Interventions: paragraph ${i + 1} must document at least one catalog intervention using the exact JSON label with "implemented … by" or "applied … by".`,
+        `Interventions: paragraph ${i + 1} must document at least one catalog intervention using the exact JSON label in a naming sentence ending with a period right after the name (for example "The RBT implemented [exact label]." or "To address this behavior, the RBT implemented [exact label]."), then describe what was done in following sentences—do not put "by …" in the same sentence as the catalog name.`,
       );
     }
   }
@@ -946,7 +968,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const firstNamed = firstInterventionMentionInText(tail, interventionList);
       if (firstNamed !== responseBlockLabel) {
         issues.push(
-          `Safety-priority behavior (${assignedBehavior}): paragraph ${i + 1} must describe "${responseBlockLabel}" as the first implemented intervention after "To address this behavior" (before other listed interventions such as environmental manipulation).`,
+          `Safety-priority behavior (${assignedBehavior}): paragraph ${i + 1} must name "${responseBlockLabel}" as the first catalog intervention after "To address this behavior" (before other listed interventions such as environmental manipulation), in its own naming sentence ending with a period after the exact label.`,
         );
       }
     }
