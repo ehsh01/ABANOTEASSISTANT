@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type {
   ClientListResponse,
   ClientDetailResponse,
@@ -73,6 +78,7 @@ export function useClientBehaviorProgramApprovals(clientId: number | undefined) 
     enabled: !!token && clientId !== undefined && clientId !== null,
     queryFn: async (): Promise<ListBehaviorProgramApprovalsResponse> =>
       listClientBehaviorProgramApprovals(clientId!),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -104,9 +110,26 @@ export function usePutClientBehaviorApprovedPrograms() {
       const fresh = res.data.items;
 
       queryClient.setQueriesData(
-        { queryKey: ["/api/clients", vars.clientId, "behavior-program-approvals"] },
+        {
+          predicate: (q) => {
+            const k = q.queryKey;
+            return (
+              Array.isArray(k) &&
+              k[0] === "/api/clients" &&
+              k[1] === vars.clientId &&
+              k[2] === "behavior-program-approvals"
+            );
+          },
+        },
         (old: ListBehaviorProgramApprovalsResponse | undefined) => {
-          if (!old?.data?.items) {
+          if (old == null) {
+            return {
+              success: true,
+              data: { items: [...fresh] },
+              error: null,
+            };
+          }
+          if (!Array.isArray(old.data?.items)) {
             return old;
           }
           const cl = canonical.toLowerCase();

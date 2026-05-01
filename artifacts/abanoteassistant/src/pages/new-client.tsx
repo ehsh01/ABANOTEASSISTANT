@@ -261,8 +261,11 @@ function BehaviorSection({
   const putMutation = usePutClientBehaviorApprovedPrograms();
   const programOptions = programsQ.data?.data ?? [];
   const [draftByBehavior, setDraftByBehavior] = useState<Record<string, BehaviorApprovalDraft[]>>({});
+  const draftByBehaviorRef = useRef(draftByBehavior);
+  draftByBehaviorRef.current = draftByBehavior;
   const [openPrograms, setOpenPrograms] = useState<Record<string, boolean>>({});
   const [saveErrorByBehavior, setSaveErrorByBehavior] = useState<Record<string, string | undefined>>({});
+  const [saveOkByBehavior, setSaveOkByBehavior] = useState<Record<string, boolean>>({});
 
   const behaviorNamesKey = items.join("\u0001");
   /** TanStack `data` is referentially stable until a fetch replaces it; do NOT depend on derived `items ?? []` arrays (new reference every render) or checkboxes reset immediately. */
@@ -337,13 +340,18 @@ function BehaviorSection({
   async function saveApprovalsForBehavior(behaviorName: string) {
     if (clientId == null) return;
     setSaveErrorByBehavior((s) => ({ ...s, [behaviorName]: undefined }));
-    const rows = draftByBehavior[behaviorName] ?? [];
+    setSaveOkByBehavior((s) => ({ ...s, [behaviorName]: false }));
+    const rows = draftByBehaviorRef.current[behaviorName] ?? [];
     try {
       await putMutation.mutateAsync({
         clientId,
         behaviorLabel: behaviorName,
         data: { programs: rows },
       });
+      setSaveOkByBehavior((s) => ({ ...s, [behaviorName]: true }));
+      window.setTimeout(() => {
+        setSaveOkByBehavior((s) => ({ ...s, [behaviorName]: false }));
+      }, 2800);
     } catch (e) {
       const msg = e instanceof ApiError ? String(e.message) : e instanceof Error ? e.message : "Save failed";
       setSaveErrorByBehavior((s) => ({ ...s, [behaviorName]: msg }));
@@ -485,6 +493,11 @@ function BehaviorSection({
                     )}
                     {saveErrorByBehavior[name] && (
                       <p className="text-xs text-rose-600 font-medium">{saveErrorByBehavior[name]}</p>
+                    )}
+                    {saveOkByBehavior[name] && (
+                      <p className="text-xs text-emerald-700 font-semibold">
+                        Approved programs saved.
+                      </p>
                     )}
                     <button
                       type="button"
