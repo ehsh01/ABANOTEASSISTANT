@@ -1,4 +1,5 @@
 import type {
+  AssessmentStructuredRow,
   Client,
   ClientProfileRow,
   MaladaptiveBehaviorProfileEntry,
@@ -19,6 +20,8 @@ export type ClientProfilePublic = {
   replacementPrograms: string[];
   interventions: string[];
   assessmentFileName?: string | null;
+  /** Curated assessment allow-lists when present on the stored profile. */
+  assessmentStructured?: AssessmentStructuredRow | null;
 };
 
 export function sanitizeClientProfileForApi(profile: ClientProfileRow): ClientProfilePublic {
@@ -32,6 +35,7 @@ export function sanitizeClientProfileForApi(profile: ClientProfileRow): ClientPr
     replacementPrograms: profile.replacementPrograms,
     interventions: profile.interventions,
     assessmentFileName: profile.assessmentFileName ?? null,
+    assessmentStructured: profile.assessmentStructured ?? null,
   };
 }
 

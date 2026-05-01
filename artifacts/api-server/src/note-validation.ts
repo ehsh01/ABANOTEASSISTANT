@@ -36,6 +36,11 @@ export type NoteComplianceContext = {
    * (verbal/language maladaptive topography); toddler speech checks skip those paragraphs.
    */
   languageMaladaptiveEpisodeForHour?: boolean[] | undefined;
+  /**
+   * When true at index `i`, paragraph `i` is a **skill-acquisition-only** segment (e.g. Respond to Own Name, Echoic):
+   * do not cite a maladaptive catalog label; `maladaptiveBehaviorForHour[i]` is cleared for validators/prompts.
+   */
+  acquisitionOnlySegmentForHour?: boolean[] | undefined;
   /** BIP intervention names (exact strings) — used for physical-aggression / Response Block ordering */
   interventions: string[];
   /**
@@ -809,8 +814,11 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   const assignedPerHour = ctx.maladaptiveBehaviorForHour ?? [];
   const activityLockedPerHour = ctx.activityAntecedentForHour ?? [];
 
+  const acquisitionFlags = ctx.acquisitionOnlySegmentForHour ?? [];
+
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i]!;
+    const acquisitionOnly = acquisitionFlags[i] === true;
     const lockedActivity = activityLockedPerHour[i];
     if (typeof lockedActivity === "string" && lockedActivity.length > 0 && !p.includes(lockedActivity)) {
       issues.push(
@@ -820,7 +828,14 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     }
     if (behaviorCatalog.length > 0) {
       const bCount = countCatalogBehaviorsInParagraph(p, behaviorCatalog);
-      if (bCount > 1) {
+      if (acquisitionOnly) {
+        if (bCount > 0) {
+          issues.push(
+            `Skill-acquisition segment (paragraph ${i + 1}): do not cite any maladaptive behavior catalog label; this segment documents only the assigned skill-acquisition replacement program (no "manifested [maladaptive]" framing).`,
+          );
+          break;
+        }
+      } else if (bCount > 1) {
         issues.push(
           `One maladaptive behavior per ABC: paragraph ${i + 1} references more than one behavior name from the client catalog; use exactly one catalog behavior per narrative segment.`,
         );
@@ -828,13 +843,13 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       }
     }
     const assigned = assignedPerHour[i]?.trim();
-    if (assigned && !p.includes(assigned)) {
+    if (!acquisitionOnly && assigned && !p.includes(assigned)) {
       issues.push(
         `Maladaptive behavior rotation: paragraph ${i + 1} must cite the assigned catalog label "${assigned}" (maladaptiveBehaviorForHour[${i}]) verbatim in the manifested-behavior portion.`,
       );
       break;
     }
-    if (tantrumWithoutTopography(p)) {
+    if (!acquisitionOnly && tantrumWithoutTopography(p)) {
       issues.push(
         `Tantrum topography: paragraph ${i + 1} mentions tantrum/meltdown without enough observable detail; describe what the client did (sounds, movements, materials) consistent with the assessment behavior definitions.`,
       );
@@ -877,7 +892,8 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
 
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i]!;
-    const assignedBehavior = assignedPerHour[i]?.trim() ?? "";
+    const acquisitionOnly = acquisitionFlags[i] === true;
+    const assignedBehavior = acquisitionOnly ? "" : (assignedPerHour[i]?.trim() ?? "");
     const trialEntry = trialSummaries?.[i];
     if (trialEntry && trialEntry.totalTrials >= 1) {
       const successN = trialEntry.successfulTrialNumbers.length;
@@ -912,6 +928,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   if (responseBlockLabel) {
     for (let i = 0; i < paragraphs.length; i++) {
       const p = paragraphs[i]!;
+      if (acquisitionFlags[i] === true) {
+        continue;
+      }
       const assignedBehavior = assignedPerHour[i]?.trim() ?? "";
       if (!assignedBehavior || !assignedBehaviorAllowsResponseBlockSafetyChain(assignedBehavior)) {
         continue;

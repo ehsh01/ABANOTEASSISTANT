@@ -14,6 +14,9 @@ import {
   UpdateClientProgramResponse,
   DeleteClientProgramParams,
   DeleteClientProgramResponse,
+  CreateClientClinicalRecommendationParams,
+  CreateClientClinicalRecommendationBody,
+  CreateClientClinicalRecommendationResponse,
 } from "@workspace/api-zod";
 import { db } from "@workspace/db";
 import {
@@ -24,6 +27,12 @@ import {
 } from "@workspace/db/schema";
 import { clientRowToApiData } from "../client-profile-api";
 import { mergeMaladaptiveProfileFields } from "../client-profile-maladaptive";
+import {
+  getAssessmentStructuredFromProfile,
+  parseAssessmentStructured,
+  validateAssessmentStructured,
+} from "../assessment-structured";
+import { computeClinicalRecommendation } from "../recommendation-engine";
 import { z } from "zod";
 
 const router: IRouter = Router();
@@ -241,6 +250,27 @@ router.post("/clients", async (req, res) => {
     interventions: body.interventions,
     assessmentFileName: body.assessmentFileName ?? undefined,
   };
+  if (body.assessmentStructured != null) {
+    const parsed = parseAssessmentStructured(body.assessmentStructured);
+    if (!parsed) {
+      res.status(400).json({
+        success: false,
+        error: "assessmentStructured could not be parsed",
+        messages: [],
+      });
+      return;
+    }
+    const vi = validateAssessmentStructured(parsed);
+    if (vi.length > 0) {
+      res.status(400).json({
+        success: false,
+        error: "Invalid assessmentStructured",
+        messages: vi,
+      });
+      return;
+    }
+    profile.assessmentStructured = parsed;
+  }
   const name = `${profile.firstName} ${profile.lastName}`.trim() || "Client";
 
   const [row] = await db
@@ -566,6 +596,85 @@ router.get("/clients/:clientId", async (req, res) => {
   res.json(data);
 });
 
+router.post("/clients/:clientId/recommendations", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const params = CreateClientClinicalRecommendationParams.parse(req.params);
+
+  let body: z.infer<typeof CreateClientClinicalRecommendationBody>;
+  try {
+    body = CreateClientClinicalRecommendationBody.parse(req.body);
+  } catch {
+    res.status(400).json({ success: false, error: "Invalid request body", messages: [] });
+    return;
+  }
+
+  const [client] = await db
+    .select()
+    .from(clientsTable)
+    .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)))
+    .limit(1);
+
+  if (!client) {
+    res.status(404).json({ success: false, error: "Client not found", messages: [] });
+    return;
+  }
+
+  const profile = (client.profile as ClientProfileRow | null | undefined) ?? null;
+  const structured = getAssessmentStructuredFromProfile(profile);
+  if (!structured) {
+    res.status(422).json({
+      success: false,
+      error: "Structured assessment required",
+      messages: [
+        "Set profile.assessmentStructured (curated BIP allow-lists) via PATCH /clients/:clientId before requesting recommendations.",
+      ],
+    });
+    return;
+  }
+
+  const structIssues = validateAssessmentStructured(structured);
+  if (structIssues.length > 0) {
+    res.status(422).json({
+      success: false,
+      error: "Invalid structured assessment on client profile",
+      messages: structIssues,
+    });
+    return;
+  }
+
+  const result = computeClinicalRecommendation(structured, {
+    behavior: body.behavior,
+    behavior_topography: body.behavior_topography,
+    operational_definition: body.operational_definition,
+    function: body.function,
+    severity_level: body.severity_level,
+    is_dangerous: body.is_dangerous,
+  });
+
+  if (!result.ok) {
+    const data = CreateClientClinicalRecommendationResponse.parse({
+      success: false,
+      data: null,
+      error: result.error,
+      messages: [],
+    });
+    res.status(200).json(data);
+    return;
+  }
+
+  const data = CreateClientClinicalRecommendationResponse.parse({
+    success: true,
+    data: result.data,
+    error: null,
+  });
+  res.json(data);
+});
+
 router.patch("/clients/:clientId", async (req, res) => {
   const companyId = req.companyId;
   if (companyId === undefined) {
@@ -615,6 +724,33 @@ router.patch("/clients/:clientId", async (req, res) => {
     maladaptiveBehaviorTargets = mal.maladaptiveBehaviorTargets;
   }
 
+  let assessmentStructuredNext: ClientProfileRow["assessmentStructured"] = base.assessmentStructured;
+  if (body.assessmentStructured !== undefined) {
+    if (body.assessmentStructured === null) {
+      assessmentStructuredNext = null;
+    } else {
+      const parsed = parseAssessmentStructured(body.assessmentStructured);
+      if (!parsed) {
+        res.status(400).json({
+          success: false,
+          error: "assessmentStructured could not be parsed",
+          messages: [],
+        });
+        return;
+      }
+      const vi = validateAssessmentStructured(parsed);
+      if (vi.length > 0) {
+        res.status(400).json({
+          success: false,
+          error: "Invalid assessmentStructured",
+          messages: vi,
+        });
+        return;
+      }
+      assessmentStructuredNext = parsed;
+    }
+  }
+
   const nextProfile: ClientProfileRow = {
     ...base,
     firstName: body.firstName?.trim() ?? base.firstName,
@@ -626,6 +762,7 @@ router.patch("/clients/:clientId", async (req, res) => {
     replacementPrograms: body.replacementPrograms ?? base.replacementPrograms,
     interventions: body.interventions ?? base.interventions,
     assessmentFileName,
+    assessmentStructured: assessmentStructuredNext,
   };
 
   const name =

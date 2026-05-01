@@ -23,6 +23,8 @@ import type {
   AdminUserListResponse,
   ClientDetailResponse,
   ClientListResponse,
+  ClinicalRecommendationRequest,
+  ClinicalRecommendationResponse,
   CreateClientRequest,
   DeleteClientProgramResponse,
   DeleteNoteResponse,
@@ -1150,6 +1152,102 @@ export const useUploadClientAssessmentDocument = <
   TContext
 > => {
   return useMutation(getUploadClientAssessmentDocumentMutationOptions(options));
+};
+
+/**
+ * Uses `profile.assessmentStructured` on the client. Does not invent labels: outputs are subsets of assessment allow-lists, filtered by FBA function when `replacement_program_functions` is populated.
+
+ * @summary Recommend programs and interventions from structured assessment only
+ */
+export const getCreateClientClinicalRecommendationUrl = (clientId: number) => {
+  return `/api/clients/${clientId}/recommendations`;
+};
+
+export const createClientClinicalRecommendation = async (
+  clientId: number,
+  clinicalRecommendationRequest: ClinicalRecommendationRequest,
+  options?: RequestInit,
+): Promise<ClinicalRecommendationResponse> => {
+  return customFetch<ClinicalRecommendationResponse>(
+    getCreateClientClinicalRecommendationUrl(clientId),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(clinicalRecommendationRequest),
+    },
+  );
+};
+
+export const getCreateClientClinicalRecommendationMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClientClinicalRecommendation>>,
+    TError,
+    { clientId: number; data: BodyType<ClinicalRecommendationRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createClientClinicalRecommendation>>,
+  TError,
+  { clientId: number; data: BodyType<ClinicalRecommendationRequest> },
+  TContext
+> => {
+  const mutationKey = ["createClientClinicalRecommendation"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createClientClinicalRecommendation>>,
+    { clientId: number; data: BodyType<ClinicalRecommendationRequest> }
+  > = (props) => {
+    const { clientId, data } = props ?? {};
+
+    return createClientClinicalRecommendation(clientId, data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateClientClinicalRecommendationMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createClientClinicalRecommendation>>
+>;
+export type CreateClientClinicalRecommendationMutationBody =
+  BodyType<ClinicalRecommendationRequest>;
+export type CreateClientClinicalRecommendationMutationError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary Recommend programs and interventions from structured assessment only
+ */
+export const useCreateClientClinicalRecommendation = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createClientClinicalRecommendation>>,
+    TError,
+    { clientId: number; data: BodyType<ClinicalRecommendationRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createClientClinicalRecommendation>>,
+  TError,
+  { clientId: number; data: BodyType<ClinicalRecommendationRequest> },
+  TContext
+> => {
+  return useMutation(
+    getCreateClientClinicalRecommendationMutationOptions(options),
+  );
 };
 
 /**
