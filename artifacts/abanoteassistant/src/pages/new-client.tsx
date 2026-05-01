@@ -9,6 +9,7 @@ import {
   X,
   Plus,
   CheckCircle2,
+  Check,
   User,
   AlertTriangle,
   Zap,
@@ -263,6 +264,8 @@ function BehaviorSection({
   const [draftByBehavior, setDraftByBehavior] = useState<Record<string, BehaviorApprovalDraft[]>>({});
   const [openPrograms, setOpenPrograms] = useState<Record<string, boolean>>({});
   const [saveErrorByBehavior, setSaveErrorByBehavior] = useState<Record<string, string | undefined>>({});
+  const [savingByBehavior, setSavingByBehavior] = useState<Record<string, boolean>>({});
+  const [savedByBehavior, setSavedByBehavior] = useState<Record<string, boolean>>({});
 
   const behaviorNamesKey = items.join("\u0001");
   /** TanStack `data` is referentially stable until a fetch replaces it; do NOT depend on derived `items ?? []` arrays (new reference every render) or checkboxes reset immediately. */
@@ -337,6 +340,8 @@ function BehaviorSection({
   async function saveApprovalsForBehavior(behaviorName: string) {
     if (clientId == null) return;
     setSaveErrorByBehavior((s) => ({ ...s, [behaviorName]: undefined }));
+    setSavedByBehavior((s) => ({ ...s, [behaviorName]: false }));
+    setSavingByBehavior((s) => ({ ...s, [behaviorName]: true }));
     const rows = draftByBehavior[behaviorName] ?? [];
     try {
       await putMutation.mutateAsync({
@@ -344,9 +349,13 @@ function BehaviorSection({
         behaviorLabel: behaviorName,
         data: { programs: rows },
       });
+      setSavedByBehavior((s) => ({ ...s, [behaviorName]: true }));
+      setTimeout(() => setSavedByBehavior((s) => ({ ...s, [behaviorName]: false })), 3000);
     } catch (e) {
       const msg = e instanceof ApiError ? String(e.message) : e instanceof Error ? e.message : "Save failed";
       setSaveErrorByBehavior((s) => ({ ...s, [behaviorName]: msg }));
+    } finally {
+      setSavingByBehavior((s) => ({ ...s, [behaviorName]: false }));
     }
   }
 
@@ -484,16 +493,26 @@ function BehaviorSection({
                       </div>
                     )}
                     {saveErrorByBehavior[name] && (
-                      <p className="text-xs text-rose-600 font-medium">{saveErrorByBehavior[name]}</p>
+                      <div className="flex items-start gap-2 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
+                        <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                        <p className="text-xs text-rose-700 font-medium leading-snug">{saveErrorByBehavior[name]}</p>
+                      </div>
                     )}
-                    <button
-                      type="button"
-                      onClick={() => void saveApprovalsForBehavior(name)}
-                      disabled={putMutation.isPending || programsQ.isLoading}
-                      className="w-full sm:w-auto px-4 py-2 rounded-lg bg-[#C27A8A] text-white text-xs font-semibold hover:bg-[#b06a79] disabled:opacity-50 transition-colors"
-                    >
-                      {putMutation.isPending ? "Saving…" : "Save approved programs"}
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => void saveApprovalsForBehavior(name)}
+                        disabled={savingByBehavior[name] || programsQ.isLoading}
+                        className="px-4 py-2 rounded-lg bg-[#C27A8A] text-white text-xs font-semibold hover:bg-[#b06a79] disabled:opacity-50 transition-colors"
+                      >
+                        {savingByBehavior[name] ? "Saving…" : "Save approved programs"}
+                      </button>
+                      {savedByBehavior[name] && (
+                        <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                          <Check className="w-3.5 h-3.5" /> Saved
+                        </span>
+                      )}
+                    </div>
                   </CollapsibleContent>
                 </Collapsible>
               )}
