@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, type MutableRefObject } from "react";
 import { useLocation, useParams, Redirect, useSearch } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -238,6 +238,11 @@ function TagSection({
 
 type BehaviorApprovalDraft = PutBehaviorApprovedProgramInput;
 
+/** Result of saving every behavior's draft approvals in one shot. */
+type FlushApprovalsResult = { ok: boolean; errors: Record<string, string> };
+type FlushApprovalsFn = () => Promise<FlushApprovalsResult>;
+type FlushApprovalsRef = MutableRefObject<FlushApprovalsFn | null>;
+
 const BEHAVIOR_MATCH_TYPE_VALUES = Object.values(BehaviorProgramMatchType) as NonNullable<
   PutBehaviorApprovedProgramInput["matchType"]
 >[];
@@ -250,14 +255,20 @@ function BehaviorSection({
   onRemove,
   onTopographyChange,
   clientId,
+  onPersistBehaviors,
+  flushApprovalsRef,
 }: {
   items: string[];
   targets: Record<string, string>;
   onAdd: (val: string) => void;
   onRemove: (i: number) => void;
   onTopographyChange: (name: string, val: string) => void;
-  /** When set (edit client), show “Approved programs for this behavior” and persist links to the API. */
+  /** When set (edit client), show "Approved programs for this behavior" and persist links to the API. */
   clientId?: number;
+  /** Called before per-behavior approval saves so newly added behaviors get persisted to the client profile first (prevents 404 from server when the behavior label isn't on the stored profile yet). */
+  onPersistBehaviors?: () => Promise<void>;
+  /** Parent registers a `current()` here to flush every behavior's draft approvals in one call (used by the section / wizard "Save changes" button). */
+  flushApprovalsRef?: FlushApprovalsRef;
 }) {
   const [draft, setDraft] = useState("");
   const approvalsQ = useClientBehaviorProgramApprovals(clientId);
@@ -341,33 +352,71 @@ function BehaviorSection({
   }
 
   async function saveApprovalsForBehavior(behaviorName: string) {
-    console.log("[saveApprovals] called", { behaviorName, clientId });
     if (clientId == null) {
-      console.warn("[saveApprovals] early exit: clientId is null/undefined");
       return;
     }
     setSaveErrorByBehavior((s) => ({ ...s, [behaviorName]: undefined }));
     setSavedByBehavior((s) => ({ ...s, [behaviorName]: false }));
     setSavingByBehavior((s) => ({ ...s, [behaviorName]: true }));
     const rows = draftByBehavior[behaviorName] ?? [];
-    console.log("[saveApprovals] sending PUT", { clientId, behaviorName, rows });
     try {
-      const result = await putMutation.mutateAsync({
+      // Persist the in-memory behaviors + topography to the client profile first so the
+      // server recognizes the label being approved (otherwise a brand-new behavior that
+      // hasn't been saved yet causes a 404 "Behavior not found on this client's profile").
+      if (onPersistBehaviors) {
+        await onPersistBehaviors();
+      }
+      await putMutation.mutateAsync({
         clientId,
         behaviorLabel: behaviorName,
         data: { programs: rows },
       });
-      console.log("[saveApprovals] success", result);
       setSavedByBehavior((s) => ({ ...s, [behaviorName]: true }));
       setTimeout(() => setSavedByBehavior((s) => ({ ...s, [behaviorName]: false })), 3000);
     } catch (e) {
-      console.error("[saveApprovals] error", e);
       const msg = e instanceof ApiError ? String(e.message) : e instanceof Error ? e.message : "Save failed";
       setSaveErrorByBehavior((s) => ({ ...s, [behaviorName]: msg }));
     } finally {
       setSavingByBehavior((s) => ({ ...s, [behaviorName]: false }));
     }
   }
+
+  // Flush every behavior's draft approvals in one shot. Parent registers this on
+  // `flushApprovalsRef.current` and calls it from the section / wizard "Save changes" flow,
+  // so the user can save behaviors, topography, and approved programs in a single click.
+  // Skip flushing while the approvals query is still loading because `draftByBehavior` is
+  // still empty for every behavior and PUTting would wipe stored approvals on the server.
+  const approvalsLoaded = approvalsQ.data != null;
+  const flushAll = useCallback(async (): Promise<FlushApprovalsResult> => {
+    if (clientId == null) return { ok: true, errors: {} };
+    if (!approvalsLoaded) return { ok: true, errors: {} };
+    const errors: Record<string, string> = {};
+    for (const name of items) {
+      const rows = draftByBehavior[name] ?? [];
+      try {
+        await putMutation.mutateAsync({
+          clientId,
+          behaviorLabel: name,
+          data: { programs: rows },
+        });
+      } catch (e) {
+        errors[name] =
+          e instanceof ApiError ? String(e.message) : e instanceof Error ? e.message : "Save failed";
+      }
+    }
+    if (Object.keys(errors).length > 0) {
+      setSaveErrorByBehavior((s) => ({ ...s, ...errors }));
+    }
+    return { ok: Object.keys(errors).length === 0, errors };
+  }, [clientId, approvalsLoaded, items, draftByBehavior, putMutation]);
+
+  useEffect(() => {
+    if (!flushApprovalsRef) return;
+    flushApprovalsRef.current = flushAll;
+    return () => {
+      if (flushApprovalsRef) flushApprovalsRef.current = null;
+    };
+  }, [flushApprovalsRef, flushAll]);
 
   const showApprovals = clientId != null && clientId > 0;
 
@@ -917,11 +966,15 @@ function Step3({
   data,
   onChange,
   clientId,
+  onPersistBehaviors,
+  flushApprovalsRef,
 }: {
   data: Step3Data;
   onChange: (d: Step3Data) => void;
   /** Present in edit flow so behavior→program links can be saved from this step. */
   clientId?: number;
+  onPersistBehaviors?: () => Promise<void>;
+  flushApprovalsRef?: FlushApprovalsRef;
 }) {
   function addTo(key: "replacementPrograms" | "interventions", val: string) {
     onChange({ ...data, [key]: [...data[key], val] });
@@ -961,6 +1014,8 @@ function Step3({
         onRemove={removeBehavior}
         onTopographyChange={setTopography}
         clientId={clientId}
+        onPersistBehaviors={onPersistBehaviors}
+        flushApprovalsRef={flushApprovalsRef}
       />
 
       <TagSection
@@ -994,11 +1049,15 @@ function Step3SingleSection({
   data,
   onChange,
   clientId,
+  onPersistBehaviors,
+  flushApprovalsRef,
 }: {
   section: Exclude<EditSection, "personal" | "assessment">;
   data: Step3Data;
   onChange: (d: Step3Data) => void;
   clientId?: number;
+  onPersistBehaviors?: () => Promise<void>;
+  flushApprovalsRef?: FlushApprovalsRef;
 }) {
   function addTo(key: "replacementPrograms" | "interventions", val: string) {
     onChange({ ...data, [key]: [...data[key], val] });
@@ -1032,6 +1091,8 @@ function Step3SingleSection({
         onRemove={removeBehavior}
         onTopographyChange={setTopography}
         clientId={clientId}
+        onPersistBehaviors={onPersistBehaviors}
+        flushApprovalsRef={flushApprovalsRef}
       />
     );
   }
@@ -1200,6 +1261,25 @@ function NewClientForm({
   const [extractError, setExtractError] = useState<string | null>(null);
   const [extractSuccess, setExtractSuccess] = useState<string | null>(null);
   const [clearingStoredAssessment, setClearingStoredAssessment] = useState(false);
+
+  // Lets BehaviorSection register a function to flush every behavior's draft approved-program
+  // selections in one shot. The bottom "Save changes" button calls it after PATCHing behaviors,
+  // so the user can save behaviors + topography + approved programs in a single click.
+  const flushBehaviorApprovalsRef = useRef<FlushApprovalsFn | null>(null);
+
+  // Called by BehaviorSection right before saving approved programs for a behavior, so a
+  // newly added (unsaved) behavior gets persisted to the client profile first. This avoids
+  // the server's "Behavior not found on this client's profile" 404.
+  const persistBehaviorsToProfile = useCallback(async () => {
+    if (!isEdit || !Number.isFinite(numericId) || numericId <= 0) return;
+    await updateClient(numericId, {
+      maladaptiveBehaviors: step3.maladaptiveBehaviors,
+      maladaptiveBehaviorTargets: step3.maladaptiveBehaviors.map((name) => ({
+        name,
+        topography: step3.maladaptiveBehaviorTargets[name]?.trim() || null,
+      })),
+    });
+  }, [isEdit, numericId, step3]);
 
   useEffect(() => {
     if (!step2.file) {
@@ -1401,6 +1481,24 @@ function NewClientForm({
         payload = { interventions: step3.interventions };
       }
       await updateClient(numericId, payload);
+      // For the behaviors section, flush every behavior's draft approved-program selections
+      // before invalidating queries (otherwise the approvalsQ refetch would reset the drafts).
+      if (editSection === "behaviors") {
+        const flushResult = await flushBehaviorApprovalsRef.current?.();
+        if (flushResult && !flushResult.ok) {
+          await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+          await queryClient.invalidateQueries({ queryKey: ["/api/clients", numericId] });
+          await queryClient.invalidateQueries({
+            queryKey: ["/api/clients", numericId, "behavior-program-approvals"],
+          });
+          const failed = Object.entries(flushResult.errors)
+            .map(([name, msg]) => `${name}: ${msg}`)
+            .join("; ");
+          setSaving(false);
+          setSaveError(`Saved behaviors, but some approved-program saves failed — ${failed}`);
+          return;
+        }
+      }
       await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       await queryClient.invalidateQueries({ queryKey: ["/api/clients", numericId] });
       await queryClient.invalidateQueries({
@@ -1449,6 +1547,23 @@ function NewClientForm({
         await updateClient(numericId, payload);
         if (step2.file) {
           await uploadClientAssessmentDocument(numericId, { file: step2.file });
+        }
+        // Flush every behavior's draft approved-program selections (registered by BehaviorSection
+        // when it renders inside Step3) before invalidating queries, so the user's per-behavior
+        // program selections save in the same "Save changes" click as the rest of the profile.
+        const flushResult = await flushBehaviorApprovalsRef.current?.();
+        if (flushResult && !flushResult.ok) {
+          await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+          await queryClient.invalidateQueries({ queryKey: ["/api/clients", numericId] });
+          await queryClient.invalidateQueries({
+            queryKey: ["/api/clients", numericId, "behavior-program-approvals"],
+          });
+          const failed = Object.entries(flushResult.errors)
+            .map(([name, msg]) => `${name}: ${msg}`)
+            .join("; ");
+          setSaving(false);
+          setSaveError(`Saved client, but some approved-program saves failed — ${failed}`);
+          return;
         }
       } else {
         const created = await createClient({
@@ -1546,6 +1661,8 @@ function NewClientForm({
                     data={step3}
                     onChange={setStep3}
                     clientId={numericId}
+                    onPersistBehaviors={persistBehaviorsToProfile}
+                    flushApprovalsRef={flushBehaviorApprovalsRef}
                   />
                 </div>
               )}
@@ -1677,6 +1794,8 @@ function NewClientForm({
                 data={step3}
                 onChange={setStep3}
                 clientId={isEdit ? numericId : undefined}
+                onPersistBehaviors={isEdit ? persistBehaviorsToProfile : undefined}
+                flushApprovalsRef={isEdit ? flushBehaviorApprovalsRef : undefined}
               />
             )}
 
