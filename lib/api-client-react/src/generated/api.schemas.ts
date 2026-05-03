@@ -341,6 +341,9 @@ export interface UpdateClientRequest {
   replacementPrograms?: string[];
   interventions?: string[];
   assessmentStructured?: AssessmentStructured | null;
+  /** When true, removes the stored assessment PDF file name, excerpt text snapshot, and structured assessment allow-lists from the client profile; sets hasAssessment to false and assessmentStatus to missing. Use when the RBT removes the assessment without uploading a replacement in the same request. Ignored when false or omitted.
+   */
+  clearAssessment?: boolean;
 }
 
 export type ClientAssessmentStatus =

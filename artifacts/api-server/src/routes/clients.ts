@@ -1106,8 +1106,12 @@ router.patch("/clients/:clientId", async (req, res) => {
   const stored = (existing.profile as ClientProfileRow | null | undefined) ?? null;
   const base: ClientProfileRow = stored ?? profileFromNameFallback(existing.name);
 
+  const clearingAssessment = body.clearAssessment === true;
+
   let assessmentFileName: string | undefined = base.assessmentFileName;
-  if (body.assessmentFileName !== undefined) {
+  if (clearingAssessment) {
+    assessmentFileName = undefined;
+  } else if (body.assessmentFileName !== undefined) {
     assessmentFileName =
       body.assessmentFileName === null ? undefined : body.assessmentFileName;
   }
@@ -1125,7 +1129,9 @@ router.patch("/clients/:clientId", async (req, res) => {
   }
 
   let assessmentStructuredNext: ClientProfileRow["assessmentStructured"] = base.assessmentStructured;
-  if (body.assessmentStructured !== undefined) {
+  if (clearingAssessment) {
+    assessmentStructuredNext = null;
+  } else if (body.assessmentStructured !== undefined) {
     if (body.assessmentStructured === null) {
       assessmentStructuredNext = null;
     } else {
@@ -1165,6 +1171,10 @@ router.patch("/clients/:clientId", async (req, res) => {
     assessmentStructured: assessmentStructuredNext,
   };
 
+  if (clearingAssessment) {
+    delete nextProfile.assessmentTextSnapshot;
+  }
+
   const name =
     `${nextProfile.firstName} ${nextProfile.lastName}`.trim() || existing.name;
 
@@ -1173,8 +1183,10 @@ router.patch("/clients/:clientId", async (req, res) => {
     .set({
       name,
       ageBand: body.ageBand !== undefined ? body.ageBand?.trim() || null : existing.ageBand,
-      hasAssessment: body.hasAssessment ?? existing.hasAssessment,
-      assessmentStatus: (body.assessmentStatus ?? existing.assessmentStatus) as AssessmentStatus,
+      hasAssessment: clearingAssessment ? false : (body.hasAssessment ?? existing.hasAssessment),
+      assessmentStatus: (clearingAssessment
+        ? "missing"
+        : (body.assessmentStatus ?? existing.assessmentStatus)) as AssessmentStatus,
       profile: nextProfile,
       updatedAt: new Date(),
     })
