@@ -67,6 +67,12 @@ export type ClientProfileRow = {
    * Used for AI note grounding; omitted from API responses.
    */
   assessmentTextSnapshot?: string;
+  /**
+   * ISO `yyyy-MM-dd` date the client's authorization (assessment / treatment plan) expires.
+   * Surfaced in red on the client card / detail header so the RBT knows when the assessment lapses.
+   * Optional; null/missing means "no expiration on file" (UI hides the badge).
+   */
+  assessmentAuthorizationExpiresOn?: string | null;
 };
 
 export const clientsTable = abanote.table("clients", {

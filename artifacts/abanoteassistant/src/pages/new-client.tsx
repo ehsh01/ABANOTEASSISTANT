@@ -804,6 +804,8 @@ function Step2({
   onExtractFromPdf,
   onClearStoredAssessment,
   clearingStoredAssessment,
+  authorizationExpiresOn,
+  onAuthorizationExpiresOnChange,
 }: {
   data: Step2Data;
   onChange: (d: Step2Data) => void;
@@ -816,6 +818,9 @@ function Step2({
   /** When set, show a control to remove the stored PDF from the server (edit flows only). */
   onClearStoredAssessment?: () => void | Promise<void>;
   clearingStoredAssessment?: boolean;
+  /** ISO yyyy-MM-dd authorization expiration (auto-filled from PDF; editable by RBT). */
+  authorizationExpiresOn?: string | null;
+  onAuthorizationExpiresOnChange?: (next: string | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -954,10 +959,67 @@ function Step2({
         </div>
       )}
 
+      {onAuthorizationExpiresOnChange ? (
+        <AuthorizationExpiresField
+          value={authorizationExpiresOn ?? null}
+          onChange={onAuthorizationExpiresOnChange}
+        />
+      ) : null}
+
       <p className="text-xs text-[#877870] flex items-center gap-1.5">
         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 pop-icon" />
         This is optional — you can upload the assessment at any time from the client's profile.
       </p>
+    </div>
+  );
+}
+
+// ── Authorization-expires-on input ──────────────────────────────────────────
+/**
+ * Lightweight date input for the authorization / treatment-plan expiration date. Auto-fills from the assessment
+ * PDF when present; the RBT can review or override before saving. Renders the stored ISO `yyyy-MM-dd` value
+ * (which is what we send back to the API) in a native HTML5 date picker for accessibility + browser support.
+ */
+function AuthorizationExpiresField({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (next: string | null) => void;
+}) {
+  const isExpired =
+    !!value && /^\d{4}-\d{2}-\d{2}$/.test(value) && value < new Date().toISOString().slice(0, 10);
+  return (
+    <div className="bg-white rounded-2xl border border-[#F0E4E1] p-5">
+      <label className="block text-sm font-semibold text-[#2D2523] mb-1">
+        Authorization expires on
+      </label>
+      <p className="text-xs text-[#877870] mb-3 leading-relaxed">
+        Auto-filled from the assessment PDF when stated. Surfaces in red on the client's card so RBTs know
+        when the assessment lapses.
+      </p>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+        <input
+          type="date"
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value ? e.target.value : null)}
+          className="px-3 py-2 rounded-lg border border-[#F0E4E1] bg-[#FDFAF7] text-sm text-[#2D2523] focus:outline-none focus:ring-2 focus:ring-[#C27A8A]/40 focus:border-[#C27A8A]/40"
+        />
+        {value ? (
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="text-xs text-[#877870] hover:text-[#C27A8A] underline self-start sm:self-auto"
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+      {isExpired ? (
+        <p className="mt-2 text-xs font-semibold text-rose-700">
+          This authorization is past its expiration date.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1258,10 +1320,17 @@ function NewClientForm({
     interventions: [],
   });
 
+  // Authorization / treatment-plan expiration date (ISO yyyy-MM-dd). Pulled from the assessment when present;
+  // sent on create + update so the clients list / detail header can show the red expiration badge.
+  const [authorizationExpiresOn, setAuthorizationExpiresOn] = useState<string | null>(null);
+
   const extractMutation = useExtractAssessmentFromPdf();
   const [extractError, setExtractError] = useState<string | null>(null);
   const [extractSuccess, setExtractSuccess] = useState<string | null>(null);
   const [clearingStoredAssessment, setClearingStoredAssessment] = useState(false);
+  // Identity of the most recently auto-extracted file (name + size) so we don't re-run extraction repeatedly
+  // for the same PDF the user picked. Switching to a different file re-arms the auto-extract effect.
+  const lastAutoExtractedFileKeyRef = useRef<string | null>(null);
   const deleteClientMutation = useDeleteClient();
 
   async function handleDeleteClientFromEdit() {
@@ -1324,12 +1393,33 @@ function NewClientForm({
         s.dateOfBirth.length === 10 ? s.dateOfBirth : normalizeExtractedDob(e.dateOfBirth) || s.dateOfBirth,
       gender: s.gender || normalizeExtractedGender(e.gender) || s.gender,
     }));
-    setStep3((s) => ({
-      maladaptiveBehaviors: appendDedupedTags(s.maladaptiveBehaviors, e.maladaptiveBehaviors),
-      maladaptiveBehaviorTargets: s.maladaptiveBehaviorTargets,
-      replacementPrograms: appendDedupedTags(s.replacementPrograms, e.replacementPrograms),
-      interventions: appendDedupedTags(s.interventions, e.interventions),
-    }));
+    setStep3((s) => {
+      const nextBehaviors = appendDedupedTags(s.maladaptiveBehaviors, e.maladaptiveBehaviors);
+      // Build a case-insensitive map of behaviors already on the form (kept) and fill topographies for any
+      // behavior the user has not typed one for, using the assessment's operational definitions when present.
+      const lowerByName = new Map(nextBehaviors.map((n) => [n.toLowerCase(), n] as const));
+      const nextTargets: Record<string, string> = { ...s.maladaptiveBehaviorTargets };
+      for (const t of e.maladaptiveBehaviorTopographies ?? []) {
+        const desc = (t.topography ?? "").trim();
+        if (!desc) continue;
+        const aligned = lowerByName.get((t.name ?? "").trim().toLowerCase()) ?? null;
+        if (!aligned) continue;
+        const existing = (nextTargets[aligned] ?? "").trim();
+        if (!existing) {
+          nextTargets[aligned] = desc;
+        }
+      }
+      return {
+        maladaptiveBehaviors: nextBehaviors,
+        maladaptiveBehaviorTargets: nextTargets,
+        replacementPrograms: appendDedupedTags(s.replacementPrograms, e.replacementPrograms),
+        interventions: appendDedupedTags(s.interventions, e.interventions),
+      };
+    });
+    if (e.assessmentAuthorizationExpiresOn) {
+      // Only auto-fill when nothing has been entered yet; never overwrite an explicitly-set value.
+      setAuthorizationExpiresOn((prev) => prev ?? e.assessmentAuthorizationExpiresOn ?? null);
+    }
   }
 
   async function handleClearStoredAssessment() {
@@ -1348,6 +1438,7 @@ function NewClientForm({
       await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       await queryClient.invalidateQueries({ queryKey: ["/api/clients", numericId] });
       setStep2({ file: null });
+      setAuthorizationExpiresOn(null);
       setExtractError(null);
       setExtractSuccess(null);
     } catch (e) {
@@ -1365,13 +1456,18 @@ function NewClientForm({
       const res = await extractMutation.mutateAsync(step2.file);
       applyAssessmentExtract(res.data);
       const e = res.data.extracted;
+      const topographyCount = (e.maladaptiveBehaviorTopographies ?? []).filter(
+        (t) => (t.topography ?? "").trim().length > 0,
+      ).length;
       const counts = [
         e.firstName || e.lastName ? "name" : null,
         e.dateOfBirth ? "DOB" : null,
         e.gender ? "gender" : null,
         e.maladaptiveBehaviors.length ? `${e.maladaptiveBehaviors.length} behaviors` : null,
+        topographyCount ? `${topographyCount} topographies` : null,
         e.replacementPrograms.length ? `${e.replacementPrograms.length} programs` : null,
         e.interventions.length ? `${e.interventions.length} interventions` : null,
+        e.assessmentAuthorizationExpiresOn ? "authorization expiration date" : null,
       ].filter(Boolean);
       const warn = res.data.warnings.length ? ` Note: ${res.data.warnings.join(" ")}` : "";
       setExtractSuccess(
@@ -1390,6 +1486,25 @@ function NewClientForm({
       setExtractError(msg);
     }
   }
+
+  // Auto-trigger extraction the moment the RBT picks (or drops) a PDF, so name / behaviors / programs /
+  // interventions / topographies / authorization expiration date are auto-filled without an extra click.
+  // Re-arms only when a different file is selected (different name+size).
+  useEffect(() => {
+    const file = step2.file;
+    if (!file) {
+      lastAutoExtractedFileKeyRef.current = null;
+      return;
+    }
+    const key = `${file.name}|${file.size}`;
+    if (lastAutoExtractedFileKeyRef.current === key) return;
+    if (extractMutation.isPending) return;
+    lastAutoExtractedFileKeyRef.current = key;
+    void handleExtractFromPdf();
+    // We intentionally depend only on the file identity; handleExtractFromPdf is recreated each render
+    // but reads the latest file via closure on `step2.file` inside.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step2.file]);
 
   useEffect(() => {
     if (!isEdit) {
@@ -1419,6 +1534,7 @@ function NewClientForm({
       replacementPrograms: [...(p?.replacementPrograms ?? [])],
       interventions: [...(p?.interventions ?? [])],
     });
+    setAuthorizationExpiresOn(p?.assessmentAuthorizationExpiresOn ?? null);
     // Preserve step parameter from URL if provided, otherwise default to 1
     const urlStep = searchParams.get("step");
     if (!urlStep) {
@@ -1565,6 +1681,7 @@ function NewClientForm({
           })),
           replacementPrograms: step3.replacementPrograms,
           interventions: step3.interventions,
+          assessmentAuthorizationExpiresOn: authorizationExpiresOn,
         };
         if (step2.file) {
           payload.hasAssessment = true;
@@ -1608,6 +1725,7 @@ function NewClientForm({
           })),
           replacementPrograms: step3.replacementPrograms,
           interventions: step3.interventions,
+          assessmentAuthorizationExpiresOn: authorizationExpiresOn,
         });
         if (step2.file) {
           await uploadClientAssessmentDocument(created.data.id, { file: step2.file });
@@ -1676,6 +1794,8 @@ function NewClientForm({
                   onExtractFromPdf={handleExtractFromPdf}
                   onClearStoredAssessment={handleClearStoredAssessment}
                   clearingStoredAssessment={clearingStoredAssessment}
+                  authorizationExpiresOn={authorizationExpiresOn}
+                  onAuthorizationExpiresOnChange={setAuthorizationExpiresOn}
                 />
               )}
               {editSection !== "personal" && editSection !== "assessment" && (
@@ -1834,6 +1954,8 @@ function NewClientForm({
                 onExtractFromPdf={handleExtractFromPdf}
                 onClearStoredAssessment={isEdit ? handleClearStoredAssessment : undefined}
                 clearingStoredAssessment={clearingStoredAssessment}
+                authorizationExpiresOn={authorizationExpiresOn}
+                onAuthorizationExpiresOnChange={setAuthorizationExpiresOn}
               />
             )}
             {step === 3 && (

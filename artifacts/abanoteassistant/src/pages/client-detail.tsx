@@ -24,7 +24,7 @@ import {
   useDeleteClientProgram,
   useDeleteClient,
 } from "@/hooks/use-aba-api";
-import { sessionTimeRangeFromHours, formatSessionDate } from "@/lib/utils";
+import { sessionTimeRangeFromHours, formatSessionDate, formatAuthorizationExpiresOn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClient, useClientPrograms, useNotesList } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
@@ -242,6 +242,19 @@ export default function ClientDetail() {
             <div className="flex-1 min-w-0">
               <h1 className="text-xl font-bold text-[#2D2523]">{fullName || client.name}</h1>
               {client.ageBand && <p className="text-sm text-[#877870] mt-0.5">{client.ageBand}</p>}
+              {(() => {
+                const exp = formatAuthorizationExpiresOn(p?.assessmentAuthorizationExpiresOn);
+                if (!exp) return null;
+                return (
+                  <p
+                    className="text-sm font-bold text-red-600 mt-1 leading-tight"
+                    title={exp.isPast ? "Authorization is past its expiration date" : "Authorization expiration date"}
+                  >
+                    {exp.isPast ? "Authorization expired on " : "Authorization expires on "}
+                    {exp.display}
+                  </p>
+                );
+              })()}
               <div className="mt-2 flex flex-wrap gap-2">
                 {client.assessmentStatus === "ready" && (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 px-2.5 py-1 rounded-full">

@@ -240,6 +240,9 @@ export interface ClientProfile {
   /** Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST /notes/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST /clients/{clientId}/recommendations uses them for audit-safe suggestions.
    */
   assessmentStructured?: AssessmentStructured | null;
+  /** ISO `yyyy-MM-dd` date the client's authorization (assessment / treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null/missing means "no expiration on file" (UI hides the badge).
+   */
+  assessmentAuthorizationExpiresOn?: string | null;
 }
 
 export type ClinicalRecommendationRequestFunction =
@@ -313,6 +316,9 @@ export interface CreateClientRequest {
   replacementPrograms: string[];
   interventions: string[];
   assessmentStructured?: AssessmentStructured | null;
+  /** ISO `yyyy-MM-dd` date the client's authorization expires. Optional; null/missing means "no expiration on file."
+   */
+  assessmentAuthorizationExpiresOn?: string | null;
 }
 
 export type UpdateClientRequestAssessmentStatus =
@@ -341,6 +347,9 @@ export interface UpdateClientRequest {
   replacementPrograms?: string[];
   interventions?: string[];
   assessmentStructured?: AssessmentStructured | null;
+  /** ISO `yyyy-MM-dd` date the client's authorization expires. Send null to clear the stored value; omit to leave it unchanged.
+   */
+  assessmentAuthorizationExpiresOn?: string | null;
   /** When true, removes the stored assessment PDF file name, excerpt text snapshot, and structured assessment allow-lists from the client profile; sets hasAssessment to false and assessmentStatus to missing. Use when the RBT removes the assessment without uploading a replacement in the same request. Ignored when false or omitted.
    */
   clearAssessment?: boolean;

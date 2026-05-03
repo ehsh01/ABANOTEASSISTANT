@@ -25,6 +25,7 @@ import {
 import type { Client } from "@workspace/api-client-react";
 import { useClients, useDeleteClient } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
+import { formatAuthorizationExpiresOn } from "@/lib/utils";
 
 function displayNames(client: Client) {
   const p = client.profile;
@@ -36,6 +37,7 @@ function displayNames(client: Client) {
       gender: p.gender,
       maladaptiveBehaviors: p.maladaptiveBehaviors,
       replacementPrograms: p.replacementPrograms,
+      assessmentAuthorizationExpiresOn: p.assessmentAuthorizationExpiresOn ?? null,
     };
   }
   const parts = client.name.trim().split(/\s+/).filter(Boolean);
@@ -46,6 +48,7 @@ function displayNames(client: Client) {
     gender: "—",
     maladaptiveBehaviors: [] as string[],
     replacementPrograms: [] as string[],
+    assessmentAuthorizationExpiresOn: null as string | null,
   };
 }
 
@@ -133,6 +136,19 @@ function ClientCard({ client }: { client: Client }) {
               {d.dateOfBirth ? `${calcAge(d.dateOfBirth)} · ` : ""}
               {d.gender}
             </p>
+            {(() => {
+              const exp = formatAuthorizationExpiresOn(d.assessmentAuthorizationExpiresOn);
+              if (!exp) return null;
+              return (
+                <p
+                  className="text-xs font-bold text-red-600 mt-1 leading-tight"
+                  title={exp.isPast ? "Authorization is past its expiration date" : "Authorization expiration date"}
+                >
+                  {exp.isPast ? "Authorization expired on " : "Authorization expires on "}
+                  {exp.display}
+                </p>
+              );
+            })()}
           </div>
         </div>
         <div

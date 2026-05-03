@@ -287,6 +287,12 @@ export const ListClientsResponse = zod.object({
             .describe(
               "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
             ),
+          assessmentAuthorizationExpiresOn: zod
+            .string()
+            .nullish()
+            .describe(
+              'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
+            ),
         })
         .nullish(),
     }),
@@ -359,6 +365,12 @@ export const CreateClientBody = zod.object({
     .nullish()
     .describe(
       "Exact strings authorized on the client assessment. Maps must only reference keys\/values present in the arrays.\n",
+    ),
+  assessmentAuthorizationExpiresOn: zod
+    .string()
+    .nullish()
+    .describe(
+      'ISO `yyyy-MM-dd` date the client\'s authorization expires. Optional; null\/missing means \"no expiration on file.\"\n',
     ),
 });
 
@@ -434,6 +446,12 @@ export const CreateClientResponse = zod.object({
           .nullish()
           .describe(
             "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+          ),
+        assessmentAuthorizationExpiresOn: zod
+          .string()
+          .nullish()
+          .describe(
+            'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
           ),
       })
       .nullish(),
@@ -521,6 +539,12 @@ export const GetClientResponse = zod.object({
           .describe(
             "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
           ),
+        assessmentAuthorizationExpiresOn: zod
+          .string()
+          .nullish()
+          .describe(
+            'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
+          ),
       })
       .nullish(),
   }),
@@ -598,6 +622,12 @@ export const UpdateClientBody = zod.object({
     .nullish()
     .describe(
       "Exact strings authorized on the client assessment. Maps must only reference keys\/values present in the arrays.\n",
+    ),
+  assessmentAuthorizationExpiresOn: zod
+    .string()
+    .nullish()
+    .describe(
+      "ISO `yyyy-MM-dd` date the client's authorization expires. Send null to clear the stored value; omit to leave it unchanged.\n",
     ),
   clearAssessment: zod
     .boolean()
@@ -679,6 +709,12 @@ export const UpdateClientResponse = zod.object({
           .nullish()
           .describe(
             "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+          ),
+        assessmentAuthorizationExpiresOn: zod
+          .string()
+          .nullish()
+          .describe(
+            'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
           ),
       })
       .nullish(),
@@ -790,6 +826,12 @@ export const UploadClientAssessmentDocumentResponse = zod.object({
           .nullish()
           .describe(
             "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+          ),
+        assessmentAuthorizationExpiresOn: zod
+          .string()
+          .nullish()
+          .describe(
+            'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
           ),
       })
       .nullish(),

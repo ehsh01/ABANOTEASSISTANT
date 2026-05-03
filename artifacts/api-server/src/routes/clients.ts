@@ -370,6 +370,43 @@ const emptyMaladaptiveBase: ClientProfileRow = {
   interventions: [],
 };
 
+/**
+ * Coerce a client-provided authorization-expires value to a canonical ISO `yyyy-MM-dd` string, or null when the
+ * input is empty/invalid/explicitly-null. Accepts `MM/dd/yyyy` and `yyyy-MM-dd`; anything else becomes null so
+ * we never persist garbage into the JSON profile.
+ */
+function sanitizeAuthorizationExpiresIsoOrNull(raw: string | null | undefined): string | null {
+  if (raw === null || raw === undefined) return null;
+  const t = String(raw).trim();
+  if (!t) return null;
+
+  const iso = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
+  if (iso) {
+    const [, y, mo, d] = iso;
+    return formatIsoDateOrNull(Number(y), Number(mo), Number(d));
+  }
+  const us = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+  if (us) {
+    const [, mo, d, y] = us;
+    return formatIsoDateOrNull(Number(y), Number(mo), Number(d));
+  }
+  return null;
+}
+
+function formatIsoDateOrNull(y: number, mo: number, d: number): string | null {
+  if (!Number.isFinite(y) || !Number.isFinite(mo) || !Number.isFinite(d)) return null;
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  if (
+    dt.getUTCFullYear() !== y ||
+    dt.getUTCMonth() !== mo - 1 ||
+    dt.getUTCDate() !== d
+  ) {
+    return null;
+  }
+  return `${y}-${String(mo).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+}
+
 router.get("/clients", async (req, res) => {
   const companyId = req.companyId;
   if (companyId === undefined) {
@@ -419,6 +456,10 @@ router.post("/clients", async (req, res) => {
       replacementPrograms: body.replacementPrograms,
       interventions: body.interventions,
       assessmentFileName: body.assessmentFileName ?? undefined,
+      assessmentAuthorizationExpiresOn:
+        body.assessmentAuthorizationExpiresOn === undefined
+          ? null
+          : sanitizeAuthorizationExpiresIsoOrNull(body.assessmentAuthorizationExpiresOn),
     };
     if (body.assessmentStructured != null) {
       const parsed = parseAssessmentStructured(body.assessmentStructured);
@@ -1170,6 +1211,18 @@ router.patch("/clients/:clientId", async (req, res) => {
     }
   }
 
+  // Authorization expiration: undefined = unchanged, null = clear, string = sanitize to ISO yyyy-MM-dd.
+  // Clearing the whole assessment also clears the expiration date.
+  let assessmentAuthorizationExpiresOnNext: string | null | undefined =
+    base.assessmentAuthorizationExpiresOn ?? null;
+  if (clearingAssessment) {
+    assessmentAuthorizationExpiresOnNext = null;
+  } else if (body.assessmentAuthorizationExpiresOn !== undefined) {
+    assessmentAuthorizationExpiresOnNext = sanitizeAuthorizationExpiresIsoOrNull(
+      body.assessmentAuthorizationExpiresOn,
+    );
+  }
+
   const nextProfile: ClientProfileRow = {
     ...base,
     firstName: body.firstName?.trim() ?? base.firstName,
@@ -1182,6 +1235,7 @@ router.patch("/clients/:clientId", async (req, res) => {
     interventions: body.interventions ?? base.interventions,
     assessmentFileName,
     assessmentStructured: assessmentStructuredNext,
+    assessmentAuthorizationExpiresOn: assessmentAuthorizationExpiresOnNext,
   };
 
   if (clearingAssessment) {

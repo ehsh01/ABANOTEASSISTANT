@@ -22,6 +22,8 @@ export type ClientProfilePublic = {
   assessmentFileName?: string | null;
   /** Curated assessment allow-lists when present on the stored profile. */
   assessmentStructured?: AssessmentStructuredRow | null;
+  /** ISO `yyyy-MM-dd` date the client's authorization expires (null when not on file). */
+  assessmentAuthorizationExpiresOn?: string | null;
 };
 
 export function sanitizeClientProfileForApi(profile: ClientProfileRow): ClientProfilePublic {
@@ -37,6 +39,7 @@ export function sanitizeClientProfileForApi(profile: ClientProfileRow): ClientPr
     interventions: profile.interventions,
     assessmentFileName: profile.assessmentFileName ?? null,
     assessmentStructured: profile.assessmentStructured ?? null,
+    assessmentAuthorizationExpiresOn: profile.assessmentAuthorizationExpiresOn ?? null,
   };
 }
 
