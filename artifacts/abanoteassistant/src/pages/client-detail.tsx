@@ -23,8 +23,10 @@ import {
   useUpdateClientProgram,
   useDeleteClientProgram,
   useDeleteClient,
+  useGenerateClientAvatar,
 } from "@/hooks/use-aba-api";
 import { sessionTimeRangeFromHours, formatSessionDate, formatAuthorizationExpiresOn } from "@/lib/utils";
+import { ClientAvatar } from "@/components/client-avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClient, useClientPrograms, useNotesList } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
@@ -111,6 +113,7 @@ export default function ClientDetail() {
   const updateProgramMutation = useUpdateClientProgram();
   const deleteProgramMutation = useDeleteClientProgram();
   const deleteClientMutation = useDeleteClient();
+  const generateAvatarMutation = useGenerateClientAvatar();
   const t = useT();
   const [activeTab, setActiveTab] = useState("sessionNotes");
 
@@ -192,8 +195,6 @@ export default function ClientDetail() {
   const firstName = p?.firstName ?? client?.name?.split(" ")[0] ?? "";
   const lastName = p?.lastName ?? client?.name?.split(" ").slice(1).join(" ") ?? "";
   const fullName = `${firstName} ${lastName}`.trim();
-  const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
-
   const behaviors = p?.maladaptiveBehaviors ?? [];
   const targets = p?.maladaptiveBehaviorTargets ?? [];
   const behaviorTopographyMap = Object.fromEntries(
@@ -236,9 +237,34 @@ export default function ClientDetail() {
         >
           {/* Header card */}
           <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6 flex items-start gap-4">
-            <div className="w-14 h-14 rounded-full bg-[#F9EEF1] flex items-center justify-center text-[#C27A8A] font-bold text-xl shrink-0">
-              {initials || <User className="w-6 h-6" />}
-            </div>
+            <ClientAvatar
+              client={{
+                avatarUrl: client.avatarUrl,
+                avatarUpdatedAt: client.avatarUpdatedAt,
+                firstName,
+                lastName,
+                name: client.name,
+              }}
+              size="lg"
+              onRegenerate={() => {
+                if (!id || generateAvatarMutation.isPending) return;
+                generateAvatarMutation.mutate(id, {
+                  onError: (err) => {
+                    window.alert(
+                      err instanceof Error
+                        ? `Could not generate avatar: ${err.message}`
+                        : "Could not generate avatar.",
+                    );
+                  },
+                });
+              }}
+              isRegenerating={generateAvatarMutation.isPending}
+              hoverLabel={
+                client.avatarUrl
+                  ? "Click to regenerate avatar with AI"
+                  : "Click to generate avatar with AI"
+              }
+            />
             <div className="flex-1 min-w-0">
               <h1 className="text-xl font-bold text-[#2D2523]">{fullName || client.name}</h1>
               {client.ageBand && <p className="text-sm text-[#877870] mt-0.5">{client.ageBand}</p>}

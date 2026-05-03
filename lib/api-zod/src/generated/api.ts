@@ -223,6 +223,18 @@ export const ListClientsResponse = zod.object({
         "ready",
         "missing",
       ]),
+      avatarUrl: zod
+        .string()
+        .nullish()
+        .describe(
+          "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+        ),
+      avatarUpdatedAt: zod
+        .date()
+        .nullish()
+        .describe(
+          "When the avatar was most recently generated. Null when no avatar is on file.",
+        ),
       profile: zod
         .object({
           firstName: zod.string(),
@@ -383,6 +395,18 @@ export const CreateClientResponse = zod.object({
     ageBand: zod.string().optional(),
     hasAssessment: zod.boolean(),
     assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    avatarUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+      ),
+    avatarUpdatedAt: zod
+      .date()
+      .nullish()
+      .describe(
+        "When the avatar was most recently generated. Null when no avatar is on file.",
+      ),
     profile: zod
       .object({
         firstName: zod.string(),
@@ -475,6 +499,18 @@ export const GetClientResponse = zod.object({
     ageBand: zod.string().optional(),
     hasAssessment: zod.boolean(),
     assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    avatarUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+      ),
+    avatarUpdatedAt: zod
+      .date()
+      .nullish()
+      .describe(
+        "When the avatar was most recently generated. Null when no avatar is on file.",
+      ),
     profile: zod
       .object({
         firstName: zod.string(),
@@ -646,6 +682,18 @@ export const UpdateClientResponse = zod.object({
     ageBand: zod.string().optional(),
     hasAssessment: zod.boolean(),
     assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    avatarUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+      ),
+    avatarUpdatedAt: zod
+      .date()
+      .nullish()
+      .describe(
+        "When the avatar was most recently generated. Null when no avatar is on file.",
+      ),
     profile: zod
       .object({
         firstName: zod.string(),
@@ -763,6 +811,238 @@ export const UploadClientAssessmentDocumentResponse = zod.object({
     ageBand: zod.string().optional(),
     hasAssessment: zod.boolean(),
     assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    avatarUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+      ),
+    avatarUpdatedAt: zod
+      .date()
+      .nullish()
+      .describe(
+        "When the avatar was most recently generated. Null when no avatar is on file.",
+      ),
+    profile: zod
+      .object({
+        firstName: zod.string(),
+        lastName: zod.string(),
+        dateOfBirth: zod.string(),
+        gender: zod.string(),
+        maladaptiveBehaviors: zod.array(zod.string()),
+        maladaptiveBehaviorTargets: zod
+          .array(
+            zod
+              .object({
+                name: zod.string(),
+                topography: zod
+                  .string()
+                  .nullable()
+                  .describe(
+                    "Operational definition; may be null when not entered.",
+                  ),
+              })
+              .describe(
+                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+              ),
+          )
+          .describe(
+            "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
+          ),
+        replacementPrograms: zod.array(zod.string()),
+        interventions: zod.array(zod.string()),
+        assessmentFileName: zod.string().nullish(),
+        assessmentStructured: zod
+          .object({
+            behaviors: zod.array(zod.string()),
+            replacement_programs: zod.array(zod.string()),
+            interventions: zod.array(zod.string()),
+            behavior_to_replacements_map: zod.record(
+              zod.string(),
+              zod.array(zod.string()),
+            ),
+            behavior_to_interventions_map: zod.record(
+              zod.string(),
+              zod.array(zod.string()),
+            ),
+            replacement_program_functions: zod
+              .record(
+                zod.string(),
+                zod.array(
+                  zod.enum(["escape", "attention", "tangible", "automatic"]),
+                ),
+              )
+              .optional()
+              .describe(
+                "Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.\n",
+              ),
+            general_interventions: zod
+              .array(zod.string())
+              .optional()
+              .describe(
+                "Optional interventions allowed when a behavior has no behavior_to_interventions_map entry (must be subset of interventions).\n",
+              ),
+          })
+          .nullish()
+          .describe(
+            "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+          ),
+        assessmentAuthorizationExpiresOn: zod
+          .string()
+          .nullish()
+          .describe(
+            'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
+          ),
+      })
+      .nullish(),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Uses the client's first name (cultural / ethnic cue), approximate age (from DOB), and gender to produce a stylized cartoon-style portrait via OpenAI's image API and stores it on the client row. Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
+
+ * @summary Generate an AI cartoon avatar for the client
+ */
+export const GenerateClientAvatarParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const GenerateClientAvatarResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    avatarUrl: zod.string().nullable(),
+    avatarUpdatedAt: zod.date().nullable(),
+    client: zod.object({
+      id: zod.number(),
+      companyId: zod.number(),
+      name: zod.string(),
+      ageBand: zod.string().optional(),
+      hasAssessment: zod.boolean(),
+      assessmentStatus: zod.enum([
+        "uploaded",
+        "processing",
+        "ready",
+        "missing",
+      ]),
+      avatarUrl: zod
+        .string()
+        .nullish()
+        .describe(
+          "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+        ),
+      avatarUpdatedAt: zod
+        .date()
+        .nullish()
+        .describe(
+          "When the avatar was most recently generated. Null when no avatar is on file.",
+        ),
+      profile: zod
+        .object({
+          firstName: zod.string(),
+          lastName: zod.string(),
+          dateOfBirth: zod.string(),
+          gender: zod.string(),
+          maladaptiveBehaviors: zod.array(zod.string()),
+          maladaptiveBehaviorTargets: zod
+            .array(
+              zod
+                .object({
+                  name: zod.string(),
+                  topography: zod
+                    .string()
+                    .nullable()
+                    .describe(
+                      "Operational definition; may be null when not entered.",
+                    ),
+                })
+                .describe(
+                  "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+                ),
+            )
+            .describe(
+              "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
+            ),
+          replacementPrograms: zod.array(zod.string()),
+          interventions: zod.array(zod.string()),
+          assessmentFileName: zod.string().nullish(),
+          assessmentStructured: zod
+            .object({
+              behaviors: zod.array(zod.string()),
+              replacement_programs: zod.array(zod.string()),
+              interventions: zod.array(zod.string()),
+              behavior_to_replacements_map: zod.record(
+                zod.string(),
+                zod.array(zod.string()),
+              ),
+              behavior_to_interventions_map: zod.record(
+                zod.string(),
+                zod.array(zod.string()),
+              ),
+              replacement_program_functions: zod
+                .record(
+                  zod.string(),
+                  zod.array(
+                    zod.enum(["escape", "attention", "tangible", "automatic"]),
+                  ),
+                )
+                .optional()
+                .describe(
+                  "Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.\n",
+                ),
+              general_interventions: zod
+                .array(zod.string())
+                .optional()
+                .describe(
+                  "Optional interventions allowed when a behavior has no behavior_to_interventions_map entry (must be subset of interventions).\n",
+                ),
+            })
+            .nullish()
+            .describe(
+              "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+            ),
+          assessmentAuthorizationExpiresOn: zod
+            .string()
+            .nullish()
+            .describe(
+              'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
+            ),
+        })
+        .nullish(),
+    }),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Clears the avatar bytes; the client falls back to initials in the UI.
+ * @summary Remove the stored AI avatar for a client
+ */
+export const DeleteClientAvatarParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const DeleteClientAvatarResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    id: zod.number(),
+    companyId: zod.number(),
+    name: zod.string(),
+    ageBand: zod.string().optional(),
+    hasAssessment: zod.boolean(),
+    assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    avatarUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+      ),
+    avatarUpdatedAt: zod
+      .date()
+      .nullish()
+      .describe(
+        "When the avatar was most recently generated. Null when no avatar is on file.",
+      ),
     profile: zod
       .object({
         firstName: zod.string(),

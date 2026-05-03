@@ -372,6 +372,11 @@ export interface Client {
   ageBand?: string;
   hasAssessment: boolean;
   assessmentStatus: ClientAssessmentStatus;
+  /** Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.
+   */
+  avatarUrl?: string | null;
+  /** When the avatar was most recently generated. Null when no avatar is on file. */
+  avatarUpdatedAt?: string | null;
   profile?: ClientProfile | null;
 }
 
@@ -384,6 +389,18 @@ export interface ClientListResponse {
 export interface ClientDetailResponse {
   success: boolean;
   data: Client;
+  error?: string | null;
+}
+
+export type GenerateClientAvatarResponseData = {
+  avatarUrl: string | null;
+  avatarUpdatedAt: string | null;
+  client: Client;
+};
+
+export interface GenerateClientAvatarResponse {
+  success: boolean;
+  data: GenerateClientAvatarResponseData;
   error?: string | null;
 }
 

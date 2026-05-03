@@ -30,6 +30,7 @@ import type {
   DeleteClientResponse,
   DeleteNoteResponse,
   ErrorResponse,
+  GenerateClientAvatarResponse,
   GenerateNoteRequest,
   GenerateNoteResponse,
   HealthStatus,
@@ -1243,6 +1244,180 @@ export const useUploadClientAssessmentDocument = <
   TContext
 > => {
   return useMutation(getUploadClientAssessmentDocumentMutationOptions(options));
+};
+
+/**
+ * Uses the client's first name (cultural / ethnic cue), approximate age (from DOB), and gender to produce a stylized cartoon-style portrait via OpenAI's image API and stores it on the client row. Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
+
+ * @summary Generate an AI cartoon avatar for the client
+ */
+export const getGenerateClientAvatarUrl = (clientId: number) => {
+  return `/api/clients/${clientId}/avatar/generate`;
+};
+
+export const generateClientAvatar = async (
+  clientId: number,
+  options?: RequestInit,
+): Promise<GenerateClientAvatarResponse> => {
+  return customFetch<GenerateClientAvatarResponse>(
+    getGenerateClientAvatarUrl(clientId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getGenerateClientAvatarMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateClientAvatar>>,
+    TError,
+    { clientId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateClientAvatar>>,
+  TError,
+  { clientId: number },
+  TContext
+> => {
+  const mutationKey = ["generateClientAvatar"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateClientAvatar>>,
+    { clientId: number }
+  > = (props) => {
+    const { clientId } = props ?? {};
+
+    return generateClientAvatar(clientId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateClientAvatarMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateClientAvatar>>
+>;
+
+export type GenerateClientAvatarMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Generate an AI cartoon avatar for the client
+ */
+export const useGenerateClientAvatar = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateClientAvatar>>,
+    TError,
+    { clientId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateClientAvatar>>,
+  TError,
+  { clientId: number },
+  TContext
+> => {
+  return useMutation(getGenerateClientAvatarMutationOptions(options));
+};
+
+/**
+ * Clears the avatar bytes; the client falls back to initials in the UI.
+ * @summary Remove the stored AI avatar for a client
+ */
+export const getDeleteClientAvatarUrl = (clientId: number) => {
+  return `/api/clients/${clientId}/avatar`;
+};
+
+export const deleteClientAvatar = async (
+  clientId: number,
+  options?: RequestInit,
+): Promise<ClientDetailResponse> => {
+  return customFetch<ClientDetailResponse>(getDeleteClientAvatarUrl(clientId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteClientAvatarMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClientAvatar>>,
+    TError,
+    { clientId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteClientAvatar>>,
+  TError,
+  { clientId: number },
+  TContext
+> => {
+  const mutationKey = ["deleteClientAvatar"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteClientAvatar>>,
+    { clientId: number }
+  > = (props) => {
+    const { clientId } = props ?? {};
+
+    return deleteClientAvatar(clientId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteClientAvatarMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteClientAvatar>>
+>;
+
+export type DeleteClientAvatarMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Remove the stored AI avatar for a client
+ */
+export const useDeleteClientAvatar = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClientAvatar>>,
+    TError,
+    { clientId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteClientAvatar>>,
+  TError,
+  { clientId: number },
+  TContext
+> => {
+  return useMutation(getDeleteClientAvatarMutationOptions(options));
 };
 
 /**

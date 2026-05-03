@@ -85,6 +85,14 @@ export const clientsTable = abanote.table("clients", {
   hasAssessment: boolean("has_assessment").notNull().default(false),
   assessmentStatus: text("assessment_status").notNull().default("missing"),
   profile: jsonb("profile").$type<ClientProfileRow | null>(),
+  /**
+   * AI-generated cartoon avatar bytes, base64-encoded (no `data:` prefix). PNG, ~50–150 KB at low quality.
+   * Stored on the `clients` row (not in the JSON profile) so list responses can omit it; binary is served
+   * by `GET /clients/:id/avatar` and embedded via signed URLs.
+   */
+  avatarPngBase64: text("avatar_png_base64"),
+  /** Timestamp of the most recent avatar generation; doubles as a cache-busting key for signed URLs. */
+  avatarUpdatedAt: timestamp("avatar_updated_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

@@ -42,8 +42,11 @@ import {
   deleteClientProgram,
   extractAssessmentFromPdf,
   listAbcBuilderActivityAntecedents,
+  generateClientAvatar as generateClientAvatarRequest,
+  deleteClientAvatar as deleteClientAvatarRequest,
   type AssessmentExtractSuccessResponse,
 } from "@workspace/api-client-react";
+import type { GenerateClientAvatarResponse } from "@workspace/api-client-react";
 import { useAuthStore } from "@/store/auth-store";
 
 export function useClients() {
@@ -269,6 +272,46 @@ export function useExtractAssessmentFromPdf() {
   return useMutation({
     mutationFn: async (file: File): Promise<AssessmentExtractSuccessResponse> =>
       extractAssessmentFromPdf(file),
+  });
+}
+
+/**
+ * Generate (or regenerate) the AI cartoon avatar for a client. The backend stores the bytes and returns
+ * a fresh signed `avatarUrl` plus the updated `Client` row, which we splat into the React Query caches
+ * so consumers (clients list, detail, wizard) see the new image without refetching.
+ */
+export function useGenerateClientAvatar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (clientId: number): Promise<GenerateClientAvatarResponse> =>
+      generateClientAvatarRequest(clientId),
+    onSuccess: (res, clientId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/clients", clientId] });
+      // Best-effort: update the detail-cache eagerly so the avatar swaps in immediately even before
+      // the network refetch lands. Falls through silently if the cache isn't populated yet.
+      const updatedClient = res?.data?.client;
+      if (updatedClient) {
+        queryClient.setQueriesData<{ success: boolean; data: typeof updatedClient }>(
+          { queryKey: ["/api/clients", clientId] },
+          (prev) => (prev ? { ...prev, data: updatedClient } : prev),
+        );
+      }
+    },
+  });
+}
+
+/**
+ * Clear the stored AI avatar for a client. The client falls back to initials in the UI.
+ */
+export function useDeleteClientAvatar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (clientId: number) => deleteClientAvatarRequest(clientId),
+    onSuccess: (_res, clientId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/clients", clientId] });
+    },
   });
 }
 

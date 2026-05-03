@@ -5,6 +5,7 @@ import type {
   MaladaptiveBehaviorProfileEntry,
 } from "@workspace/db/schema";
 import { expandMaladaptiveTargetsFromProfile } from "./client-profile-maladaptive";
+import { buildAvatarUrl } from "./avatar-generation";
 
 type AssessmentStatus = "uploaded" | "processing" | "ready" | "missing";
 
@@ -45,6 +46,11 @@ export function sanitizeClientProfileForApi(profile: ClientProfileRow): ClientPr
 
 export function clientRowToApiData(c: Client) {
   const profile = (c.profile as ClientProfileRow | null | undefined) ?? null;
+  // Surfaces a signed, version-pinned URL the browser can drop into `<img src=…>`. The signature is
+  // bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates
+  // automatically. Returns `null` when the client has no avatar on file yet.
+  const avatarUrl = buildAvatarUrl(c.id, c.avatarUpdatedAt ?? null);
+  const avatarUpdatedAt = c.avatarUpdatedAt ? c.avatarUpdatedAt.toISOString() : null;
   return {
     id: c.id,
     companyId: c.companyId,
@@ -52,6 +58,8 @@ export function clientRowToApiData(c: Client) {
     ageBand: c.ageBand ?? undefined,
     hasAssessment: c.hasAssessment,
     assessmentStatus: c.assessmentStatus as AssessmentStatus,
+    avatarUrl,
+    avatarUpdatedAt,
     profile: profile ? sanitizeClientProfileForApi(profile) : null,
   };
 }

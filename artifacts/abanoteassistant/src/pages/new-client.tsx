@@ -31,8 +31,10 @@ import {
   useClientBehaviorProgramApprovals,
   useClientReplacementProgramsList,
   usePutClientBehaviorApprovedPrograms,
+  useGenerateClientAvatar,
 } from "@/hooks/use-aba-api";
 import { ApiError, type AssessmentExtractResultPayload } from "@workspace/api-client-react";
+import { ClientAvatar } from "@/components/client-avatar";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -694,9 +696,12 @@ function StepBar({ progress }: { progress: number }) {
 function Step1({
   data,
   onChange,
+  avatarPanel,
 }: {
   data: Step1Data;
   onChange: (d: Step1Data) => void;
+  /** Optional avatar panel rendered above the name fields (edit mode only). */
+  avatarPanel?: React.ReactNode;
 }) {
   const genders = ["Male", "Female", "Non-binary", "Prefer not to say"];
   const [dobOpen, setDobOpen] = useState(false);
@@ -707,6 +712,7 @@ function Step1({
 
   return (
     <div className="space-y-5">
+      {avatarPanel}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         {/* First name */}
         <div>
@@ -1350,6 +1356,74 @@ function NewClientForm({
   // for the same PDF the user picked. Switching to a different file re-arms the auto-extract effect.
   const lastAutoExtractedFileKeyRef = useRef<string | null>(null);
   const deleteClientMutation = useDeleteClient();
+  const generateAvatarMutation = useGenerateClientAvatar();
+
+  /** Fires the avatar regenerate request for an existing client (edit mode + section-edit "personal"). */
+  function regenerateAvatarForCurrentClient() {
+    if (!isEdit || !Number.isFinite(numericId) || numericId <= 0) return;
+    if (generateAvatarMutation.isPending) return;
+    generateAvatarMutation.mutate(numericId, {
+      onError: (err) => {
+        const msg =
+          err instanceof Error ? `Could not generate avatar: ${err.message}` : "Could not generate avatar.";
+        setSaveError(msg);
+      },
+      onSuccess: () => {
+        setSaveError(null);
+      },
+    });
+  }
+
+  /** Renders the clickable avatar circle + helper copy used in the wizard Step 1 (edit mode only). */
+  function renderEditModeAvatarPanel() {
+    if (!isEdit) return null;
+    const stored = detailRes?.data;
+    if (!stored) return null;
+    const subject = {
+      avatarUrl: stored.avatarUrl,
+      avatarUpdatedAt: stored.avatarUpdatedAt,
+      firstName: step1.firstName || stored.profile?.firstName || "",
+      lastName: step1.lastName || stored.profile?.lastName || "",
+      name: stored.name,
+    };
+    const hasAvatar = Boolean(stored.avatarUrl);
+    return (
+      <div className="flex items-center gap-4 rounded-2xl border border-[#F0E4E1] bg-[#FDFAF7] p-4 mb-2">
+        <ClientAvatar
+          client={subject}
+          size="xl"
+          onRegenerate={regenerateAvatarForCurrentClient}
+          isRegenerating={generateAvatarMutation.isPending}
+          hoverLabel={hasAvatar ? "Click to regenerate avatar with AI" : "Click to generate avatar with AI"}
+        />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#2D2523]">Profile avatar</p>
+          <p className="text-xs text-[#877870] mt-0.5 leading-relaxed">
+            {generateAvatarMutation.isPending
+              ? "Generating a new avatar with AI…"
+              : hasAvatar
+                ? "Click the picture to regenerate a new AI cartoon avatar from this client's name, age, and gender."
+                : "Click the initials to generate an AI cartoon avatar from this client's name, age, and gender."}
+          </p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              regenerateAvatarForCurrentClient();
+            }}
+            disabled={generateAvatarMutation.isPending}
+            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#F0E4E1] text-xs font-semibold text-[#C27A8A] hover:bg-[#F9EEF1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {generateAvatarMutation.isPending
+              ? "Generating…"
+              : hasAvatar
+                ? "Regenerate avatar"
+                : "Generate avatar"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   async function handleDeleteClientFromEdit() {
     if (!isEdit || !Number.isFinite(numericId) || numericId <= 0) return;
@@ -1748,6 +1822,18 @@ function NewClientForm({
         if (step2.file) {
           await uploadClientAssessmentDocument(created.data.id, { file: step2.file });
         }
+        // Fire-and-forget avatar generation. We don't await: the request can take ~5–15s and we want
+        // the user back on the clients page immediately. The clients-list query is invalidated by the
+        // hook on success, so the avatar swaps in for the new card the next time it renders.
+        const newClientId = created.data.id;
+        generateAvatarMutation.mutate(newClientId, {
+          onError: (err) => {
+            // Log only — never block the create flow on avatar generation. The user can retry later
+            // from the edit screen.
+            const msg = err instanceof Error ? err.message : "Avatar generation failed";
+            console.warn(`Avatar generation failed for new client ${newClientId}:`, msg);
+          },
+        });
       }
       await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       if (isEdit && !isSectionEdit) {
@@ -1800,7 +1886,9 @@ function NewClientForm({
                 <p className="text-[#877870] mt-1">{SECTION_EDIT_SUBTITLES[editSection]}</p>
               </div>
 
-              {editSection === "personal" && <Step1 data={step1} onChange={setStep1} />}
+              {editSection === "personal" && (
+                <Step1 data={step1} onChange={setStep1} avatarPanel={renderEditModeAvatarPanel()} />
+              )}
               {editSection === "assessment" && (
                 <Step2
                   data={step2}
@@ -1965,7 +2053,13 @@ function NewClientForm({
               <WizardExistingClientPicker onChosen={() => setLocation("/wizard")} />
             )}
 
-            {step === 1 && <Step1 data={step1} onChange={setStep1} />}
+            {step === 1 && (
+              <Step1
+                data={step1}
+                onChange={setStep1}
+                avatarPanel={isEdit ? renderEditModeAvatarPanel() : undefined}
+              />
+            )}
             {step === 2 && (
               <Step2
                 data={step2}

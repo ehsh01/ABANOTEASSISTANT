@@ -35,6 +35,7 @@ import type { Client } from "@workspace/api-client-react";
 import { useClients, useDeleteClient } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
 import { formatAuthorizationExpiresOn } from "@/lib/utils";
+import { ClientAvatar } from "@/components/client-avatar";
 
 function displayNames(client: Client) {
   const p = client.profile;
@@ -59,10 +60,6 @@ function displayNames(client: Client) {
     replacementPrograms: [] as string[],
     assessmentAuthorizationExpiresOn: null as string | null,
   };
-}
-
-function getInitials(firstName: string, lastName: string) {
-  return `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
 }
 
 function calcAge(dob: string): string {
@@ -131,12 +128,17 @@ function ClientCard({ client }: { client: Client }) {
     >
       <div className="flex items-start justify-between mb-5 gap-3">
         <div className="flex items-center gap-4 min-w-0">
-          <div
-            className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white shrink-0 group-hover:scale-105 transition-transform pop-text-white"
-            style={{ background: "linear-gradient(135deg, #C27A8A 0%, #e8c4cc 100%)" }}
-          >
-            {getInitials(d.firstName, d.lastName)}
-          </div>
+          <ClientAvatar
+            client={{
+              avatarUrl: client.avatarUrl,
+              avatarUpdatedAt: client.avatarUpdatedAt,
+              firstName: d.firstName,
+              lastName: d.lastName,
+              name: client.name,
+            }}
+            size="md"
+            className="group-hover:scale-105 transition-transform"
+          />
           <div className="min-w-0">
             <h3 className="font-bold text-[#2D2523] text-lg leading-tight pop-text truncate">
               {d.firstName} {d.lastName}

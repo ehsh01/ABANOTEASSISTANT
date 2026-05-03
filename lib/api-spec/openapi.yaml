@@ -469,6 +469,89 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /clients/{clientId}/avatar/generate:
+    post:
+      operationId: generateClientAvatar
+      tags: [clients]
+      summary: Generate an AI cartoon avatar for the client
+      description: >
+        Uses the client's first name (cultural / ethnic cue), approximate age (from DOB), and gender to
+        produce a stylized cartoon-style portrait via OpenAI's image API and stores it on the client row.
+        Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Avatar generated and stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateClientAvatarResponse"
+        "400":
+          description: Missing first name on client (cannot generate)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Upstream image-generation failure (model error, content policy refusal, quota)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clients/{clientId}/avatar:
+    delete:
+      operationId: deleteClientAvatar
+      tags: [clients]
+      summary: Remove the stored AI avatar for a client
+      description: Clears the avatar bytes; the client falls back to initials in the UI.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Avatar cleared
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientDetailResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /clients/{clientId}/recommendations:
     post:
       operationId: createClientClinicalRecommendation
@@ -1646,6 +1729,18 @@ components:
         assessmentStatus:
           type: string
           enum: [uploaded, processing, ready, missing]
+        avatarUrl:
+          type: string
+          nullable: true
+          description: >
+            Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar.
+            The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the
+            browser cache invalidates automatically. Null when the client has no avatar on file.
+        avatarUpdatedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the avatar was most recently generated. Null when no avatar is on file.
         profile:
           $ref: "#/components/schemas/ClientProfile"
           nullable: true
@@ -1679,6 +1774,34 @@ components:
           type: boolean
         data:
           $ref: "#/components/schemas/Client"
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    GenerateClientAvatarResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            avatarUrl:
+              type: string
+              nullable: true
+            avatarUpdatedAt:
+              type: string
+              format: date-time
+              nullable: true
+            client:
+              $ref: "#/components/schemas/Client"
+          required:
+            - avatarUrl
+            - avatarUpdatedAt
+            - client
         error:
           type: string
           nullable: true
