@@ -678,12 +678,13 @@ function SectionEditHeader({
 }
 
 // ── Step progress bar ─────────────────────────────────────────────────────────
-function StepBar({ step }: { step: number }) {
+function StepBar({ progress }: { progress: number }) {
+  const clamped = Math.max(0, Math.min(1, progress));
   return (
     <div className="w-full h-1 bg-[#F0E4E1]">
       <div
         className="h-full bg-[#C27A8A] transition-all duration-500 ease-out"
-        style={{ width: `${(step / 3) * 100}%` }}
+        style={{ width: `${clamped * 100}%` }}
       />
     </div>
   );
@@ -1296,10 +1297,27 @@ function NewClientForm({
 
   const [hydrated, setHydrated] = useState(!isEdit);
   const searchParams = new URLSearchParams(window.location.search);
-  const initialStep = isEdit ? Math.min(3, Math.max(1, Number(searchParams.get("step") || 1))) : 1;
+
+  // `?intent=assessment` (set by the "From Assessment PDF" picker on the clients page) reorders the create
+  // wizard so the assessment upload comes FIRST. The wizard then walks the user through Step 2 → Step 1 →
+  // Step 3 so they can review the auto-extracted name/DOB/gender before reviewing programs and saving.
+  // Edit flows always use the canonical 1→2→3 order.
+  const intentRaw = (searchParams.get("intent") ?? "").toLowerCase();
+  const STEP_ORDER: readonly number[] =
+    !isEdit && intentRaw === "assessment" ? [2, 1, 3] : [1, 2, 3];
+  const initialStep = isEdit
+    ? Math.min(3, Math.max(1, Number(searchParams.get("step") || 1)))
+    : STEP_ORDER[0];
   const [step, setStep] = useState(initialStep);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const stepIndex = STEP_ORDER.indexOf(step);
+  const safeStepIndex = stepIndex < 0 ? 0 : stepIndex;
+  const isFirstStep = safeStepIndex === 0;
+  const isLastStep = safeStepIndex === STEP_ORDER.length - 1;
+  const nextStep = STEP_ORDER[safeStepIndex + 1];
+  const prevStep = STEP_ORDER[safeStepIndex - 1];
 
   // Detect return destination from query param (?returnTo=wizard)
   const returnTo = searchParams.get("returnTo");
@@ -1553,8 +1571,8 @@ function NewClientForm({
       setLocation("/clients");
       return;
     }
-    if (step === 1) setLocation(cancelDestination());
-    else setStep(step - 1);
+    if (isFirstStep) setLocation(cancelDestination());
+    else if (typeof prevStep === "number") setStep(prevStep);
   }
 
   function canContinue() {
@@ -1660,9 +1678,9 @@ function NewClientForm({
 
   async function handleNext() {
     if (isSectionEdit) return;
-    if (step < 3) {
+    if (!isLastStep && typeof nextStep === "number") {
       setSaveError(null);
-      setStep(step + 1);
+      setStep(nextStep);
       return;
     }
     setSaving(true);
@@ -1886,19 +1904,24 @@ function NewClientForm({
         onCancel={() => setLocation(cancelDestination())}
         mode={isEdit ? "edit" : "create"}
       />
-      {!isSectionEdit && <StepBar step={step} />}
+      {!isSectionEdit && (
+        <StepBar
+          progress={(safeStepIndex + 1) / STEP_ORDER.length}
+        />
+      )}
 
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 py-10">
-        {/* Step indicator dots — full wizard only (not section edit) */}
+        {/* Step indicator dots — full wizard only (not section edit). Render in the wizard's actual order
+            (assessment-first vs canonical) so the highlighted dot tracks the user's true position. */}
         {!isSectionEdit && (
           <div className="flex items-center justify-center gap-3 mb-8">
-            {[1, 2, 3].map((n) => (
+            {STEP_ORDER.map((n, i) => (
               <div
                 key={n}
                 className={`rounded-full transition-all duration-300 ${
-                  n < step
+                  i < safeStepIndex
                     ? "w-6 h-2 bg-[#C27A8A]"
-                    : n === step
+                    : i === safeStepIndex
                     ? "w-8 h-2 bg-[#C27A8A]"
                     : "w-2 h-2 bg-[#F0E4E1]"
                 }`}
@@ -1981,7 +2004,7 @@ function NewClientForm({
                 >
                   {saving ? (
                     <>Saving...</>
-                  ) : step === 3 ? (
+                  ) : isLastStep ? (
                     <>
                       <User className="w-4 h-4 pop-icon-white" /> {isEdit ? "Save changes" : "Save Client"}
                     </>
