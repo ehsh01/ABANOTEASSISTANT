@@ -154,9 +154,9 @@ function buildPerformanceSentenceWithoutTrialAggregate(programSlotCount: number)
  * `replacementProgramSlotCount(sessionHours)` / collapsed narrative segments).
  *
  * When `therapistTrialSummaryForReplacementHour` contains at least one segment with `totalTrials >= 1`, the line
- * includes the pooled **X out of Y** trial counts, the **rounded percentage** derived from that ratio, and a
- * fixed neutral interpretation band (no subjective majority/good/fair language). Prose uses **independent responding**
- * as the product phrase; numerators/denominators still come from therapist-entered criterion trial successes in JSON.
+ * states the **rounded percentage** from pooled criterion successes over recorded discrete trials (no "X out of Y trials"
+ * parenthetical), plus a fixed neutral interpretation band (no subjective majority/good/fair language). Prose uses
+ * **independent responding** as the product phrase; the percent still comes from therapist-entered trial JSON.
  */
 export function buildPerformanceSentence(
   programSlotCount: number,
@@ -168,11 +168,11 @@ export function buildPerformanceSentence(
   }
   const pct = discreteTrialSuccessPercent(agg.successes, agg.trials);
   const interpretation = neutralDiscreteTrialPerformanceClause(pct);
-  const trialPhrase =
+  const scopePhrase =
     agg.segmentsWithData === 1
-      ? `${agg.successes} out of ${agg.trials} trials per program`
-      : `${agg.successes} out of ${agg.trials} trials across ${agg.segmentsWithData} programs`;
-  return `The client demonstrated approximately ${pct}% independent responding (${trialPhrase}), ${interpretation}.`;
+      ? "based on recorded discrete trials for that replacement program"
+      : `based on recorded discrete trials pooled across ${agg.segmentsWithData} programs`;
+  return `The client demonstrated approximately ${pct}% independent responding (${scopePhrase}), ${interpretation}.`;
 }
 
 export function buildNextSessionSentence(

@@ -45,7 +45,8 @@ export type NoteComplianceContext = {
   interventions: string[];
   /**
    * Per narrative segment: therapist-entered discrete-trial rollup for `replacementProgramForHour[s]`.
-   * When set, the clinical paragraph must state success counts as **N out of M trials were/was successful** (see validators).
+   * When set, the clinical paragraph must state outcomes as a **rounded success percentage** tied to that program
+   * (e.g. successful ~P% of the time / P% of trials), not "N out of M trials" counts (see validators).
    */
   therapistTrialSummaryForReplacementHour?: TherapistTrialSummaryForHourEntry[] | undefined;
   /** Approximate age in years from DOB + session date; null if unknown */
@@ -751,18 +752,53 @@ export function countInterventionImplementationsInParagraph(
   return spans.length;
 }
 
-function therapistTrialRollupPhrasePresent(
+/** Rounded % of trials that met criterion; must match `discreteTrialSuccessPercent` in note-assembly.ts. */
+function therapistTrialSuccessPercentRounded(successfulTrialCount: number, totalTrials: number): number {
+  const m = totalTrials;
+  let n = successfulTrialCount;
+  if (!Number.isFinite(n) || !Number.isFinite(m) || m < 1 || n < 0) return 0;
+  n = Math.min(n, m);
+  return Math.round((n / m) * 100);
+}
+
+/**
+ * True when the paragraph states therapist-entered discrete-trial outcomes as a **percentage** aligned with JSON
+ * (rounded successes/total), not as "N out of M trials were successful".
+ */
+function therapistTrialPercentRollupPhrasePresent(
   paragraph: string,
   successfulTrialCount: number,
   totalTrials: number,
 ): boolean {
-  const n = successfulTrialCount;
   const m = totalTrials;
+  let n = successfulTrialCount;
   if (!Number.isFinite(n) || !Number.isFinite(m) || m < 1 || n < 0) return false;
-  const wasWere = n === 1 ? "(?:was|were)" : "were";
-  const outOf = new RegExp(`\\b${n}\\s+out\\s+of\\s+${m}\\s+trials?\\s+${wasWere}\\s+successful\\b`, "i");
-  const ofOnly = new RegExp(`\\b${n}\\s+of\\s+${m}\\s+trials?\\s+${wasWere}\\s+successful\\b`, "i");
-  return outOf.test(paragraph) || ofOnly.test(paragraph);
+  n = Math.min(n, m);
+  const p = therapistTrialSuccessPercentRounded(n, m);
+  const pStr = String(p);
+
+  const legacyOut = new RegExp(`\\b${n}\\s+out\\s+of\\s+${m}\\s+trials?\\b`, "i");
+  const legacyOf = new RegExp(`\\b${n}\\s+of\\s+${m}\\s+trials?\\b`, "i");
+  const legacyWasWere = new RegExp(
+    `\\b${n}\\s+out\\s+of\\s+${m}\\s+trials?\\s+(?:was|were)\\s+successful\\b`,
+    "i",
+  );
+  if (legacyOut.test(paragraph) || legacyOf.test(paragraph) || legacyWasWere.test(paragraph)) {
+    return false;
+  }
+
+  if (!new RegExp(`\\b${pStr}%\\b`, "i").test(paragraph)) return false;
+
+  return new RegExp(
+    `\\b${pStr}%\\s+of\\s+the\\s+time|` +
+      `\\bsuccessful\\b[^.;]{0,160}?\\b${pStr}%|` +
+      `\\b${pStr}%\\b[^.;]{0,160}?\\bsuccessful|` +
+      `\\bsucceeded\\b[^.;]{0,160}?\\b${pStr}%|` +
+      `\\b${pStr}%\\s+of\\s+(?:recorded\\s+)?(?:discrete\\s+)?trials?|` +
+      `\\bcriterion\\b[^.;]{0,160}?\\b${pStr}%|` +
+      `\\b${pStr}%[^.;]{0,160}?\\bcriterion`,
+    "i",
+  ).test(paragraph);
 }
 
 /** Exact intervention string from the client's list when it is the canonical Response Block label. */
@@ -1007,9 +1043,10 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     const trialEntry = trialSummaries?.[i];
     if (trialEntry && trialEntry.totalTrials >= 1) {
       const successN = trialEntry.successfulTrialNumbers.length;
-      if (!therapistTrialRollupPhrasePresent(p, successN, trialEntry.totalTrials)) {
+      const pct = therapistTrialSuccessPercentRounded(successN, trialEntry.totalTrials);
+      if (!therapistTrialPercentRollupPhrasePresent(p, successN, trialEntry.totalTrials)) {
         issues.push(
-          `Therapist trial counts: paragraph ${i + 1} must state discrete-trial outcomes as "${successN} out of ${trialEntry.totalTrials} trials were successful" (use "was" instead of "were" when ${successN} is 1 if you prefer standard agreement). Do not use "trials were conducted" plus separate "trial … was successful" / "trials … and … were successful" wording.`,
+          `Therapist trial counts: paragraph ${i + 1} must state discrete-trial outcomes as a **percentage** tied to that program (rounded from intake: **${pct}%** of trials met criterion / **~${pct}%** of the time / **successful ~${pct}%** of the time — same rounding as the end-of-note performance line). Do **not** use "${successN} out of ${trialEntry.totalTrials} trials were successful" or other N-of-M trial count rollups. Do not use "trials were conducted" plus separate per-trial success lists.`,
         );
       }
     }
