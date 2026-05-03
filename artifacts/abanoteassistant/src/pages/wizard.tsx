@@ -125,7 +125,41 @@ function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | null {
 /** Wizard + generate request: total trials and per-trial indices are capped at 10. */
 const MAX_PROGRAM_TRIALS = 10;
 
-const TRIAL_TOTAL_CHOICES = Array.from({ length: MAX_PROGRAM_TRIALS }, (_, i) => i + 1);
+/**
+ * Single wizard control: "How many trials met criterion?" as a percent.
+ * Stored on the API as `count` = fixed denominator and `effectiveTrials` = trials 1..N that met criterion.
+ */
+const TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT = 10;
+const CRITERION_MET_PERCENT_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 100] as const;
+
+function criterionPercentFromTrialEntry(entry: ProgramTrialDataEntry): number | null {
+  const n = normalizeProgramTrialEntry(entry);
+  const c = n.count;
+  const s = n.effectiveTrials.length;
+  if (c == null || c < 1 || s < 1) return null;
+  const rawPct = Math.round((s / c) * 100);
+  let best: number | null = null;
+  let bestDiff = Infinity;
+  for (const p of CRITERION_MET_PERCENT_OPTIONS) {
+    const d = Math.abs(p - rawPct);
+    if (d < bestDiff) {
+      bestDiff = d;
+      best = p;
+    }
+  }
+  return best;
+}
+
+function trialEntryFromCriterionPercent(percent: number): ProgramTrialDataEntry {
+  const successes = Math.min(
+    TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT,
+    Math.max(0, Math.round(percent / 10)),
+  );
+  return normalizeProgramTrialEntry({
+    count: TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT,
+    effectiveTrials: effectiveTrialsForSuccessCount(TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT, successes),
+  });
+}
 
 function normalizeProgramTrialEntry(
   entry: Partial<ProgramTrialDataEntry> & { effectiveTrials?: number[] },
@@ -1138,13 +1172,8 @@ function Step6Programs() {
           const trialEntry = normalizeProgramTrialEntry(
             trialMap[String(program.id)] ?? { count: null, effectiveTrials: [] },
           );
-          const trialCount = typeof trialEntry.count === "number" && trialEntry.count >= 1 ? trialEntry.count : null;
-          const successSelectValue =
-            trialCount == null
-              ? ""
-              : trialEntry.effectiveTrials.length === 0
-                ? ""
-                : String(trialEntry.effectiveTrials.length);
+          const criterionPercent = criterionPercentFromTrialEntry(trialEntry);
+          const criterionPercentSelectValue = criterionPercent == null ? "" : String(criterionPercent);
           return (
             <div
               key={program.id}
@@ -1192,82 +1221,45 @@ function Step6Programs() {
                   aria-label="Trial counts for this program"
                 >
                   <div className="space-y-1">
-                    <label htmlFor={`trial-count-${program.id}`} className="text-xs font-semibold text-muted-foreground">
-                      How many trials did you run?
+                    <label
+                      htmlFor={`criterion-percent-${program.id}`}
+                      className="text-xs font-semibold text-muted-foreground"
+                    >
+                      How many trials met criterion?
                     </label>
                     <select
-                      id={`trial-count-${program.id}`}
-                      value={trialCount ?? ""}
+                      id={`criterion-percent-${program.id}`}
+                      value={criterionPercentSelectValue}
                       onChange={(e) => {
                         const raw = e.target.value;
                         if (raw === "") {
                           updateProgramTrial(program.id, () => ({ count: null, effectiveTrials: [] }));
                           return;
                         }
-                        const capped = Math.min(MAX_PROGRAM_TRIALS, parseInt(raw, 10));
-                        if (Number.isNaN(capped) || capped < 1) {
-                          updateProgramTrial(program.id, () => ({ count: null, effectiveTrials: [] }));
+                        const pct = parseInt(raw, 10);
+                        if (
+                          Number.isNaN(pct) ||
+                          !(CRITERION_MET_PERCENT_OPTIONS as readonly number[]).includes(pct)
+                        ) {
                           return;
                         }
-                        updateProgramTrial(program.id, (prev) => {
-                          const prevSuccess = prev.effectiveTrials.length;
-                          const nextSuccess =
-                            prevSuccess > 0 ? Math.min(prevSuccess, capped) : 0;
-                          return {
-                            count: capped,
-                            effectiveTrials: effectiveTrialsForSuccessCount(capped, nextSuccess),
-                          };
-                        });
+                        updateProgramTrial(program.id, () => trialEntryFromCriterionPercent(pct));
                       }}
                       className="w-full text-sm rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                     >
                       <option value="">Optional</option>
-                      {TRIAL_TOTAL_CHOICES.map((n) => (
-                        <option key={n} value={n}>
-                          {n}
+                      {CRITERION_MET_PERCENT_OPTIONS.map((pct) => (
+                        <option key={pct} value={pct}>
+                          {pct}%
                         </option>
                       ))}
                     </select>
+                    <p className="text-[11px] text-muted-foreground">
+                      Each percent maps to {TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT} trials (e.g. 70% = 7 of{" "}
+                      {TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT} met criterion). Note generation uses the same rollup the
+                      server already expects.
+                    </p>
                   </div>
-
-                  {trialCount != null && (
-                    <div className="space-y-1">
-                      <label htmlFor={`trial-success-${program.id}`} className="text-xs font-semibold text-muted-foreground">
-                        How many met criterion?
-                      </label>
-                      <select
-                        id={`trial-success-${program.id}`}
-                        value={successSelectValue}
-                        onChange={(e) => {
-                          const raw = e.target.value;
-                          if (raw === "") {
-                            updateProgramTrial(program.id, () => ({
-                              count: trialCount,
-                              effectiveTrials: [],
-                            }));
-                            return;
-                          }
-                          const s = parseInt(raw, 10);
-                          if (Number.isNaN(s) || s < 0 || s > trialCount) return;
-                          updateProgramTrial(program.id, () => ({
-                            count: trialCount,
-                            effectiveTrials: effectiveTrialsForSuccessCount(trialCount, s),
-                          }));
-                        }}
-                        className="w-full text-sm rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
-                      >
-                        <option value="">Optional</option>
-                        {Array.from({ length: trialCount + 1 }, (_, s) => (
-                          <option key={s} value={String(s)}>
-                            {s === 0 ? "0 (none)" : s}
-                          </option>
-                        ))}
-                      </select>
-                      <p className="text-[11px] text-muted-foreground">
-                        Up to {MAX_PROGRAM_TRIALS} trials. Trials 1 through the count you pick are treated as successful (e.g. 3 of 5 → trials 1, 2, 3).
-                      </p>
-                    </div>
-                  )}
                 </div>
               )}
             </div>

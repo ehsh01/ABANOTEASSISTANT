@@ -38,6 +38,7 @@ import {
   maladaptiveBehaviorsCatalogForRotation,
   maladaptiveBehaviorsForSessionHours,
   replacementProgramAssignmentsForSessionHours,
+  rebalanceTaskRefusalReplacementProgramsHourly,
   replacementProgramPoolForAutoAssignment,
   replacementProgramSlotCount,
   validateCaregiverMentionRule,
@@ -574,6 +575,18 @@ router.post("/notes/generate", async (req, res) => {
     explicitProgramIdByHour,
     sessionSelectionCoversHours:
       body.selectedReplacements.length >= replacementProgramSlotCount(body.sessionHours),
+  });
+
+  rebalanceTaskRefusalReplacementProgramsHourly({
+    sessionHours: body.sessionHours,
+    maladaptiveBehaviorForHour,
+    names: replacementProgramForHour,
+    rbtActionsOnlyOutcomeForHour,
+    programIdForHour,
+    explicitProgramIdByHour,
+    poolIds,
+    idToName: idToNameForPrograms,
+    selectedIdSet,
   });
 
   const therapistTrialSummaryHourly = buildTherapistTrialSummaryForReplacementHour({

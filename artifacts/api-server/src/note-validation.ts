@@ -613,6 +613,94 @@ export function replacementProgramAssignmentsForSessionHours(params: {
   return { names, rbtActionsOnly: rbt, programIdForHour };
 }
 
+/**
+ * True when the replacement program name is the common BIP line for ending activities
+ * (e.g. Indicate 'All Done' to End an Activity). Matching is substring-based so minor catalog
+ * punctuation variants still qualify.
+ */
+export function isIndicateAllDoneReplacementProgramName(name: string): boolean {
+  const t = name.trim().toLowerCase();
+  return t.includes("indicate") && t.includes("all done");
+}
+
+const TASK_REFUSAL_CATALOG = "Task Refusal";
+
+/**
+ * Auto-assignment sometimes pairs **Task Refusal** with **Indicate … All Done …**, which external
+ * reviewers often flag when the episode is noncompliance with a **new instructional demand** (not
+ * clearly "end this activity"). When that hour's replacement was **not** explicitly pinned in ABC
+ * hints, swap to another linked program from the session pool when available (prefer transitioning,
+ * request help, follow demands, time on task, then any other).
+ *
+ * Mutates `names`, `rbtActionsOnlyOutcomeForHour`, and `programIdForHour` in place for affected hours.
+ */
+export function rebalanceTaskRefusalReplacementProgramsHourly(params: {
+  sessionHours: number;
+  maladaptiveBehaviorForHour: string[];
+  names: string[];
+  rbtActionsOnlyOutcomeForHour: boolean[];
+  programIdForHour: (number | null)[];
+  explicitProgramIdByHour: (number | null | undefined)[];
+  poolIds: number[];
+  idToName: Map<number, string>;
+  selectedIdSet: Set<number>;
+}): void {
+  const {
+    sessionHours: H,
+    maladaptiveBehaviorForHour: beh,
+    names,
+    rbtActionsOnlyOutcomeForHour: rbt,
+    programIdForHour: pids,
+    explicitProgramIdByHour: explicit,
+    poolIds,
+    idToName,
+    selectedIdSet,
+  } = params;
+
+  const preferencePredicates: ((n: string) => boolean)[] = [
+    (n) => {
+      const t = n.toLowerCase();
+      return t.includes("transitioning") && t.includes("preferred");
+    },
+    (n) => n.toLowerCase().includes("request help"),
+    (n) => n.toLowerCase().includes("follow demands"),
+    (n) => n.toLowerCase().includes("time on task"),
+  ];
+
+  for (let h = 0; h < H; h++) {
+    if (beh[h]?.trim() !== TASK_REFUSAL_CATALOG) continue;
+    if (!isIndicateAllDoneReplacementProgramName(names[h] ?? "")) continue;
+    const pinned = explicit[h];
+    if (typeof pinned === "number") continue;
+
+    const currentName = names[h] ?? "";
+    const candidates = poolIds.filter((id) => {
+      const n = idToName.get(id)?.trim();
+      if (!n || n === currentName) return false;
+      if (!isIndicateAllDoneReplacementProgramName(n)) return true;
+      return false;
+    });
+    if (candidates.length === 0) continue;
+
+    let pick: number | undefined;
+    for (const pred of preferencePredicates) {
+      const found = candidates.find((id) => pred(idToName.get(id)!));
+      if (found !== undefined) {
+        pick = found;
+        break;
+      }
+    }
+    if (pick === undefined) {
+      pick = candidates[0];
+    }
+
+    const newName = idToName.get(pick)!;
+    names[h] = newName;
+    pids[h] = pick;
+    rbt[h] = !selectedIdSet.has(pick);
+  }
+}
+
 /** Catalog label denotes physical aggression (person-directed); match is on the catalog string, not free text. */
 function isPhysicalAggressionCatalogLabel(behaviorName: string): boolean {
   return /\bphysical\s+aggression\b/i.test(behaviorName.trim());
