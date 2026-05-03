@@ -109,7 +109,7 @@ Rules:
 - Use ONLY information explicitly present in the document. Do not invent diagnoses, behaviors, or programs.
 - Copy behavior and program names closely from the document when possible (short phrases, not long paragraphs).
 - maladaptiveBehaviors: target behaviors, problem behaviors, or behavior definitions listed in the plan.
-- maladaptiveBehaviorTopographies: for each behavior name in \`maladaptiveBehaviors\`, copy the short operational definition / observable description (the assessment's "topography" or "operational definition" text) when one is present. Use the SAME exact \`name\` string as the matching entry in \`maladaptiveBehaviors\` and put the description in \`topography\`. Keep it concise (one or two sentences); do not invent definitions when the document does not give one (omit that name's topography in that case). Use a JSON array of \`{ "name": "<behavior>", "topography": "<short description>" }\` objects.
+- maladaptiveBehaviorTopographies: for EVERY behavior name in \`maladaptiveBehaviors\`, copy the short operational definition / observable description from the document when one is present. BIP/FBA documents commonly label this paragraph "Description", "Operational Definition", or "Topography" inside each behavior's section, often followed by "Onset" and "Offset". When you find such a paragraph for a behavior, include it. Use the SAME exact \`name\` string as the matching entry in \`maladaptiveBehaviors\` and put the description in \`topography\`. Keep it concise (one to three sentences). Do not invent definitions when the document does not give one (omit that name's topography in that case). Use a JSON array of \`{ "name": "<behavior>", "topography": "<short description>" }\` objects. Do not skip behaviors that have a clear definition — emit one entry per behavior whenever the document supplies one.
 - replacementPrograms: replacement skills, target behaviors to increase, BIP goals, or teaching programs (names only).
 - interventions: strategies, antecedent modifications, consequence procedures, prompts, token systems, DRA/DRI/DRA, redirection, etc.
 - dateOfBirth: output as MM/dd/yyyy if you can determine it; otherwise yyyy-MM-dd; omit if not in the text.
@@ -209,6 +209,22 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
     topographies.push({ name: aligned, topography: desc });
   }
 
+  // Deterministic fallback: large BIPs (e.g. 100+ pages) routinely cause the LLM to drop entries from
+  // `maladaptiveBehaviorTopographies` even when each behavior section spells out a clear "Description:".
+  // For any behavior with no LLM-supplied topography, scan the raw PDF text for the standard
+  // `Behavior Name` / `Description:` BIP layout and pull the operational definition straight from the source.
+  // The full (untruncated) `rawText` is searched here so we don't miss late sections that the
+  // model-context truncation would otherwise hide.
+  for (const behaviorName of dedupedBehaviors) {
+    const key = behaviorName.toLowerCase();
+    if (seenTopographyNames.has(key)) continue;
+    const found = extractTopographyFromBipText(rawText, behaviorName);
+    if (found) {
+      seenTopographyNames.add(key);
+      topographies.push({ name: behaviorName, topography: found });
+    }
+  }
+
   return {
     extracted: {
       ...extracted,
@@ -266,4 +282,89 @@ function formatIsoDateParts(y: number, mo: number, d: number): string | undefine
 export async function extractAssessmentFromPdfBuffer(buffer: Buffer): Promise<AssessmentExtractResult> {
   const { text, numpages } = await extractTextFromPdfBuffer(buffer);
   return extractAssessmentFromPdfText(text, numpages);
+}
+
+/**
+ * Headings that mark the **end** of a behavior's `Description:` paragraph in standard BIP layouts
+ * (Project Minds Care template and similar). Matched at line-start, case-insensitive, and tolerant
+ * of trailing whitespace/colon. Order matters only insofar as the longest distinctive phrase
+ * should be preferred — we still rely on `RegExp` alternation so any of these can terminate the
+ * capture.
+ */
+const BIP_DESCRIPTION_STOP_HEADINGS = [
+  "Onset",
+  "Offset",
+  "Intensity Key",
+  "Intensity Description",
+  "Instructions/Procedures",
+  "Hypothesized function",
+  "Hypothesized Function",
+  "Prevalent Setting",
+  "Possible Antecedents",
+  "Recommended Interventions",
+  "Interventions/Teaching methodologies",
+  "Replacement Skills",
+  "Replacement Programs",
+  "Preventive Strategies",
+  "Management Strategies",
+  "Objectives",
+  "Start Date",
+  "Baselines",
+  "Collection Method",
+];
+
+function escapeForRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Strip generic word-boundary noise from a behavior name (extra spaces, smart quotes, parenthetical
+ * abbreviations) so the regex below matches headings like `SIB` or `Off-Task Behavior` written with
+ * varying punctuation.
+ */
+function normalizeBehaviorHeading(name: string): string {
+  return name
+    .replace(/[\u2018\u2019\u201C\u201D]/g, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Best-effort deterministic topography extraction for a single behavior name from raw BIP text.
+ * Looks for a heading line containing the behavior name followed (within ~5KB) by a
+ * `Description:` block, then captures until the next standard BIP sub-heading. Returns `null`
+ * when no clean match is found — callers should leave the topography empty in that case rather
+ * than fabricate one.
+ */
+export function extractTopographyFromBipText(rawText: string, behaviorName: string): string | null {
+  const text = rawText ?? "";
+  if (!text) return null;
+
+  const heading = normalizeBehaviorHeading(behaviorName);
+  if (!heading) return null;
+
+  const headingPattern = new RegExp(
+    String.raw`(?:^|\n)\s*${escapeForRegex(heading)}\s*(?:\r?\n|\s*$)`,
+    "gi",
+  );
+  const stopAlternation = BIP_DESCRIPTION_STOP_HEADINGS.map(escapeForRegex).join("|");
+  const descPattern = new RegExp(
+    String.raw`Description\s*:\s*([\s\S]*?)(?:\n\s*(?:${stopAlternation})\s*[:.\n])`,
+    "i",
+  );
+
+  let match: RegExpExecArray | null;
+  while ((match = headingPattern.exec(text)) !== null) {
+    const start = match.index + match[0].length;
+    const window = text.slice(start, start + 5000);
+    const desc = descPattern.exec(window);
+    if (!desc) continue;
+    const cleaned = (desc[1] ?? "")
+      .replace(/\r/g, "")
+      .replace(/\n+/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    if (cleaned.length >= 30) return cleaned;
+  }
+  return null;
 }
