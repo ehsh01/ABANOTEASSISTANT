@@ -1,14 +1,18 @@
 /**
- * AI-generated **stylized cartoon** avatar for a client profile.
+ * AI-generated **stylized 3D character** avatar for a client profile.
+ *
+ * Visual target: the look of a modern animated feature (Pixar / Disney CGI / high-end stylized 3D
+ * character render) — realistic skin and clothing textures with **slightly idealized** facial features
+ * and warm cinematic lighting. **Not** a flat cartoon, **not** a real photograph of a real person.
  *
  * Privacy & safety choices (intentional):
- * - We render an **illustrated / cartoon** portrait, never photorealistic, so the avatar stays clearly
- *   stylized and does not impersonate the actual learner. This is deliberately friendly for HIPAA-adjacent
- *   contexts and minors.
+ * - Output is clearly a stylized character render, not a real photo, so the avatar does not impersonate
+ *   the actual learner. This is HIPAA-friendly and appropriate for minors.
  * - We pass only the **first name**, **approximate age** (years), and **gender** to the model. The first
  *   name supplies cultural / ethnic cues so the avatar can resemble likely appearance; the last name is
  *   omitted. The model never sees DOB, behaviors, programs, interventions, or assessment text.
- * - The model is told explicitly to avoid text, logos, watermarks, photo realism, and uncanny detail.
+ * - The model is told explicitly to avoid text, logos, watermarks, brand marks, jersey numbers, and any
+ *   suggestive / scary / violent imagery.
  */
 
 import OpenAI from "openai";
@@ -17,11 +21,25 @@ import crypto from "crypto";
 /** Default model. Override with `OPENAI_AVATAR_MODEL` (e.g. `dall-e-3`) when an org isn't verified. */
 const DEFAULT_AVATAR_MODEL = "gpt-image-1";
 
-/** Quality knob — `low` keeps the PNG ~50–150 KB; `medium`/`high` trade size for crispness. */
-const DEFAULT_AVATAR_QUALITY = "low" as const;
+/**
+ * Quality knob for `gpt-image-1`. Default is `medium` — the stylized 3D character look the product
+ * targets needs more pixel budget than `low` provides (faces look mushy at low quality). Override with
+ * `OPENAI_AVATAR_QUALITY` (`low` | `medium` | `high`) when cost matters more than crispness.
+ *
+ * Approximate per-image cost at 1024x1024 (gpt-image-1, subject to OpenAI pricing):
+ *   low ≈ $0.011 · medium ≈ $0.042 · high ≈ $0.167
+ */
+type AvatarQuality = "low" | "medium" | "high";
+const DEFAULT_AVATAR_QUALITY: AvatarQuality = "medium";
 
 /** Smallest gpt-image-1 size; PNG output. */
 const DEFAULT_AVATAR_SIZE = "1024x1024" as const;
+
+function resolveAvatarQuality(): AvatarQuality {
+  const raw = process.env["OPENAI_AVATAR_QUALITY"]?.trim().toLowerCase();
+  if (raw === "low" || raw === "medium" || raw === "high") return raw;
+  return DEFAULT_AVATAR_QUALITY;
+}
 
 export type GenerateClientAvatarInput = {
   firstName: string;
@@ -115,20 +133,26 @@ export function buildAvatarPrompt(input: GenerateClientAvatarInput): string {
     ageYears === null ? "approximately school-aged" : `approximately ${ageYears} years old`;
   const genderClause = describeGender(input.gender, ageYears);
 
-  // Keep wording explicit about cartoon / illustrated style so the model never tries photorealism.
+  // Stylized 3D character target: Pixar / Disney CGI feel — realistic textures with slightly
+  // idealized features. Explicitly NOT a real photograph (preserves child-safety / HIPAA stance)
+  // and explicitly NOT a flat cartoon (matches the more lifelike look the product wants).
   return [
-    `Create a friendly, soft cartoon-style illustrated portrait avatar for a profile picture in a children's behavior therapy app.`,
+    `Create a high-quality stylized 3D character portrait — the look of a modern animated film (Pixar / Disney CGI / high-end stylized 3D character render) — for a profile picture in a children's behavior therapy app.`,
     ``,
     `Subject:`,
     `- A ${ageClause} ${genderClause}.`,
-    firstNameSafe ? `- The first name is "${firstNameSafe}". Use the name only as a gentle cultural / ethnic cue when choosing skin tone, hair color, hair style, and eye color so the avatar resembles plausible appearance for that name and that age. If the name is culturally ambiguous, use a neutral mix.` : ``,
+    firstNameSafe
+      ? `- The first name is "${firstNameSafe}". Use the name only as a gentle cultural / ethnic cue when choosing skin tone, hair texture, hair color, hair style, and eye color so the character resembles plausible appearance for that name and that age. If the name is culturally ambiguous, use a neutral mix.`
+      : ``,
     ``,
     `Style requirements (mandatory):`,
-    `- Cartoon / illustration / flat colors / simple shapes. NOT photorealistic. NOT a real photo. Avoid uncanny detail.`,
-    `- Head-and-shoulders portrait, centered, facing forward, gentle smile, warm and approachable.`,
-    `- Solid soft pastel background.`,
-    `- No text, no letters, no logos, no watermarks, no name overlays, no captions.`,
-    `- Professional, dignified, clinically appropriate, suitable for a child's profile in a healthcare app.`,
+    `- Stylized 3D character render with realistic skin and clothing textures and slightly idealized, friendly facial features (large, expressive eyes; soft proportions). Cinematic, high-detail, polished.`,
+    `- NOT a real photograph of a real person. NOT a flat 2D cartoon. Aim for the lifelike-but-stylized look of contemporary animated feature characters.`,
+    `- Head-and-shoulders portrait, centered, facing the camera (or three-quarter view), gentle natural smile, warm and approachable expression.`,
+    `- Soft natural lighting, cinematic depth-of-field with a softly blurred, tasteful background — for example a sunlit meadow with wildflowers, a friendly schoolyard, a quiet park, or a simple themed scene appropriate to a child. Background must be subtle, never distracting, and contain no people, no text, and no signage.`,
+    `- Age-appropriate, casual modern clothing (e.g. plaid shirt, hoodie, t-shirt, light jacket, simple track top). Clothing must be plain — no visible text, no jersey numbers, no team names, no brand logos, no school crests.`,
+    `- No text, no letters, no numbers, no logos, no watermarks, no name overlays, no captions, no brand marks anywhere in the image (including on caps, jackets, jerseys, or backgrounds).`,
+    `- Professional, dignified, clinically appropriate. No suggestive, scary, violent, or distressing imagery. No weapons. No injuries.`,
     `- Square composition.`,
     ``,
     `Output: a single PNG image, square aspect ratio.`,
@@ -172,7 +196,7 @@ export async function generateClientAvatar(
   // gpt-image-1 supports a `quality` knob; older `dall-e-*` models silently reject it. We keep it
   // optional so an env-pinned `dall-e-3` fallback continues to work without extra branching here.
   if (model === DEFAULT_AVATAR_MODEL) {
-    (params as unknown as Record<string, unknown>)["quality"] = DEFAULT_AVATAR_QUALITY;
+    (params as unknown as Record<string, unknown>)["quality"] = resolveAvatarQuality();
   }
 
   const result = await client.images.generate(params);
