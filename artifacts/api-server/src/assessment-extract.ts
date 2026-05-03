@@ -76,6 +76,15 @@ function resolveExtractModel(): string {
   );
 }
 
+/**
+ * GPT-5.x chat models (e.g. `gpt-5.3-chat-latest`) reject custom `temperature` and `max_tokens`; only
+ * the default temperature (1) is accepted, and `max_completion_tokens` replaces `max_tokens`. Mirrors
+ * `isGpt5FamilyNoteModel` in `openai-notes.ts`.
+ */
+function isGpt5FamilyExtractModel(modelId: string): boolean {
+  return modelId.toLowerCase().includes("gpt-5");
+}
+
 export async function extractTextFromPdfBuffer(buffer: Buffer): Promise<{
   text: string;
   numpages: number;
@@ -145,15 +154,27 @@ ${text}
 
 Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBehaviors, maladaptiveBehaviorTopographies, replacementPrograms, interventions, assessmentAuthorizationExpiresOn, confidenceNotes (all optional except arrays default to []).`;
 
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.2,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: SYSTEM },
-      { role: "user", content: userContent },
-    ],
-  });
+  // GPT-5.x chat models only accept the default temperature; older models still benefit from a low value
+  // (0.2) for deterministic JSON extraction. Branch the request shape so we don't trigger
+  // `Unsupported value: 'temperature' does not support 0.2 with this model` on the new family.
+  const completion = isGpt5FamilyExtractModel(model)
+    ? await client.chat.completions.create({
+        model,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: SYSTEM },
+          { role: "user", content: userContent },
+        ],
+      })
+    : await client.chat.completions.create({
+        model,
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: SYSTEM },
+          { role: "user", content: userContent },
+        ],
+      });
 
   const raw = completion.choices[0]?.message?.content?.trim();
   if (!raw) {
