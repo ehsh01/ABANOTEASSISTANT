@@ -49,10 +49,13 @@ echo ""
 echo "📦 Installing dependencies..."
 pnpm install
 
-# Step 4: Build
+# Step 4: Build API + SPA (when nginx serves dist/public from this repo)
 echo ""
 echo "🔨 Building API server..."
 pnpm run build:api-server
+echo ""
+echo "🔨 Building frontend (ABA Note Assistant SPA)..."
+pnpm run build:frontend
 
 # Step 5: Check environment variables
 echo ""

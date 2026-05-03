@@ -36,9 +36,10 @@ pnpm install
 echo "   ✅ Dependencies installed"
 echo ""
 
-# Step 3: Build
-echo "🔨 Step 3: Building API server..."
-pnpm run build
+# Step 3: Build API + SPA (nginx serves artifacts/abanoteassistant/dist/public)
+echo "🔨 Step 3: Building API server and frontend..."
+pnpm run build:api-server
+pnpm run build:frontend
 echo "   ✅ Build complete"
 echo ""
 

@@ -5,27 +5,18 @@ import path from "path";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 import { VitePWA } from "vite-plugin-pwa";
 
-const rawPort = process.env.PORT;
-
-if (!rawPort) {
-  throw new Error(
-    "PORT environment variable is required but was not provided.",
-  );
-}
-
+/** Dev server / preview port. Droplet/Linux CI builds often omit env — default matches typical Vite. */
+const rawPort = process.env.PORT ?? "5173";
 const port = Number(rawPort);
-
 if (Number.isNaN(port) || port <= 0) {
   throw new Error(`Invalid PORT value: "${rawPort}"`);
 }
 
-const basePath = process.env.BASE_PATH;
-
-if (!basePath) {
-  throw new Error(
-    "BASE_PATH environment variable is required but was not provided.",
-  );
-}
+/** Asset base for `index.html` (e.g. `/` for nginx root, `/app/` for subpath). */
+const basePath =
+  process.env.BASE_PATH !== undefined && process.env.BASE_PATH !== ""
+    ? process.env.BASE_PATH
+    : "/";
 
 export default defineConfig({
   base: basePath,

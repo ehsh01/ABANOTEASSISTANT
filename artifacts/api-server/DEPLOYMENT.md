@@ -173,7 +173,8 @@ When you make code changes:
 cd /var/www/ABANOTEASSISTANT
 git pull
 pnpm install
-pnpm run build
+pnpm run build:api-server
+pnpm run build:frontend
 pm2 restart abanoteassistant-api
 ```
 
