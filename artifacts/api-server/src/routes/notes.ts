@@ -68,6 +68,13 @@ import { ABC_ACTIVITY_ANTECEDENT_CATALOG } from "../abc-activity-antecedent-cata
 /**
  * Per-hour trial summary for the AI when `programTrialData` has a usable entry for that hour's program id.
  * Indices outside 1..count are dropped; duplicates removed; list sorted ascending.
+ *
+ * Contract: `count == null` means "no trial data entered" (skip the hour). `count >= 1` means trials
+ * were entered for that program — even when `effectiveTrials` is empty, we keep the entry as a
+ * **0-success / count-trial** record so the wizard's "0%" selection genuinely flows through to the
+ * end-of-note performance line and the per-paragraph percentage prose (the AI will write
+ * "successful approximately 0% of the time"). Previously an empty `effectiveTrials` was treated the
+ * same as missing data and the hour was dropped entirely.
  */
 function buildTherapistTrialSummaryForReplacementHour(params: {
   sessionHours: number;
@@ -85,16 +92,16 @@ function buildTherapistTrialSummaryForReplacementHour(params: {
     const entry = programTrialData?.[String(id)];
     if (!entry) return null;
     const count = entry.count;
-    const trials = entry.effectiveTrials;
-    if (count == null || trials.length === 0) return null;
     if (typeof count !== "number" || !Number.isFinite(count) || !Number.isInteger(count) || count < 1) {
       return null;
     }
+    const trials = entry.effectiveTrials ?? [];
     const inRange = trials.filter(
       (t): t is number => typeof t === "number" && Number.isInteger(t) && t >= 1 && t <= count,
     );
-    if (inRange.length === 0) return null;
     const uniqueSorted = [...new Set(inRange)].sort((a, b) => a - b);
+    // Empty `successfulTrialNumbers` is intentional for 0% selections — keep the entry instead of
+    // returning null, so the percentage rollup downstream sees 0/count for this hour.
     return { totalTrials: count, successfulTrialNumbers: uniqueSorted };
   });
 }

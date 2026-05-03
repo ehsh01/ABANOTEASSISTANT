@@ -560,16 +560,16 @@ export const GenerateNoteRequestTherapySetting = {
 } as const;
 
 export interface ProgramTrialDataEntry {
-  /** Total trials conducted for this replacement program when known; when null, the server does not inject therapist-entered trial-count prose (use default quantified language).
+  /** Total trials conducted for this replacement program when therapist-entered. `null` means "no trial data entered" — the server falls back to default quantified language. `>= 1` means trials were entered (including a deliberate 0% selection, encoded as `count >= 1` plus an empty `effectiveTrials`).
    */
   count: number | null;
-  /** 1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty, therapist-entered trial-detail prose is not used for that program.
+  /** 1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty AND `count >= 1`, this represents **0 successes / count trials** (a 0% entry); the server still injects the rounded percentage into the prose. When empty AND `count` is null, no data was entered.
    */
   effectiveTrials: number[];
 }
 
 /**
- * Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is non-null and `effectiveTrials` is non-empty for a program assigned to an hour, the clinical narrative for that hour must incorporate that exact count and those trial indices in natural prose for the verbatim replacement program name. When `count` is null or `effectiveTrials` is empty, use default quantified replacement-program language for that hour. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+ * Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is **null**, no trial data was entered and the server uses default quantified replacement-program language for that hour. When `count` is **>= 1**, the therapist entered trial data for that program — `effectiveTrials` lists the 1-based trial indices that met criterion (so an empty `effectiveTrials` paired with `count >= 1` represents **0 successes / count trials**, i.e. a deliberate 0% entry, not "no data"). The clinical narrative for that hour must incorporate the rounded percentage (`successfulTrialNumbers.length` / `totalTrials`) for the verbatim replacement program name. Ignored for hours that document RBT-only replacement programs (not selected session targets).
 
  */
 export type GenerateNoteRequestProgramTrialData = {
@@ -612,7 +612,7 @@ export interface GenerateNoteRequest {
    * @maxItems 8
    */
   abcHints?: AbcHintEntry[];
-  /** Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is non-null and `effectiveTrials` is non-empty for a program assigned to an hour, the clinical narrative for that hour must incorporate that exact count and those trial indices in natural prose for the verbatim replacement program name. When `count` is null or `effectiveTrials` is empty, use default quantified replacement-program language for that hour. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+  /** Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is **null**, no trial data was entered and the server uses default quantified replacement-program language for that hour. When `count` is **>= 1**, the therapist entered trial data for that program — `effectiveTrials` lists the 1-based trial indices that met criterion (so an empty `effectiveTrials` paired with `count >= 1` represents **0 successes / count trials**, i.e. a deliberate 0% entry, not "no data"). The clinical narrative for that hour must incorporate the rounded percentage (`successfulTrialNumbers.length` / `totalTrials`) for the verbatim replacement program name. Ignored for hours that document RBT-only replacement programs (not selected session targets).
    */
   programTrialData?: GenerateNoteRequestProgramTrialData;
 }
