@@ -230,10 +230,10 @@ export const ListClientsResponse = zod.object({
           "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
         ),
       avatarUpdatedAt: zod
-        .date()
+        .string()
         .nullish()
         .describe(
-          "When the avatar was most recently generated. Null when no avatar is on file.",
+          "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
         ),
       profile: zod
         .object({
@@ -402,10 +402,10 @@ export const CreateClientResponse = zod.object({
         "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
       ),
     avatarUpdatedAt: zod
-      .date()
+      .string()
       .nullish()
       .describe(
-        "When the avatar was most recently generated. Null when no avatar is on file.",
+        "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
       ),
     profile: zod
       .object({
@@ -506,10 +506,10 @@ export const GetClientResponse = zod.object({
         "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
       ),
     avatarUpdatedAt: zod
-      .date()
+      .string()
       .nullish()
       .describe(
-        "When the avatar was most recently generated. Null when no avatar is on file.",
+        "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
       ),
     profile: zod
       .object({
@@ -689,10 +689,10 @@ export const UpdateClientResponse = zod.object({
         "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
       ),
     avatarUpdatedAt: zod
-      .date()
+      .string()
       .nullish()
       .describe(
-        "When the avatar was most recently generated. Null when no avatar is on file.",
+        "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
       ),
     profile: zod
       .object({
@@ -818,10 +818,10 @@ export const UploadClientAssessmentDocumentResponse = zod.object({
         "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
       ),
     avatarUpdatedAt: zod
-      .date()
+      .string()
       .nullish()
       .describe(
-        "When the avatar was most recently generated. Null when no avatar is on file.",
+        "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
       ),
     profile: zod
       .object({
@@ -912,7 +912,12 @@ export const GenerateClientAvatarResponse = zod.object({
   success: zod.boolean(),
   data: zod.object({
     avatarUrl: zod.string().nullable(),
-    avatarUpdatedAt: zod.date().nullable(),
+    avatarUpdatedAt: zod
+      .string()
+      .nullable()
+      .describe(
+        "ISO timestamp; plain string for Zod compatibility (see Client.avatarUpdatedAt).",
+      ),
     client: zod.object({
       id: zod.number(),
       companyId: zod.number(),
@@ -932,10 +937,10 @@ export const GenerateClientAvatarResponse = zod.object({
           "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
         ),
       avatarUpdatedAt: zod
-        .date()
+        .string()
         .nullish()
         .describe(
-          "When the avatar was most recently generated. Null when no avatar is on file.",
+          "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
         ),
       profile: zod
         .object({
@@ -1038,10 +1043,10 @@ export const DeleteClientAvatarResponse = zod.object({
         "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
       ),
     avatarUpdatedAt: zod
-      .date()
+      .string()
       .nullish()
       .describe(
-        "When the avatar was most recently generated. Null when no avatar is on file.",
+        "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
       ),
     profile: zod
       .object({

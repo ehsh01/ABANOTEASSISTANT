@@ -375,7 +375,8 @@ export interface Client {
   /** Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.
    */
   avatarUrl?: string | null;
-  /** When the avatar was most recently generated. Null when no avatar is on file. */
+  /** ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.
+   */
   avatarUpdatedAt?: string | null;
   profile?: ClientProfile | null;
 }
@@ -394,6 +395,7 @@ export interface ClientDetailResponse {
 
 export type GenerateClientAvatarResponseData = {
   avatarUrl: string | null;
+  /** ISO timestamp; plain string for Zod compatibility (see Client.avatarUpdatedAt). */
   avatarUpdatedAt: string | null;
   client: Client;
 };

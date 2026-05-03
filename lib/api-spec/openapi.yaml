@@ -1738,9 +1738,11 @@ components:
             browser cache invalidates automatically. Null when the client has no avatar on file.
         avatarUpdatedAt:
           type: string
-          format: date-time
           nullable: true
-          description: When the avatar was most recently generated. Null when no avatar is on file.
+          description: >
+            ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated.
+            Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()`
+            and accepts the JSON wire shape directly. Null when no avatar is on file.
         profile:
           $ref: "#/components/schemas/ClientProfile"
           nullable: true
@@ -1794,8 +1796,8 @@ components:
               nullable: true
             avatarUpdatedAt:
               type: string
-              format: date-time
               nullable: true
+              description: ISO timestamp; plain string for Zod compatibility (see Client.avatarUpdatedAt).
             client:
               $ref: "#/components/schemas/Client"
           required:
