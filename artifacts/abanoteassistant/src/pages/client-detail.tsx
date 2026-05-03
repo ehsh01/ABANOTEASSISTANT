@@ -265,6 +265,15 @@ export default function ClientDetail() {
                   Edit Info
                 </button>
               </Link>
+              <Link href={`/clients/edit/${client.id}?section=assessment`}>
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#877870] hover:border-[#C27A8A] hover:text-[#C27A8A] transition-all w-full justify-center"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  Assessment PDF
+                </button>
+              </Link>
             </div>
           </div>
 

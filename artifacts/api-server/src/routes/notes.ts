@@ -38,12 +38,14 @@ import {
   maladaptiveBehaviorsCatalogForRotation,
   maladaptiveBehaviorsForSessionHours,
   replacementProgramAssignmentsForSessionHours,
+  rebalanceTaskRefusalReplacementProgramsHourly,
   replacementProgramPoolForAutoAssignment,
   replacementProgramSlotCount,
   validateCaregiverMentionRule,
   validateClinicalBodyCompliance,
   collapseHourlyNoteNarrativeToSegments,
   type NoteComplianceContext,
+  type TherapistTrialSummaryForHourEntry,
 } from "../note-validation";
 import {
   buildLockedOpening,
@@ -53,8 +55,14 @@ import {
   type TherapySetting,
 } from "../note-assembly";
 import { truncateAssessmentTextForNoteContext } from "../assessment-extract";
+import {
+  getAssessmentStructuredFromProfile,
+  intersectCatalog,
+  validateAssessmentStructured,
+} from "../assessment-structured";
 import { resolveAbcHintsForNoteGeneration } from "../abc-hints";
 import { isLanguageMaladaptiveBehaviorLabel } from "../language-maladaptive-behavior";
+import { isSkillAcquisitionOnlyReplacementProgram } from "../skill-acquisition-programs";
 import { ABC_ACTIVITY_ANTECEDENT_CATALOG } from "../abc-activity-antecedent-catalog";
 
 /**
@@ -129,9 +137,13 @@ function assembleSessionNote(
   nextSessionDate: string | undefined,
   clientFirstName: string | null | undefined,
   narrativeProgramSegmentCount: number,
+  therapistTrialSummaryForReplacementHour: TherapistTrialSummaryForHourEntry[] | undefined,
 ): string {
   const opening = buildLockedOpening(presentPeople, hasEnvChanges, therapySetting, clientFirstName);
-  const performance = buildPerformanceSentence(narrativeProgramSegmentCount);
+  const performance = buildPerformanceSentence(
+    narrativeProgramSegmentCount,
+    therapistTrialSummaryForReplacementHour,
+  );
   const nextSession = buildNextSessionSentence(nextSessionDate, clientFirstName);
 
   return [opening, "", clinicalBody, "", LOCKED_CLOSING_PARAGRAPH, "", performance, "", nextSession].join("\n");
@@ -396,12 +408,41 @@ router.post("/notes/generate", async (req, res) => {
   );
 
   /** Linked DB rows authorized for this note: assessment profile list + anything explicitly selected for the session. */
-  const allowedProgramRows =
+  let allowedProgramRows =
     assessmentReplacementNameSet.size > 0
       ? linkedProgramRows.filter(
           (r) => selectedIdSet.has(r.id) || assessmentReplacementNameSet.has(r.name.trim()),
         )
       : linkedProgramRows;
+
+  const structuredForNote = getAssessmentStructuredFromProfile(profile);
+  if (structuredForNote) {
+    const structIssues = validateAssessmentStructured(structuredForNote);
+    if (structIssues.length > 0) {
+      res.status(422).json({
+        success: false,
+        error: "Invalid structured assessment on client profile",
+        messages: structIssues,
+      });
+      return;
+    }
+    for (const id of body.selectedReplacements) {
+      const n = nameById.get(id)?.trim();
+      if (n && !structuredForNote.replacement_programs.includes(n)) {
+        res.status(422).json({
+          success: false,
+          error: "Program not on structured assessment",
+          messages: [
+            `Selected program "${n}" is not listed on the client's assessmentStructured.replacement_programs.`,
+          ],
+        });
+        return;
+      }
+    }
+    allowedProgramRows = allowedProgramRows.filter((r) =>
+      structuredForNote.replacement_programs.includes(r.name.trim()),
+    );
+  }
 
   const allowedIdToName = new Map(allowedProgramRows.map((r) => [r.id, r.name]));
   for (const id of body.selectedReplacements) {
@@ -444,6 +485,24 @@ router.post("/notes/generate", async (req, res) => {
     return [];
   })();
 
+  let replacementProgramsCatalogForNote = replacementProgramsCatalog;
+  if (structuredForNote) {
+    replacementProgramsCatalogForNote = intersectCatalog(
+      replacementProgramsCatalogForNote,
+      structuredForNote.replacement_programs,
+    );
+    if (replacementProgramsCatalogForNote.length === 0) {
+      res.status(422).json({
+        success: false,
+        error: "No replacement programs remain after applying structured assessment",
+        messages: [
+          "Program names for this session did not intersect with assessmentStructured.replacement_programs.",
+        ],
+      });
+      return;
+    }
+  }
+
   const clientAgeYears = approximateAgeYearsAtSession(profile?.dateOfBirth ?? null, body.sessionDate);
 
   const { text: clientAssessmentTextExcerpt, truncated: assessmentExcerptForNoteTruncated } =
@@ -454,7 +513,20 @@ router.post("/notes/generate", async (req, res) => {
     profileBehaviorList,
     rawAssessmentSnapshot,
   );
-  const behaviorCatalog = rotationResult.catalog;
+  let behaviorCatalog = rotationResult.catalog;
+  if (structuredForNote) {
+    behaviorCatalog = intersectCatalog(behaviorCatalog, structuredForNote.behaviors);
+    if (behaviorCatalog.length === 0) {
+      res.status(422).json({
+        success: false,
+        error: "No maladaptive behaviors remain after applying structured assessment",
+        messages: [
+          "The session rotation catalog did not intersect with assessmentStructured.behaviors; align profile/assessment text labels with the structured assessment list.",
+        ],
+      });
+      return;
+    }
+  }
   const maladaptiveBehaviorTargetsForNote = maladaptiveBehaviorTargetsForNoteCatalog(
     behaviorCatalog,
     profile ?? undefined,
@@ -505,6 +577,18 @@ router.post("/notes/generate", async (req, res) => {
       body.selectedReplacements.length >= replacementProgramSlotCount(body.sessionHours),
   });
 
+  rebalanceTaskRefusalReplacementProgramsHourly({
+    sessionHours: body.sessionHours,
+    maladaptiveBehaviorForHour,
+    names: replacementProgramForHour,
+    rbtActionsOnlyOutcomeForHour,
+    programIdForHour,
+    explicitProgramIdByHour,
+    poolIds,
+    idToName: idToNameForPrograms,
+    selectedIdSet,
+  });
+
   const therapistTrialSummaryHourly = buildTherapistTrialSummaryForReplacementHour({
     sessionHours: body.sessionHours,
     programIdForHour,
@@ -514,6 +598,21 @@ router.post("/notes/generate", async (req, res) => {
   const languageMaladaptiveEpisodeHourly = maladaptiveBehaviorForHour.map((b) =>
     isLanguageMaladaptiveBehaviorLabel(b),
   );
+
+  let interventionsForNote = profile?.interventions ?? [];
+  if (structuredForNote) {
+    interventionsForNote = intersectCatalog(interventionsForNote, structuredForNote.interventions);
+    if (interventionsForNote.length === 0) {
+      res.status(422).json({
+        success: false,
+        error: "No interventions remain after applying structured assessment",
+        messages: [
+          "Profile interventions did not intersect with assessmentStructured.interventions; update the client profile or structured assessment.",
+        ],
+      });
+      return;
+    }
+  }
 
   const narrativeCollapsed = collapseHourlyNoteNarrativeToSegments({
     sessionHours: body.sessionHours,
@@ -525,23 +624,44 @@ router.post("/notes/generate", async (req, res) => {
     therapistTrialSummaryForReplacementHour: therapistTrialSummaryHourly,
   });
 
+  const acquisitionOnlySegmentForHour = narrativeCollapsed.replacementProgramForHour.map((name) =>
+    isSkillAcquisitionOnlyReplacementProgram(name),
+  );
+  const maladaptiveBehaviorForNarrative = narrativeCollapsed.maladaptiveBehaviorForHour.map((b, i) =>
+    acquisitionOnlySegmentForHour[i] ? "" : b,
+  );
+  const languageMaladaptiveForNarrative = narrativeCollapsed.languageMaladaptiveEpisodeForHour.map((v, i) =>
+    acquisitionOnlySegmentForHour[i] ? false : v,
+  );
+
   const complianceCtxBase: NoteComplianceContext = {
     sessionHours: body.sessionHours,
     narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
-    replacementProgramsInOrder: replacementProgramsCatalog,
+    replacementProgramsInOrder: replacementProgramsCatalogForNote,
     replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
     rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
     maladaptiveBehaviors: behaviorCatalog,
-    maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
+    maladaptiveBehaviorForHour: maladaptiveBehaviorForNarrative,
     activityAntecedentForHour: narrativeCollapsed.activityAntecedentForHour,
-    languageMaladaptiveEpisodeForHour: narrativeCollapsed.languageMaladaptiveEpisodeForHour,
-    interventions: profile?.interventions ?? [],
+    languageMaladaptiveEpisodeForHour: languageMaladaptiveForNarrative,
+    acquisitionOnlySegmentForHour,
+    interventions: interventionsForNote,
     therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
     clientAgeYears,
     presentPeople: body.presentPeople,
   };
 
   const warnings: string[] = [];
+  if (structuredForNote) {
+    warnings.push(
+      "Structured assessment mode: maladaptive behaviors, interventions, and replacement programs for this note were intersected with profile.assessmentStructured allow-lists.",
+    );
+  }
+  if (acquisitionOnlySegmentForHour.some(Boolean)) {
+    warnings.push(
+      "One or more narrative segments use skill-acquisition-only programs (Respond to Own Name, or a program name containing Echoic): the clinical body must not cite a maladaptive catalog label in those paragraphs.",
+    );
+  }
   if (assessmentReplacementNameSet.size > 0) {
     const omitted = linkedProgramRows.filter(
       (r) => !selectedIdSet.has(r.id) && !assessmentReplacementNameSet.has(r.name.trim()),
@@ -593,9 +713,10 @@ router.post("/notes/generate", async (req, res) => {
     environmentalChanges: body.environmentalChanges ?? "",
     maladaptiveBehaviors: behaviorCatalog,
     maladaptiveBehaviorTargets: maladaptiveBehaviorTargetsForNote,
-    maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
-    interventions: profile?.interventions ?? [],
-    replacementProgramsInOrder: replacementProgramsCatalog,
+    maladaptiveBehaviorForHour: maladaptiveBehaviorForNarrative,
+    acquisitionOnlySegmentForHour,
+    interventions: interventionsForNote,
+    replacementProgramsInOrder: replacementProgramsCatalogForNote,
     replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
     rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
     requestNonce: behaviorRotationSeed,
@@ -640,6 +761,7 @@ router.post("/notes/generate", async (req, res) => {
     body.nextSessionDate,
     profile?.firstName,
     narrativeCollapsed.narrativeSegmentCount,
+    narrativeCollapsed.therapistTrialSummaryForReplacementHour,
   );
 
   for (const issue of validateCaregiverMentionRule(noteContent, body.presentPeople)) {

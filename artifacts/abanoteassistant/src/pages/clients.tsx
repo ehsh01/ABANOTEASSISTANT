@@ -146,6 +146,12 @@ function ClientCard({ client }: { client: Client }) {
                 asChild
                 className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-[#2D2523] focus:bg-[#F0E4E1] focus:text-[#C27A8A] data-[highlighted]:bg-[#F0E4E1] data-[highlighted]:text-[#C27A8A]"
               >
+                <Link href={`/clients/edit/${client.id}?section=assessment`}>Replace or remove assessment PDF</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                asChild
+                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-[#2D2523] focus:bg-[#F0E4E1] focus:text-[#C27A8A] data-[highlighted]:bg-[#F0E4E1] data-[highlighted]:text-[#C27A8A]"
+              >
                 <Link href={`/clients/edit/${client.id}?section=behaviors`}>Edit behaviors</Link>
               </DropdownMenuItem>
               <DropdownMenuItem

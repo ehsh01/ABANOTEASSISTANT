@@ -599,6 +599,12 @@ export const UpdateClientBody = zod.object({
     .describe(
       "Exact strings authorized on the client assessment. Maps must only reference keys\/values present in the arrays.\n",
     ),
+  clearAssessment: zod
+    .boolean()
+    .optional()
+    .describe(
+      "When true, removes the stored assessment PDF file name, excerpt text snapshot, and structured assessment allow-lists from the client profile; sets hasAssessment to false and assessmentStatus to missing. Use when the RBT removes the assessment without uploading a replacement in the same request. Ignored when false or omitted.\n",
+    ),
 });
 
 export const UpdateClientResponse = zod.object({

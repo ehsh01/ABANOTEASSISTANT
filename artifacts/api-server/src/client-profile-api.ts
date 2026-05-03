@@ -1,4 +1,5 @@
 import type {
+  AssessmentStructuredRow,
   Client,
   ClientProfileRow,
   MaladaptiveBehaviorProfileEntry,
@@ -19,19 +20,23 @@ export type ClientProfilePublic = {
   replacementPrograms: string[];
   interventions: string[];
   assessmentFileName?: string | null;
+  /** Curated assessment allow-lists when present on the stored profile. */
+  assessmentStructured?: AssessmentStructuredRow | null;
 };
 
 export function sanitizeClientProfileForApi(profile: ClientProfileRow): ClientProfilePublic {
+  const mal = expandMaladaptiveTargetsFromProfile(profile);
   return {
     firstName: profile.firstName,
     lastName: profile.lastName,
     dateOfBirth: profile.dateOfBirth,
     gender: profile.gender,
-    maladaptiveBehaviors: profile.maladaptiveBehaviors,
-    maladaptiveBehaviorTargets: expandMaladaptiveTargetsFromProfile(profile),
+    maladaptiveBehaviors: mal.map((t) => t.name),
+    maladaptiveBehaviorTargets: mal,
     replacementPrograms: profile.replacementPrograms,
     interventions: profile.interventions,
     assessmentFileName: profile.assessmentFileName ?? null,
+    assessmentStructured: profile.assessmentStructured ?? null,
   };
 }
 

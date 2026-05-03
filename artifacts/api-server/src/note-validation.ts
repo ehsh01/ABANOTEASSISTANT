@@ -4,35 +4,50 @@
  */
 
 export type NoteComplianceContext = {
+  /** Billable session duration from the wizard (integer hours). */
   sessionHours: number;
+  /**
+   * Number of ABC paragraphs expected in the clinical body (aligned with ~90-minute narrative/program slots).
+   * When omitted, validators fall back to `sessionHours` for backward compatibility.
+   */
+  narrativeSegmentCount?: number | undefined;
   replacementProgramsInOrder: string[];
   /**
-   * Exact replacement program name for each hour (length = sessionHours), cycling `replacementProgramsInOrder`.
-   * Clinical body must include this substring verbatim in paragraph h when non-empty.
+   * Exact replacement program name per **narrative segment** (length = `narrativeSegmentCount ?? sessionHours`).
+   * Clinical body must include this substring verbatim in paragraph index `i` when non-empty.
    */
   replacementProgramForHour: string[];
   /**
-   * When provided (length = sessionHours), indices that are true use RBT-actions-only outcome rules for that hour.
+   * When provided (length matches replacement program array), indices that are true use RBT-actions-only outcome rules for that segment.
    */
   rbtActionsOnlyOutcomeForHour?: boolean[] | undefined;
   /** BIP maladaptive behavior names (exact strings) — used for one-behavior-per-paragraph checks */
   maladaptiveBehaviors: string[];
   /**
-   * Exact catalog label assigned to each hour (length = sessionHours), cycling the full client list in order.
-   * Used to enforce rotation across all listed behaviors over multi-hour sessions.
+   * Exact catalog label assigned to each **narrative segment** (same length contract as `replacementProgramForHour`).
    */
   maladaptiveBehaviorForHour: string[];
   /**
-   * Optional ABC Builder: per hour, exact activity/antecedent catalog string that must appear verbatim in the paragraph, or null for AI-chosen antecedent.
+   * Optional ABC Builder: per segment, exact activity/antecedent catalog string that must appear verbatim in the paragraph, or null for AI-chosen antecedent.
    */
   activityAntecedentForHour?: (string | null)[] | undefined;
   /**
-   * When set (length = sessionHours), paragraphs at true indices may include brief attributed client speech
+   * When set (same length contract), paragraphs at true indices may include brief attributed client speech
    * (verbal/language maladaptive topography); toddler speech checks skip those paragraphs.
    */
   languageMaladaptiveEpisodeForHour?: boolean[] | undefined;
+  /**
+   * When true at index `i`, paragraph `i` is a **skill-acquisition-only** segment (e.g. Respond to Own Name, Echoic):
+   * do not cite a maladaptive catalog label; `maladaptiveBehaviorForHour[i]` is cleared for validators/prompts.
+   */
+  acquisitionOnlySegmentForHour?: boolean[] | undefined;
   /** BIP intervention names (exact strings) — used for physical-aggression / Response Block ordering */
   interventions: string[];
+  /**
+   * Per narrative segment: therapist-entered discrete-trial rollup for `replacementProgramForHour[s]`.
+   * When set, the clinical paragraph must state success counts as **N out of M trials were/was successful** (see validators).
+   */
+  therapistTrialSummaryForReplacementHour?: TherapistTrialSummaryForHourEntry[] | undefined;
   /** Approximate age in years from DOB + session date; null if unknown */
   clientAgeYears: number | null;
   presentPeople: string[];
@@ -133,6 +148,86 @@ const CAREGIVER_LEXICON =
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripStraightDoubleQuotes(s: string): string {
+  return s.replace(/"/g, "");
+}
+
+function normInterventionWhitespace(s: string): string {
+  return s.trim().replace(/\s+/g, " ");
+}
+
+/**
+ * Two distinct approved intervention strings appear as one adjacent phrase
+ * (comma or "and" only between them), which breaks exact per-intervention
+ * documentation. Uses a de-quoted scan so `"A" and "B"` is still detected.
+ * Skips when some catalog entry is literally a single label equal to
+ * "A and B" / "A, B" so legitimate multi-word intervention names are not flagged.
+ */
+function findJoinedInterventionPairPhrase(
+  text: string,
+  interventionNames: string[],
+): { a: string; b: string } | null {
+  const list = [...new Set(interventionNames.map((s) => s.trim()).filter((s) => s.length > 1))].sort(
+    (a, b) => b.length - a.length,
+  );
+  if (list.length < 2) return null;
+  const scan = stripStraightDoubleQuotes(text);
+  for (let i = 0; i < list.length; i++) {
+    for (let j = 0; j < list.length; j++) {
+      if (i === j) continue;
+      const a = list[i]!;
+      const b = list[j]!;
+      const andJoined = normInterventionWhitespace(`${a} and ${b}`);
+      if (list.some((c) => normInterventionWhitespace(c) === andJoined)) {
+        continue;
+      }
+      const commaJoined = normInterventionWhitespace(`${a}, ${b}`);
+      if (list.some((c) => normInterventionWhitespace(c) === commaJoined)) {
+        continue;
+      }
+      const between = String.raw`\s*(?:,\s*|\s+and\s+)\s*`;
+      const re = new RegExp(escapeRegExp(a) + between + escapeRegExp(b));
+      if (re.test(scan)) return { a, b };
+    }
+  }
+  return null;
+}
+
+/** Catalog intervention immediately followed by comma before "by" (breaks exact-match phrasing). */
+function firstInterventionWithCommaBeforeBy(paragraph: string, interventionNames: string[]): string | null {
+  const list = interventionNames.map((s) => s.trim()).filter((s) => s.length > 1);
+  for (const name of list) {
+    const re = new RegExp(escapeRegExp(name) + String.raw`,\s*by\b`);
+    if (re.test(paragraph)) return name;
+  }
+  return null;
+}
+
+/** Catalog intervention wrapped in straight double quotes (breaks plain substring checks). */
+function firstQuotedCatalogIntervention(paragraph: string, interventionNames: string[]): string | null {
+  const list = interventionNames.map((s) => s.trim()).filter((s) => s.length > 1);
+  for (const name of list) {
+    const re = new RegExp(`"${escapeRegExp(name)}"`);
+    if (re.test(paragraph)) return name;
+  }
+  return null;
+}
+
+/** Legacy / invalid: catalog name immediately followed by **by** in the same clause as implemented/applied. */
+function firstInterventionNameWithAttachedByClause(
+  paragraph: string,
+  interventionNames: string[],
+): string | null {
+  const list = [...new Set(interventionNames.map((s) => s.trim()).filter((s) => s.length > 1))].sort(
+    (a, b) => b.length - a.length,
+  );
+  for (const name of list) {
+    const re = new RegExp(`(?:implemented|applied)\\s+${escapeRegExp(name)}\\s+by\\b`, "i");
+    if (re.test(paragraph)) return name;
+  }
+  return null;
 }
 
 /** Canonical rotation order for common BIP maladaptive behavior names (exact spelling for substring match in assessment text). */
@@ -285,12 +380,109 @@ export function replacementProgramPoolOrdered(selectedIdsOrdered: number[], link
 }
 
 /**
+ * Replacement program rotation buckets session time into **slots**:
+ * - **Exactly 2 session hours:** two slots (one per hour) so each hour can document a different selected program.
+ * - **All other lengths:** one slot per **90 minutes** of session time; consecutive calendar hours in the same
+ *   bucket share the same replacement program unless ABC Builder sets an explicit `replacementProgramId` for an hour.
+ */
+export function replacementProgramSlotIdForHour(sessionHours: number, hourIndex: number): number {
+  if (sessionHours <= 0 || hourIndex < 0 || hourIndex >= sessionHours) {
+    return 0;
+  }
+  if (sessionHours === 2) {
+    return hourIndex;
+  }
+  return Math.floor((hourIndex * 60) / 90);
+}
+
+/** Number of replacement-program slots for `sessionHours` (see `replacementProgramSlotIdForHour`). */
+export function replacementProgramSlotCount(sessionHours: number): number {
+  if (sessionHours <= 0) {
+    return 0;
+  }
+  if (sessionHours === 2) {
+    return 2;
+  }
+  return Math.floor(((sessionHours - 1) * 60) / 90) + 1;
+}
+
+/** Calendar-hour indices (0 … sessionHours−1) that belong to `slotId` for replacement-program rotation. */
+export function replacementProgramSlotHours(sessionHours: number, slotId: number): number[] {
+  const out: number[] = [];
+  for (let h = 0; h < sessionHours; h++) {
+    if (replacementProgramSlotIdForHour(sessionHours, h) === slotId) {
+      out.push(h);
+    }
+  }
+  return out;
+}
+
+export type TherapistTrialSummaryForHourEntry = {
+  totalTrials: number;
+  successfulTrialNumbers: number[];
+} | null;
+
+/**
+ * Collapse per-calendar-hour narrative inputs to one row per **replacement-program slot** (~90 minutes, except
+ * 2-hour sessions = two hourly slots). OpenAI and compliance use the collapsed arrays; `sessionHours` stays the
+ * billable duration for context elsewhere.
+ */
+export function collapseHourlyNoteNarrativeToSegments(params: {
+  sessionHours: number;
+  maladaptiveBehaviorForHour: string[];
+  replacementProgramForHour: string[];
+  rbtActionsOnlyOutcomeForHour: boolean[];
+  activityAntecedentForHour: (string | null)[];
+  languageMaladaptiveEpisodeForHour: boolean[];
+  therapistTrialSummaryForReplacementHour: TherapistTrialSummaryForHourEntry[];
+}): {
+  narrativeSegmentCount: number;
+  maladaptiveBehaviorForHour: string[];
+  replacementProgramForHour: string[];
+  rbtActionsOnlyOutcomeForHour: boolean[];
+  activityAntecedentForHour: (string | null)[];
+  languageMaladaptiveEpisodeForHour: boolean[];
+  therapistTrialSummaryForReplacementHour: TherapistTrialSummaryForHourEntry[];
+} {
+  const H = params.sessionHours;
+  const S = replacementProgramSlotCount(H);
+  const firstHourInSlot = (s: number): number => {
+    const xs = replacementProgramSlotHours(H, s);
+    return xs.length > 0 ? xs[0]! : 0;
+  };
+  const firstNonNullActivityInSlot = (s: number): string | null => {
+    for (const h of replacementProgramSlotHours(H, s)) {
+      const a = params.activityAntecedentForHour[h];
+      if (typeof a === "string" && a.length > 0) {
+        return a;
+      }
+    }
+    return null;
+  };
+  return {
+    narrativeSegmentCount: S,
+    maladaptiveBehaviorForHour: Array.from({ length: S }, (_, s) => params.maladaptiveBehaviorForHour[firstHourInSlot(s)]!),
+    replacementProgramForHour: Array.from({ length: S }, (_, s) => params.replacementProgramForHour[firstHourInSlot(s)]!),
+    rbtActionsOnlyOutcomeForHour: Array.from({ length: S }, (_, s) => params.rbtActionsOnlyOutcomeForHour[firstHourInSlot(s)]!),
+    activityAntecedentForHour: Array.from({ length: S }, (_, s) => firstNonNullActivityInSlot(s)),
+    languageMaladaptiveEpisodeForHour: Array.from({ length: S }, (_, s) =>
+      replacementProgramSlotHours(H, s).some((h) => params.languageMaladaptiveEpisodeForHour[h]),
+    ),
+    therapistTrialSummaryForReplacementHour: Array.from({ length: S }, (_, s) => {
+      const h0 = firstHourInSlot(s);
+      return params.therapistTrialSummaryForReplacementHour[h0] ?? null;
+    }),
+  };
+}
+
+/**
  * Pool used to auto-fill hours that do not have an explicit `replacementProgramId` in ABC hints.
  *
- * - When **fewer** programs are selected than `sessionHours`, the pool is **selection order first**,
- *   then **other linked** program ids (ascending), so extra hours can draw from the rest of the client catalog.
- * - When the wizard selected **at least as many** programs as `sessionHours`, the pool is **only** those
- *   selections (order preserved, deduped). Assignment then walks that pool in order for auto-filled hours (see
+ * - When **fewer** programs are selected than **replacement-program slots** for this session (see
+ *   `replacementProgramSlotCount`), the pool is **selection order first**, then **other linked** program ids
+ *   (ascending), so extra slots can draw from the rest of the client catalog.
+ * - When the wizard selected **at least as many** programs as **slot count**, the pool is **only** those
+ *   selections (order preserved, deduped). Assignment walks that pool in slot order for auto-filled hours (see
  *   `replacementProgramAssignmentsForSessionHours` + `sessionSelectionCoversHours`) so programs the user did not
  *   select are never introduced.
  */
@@ -302,7 +494,8 @@ export function replacementProgramPoolForAutoAssignment(
   if (sessionHours <= 0) {
     return [];
   }
-  if (selectedIdsOrdered.length < sessionHours) {
+  const slotNeed = replacementProgramSlotCount(sessionHours);
+  if (selectedIdsOrdered.length < slotNeed) {
     return replacementProgramPoolOrdered(selectedIdsOrdered, linkedProgramIds);
   }
   return replacementProgramPoolOrdered(selectedIdsOrdered, selectedIdsOrdered);
@@ -310,14 +503,16 @@ export function replacementProgramPoolForAutoAssignment(
 
 /**
  * Per-hour replacement program **names** and RBT-only flags. Explicit `replacementProgramId` per hour wins when
- * present in `idToName`. Other hours consume `poolIds` (from `replacementProgramPoolForAutoAssignment` in production:
- * session-selected programs only when selection count ≥ session hours; otherwise selected first then other linked ids)
- * in order, advancing through the pool; avoids matching the **previous** hour's program name when `pool.length > 1`.
- * When the pool is exhausted, assignments continue with modulo indexing.
+ * present in `idToName`. Other hours share a program when they fall in the same **90-minute slot** (except a
+ * **2-hour** session, which uses one program per hour). See `replacementProgramSlotIdForHour`.
  *
- * When `sessionSelectionCoversHours` is true (wizard selected at least as many programs as hours), auto-filled
- * hours consume the pool **in order**, skipping ids already taken by explicit ABC rows—so each selected program
- * is used at most once before any repeat.
+ * Pool comes from `replacementProgramPoolForAutoAssignment`: session-selected programs only when selection count ≥
+ * replacement-program **slot** count; otherwise selected first then other linked ids. Avoids matching the **previous**
+ * calendar hour's program name when `pool.length > 1` at slot boundaries.
+ *
+ * When `sessionSelectionCoversHours` is true (wizard selected at least as many programs as **slots**), each
+ * auto-filled **slot** consumes the next id from the queue (all auto hours in that slot get the same program),
+ * skipping ids already taken by explicit ABC rows—so each selected program is used at most once before any repeat.
  */
 export function replacementProgramAssignmentsForSessionHours(params: {
   sessionHours: number;
@@ -326,14 +521,14 @@ export function replacementProgramAssignmentsForSessionHours(params: {
   selectedIdSet: Set<number>;
   explicitProgramIdByHour: (number | null | undefined)[];
   /**
-   * True when `selectedReplacements.length >= sessionHours` (same condition as selection-only pool). Auto hours
-   * then take programs sequentially from the pool in wizard order, excluding explicit picks.
+   * True when `selectedReplacements.length >= replacementProgramSlotCount(sessionHours)` (selection-only pool).
+   * Auto-filled **slots** then take programs sequentially from the pool in wizard order, excluding explicit picks.
    */
   sessionSelectionCoversHours?: boolean | undefined;
 }): {
   names: string[];
   rbtActionsOnly: boolean[];
-  /** Program id assigned for hour h (for mapping therapist-entered trial percentages); null if unassigned. */
+  /** Program id assigned for hour h (for mapping therapist-entered trial metadata); null if unassigned. */
   programIdForHour: (number | null)[];
 } {
   const { sessionHours, poolIds, idToName, selectedIdSet, explicitProgramIdByHour, sessionSelectionCoversHours } =
@@ -367,41 +562,207 @@ export function replacementProgramAssignmentsForSessionHours(params: {
   const queueForSequential =
     sessionSelectionCoversHours === true ? pool.filter((id) => !usedByExplicit.has(id)) : [];
 
-  let autoSlot = 0;
+  const slotIdForHour = (h: number) => replacementProgramSlotIdForHour(H, h);
+  const slotsNeeding = new Set<number>();
   for (let h = 0; h < H; h++) {
-    if (names[h]) continue;
+    if (!names[h]) {
+      slotsNeeding.add(slotIdForHour(h));
+    }
+  }
+  const uniqueSlots = [...slotsNeeding].sort((a, b) => a - b);
 
-    if (sessionSelectionCoversHours === true && queueForSequential.length > 0) {
-      const pick = queueForSequential.shift()!;
-      names[h] = idToName.get(pick)!;
-      rbt[h] = !selectedIdSet.has(pick);
-      programIdForHour[h] = pick;
-      autoSlot++;
+  let autoSlot = 0;
+  for (const slot of uniqueSlots) {
+    const hoursToFill: number[] = [];
+    for (let h = 0; h < H; h++) {
+      if (names[h]) continue;
+      if (slotIdForHour(h) !== slot) continue;
+      hoursToFill.push(h);
+    }
+    if (hoursToFill.length === 0) {
       continue;
     }
 
-    let pickIdx = autoSlot % pool.length;
-    let pick = pool[pickIdx]!;
-    if (h > 0 && names[h - 1] === idToName.get(pick) && pool.length > 1) {
-      for (let k = 1; k < pool.length; k++) {
-        const tryPick = pool[(pickIdx + k) % pool.length]!;
-        if (idToName.get(tryPick) !== names[h - 1]) {
-          pick = tryPick;
-          break;
+    let pick: number;
+    if (sessionSelectionCoversHours === true && queueForSequential.length > 0) {
+      pick = queueForSequential.shift()!;
+    } else {
+      let pickIdx = autoSlot % pool.length;
+      pick = pool[pickIdx]!;
+      const prevH = hoursToFill[0]! - 1;
+      if (prevH >= 0 && names[prevH] === idToName.get(pick) && pool.length > 1) {
+        for (let k = 1; k < pool.length; k++) {
+          const tryPick = pool[(pickIdx + k) % pool.length]!;
+          if (idToName.get(tryPick) !== names[prevH]) {
+            pick = tryPick;
+            break;
+          }
         }
       }
     }
-    names[h] = idToName.get(pick)!;
-    rbt[h] = !selectedIdSet.has(pick);
-    programIdForHour[h] = pick;
+
+    const label = idToName.get(pick)!;
+    const rbtFlag = !selectedIdSet.has(pick);
+    for (const h of hoursToFill) {
+      names[h] = label;
+      rbt[h] = rbtFlag;
+      programIdForHour[h] = pick;
+    }
     autoSlot++;
   }
   return { names, rbtActionsOnly: rbt, programIdForHour };
 }
 
+/**
+ * True when the replacement program name is the common BIP line for ending activities
+ * (e.g. Indicate 'All Done' to End an Activity). Matching is substring-based so minor catalog
+ * punctuation variants still qualify.
+ */
+export function isIndicateAllDoneReplacementProgramName(name: string): boolean {
+  const t = name.trim().toLowerCase();
+  return t.includes("indicate") && t.includes("all done");
+}
+
+const TASK_REFUSAL_CATALOG = "Task Refusal";
+
+/**
+ * Auto-assignment sometimes pairs **Task Refusal** with **Indicate … All Done …**, which external
+ * reviewers often flag when the episode is noncompliance with a **new instructional demand** (not
+ * clearly "end this activity"). When that hour's replacement was **not** explicitly pinned in ABC
+ * hints, swap to another linked program from the session pool when available (prefer transitioning,
+ * request help, follow demands, time on task, then any other).
+ *
+ * Mutates `names`, `rbtActionsOnlyOutcomeForHour`, and `programIdForHour` in place for affected hours.
+ */
+export function rebalanceTaskRefusalReplacementProgramsHourly(params: {
+  sessionHours: number;
+  maladaptiveBehaviorForHour: string[];
+  names: string[];
+  rbtActionsOnlyOutcomeForHour: boolean[];
+  programIdForHour: (number | null)[];
+  explicitProgramIdByHour: (number | null | undefined)[];
+  poolIds: number[];
+  idToName: Map<number, string>;
+  selectedIdSet: Set<number>;
+}): void {
+  const {
+    sessionHours: H,
+    maladaptiveBehaviorForHour: beh,
+    names,
+    rbtActionsOnlyOutcomeForHour: rbt,
+    programIdForHour: pids,
+    explicitProgramIdByHour: explicit,
+    poolIds,
+    idToName,
+    selectedIdSet,
+  } = params;
+
+  const preferencePredicates: ((n: string) => boolean)[] = [
+    (n) => {
+      const t = n.toLowerCase();
+      return t.includes("transitioning") && t.includes("preferred");
+    },
+    (n) => n.toLowerCase().includes("request help"),
+    (n) => n.toLowerCase().includes("follow demands"),
+    (n) => n.toLowerCase().includes("time on task"),
+  ];
+
+  for (let h = 0; h < H; h++) {
+    if (beh[h]?.trim() !== TASK_REFUSAL_CATALOG) continue;
+    if (!isIndicateAllDoneReplacementProgramName(names[h] ?? "")) continue;
+    const pinned = explicit[h];
+    if (typeof pinned === "number") continue;
+
+    const currentName = names[h] ?? "";
+    const candidates = poolIds.filter((id) => {
+      const n = idToName.get(id)?.trim();
+      if (!n || n === currentName) return false;
+      if (!isIndicateAllDoneReplacementProgramName(n)) return true;
+      return false;
+    });
+    if (candidates.length === 0) continue;
+
+    let pick: number | undefined;
+    for (const pred of preferencePredicates) {
+      const found = candidates.find((id) => pred(idToName.get(id)!));
+      if (found !== undefined) {
+        pick = found;
+        break;
+      }
+    }
+    if (pick === undefined) {
+      pick = candidates[0];
+    }
+
+    const newName = idToName.get(pick)!;
+    names[h] = newName;
+    pids[h] = pick;
+    rbt[h] = !selectedIdSet.has(pick);
+  }
+}
+
 /** Catalog label denotes physical aggression (person-directed); match is on the catalog string, not free text. */
 function isPhysicalAggressionCatalogLabel(behaviorName: string): boolean {
   return /\bphysical\s+aggression\b/i.test(behaviorName.trim());
+}
+
+/**
+ * Assigned maladaptive labels where, if **Response Block** is on the client's intervention list, the narrative may
+ * document Response Block first and then **additional** separate intervention sentences (safety chain).
+ */
+function assignedBehaviorAllowsResponseBlockSafetyChain(behaviorName: string): boolean {
+  const t = behaviorName.trim();
+  if (isPhysicalAggressionCatalogLabel(t)) return true;
+  const u = t.toLowerCase();
+  return (
+    /\bwandering\b/.test(u) ||
+    /\belope/.test(u) ||
+    /\bbaiting\b/.test(u) ||
+    /\bbolting\b/.test(u) ||
+    /\brunning\s+away\b/.test(u)
+  );
+}
+
+/**
+ * Count distinct catalog interventions documented with **implemented** / **applied** + exact catalog name,
+ * where the **naming sentence ends with a period** immediately after the name (no **by** clause in that sentence).
+ * Longest catalog strings first to avoid double-counting a shorter label inside a longer one.
+ */
+export function countInterventionImplementationsInParagraph(
+  paragraph: string,
+  interventionCatalog: string[],
+): number {
+  const names = [...new Set(interventionCatalog.map((s) => s.trim()).filter((s) => s.length > 0))].sort(
+    (a, b) => b.length - a.length,
+  );
+  const spans: { start: number; end: number }[] = [];
+  for (const name of names) {
+    const re = new RegExp(`(?:implemented|applied)\\s+${escapeRegExp(name)}\\s*\\.`, "gi");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(paragraph)) !== null) {
+      const start = m.index;
+      const end = start + m[0].length;
+      const overlaps = spans.some((s) => !(end <= s.start || start >= s.end));
+      if (!overlaps) {
+        spans.push({ start, end });
+      }
+    }
+  }
+  return spans.length;
+}
+
+function therapistTrialRollupPhrasePresent(
+  paragraph: string,
+  successfulTrialCount: number,
+  totalTrials: number,
+): boolean {
+  const n = successfulTrialCount;
+  const m = totalTrials;
+  if (!Number.isFinite(n) || !Number.isFinite(m) || m < 1 || n < 0) return false;
+  const wasWere = n === 1 ? "(?:was|were)" : "were";
+  const outOf = new RegExp(`\\b${n}\\s+out\\s+of\\s+${m}\\s+trials?\\s+${wasWere}\\s+successful\\b`, "i");
+  const ofOnly = new RegExp(`\\b${n}\\s+of\\s+${m}\\s+trials?\\s+${wasWere}\\s+successful\\b`, "i");
+  return outOf.test(paragraph) || ofOnly.test(paragraph);
 }
 
 /** Exact intervention string from the client's list when it is the canonical Response Block label. */
@@ -504,9 +865,10 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     .map((p) => p.trim())
     .filter(Boolean);
 
-  if (paragraphs.length !== ctx.sessionHours) {
+  const expectedParagraphs = ctx.narrativeSegmentCount ?? ctx.sessionHours;
+  if (paragraphs.length !== expectedParagraphs) {
     issues.push(
-      `Expected exactly ${ctx.sessionHours} clinical paragraph(s) separated by blank lines; found ${paragraphs.length}.`,
+      `Expected exactly ${expectedParagraphs} clinical paragraph(s) separated by blank lines (aligned with narrative segments for this session duration); found ${paragraphs.length}.`,
     );
   }
 
@@ -542,13 +904,13 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     const progCount = countDistinctCatalogLabelsInParagraph(p, programs);
     if (progCount > 1) {
       issues.push(
-        `One program per ABC: paragraph ${i + 1} references more than one distinct replacement program name from the catalog; that hour must name only the assigned program and must not describe or cite a second program from the list.`,
+        `One program per ABC: paragraph ${i + 1} references more than one distinct replacement program name from the catalog; that segment must name only the assigned program and must not describe or cite a second program from the list.`,
       );
     }
     const assignedRp = replacementPerHour[i]?.trim() ?? "";
     if (assignedRp.length > 0 && !p.includes(assignedRp)) {
       issues.push(
-        `Replacement program for hour ${i + 1}: include the assigned program exactly as given (character-for-character, including every "(" and ")"): "${assignedRp}".`,
+        `Replacement program for paragraph ${i + 1}: include the assigned program exactly as given (character-for-character, including every "(" and ")"): "${assignedRp}".`,
       );
     }
   }
@@ -556,8 +918,11 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   const assignedPerHour = ctx.maladaptiveBehaviorForHour ?? [];
   const activityLockedPerHour = ctx.activityAntecedentForHour ?? [];
 
+  const acquisitionFlags = ctx.acquisitionOnlySegmentForHour ?? [];
+
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i]!;
+    const acquisitionOnly = acquisitionFlags[i] === true;
     const lockedActivity = activityLockedPerHour[i];
     if (typeof lockedActivity === "string" && lockedActivity.length > 0 && !p.includes(lockedActivity)) {
       issues.push(
@@ -567,21 +932,28 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     }
     if (behaviorCatalog.length > 0) {
       const bCount = countCatalogBehaviorsInParagraph(p, behaviorCatalog);
-      if (bCount > 1) {
+      if (acquisitionOnly) {
+        if (bCount > 0) {
+          issues.push(
+            `Skill-acquisition segment (paragraph ${i + 1}): do not cite any maladaptive behavior catalog label; this segment documents only the assigned skill-acquisition replacement program (no "manifested [maladaptive]" framing).`,
+          );
+          break;
+        }
+      } else if (bCount > 1) {
         issues.push(
-          `One maladaptive behavior per ABC: paragraph ${i + 1} references more than one behavior name from the client catalog; use exactly one catalog behavior per hour.`,
+          `One maladaptive behavior per ABC: paragraph ${i + 1} references more than one behavior name from the client catalog; use exactly one catalog behavior per narrative segment.`,
         );
         break;
       }
     }
     const assigned = assignedPerHour[i]?.trim();
-    if (assigned && !p.includes(assigned)) {
+    if (!acquisitionOnly && assigned && !p.includes(assigned)) {
       issues.push(
         `Maladaptive behavior rotation: paragraph ${i + 1} must cite the assigned catalog label "${assigned}" (maladaptiveBehaviorForHour[${i}]) verbatim in the manifested-behavior portion.`,
       );
       break;
     }
-    if (tantrumWithoutTopography(p)) {
+    if (!acquisitionOnly && tantrumWithoutTopography(p)) {
       issues.push(
         `Tantrum topography: paragraph ${i + 1} mentions tantrum/meltdown without enough observable detail; describe what the client did (sounds, movements, materials) consistent with the assessment behavior definitions.`,
       );
@@ -589,28 +961,103 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     }
   }
 
-  const responseBlockLabel = findResponseBlockInterventionLabel(ctx.interventions ?? []);
-  const paBehaviorLabels = behaviorCatalog.filter(isPhysicalAggressionCatalogLabel);
-  if (responseBlockLabel && paBehaviorLabels.length > 0) {
-    const interventionList = ctx.interventions ?? [];
+  const interventionCatalog = (ctx.interventions ?? []).map((s) => s.trim()).filter((s) => s.length > 0);
+  if (interventionCatalog.length >= 2) {
+    for (let i = 0; i < paragraphs.length; i++) {
+      const joined = findJoinedInterventionPairPhrase(paragraphs[i]!, interventionCatalog);
+      if (joined) {
+        issues.push(
+          `Interventions: paragraph ${i + 1} joins two catalog interventions (${joined.a} and ${joined.b}) in one phrase (comma or "and" between names). Do not combine two catalog names into one noun phrase; use exact JSON labels in separate naming sentences (each ending with a period after the name). For most ABC segments document **one** intervention only—only safety-priority segments with Response Block on the client's list may use multiple **separate** naming sentences (never a compound label).`,
+        );
+      }
+    }
+  }
+  if (interventionCatalog.length >= 1) {
     for (let i = 0; i < paragraphs.length; i++) {
       const p = paragraphs[i]!;
-      const citesPa = paBehaviorLabels.some((label) => p.includes(label));
-      if (!citesPa) continue;
+      const commaAfter = firstInterventionWithCommaBeforeBy(p, interventionCatalog);
+      if (commaAfter) {
+        issues.push(
+          `Interventions: paragraph ${i + 1}: remove the comma between "${commaAfter}" and "by" (do not use a "…, by …" clause attached to the catalog name). End the naming sentence after the exact catalog name with a period, then describe implementation in a new sentence.`,
+        );
+      }
+      const quoted = firstQuotedCatalogIntervention(p, interventionCatalog);
+      if (quoted) {
+        issues.push(
+          `Interventions: paragraph ${i + 1}: remove double quotes around "${quoted}"; write the catalog intervention as plain text matching JSON exactly, in its own sentence ending with a period after the name.`,
+        );
+      }
+      const attachedBy = firstInterventionNameWithAttachedByClause(p, interventionCatalog);
+      if (attachedBy) {
+        issues.push(
+          `Interventions: paragraph ${i + 1}: do not attach "by …" to "${attachedBy}" in the same sentence as implemented/applied. Use two sentences: (1) "The RBT implemented ${attachedBy}." or "To address this behavior, the RBT implemented ${attachedBy}." with the exact JSON string and a period immediately after the name; (2) a separate sentence describing what was done (for example beginning with "Following this intervention, …").`,
+        );
+      }
+    }
+  }
+
+  const trialSummaries = ctx.therapistTrialSummaryForReplacementHour;
+  const responseBlockLabel = findResponseBlockInterventionLabel(ctx.interventions ?? []);
+  const interventionList = ctx.interventions ?? [];
+
+  for (let i = 0; i < paragraphs.length; i++) {
+    const p = paragraphs[i]!;
+    const acquisitionOnly = acquisitionFlags[i] === true;
+    const assignedBehavior = acquisitionOnly ? "" : (assignedPerHour[i]?.trim() ?? "");
+    const trialEntry = trialSummaries?.[i];
+    if (trialEntry && trialEntry.totalTrials >= 1) {
+      const successN = trialEntry.successfulTrialNumbers.length;
+      if (!therapistTrialRollupPhrasePresent(p, successN, trialEntry.totalTrials)) {
+        issues.push(
+          `Therapist trial counts: paragraph ${i + 1} must state discrete-trial outcomes as "${successN} out of ${trialEntry.totalTrials} trials were successful" (use "was" instead of "were" when ${successN} is 1 if you prefer standard agreement). Do not use "trials were conducted" plus separate "trial … was successful" / "trials … and … were successful" wording.`,
+        );
+      }
+    }
+
+    if (interventionCatalog.length === 0) {
+      continue;
+    }
+    const implCount = countInterventionImplementationsInParagraph(p, interventionCatalog);
+    const safetyChainAllowed =
+      Boolean(responseBlockLabel) &&
+      assignedBehavior.length > 0 &&
+      assignedBehaviorAllowsResponseBlockSafetyChain(assignedBehavior);
+
+    if (!safetyChainAllowed && implCount > 1) {
+      issues.push(
+        `Interventions: paragraph ${i + 1} must document **one** catalog intervention for this ABC segment (one naming sentence: "… implemented [exact JSON label]." or "… applied [exact JSON label]." with a period immediately after the name, then separate sentences for detail). Pick the single best-matching entry from JSON interventions unless the segment is a safety-priority behavior with Response Block on the client's list (physical aggression, wandering, elopement, baiting, bolting, running away)—then Response Block may be first with additional interventions in separate naming sentences.`,
+      );
+    }
+    if (implCount === 0) {
+      issues.push(
+        `Interventions: paragraph ${i + 1} must document at least one catalog intervention using the exact JSON label in a naming sentence ending with a period right after the name (for example "The RBT implemented [exact label]." or "To address this behavior, the RBT implemented [exact label]."), then describe what was done in following sentences—do not put "by …" in the same sentence as the catalog name.`,
+      );
+    }
+  }
+
+  if (responseBlockLabel) {
+    for (let i = 0; i < paragraphs.length; i++) {
+      const p = paragraphs[i]!;
+      if (acquisitionFlags[i] === true) {
+        continue;
+      }
+      const assignedBehavior = assignedPerHour[i]?.trim() ?? "";
+      if (!assignedBehavior || !assignedBehaviorAllowsResponseBlockSafetyChain(assignedBehavior)) {
+        continue;
+      }
       const m = /\bto address this behavior\b|\bto address these behaviors\b/i.exec(p);
       if (!m || m.index === undefined) {
         issues.push(
-          `Physical aggression: paragraph ${i + 1} cites a physical-aggression catalog behavior; use "To address this behavior" or "To address these behaviors" before consequence interventions.`,
+          `Safety-priority behavior (${assignedBehavior}): paragraph ${i + 1} must use "To address this behavior" or "To address these behaviors" before the first consequence intervention when Response Block is on the client's intervention list.`,
         );
-        break;
+        continue;
       }
       const tail = p.slice(m.index);
       const firstNamed = firstInterventionMentionInText(tail, interventionList);
       if (firstNamed !== responseBlockLabel) {
         issues.push(
-          `Physical aggression: paragraph ${i + 1} must describe "${responseBlockLabel}" as the first implemented intervention after "To address this behavior" (before other listed interventions such as environmental manipulation).`,
+          `Safety-priority behavior (${assignedBehavior}): paragraph ${i + 1} must name "${responseBlockLabel}" as the first catalog intervention after "To address this behavior" (before other listed interventions such as environmental manipulation), in its own naming sentence ending with a period after the exact label.`,
         );
-        break;
       }
     }
   }

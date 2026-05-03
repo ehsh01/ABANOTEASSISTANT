@@ -107,6 +107,8 @@ router.post(
     };
     if (snapshot.length > 0) {
       nextProfile.assessmentTextSnapshot = snapshot;
+    } else {
+      delete nextProfile.assessmentTextSnapshot;
     }
 
     const [updated] = await db
