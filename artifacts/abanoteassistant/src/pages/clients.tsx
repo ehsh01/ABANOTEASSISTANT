@@ -4,6 +4,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { motion } from "framer-motion";
@@ -19,9 +20,10 @@ import {
   Loader2,
   Users,
   Pencil,
+  Trash2,
 } from "lucide-react";
 import type { Client } from "@workspace/api-client-react";
-import { useClients } from "@/hooks/use-aba-api";
+import { useClients, useDeleteClient } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
 
 function displayNames(client: Client) {
@@ -66,6 +68,23 @@ function ClientCard({ client }: { client: Client }) {
   const [, setLocation] = useLocation();
   const t = useT();
   const d = displayNames(client);
+  const deleteClientMutation = useDeleteClient();
+  const fullName = `${d.firstName} ${d.lastName}`.trim() || client.name;
+
+  function handleDeleteClient() {
+    if (deleteClientMutation.isPending) return;
+    const confirmed = window.confirm(
+      `Delete client "${fullName}"?\n\nThis permanently removes the client, their session notes, program links, and behavior approvals. This cannot be undone.`,
+    );
+    if (!confirmed) return;
+    deleteClientMutation.mutate(client.id, {
+      onError: (err) => {
+        window.alert(
+          err instanceof Error ? `Could not delete client: ${err.message}` : "Could not delete client.",
+        );
+      },
+    });
+  }
 
   const STATUS_CONFIG = {
     ready: { label: t.clients.assessmentReady, icon: CheckCircle2, bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
@@ -165,6 +184,18 @@ function ClientCard({ client }: { client: Client }) {
                 className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-[#2D2523] focus:bg-[#F0E4E1] focus:text-[#C27A8A] data-[highlighted]:bg-[#F0E4E1] data-[highlighted]:text-[#C27A8A]"
               >
                 <Link href={`/clients/edit/${client.id}?section=interventions`}>Edit interventions</Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="my-1 h-px bg-[#F0E4E1]" />
+              <DropdownMenuItem
+                disabled={deleteClientMutation.isPending}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  handleDeleteClient();
+                }}
+                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-semibold text-rose-700 focus:bg-rose-50 focus:text-rose-700 data-[highlighted]:bg-rose-50 data-[highlighted]:text-rose-700 flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                {deleteClientMutation.isPending ? "Deleting…" : "Delete client"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

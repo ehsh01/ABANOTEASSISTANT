@@ -17,6 +17,7 @@ import type {
   SaveNoteRequest,
   SaveNoteResponse,
   DeleteNoteResponse,
+  DeleteClientResponse,
   DeleteClientProgramResponse,
   UpdateClientProgramBody,
   UpdateClientProgramResponse,
@@ -36,6 +37,7 @@ import {
   generateNote,
   saveNote,
   deleteNote as deleteNoteRequest,
+  deleteClient as deleteClientRequest,
   updateClientProgram,
   deleteClientProgram,
   extractAssessmentFromPdf,
@@ -203,6 +205,19 @@ export function useDeleteSessionNote() {
     onSuccess: (_res, noteId) => {
       queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notes", noteId] });
+    },
+  });
+}
+
+export function useDeleteClient() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (clientId: number): Promise<DeleteClientResponse> =>
+      deleteClientRequest(clientId),
+    onSuccess: (_res, clientId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.removeQueries({ queryKey: ["/api/clients", clientId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
     },
   });
 }

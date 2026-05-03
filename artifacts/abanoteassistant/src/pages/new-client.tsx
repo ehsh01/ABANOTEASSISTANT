@@ -26,6 +26,7 @@ import { useWizardStore } from "@/store/wizard-store";
 import {
   useClients,
   useClient,
+  useDeleteClient,
   useExtractAssessmentFromPdf,
   useClientBehaviorProgramApprovals,
   useClientReplacementProgramsList,
@@ -1261,6 +1262,32 @@ function NewClientForm({
   const [extractError, setExtractError] = useState<string | null>(null);
   const [extractSuccess, setExtractSuccess] = useState<string | null>(null);
   const [clearingStoredAssessment, setClearingStoredAssessment] = useState(false);
+  const deleteClientMutation = useDeleteClient();
+
+  async function handleDeleteClientFromEdit() {
+    if (!isEdit || !Number.isFinite(numericId) || numericId <= 0) return;
+    if (deleteClientMutation.isPending) return;
+    const stored = detailRes?.data;
+    const fromProfile =
+      stored?.profile?.firstName || stored?.profile?.lastName
+        ? `${stored?.profile?.firstName ?? ""} ${stored?.profile?.lastName ?? ""}`.trim()
+        : "";
+    const fromForm = `${step1.firstName} ${step1.lastName}`.trim();
+    const namePart = fromProfile || stored?.name || fromForm || "this client";
+    const ok = window.confirm(
+      `Delete client "${namePart}"?\n\nThis permanently removes the client, their session notes, program links, and behavior approvals. This cannot be undone.`,
+    );
+    if (!ok) return;
+    setSaveError(null);
+    deleteClientMutation.mutate(numericId, {
+      onSuccess: () => setLocation("/clients"),
+      onError: (err) => {
+        setSaveError(
+          err instanceof Error ? `Could not delete client: ${err.message}` : "Could not delete client.",
+        );
+      },
+    });
+  }
 
   // Lets BehaviorSection register a function to flush every behavior's draft approved-program
   // selections in one shot. The bottom "Save changes" button calls it after PATCHing behaviors,
@@ -1704,6 +1731,26 @@ function NewClientForm({
                   </span>
                 </div>
               </div>
+
+              <div className="mt-12 rounded-xl border border-rose-200 bg-rose-50/60 p-5">
+                <h3 className="text-sm font-bold text-rose-700 flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  Danger zone
+                </h3>
+                <p className="text-xs text-rose-700/80 mt-1 leading-relaxed">
+                  Permanently delete this client, all their session notes, program links, and behavior approvals.
+                  This cannot be undone.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleDeleteClientFromEdit}
+                  disabled={deleteClientMutation.isPending}
+                  className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-4 h-4 pop-icon-white" />
+                  {deleteClientMutation.isPending ? "Deleting…" : "Delete client"}
+                </button>
+              </div>
             </motion.div>
           </AnimatePresence>
         </main>
@@ -1833,6 +1880,28 @@ function NewClientForm({
                 </span>
               </div>
             </div>
+
+            {isEdit && step === 3 && (
+              <div className="mt-12 rounded-xl border border-rose-200 bg-rose-50/60 p-5">
+                <h3 className="text-sm font-bold text-rose-700 flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  Danger zone
+                </h3>
+                <p className="text-xs text-rose-700/80 mt-1 leading-relaxed">
+                  Permanently delete this client, all their session notes, program links, and behavior approvals.
+                  This cannot be undone.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleDeleteClientFromEdit}
+                  disabled={deleteClientMutation.isPending}
+                  className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-4 h-4 pop-icon-white" />
+                  {deleteClientMutation.isPending ? "Deleting…" : "Delete client"}
+                </button>
+              </div>
+            )}
           </motion.div>
         </AnimatePresence>
       </main>

@@ -694,6 +694,16 @@ export interface DeleteNoteResponse {
   error?: string | null;
 }
 
+export type DeleteClientResponseData = {
+  clientId: number;
+};
+
+export interface DeleteClientResponse {
+  success: boolean;
+  data: DeleteClientResponseData;
+  error?: string | null;
+}
+
 export type SaveNoteRequestStatus =
   (typeof SaveNoteRequestStatus)[keyof typeof SaveNoteRequestStatus];
 

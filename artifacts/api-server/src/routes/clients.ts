@@ -24,6 +24,8 @@ import {
   CreateClientClinicalRecommendationParams,
   CreateClientClinicalRecommendationBody,
   CreateClientClinicalRecommendationResponse,
+  DeleteClientParams,
+  DeleteClientResponse,
 } from "@workspace/api-zod";
 import { db } from "@workspace/db";
 import {
@@ -401,71 +403,81 @@ router.post("/clients", async (req, res) => {
     return;
   }
 
-  const mal = mergeMaladaptiveProfileFields({
-    base: emptyMaladaptiveBase,
-    behaviorsInput: body.maladaptiveBehaviors,
-    targetsInput: body.maladaptiveBehaviorTargets,
-  });
-  const profile: ClientProfileRow = {
-    firstName: body.firstName.trim(),
-    lastName: body.lastName.trim(),
-    dateOfBirth: body.dateOfBirth,
-    gender: body.gender,
-    maladaptiveBehaviors: mal.maladaptiveBehaviors,
-    maladaptiveBehaviorTargets: mal.maladaptiveBehaviorTargets,
-    replacementPrograms: body.replacementPrograms,
-    interventions: body.interventions,
-    assessmentFileName: body.assessmentFileName ?? undefined,
-  };
-  if (body.assessmentStructured != null) {
-    const parsed = parseAssessmentStructured(body.assessmentStructured);
-    if (!parsed) {
-      res.status(400).json({
-        success: false,
-        error: "assessmentStructured could not be parsed",
-        messages: [],
-      });
+  try {
+    const mal = mergeMaladaptiveProfileFields({
+      base: emptyMaladaptiveBase,
+      behaviorsInput: body.maladaptiveBehaviors,
+      targetsInput: body.maladaptiveBehaviorTargets,
+    });
+    const profile: ClientProfileRow = {
+      firstName: body.firstName.trim(),
+      lastName: body.lastName.trim(),
+      dateOfBirth: body.dateOfBirth,
+      gender: body.gender,
+      maladaptiveBehaviors: mal.maladaptiveBehaviors,
+      maladaptiveBehaviorTargets: mal.maladaptiveBehaviorTargets,
+      replacementPrograms: body.replacementPrograms,
+      interventions: body.interventions,
+      assessmentFileName: body.assessmentFileName ?? undefined,
+    };
+    if (body.assessmentStructured != null) {
+      const parsed = parseAssessmentStructured(body.assessmentStructured);
+      if (!parsed) {
+        res.status(400).json({
+          success: false,
+          error: "assessmentStructured could not be parsed",
+          messages: [],
+        });
+        return;
+      }
+      const vi = validateAssessmentStructured(parsed);
+      if (vi.length > 0) {
+        res.status(400).json({
+          success: false,
+          error: "Invalid assessmentStructured",
+          messages: vi,
+        });
+        return;
+      }
+      profile.assessmentStructured = parsed;
+    }
+    const name = `${profile.firstName} ${profile.lastName}`.trim() || "Client";
+
+    const [row] = await db
+      .insert(clientsTable)
+      .values({
+        companyId,
+        name,
+        ageBand: body.ageBand?.trim() || null,
+        hasAssessment: body.hasAssessment,
+        assessmentStatus: body.assessmentStatus,
+        profile,
+      })
+      .returning();
+
+    if (!row) {
+      res.status(500).json({ success: false, error: "Failed to create client", messages: [] });
       return;
     }
-    const vi = validateAssessmentStructured(parsed);
-    if (vi.length > 0) {
-      res.status(400).json({
-        success: false,
-        error: "Invalid assessmentStructured",
-        messages: vi,
-      });
-      return;
-    }
-    profile.assessmentStructured = parsed;
+
+    await syncReplacementProgramsFromProfile(row.id, companyId, profile);
+    await pruneClientBehaviorProgramApprovals(row.id, profile);
+
+    const data = GetClientResponse.parse({
+      success: true,
+      data: clientRowToApiData(row),
+      error: null,
+    });
+    res.json(data);
+  } catch (err) {
+    console.error("[POST /clients] failed", err);
+    const detail = extractDeepestDriverMessage(err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to create client",
+      messages: [detail.length > 400 ? `${detail.slice(0, 400)}…` : detail],
+    });
   }
-  const name = `${profile.firstName} ${profile.lastName}`.trim() || "Client";
-
-  const [row] = await db
-    .insert(clientsTable)
-    .values({
-      companyId,
-      name,
-      ageBand: body.ageBand?.trim() || null,
-      hasAssessment: body.hasAssessment,
-      assessmentStatus: body.assessmentStatus,
-      profile,
-    })
-    .returning();
-
-  if (!row) {
-    res.status(500).json({ success: false, error: "Failed to create client", messages: [] });
-    return;
-  }
-
-  await syncReplacementProgramsFromProfile(row.id, companyId, profile);
-  await pruneClientBehaviorProgramApprovals(row.id, profile);
-
-  const data = GetClientResponse.parse({
-    success: true,
-    data: clientRowToApiData(row),
-    error: null,
-  });
-  res.json(data);
 });
 
 router.get("/clients/:clientId/programs", async (req, res) => {
@@ -1092,6 +1104,7 @@ router.patch("/clients/:clientId", async (req, res) => {
     return;
   }
 
+  try {
   const [existing] = await db
     .select()
     .from(clientsTable)
@@ -1207,6 +1220,59 @@ router.patch("/clients/:clientId", async (req, res) => {
     error: null,
   });
   res.json(data);
+  } catch (err) {
+    console.error("[PATCH /clients/:clientId] failed", err);
+    const detail = extractDeepestDriverMessage(err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to update client",
+      messages: [detail.length > 400 ? `${detail.slice(0, 400)}…` : detail],
+    });
+  }
+});
+
+router.delete("/clients/:clientId", async (req, res) => {
+  const companyId = req.companyId;
+  if (companyId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const params = DeleteClientParams.parse(req.params);
+
+  try {
+    const [existing] = await db
+      .select({ id: clientsTable.id })
+      .from(clientsTable)
+      .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)))
+      .limit(1);
+
+    if (!existing) {
+      res.status(404).json({ success: false, error: "Client not found", messages: [] });
+      return;
+    }
+
+    // Notes, client_programs, and client_behavior_program_approvals all use ON DELETE CASCADE
+    // (see lib/db/src/schema), so a single delete on clients removes the dependent rows too.
+    await db
+      .delete(clientsTable)
+      .where(and(eq(clientsTable.id, params.clientId), eq(clientsTable.companyId, companyId)));
+
+    const data = DeleteClientResponse.parse({
+      success: true,
+      data: { clientId: params.clientId },
+      error: null,
+    });
+    res.json(data);
+  } catch (err) {
+    console.error("[DELETE /clients/:clientId] failed", err);
+    const detail = extractDeepestDriverMessage(err);
+    res.status(500).json({
+      success: false,
+      error: "Failed to delete client",
+      messages: [detail.length > 400 ? `${detail.slice(0, 400)}…` : detail],
+    });
+  }
 });
 
 export default router;

@@ -687,6 +687,23 @@ export const UpdateClientResponse = zod.object({
 });
 
 /**
+ * Permanently removes the client and cascades related session notes, program links, and behavior–program approval rows for this company. Cannot be undone.
+
+ * @summary Delete a client
+ */
+export const DeleteClientParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const DeleteClientResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    clientId: zod.number(),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
  * Parses PDF text server-side, stores a truncated excerpt on the client profile (not returned in API JSON), and sets assessment status to ready. Call after creating or updating a client when the RBT selects an assessment file.
 
  * @summary Upload assessment PDF and store text for AI note grounding

@@ -379,6 +379,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteClient
+      tags: [clients]
+      summary: Delete a client
+      description: >
+        Permanently removes the client and cascades related session notes, program links, and
+        behavior–program approval rows for this company. Cannot be undone.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Client deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteClientResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /clients/{clientId}/assessment/document:
     post:
@@ -2135,6 +2169,25 @@ components:
               type: integer
           required:
             - noteId
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    DeleteClientResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            clientId:
+              type: integer
+          required:
+            - clientId
         error:
           type: string
           nullable: true

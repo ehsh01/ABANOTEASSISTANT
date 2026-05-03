@@ -27,6 +27,7 @@ import type {
   ClinicalRecommendationResponse,
   CreateClientRequest,
   DeleteClientProgramResponse,
+  DeleteClientResponse,
   DeleteNoteResponse,
   ErrorResponse,
   GenerateNoteRequest,
@@ -1060,6 +1061,92 @@ export const useUpdateClient = <
   TContext
 > => {
   return useMutation(getUpdateClientMutationOptions(options));
+};
+
+/**
+ * Permanently removes the client and cascades related session notes, program links, and behavior–program approval rows for this company. Cannot be undone.
+
+ * @summary Delete a client
+ */
+export const getDeleteClientUrl = (clientId: number) => {
+  return `/api/clients/${clientId}`;
+};
+
+export const deleteClient = async (
+  clientId: number,
+  options?: RequestInit,
+): Promise<DeleteClientResponse> => {
+  return customFetch<DeleteClientResponse>(getDeleteClientUrl(clientId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteClientMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClient>>,
+    TError,
+    { clientId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteClient>>,
+  TError,
+  { clientId: number },
+  TContext
+> => {
+  const mutationKey = ["deleteClient"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteClient>>,
+    { clientId: number }
+  > = (props) => {
+    const { clientId } = props ?? {};
+
+    return deleteClient(clientId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteClientMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteClient>>
+>;
+
+export type DeleteClientMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete a client
+ */
+export const useDeleteClient = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClient>>,
+    TError,
+    { clientId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteClient>>,
+  TError,
+  { clientId: number },
+  TContext
+> => {
+  return useMutation(getDeleteClientMutationOptions(options));
 };
 
 /**

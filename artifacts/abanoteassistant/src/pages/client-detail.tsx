@@ -1,4 +1,4 @@
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useMemo, Fragment } from "react";
 import {
@@ -18,7 +18,12 @@ import {
   Trash2,
   Plus,
 } from "lucide-react";
-import { useDeleteSessionNote, useUpdateClientProgram, useDeleteClientProgram } from "@/hooks/use-aba-api";
+import {
+  useDeleteSessionNote,
+  useUpdateClientProgram,
+  useDeleteClientProgram,
+  useDeleteClient,
+} from "@/hooks/use-aba-api";
 import { sessionTimeRangeFromHours, formatSessionDate } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClient, useClientPrograms, useNotesList } from "@/hooks/use-aba-api";
@@ -93,6 +98,7 @@ function TagListSection({
 export default function ClientDetail() {
   const { clientId } = useParams<{ clientId: string }>();
   const id = clientId ? Number(clientId) : undefined;
+  const [, setLocation] = useLocation();
   const { data: clientResp, isLoading: clientLoading } = useClient(id);
   const {
     data: programsResp,
@@ -104,6 +110,7 @@ export default function ClientDetail() {
   const deleteMutation = useDeleteSessionNote();
   const updateProgramMutation = useUpdateClientProgram();
   const deleteProgramMutation = useDeleteClientProgram();
+  const deleteClientMutation = useDeleteClient();
   const t = useT();
   const [activeTab, setActiveTab] = useState("sessionNotes");
 
@@ -151,6 +158,27 @@ export default function ClientDetail() {
     if (!id) return;
     if (!window.confirm("Remove this program? This cannot be undone.")) return;
     deleteProgramMutation.mutate({ clientId: id, programId });
+  };
+
+  const handleDeleteClient = () => {
+    if (!id || deleteClientMutation.isPending) return;
+    const client = clientResp?.data;
+    const namePart = client
+      ? `${client.profile?.firstName ?? ""} ${client.profile?.lastName ?? ""}`.trim() ||
+        client.name
+      : "this client";
+    const ok = window.confirm(
+      `Delete client "${namePart}"?\n\nThis permanently removes the client, their session notes, program links, and behavior approvals. This cannot be undone.`,
+    );
+    if (!ok) return;
+    deleteClientMutation.mutate(id, {
+      onSuccess: () => setLocation("/clients"),
+      onError: (err) => {
+        window.alert(
+          err instanceof Error ? `Could not delete client: ${err.message}` : "Could not delete client.",
+        );
+      },
+    });
   };
 
   const client = clientResp?.data;
@@ -274,6 +302,15 @@ export default function ClientDetail() {
                   Assessment PDF
                 </button>
               </Link>
+              <button
+                type="button"
+                onClick={handleDeleteClient}
+                disabled={deleteClientMutation.isPending}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition-all w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {deleteClientMutation.isPending ? "Deleting…" : "Delete client"}
+              </button>
             </div>
           </div>
 
