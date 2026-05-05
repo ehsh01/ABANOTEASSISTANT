@@ -62,7 +62,10 @@ import {
 } from "../assessment-structured";
 import { resolveAbcHintsForNoteGeneration } from "../abc-hints";
 import { isLanguageMaladaptiveBehaviorLabel } from "../language-maladaptive-behavior";
-import { isSkillAcquisitionOnlyReplacementProgram } from "../skill-acquisition-programs";
+import {
+  isSkillAcquisitionOnlyReplacementProgram,
+  maladaptiveReplacementPairingsForSessionNote,
+} from "../skill-acquisition-programs";
 import { ABC_ACTIVITY_ANTECEDENT_CATALOG } from "../abc-activity-antecedent-catalog";
 
 /**
@@ -808,6 +811,12 @@ router.post("/notes/generate", async (req, res) => {
   res.setHeader("X-ABA-Clinical-Body-Source", "openai");
   res.setHeader("X-ABA-OpenAI-Model", generationModel);
 
+  const maladaptiveReplacementPairings = maladaptiveReplacementPairingsForSessionNote({
+    acquisitionOnlySegmentForHour,
+    maladaptiveBehaviorForNarrative,
+    replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
+  });
+
   const data = GenerateNoteResponse.parse({
     success: true,
     data: {
@@ -820,6 +829,7 @@ router.post("/notes/generate", async (req, res) => {
       generatedAt: generatedAt.toISOString(),
       generationSource,
       generationModel,
+      maladaptiveReplacementPairings,
     },
     warnings: warnings.length > 0 ? warnings : undefined,
     error: null,

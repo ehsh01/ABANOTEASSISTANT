@@ -120,6 +120,11 @@ export const translations = {
       sourceTemplateBody:
         "This label applies only to older notes generated before the API required OpenAI. New generations always use OpenAI; if generation fails, the API returns an error instead of a template.",
       serverNotices: "Server notices",
+      maladaptivePairingTitle: "Behavior → program (forms)",
+      maladaptivePairingBody:
+        "Authoritative rows for tools that need maladaptive catalog behavior paired with the replacement program for that narrative segment. Skill-acquisition-only segments (for example Echoic) are omitted so program names are not misclassified as behaviors.",
+      maladaptivePairingCopyJson: "Copy JSON",
+      maladaptivePairingCopied: "Pairings copied",
     },
     // ── Note detail page ──
     noteDetail: {
@@ -375,6 +380,11 @@ export const translations = {
       sourceTemplateBody:
         "Solo aplica a notas antiguas generadas antes de que la API exigiera OpenAI. Las nuevas generaciones siempre usan OpenAI; si falla, la API devuelve un error en lugar de una plantilla.",
       serverNotices: "Avisos del servidor",
+      maladaptivePairingTitle: "Conducta → programa (formularios)",
+      maladaptivePairingBody:
+        "Filas oficiales para herramientas que requieren la conducta maladaptativa del catálogo emparejada con el programa de reemplazo de ese segmento narrativo. Los segmentos solo de adquisición de habilidades (por ejemplo, Ecoico) se omiten para no clasificar erróneamente nombres de programas como conductas.",
+      maladaptivePairingCopyJson: "Copiar JSON",
+      maladaptivePairingCopied: "Emparejamientos copiados",
     },
     // ── Note detail page ──
     noteDetail: {

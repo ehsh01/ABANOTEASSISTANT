@@ -15,6 +15,7 @@ export default function Result() {
   const t = useT();
 
   const [copied, setCopied] = useState(false);
+  const [copiedPairings, setCopiedPairings] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [content, setContent] = useState("");
   const [translatedContent, setTranslatedContent] = useState<string | null>(null);
@@ -89,6 +90,7 @@ export default function Result() {
   };
 
   const displayDate = formatSessionDate(generatedNote.sessionDate);
+  const maladaptivePairings = generatedNote.maladaptiveReplacementPairings ?? [];
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -207,6 +209,35 @@ export default function Result() {
               </div>
             </div>
           </div>
+
+          {maladaptivePairings.length > 0 && (
+            <div className="bg-card rounded-2xl border border-border shadow-sm p-6 space-y-3">
+              <h3 className="font-display font-bold text-sm border-b border-border/50 pb-2">
+                {t.result.maladaptivePairingTitle}
+              </h3>
+              <p className="text-xs text-muted-foreground leading-snug">{t.result.maladaptivePairingBody}</p>
+              <ul className="text-xs space-y-2 max-h-48 overflow-y-auto">
+                {maladaptivePairings.map((row) => (
+                  <li key={row.segmentIndex} className="border border-border/60 rounded-lg p-2 bg-secondary/20">
+                    <div className="font-medium text-foreground">{row.maladaptiveBehavior}</div>
+                    <div className="text-muted-foreground mt-0.5">→ {row.replacementProgramName}</div>
+                  </li>
+                ))}
+              </ul>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(JSON.stringify(maladaptivePairings, null, 2));
+                  setCopiedPairings(true);
+                  window.setTimeout(() => setCopiedPairings(false), 2000);
+                }}
+                className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-border text-sm font-medium hover:bg-secondary/50 transition-colors"
+              >
+                {copiedPairings ? <CheckCircle2 className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
+                {copiedPairings ? t.result.maladaptivePairingCopied : t.result.maladaptivePairingCopyJson}
+              </button>
+            </div>
+          )}
 
           {/* Translate Note Button */}
           <div className="space-y-2">

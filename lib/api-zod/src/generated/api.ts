@@ -1523,6 +1523,8 @@ export const GenerateNoteBody = zod.object({
     ),
 });
 
+export const generateNoteResponseDataMaladaptiveReplacementPairingsItemSegmentIndexMin = 0;
+
 export const GenerateNoteResponse = zod.object({
   success: zod.boolean(),
   data: zod.object({
@@ -1542,6 +1544,37 @@ export const GenerateNoteResponse = zod.object({
       .string()
       .nullable()
       .describe("OpenAI model id used for the clinical body (set on success)"),
+    maladaptiveReplacementPairings: zod
+      .array(
+        zod
+          .object({
+            segmentIndex: zod
+              .number()
+              .min(
+                generateNoteResponseDataMaladaptiveReplacementPairingsItemSegmentIndexMin,
+              )
+              .describe(
+                "Zero-based narrative segment index after session collapse (replacement-program slots).",
+              ),
+            maladaptiveBehavior: zod
+              .string()
+              .describe(
+                "Maladaptive behavior catalog label for this segment (never a replacement program name).",
+              ),
+            replacementProgramName: zod
+              .string()
+              .describe(
+                "Replacement program name documented for this segment in the generated note.",
+              ),
+          })
+          .describe(
+            "One row for integrations that need \*\*maladaptive catalog behavior → replacement program\*\* pairings only. Omitted for skill-acquisition-only narrative segments (no maladaptive episode).\n",
+          ),
+      )
+      .optional()
+      .describe(
+        'Authoritative \*\*behavior → replacement program\*\* rows for this session (post-collapse segments). \*\*Excludes\*\* skill-acquisition-only segments (e.g. program names containing \"Echoic\", or \"Respond to Own Name\"), which are not maladaptive-behavior episodes. Downstream `replacementProgramImplementation`-style lists should use this array instead of inferring a \"behavior\" from replacement program names for every paragraph.\n',
+      ),
   }),
   warnings: zod.array(zod.string()).optional(),
   error: zod.string().nullish(),

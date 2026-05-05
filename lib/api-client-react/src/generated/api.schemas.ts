@@ -640,6 +640,22 @@ export const GeneratedNoteGenerationSource = {
   template: "template",
 } as const;
 
+/**
+ * One row for integrations that need **maladaptive catalog behavior → replacement program** pairings only. Omitted for skill-acquisition-only narrative segments (no maladaptive episode).
+
+ */
+export interface MaladaptiveReplacementPairing {
+  /**
+   * Zero-based narrative segment index after session collapse (replacement-program slots).
+   * @minimum 0
+   */
+  segmentIndex: number;
+  /** Maladaptive behavior catalog label for this segment (never a replacement program name). */
+  maladaptiveBehavior: string;
+  /** Replacement program name documented for this segment in the generated note. */
+  replacementProgramName: string;
+}
+
 export interface GeneratedNote {
   noteId: number;
   content: string;
@@ -652,6 +668,9 @@ export interface GeneratedNote {
   generationSource: GeneratedNoteGenerationSource;
   /** OpenAI model id used for the clinical body (set on success) */
   generationModel: string | null;
+  /** Authoritative **behavior → replacement program** rows for this session (post-collapse segments). **Excludes** skill-acquisition-only segments (e.g. program names containing "Echoic", or "Respond to Own Name"), which are not maladaptive-behavior episodes. Downstream `replacementProgramImplementation`-style lists should use this array instead of inferring a "behavior" from replacement program names for every paragraph.
+   */
+  maladaptiveReplacementPairings?: MaladaptiveReplacementPairing[];
 }
 
 export interface GenerateNoteResponse {

@@ -19,3 +19,36 @@ export function isSkillAcquisitionOnlyReplacementProgram(programName: string): b
   if (ECHOIC_PROGRAM.test(t)) return true;
   return false;
 }
+
+/** One maladaptive-behavior row for billing/review integrations (excludes skill-acquisition-only segments). */
+export type MaladaptiveReplacementPairingRow = {
+  segmentIndex: number;
+  maladaptiveBehavior: string;
+  replacementProgramName: string;
+};
+
+/**
+ * Builds **maladaptive catalog behavior → replacement program** pairings for the collapsed narrative segments.
+ * **Omits** indices where `acquisitionOnlySegmentForHour[i]` is true (Echoic-style / Respond to Own Name programs),
+ * so consumers never place a replacement program name in a "Behavior → Response" behavior slot for those segments.
+ */
+export function maladaptiveReplacementPairingsForSessionNote(params: {
+  acquisitionOnlySegmentForHour: boolean[];
+  maladaptiveBehaviorForNarrative: string[];
+  replacementProgramForHour: string[];
+}): MaladaptiveReplacementPairingRow[] {
+  const { acquisitionOnlySegmentForHour, maladaptiveBehaviorForNarrative, replacementProgramForHour } = params;
+  const n = acquisitionOnlySegmentForHour.length;
+  const out: MaladaptiveReplacementPairingRow[] = [];
+  for (let i = 0; i < n; i++) {
+    if (acquisitionOnlySegmentForHour[i]) continue;
+    const b = (maladaptiveBehaviorForNarrative[i] ?? "").trim();
+    if (!b) continue;
+    out.push({
+      segmentIndex: i,
+      maladaptiveBehavior: b,
+      replacementProgramName: (replacementProgramForHour[i] ?? "").trim(),
+    });
+  }
+  return out;
+}

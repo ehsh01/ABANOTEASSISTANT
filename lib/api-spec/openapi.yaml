@@ -2172,6 +2172,27 @@ components:
         - success
         - data
 
+    MaladaptiveReplacementPairing:
+      type: object
+      description: >
+        One row for integrations that need **maladaptive catalog behavior → replacement program** pairings only.
+        Omitted for skill-acquisition-only narrative segments (no maladaptive episode).
+      required:
+        - segmentIndex
+        - maladaptiveBehavior
+        - replacementProgramName
+      properties:
+        segmentIndex:
+          type: integer
+          minimum: 0
+          description: Zero-based narrative segment index after session collapse (replacement-program slots).
+        maladaptiveBehavior:
+          type: string
+          description: Maladaptive behavior catalog label for this segment (never a replacement program name).
+        replacementProgramName:
+          type: string
+          description: Replacement program name documented for this segment in the generated note.
+
     GeneratedNote:
       type: object
       properties:
@@ -2197,6 +2218,15 @@ components:
           type: string
           nullable: true
           description: OpenAI model id used for the clinical body (set on success)
+        maladaptiveReplacementPairings:
+          type: array
+          items:
+            $ref: "#/components/schemas/MaladaptiveReplacementPairing"
+          description: >
+            Authoritative **behavior → replacement program** rows for this session (post-collapse segments).
+            **Excludes** skill-acquisition-only segments (e.g. program names containing "Echoic", or "Respond to Own Name"),
+            which are not maladaptive-behavior episodes. Downstream `replacementProgramImplementation`-style lists should
+            use this array instead of inferring a "behavior" from replacement program names for every paragraph.
       required:
         - noteId
         - content
