@@ -112,36 +112,6 @@ export function aggregateTherapistTrialSummariesForPerformanceLine(
   return { successes, trials, segmentsWithData };
 }
 
-/** Rounded percentage for prose; matches (successes / trials) * 100 with standard rounding. */
-export function discreteTrialSuccessPercent(successes: number, trials: number): number {
-  if (trials < 1) return 0;
-  return Math.round((successes / trials) * 100);
-}
-
-/**
- * Clinically neutral clause tied to the computed percentage (no subjective good/fair/majority language).
- * Wording aligns with the locked end-of-note performance template (independent responding; "across all targets" where applicable).
- */
-export function neutralDiscreteTrialPerformanceClause(percentRounded: number): string {
-  const p = Math.max(0, Math.min(100, Math.round(percentRounded)));
-  if (p <= 0) {
-    return "indicating limited independent responding during recorded trials and need for intensive systematic prompting across all targets";
-  }
-  if (p <= 30) {
-    return "indicating emerging skill acquisition and need for continued prompting across all targets";
-  }
-  if (p <= 50) {
-    return "indicating variable acquisition with ongoing need for prompt fading across all targets";
-  }
-  if (p <= 70) {
-    return "indicating developing consistency of independent responding with continued practice across all targets";
-  }
-  if (p <= 90) {
-    return "indicating strong acquisition trends during recorded trials, consistent with progression toward maintenance or next-step targets across programs";
-  }
-  return "indicating very high rates of independent responding during recorded trials across targets";
-}
-
 function buildPerformanceSentenceWithoutTrialAggregate(programSlotCount: number): string {
   const n = Math.max(1, Math.floor(programSlotCount));
   const programsWord = n === 1 ? "program" : "programs";
@@ -153,10 +123,9 @@ function buildPerformanceSentenceWithoutTrialAggregate(programSlotCount: number)
  * `programSlotCount` = number of replacement-program narrative segments for this session (aligned with
  * `replacementProgramSlotCount(sessionHours)` / collapsed narrative segments).
  *
- * When `therapistTrialSummaryForReplacementHour` contains at least one segment with `totalTrials >= 1`, the line
- * states the **rounded percentage** from pooled criterion successes over recorded discrete trials (no "X out of Y trials"
- * parenthetical), plus a fixed neutral interpretation band (no subjective majority/good/fair language). Prose uses
- * **independent responding** as the product phrase; the percent still comes from therapist-entered trial JSON.
+ * When therapist-entered discrete trials exist for at least one narrative segment, emits one fixed qualitative
+ * sentence (no session-wide percent on this line). Per-hour ABC text still carries trial percentages where required
+ * by validation. When no trial rows qualify, uses the program-count fallback (see `buildPerformanceSentenceWithoutTrialAggregate`).
  */
 export function buildPerformanceSentence(
   programSlotCount: number,
@@ -166,13 +135,9 @@ export function buildPerformanceSentence(
   if (!agg) {
     return buildPerformanceSentenceWithoutTrialAggregate(programSlotCount);
   }
-  const pct = discreteTrialSuccessPercent(agg.successes, agg.trials);
-  const interpretation = neutralDiscreteTrialPerformanceClause(pct);
-  const scopePhrase =
-    agg.segmentsWithData === 1
-      ? "based on recorded discrete trials for that replacement program"
-      : `based on recorded discrete trials pooled across ${agg.segmentsWithData} programs`;
-  return `The client demonstrated approximately ${pct}% independent responding (${scopePhrase}), ${interpretation}.`;
+  const acrossPrograms =
+    agg.segmentsWithData > 1 ? " across programs" : "";
+  return `Overall, the client demonstrated variable performance${acrossPrograms} with emerging independence and continued need for prompting.`;
 }
 
 export function buildNextSessionSentence(

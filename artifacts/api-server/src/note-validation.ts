@@ -752,7 +752,7 @@ export function countInterventionImplementationsInParagraph(
   return spans.length;
 }
 
-/** Rounded % of trials that met criterion; must match `discreteTrialSuccessPercent` in note-assembly.ts. */
+/** Rounded % of trials that met criterion (standard rounding of successes/total). */
 function therapistTrialSuccessPercentRounded(successfulTrialCount: number, totalTrials: number): number {
   const m = totalTrials;
   let n = successfulTrialCount;
