@@ -126,16 +126,22 @@ function buildPerformanceSentenceWithoutTrialAggregate(programSlotCount: number)
  * When therapist-entered discrete trials exist for at least one narrative segment, emits one fixed qualitative
  * sentence (no session-wide percent on this line). Per-hour ABC text still carries trial percentages where required
  * by validation. When no trial rows qualify, uses the program-count fallback (see `buildPerformanceSentenceWithoutTrialAggregate`).
+ *
+ * Learner reference matches the locked opening: client profile **first name** when non-empty after trim; otherwise
+ * **The client** (sentence-initial capitalization for the generic referral).
  */
 export function buildPerformanceSentence(
   programSlotCount: number,
   therapistTrialSummaryForReplacementHour?: TherapistTrialSummaryForHourEntry[] | undefined,
+  clientFirstName?: string | null,
 ): string {
   const agg = aggregateTherapistTrialSummariesForPerformanceLine(therapistTrialSummaryForReplacementHour);
   if (!agg) {
     return buildPerformanceSentenceWithoutTrialAggregate(programSlotCount);
   }
-  return "Performance remained generally consistent with previous sessions, with continued need for prompting across skill acquisition targets.";
+  const trimmed = clientFirstName?.trim() ?? "";
+  const who = trimmed.length > 0 ? trimmed : "The client";
+  return `${who} participated in session activities with inconsistent responding and required prompting across tasks.`;
 }
 
 export function buildNextSessionSentence(

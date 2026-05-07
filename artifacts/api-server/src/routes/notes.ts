@@ -153,6 +153,7 @@ function assembleSessionNote(
   const performance = buildPerformanceSentence(
     narrativeProgramSegmentCount,
     therapistTrialSummaryForReplacementHour,
+    clientFirstName,
   );
   const nextSession = buildNextSessionSentence(nextSessionDate, clientFirstName);
 
