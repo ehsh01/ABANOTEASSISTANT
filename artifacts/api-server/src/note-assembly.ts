@@ -135,9 +135,7 @@ export function buildPerformanceSentence(
   if (!agg) {
     return buildPerformanceSentenceWithoutTrialAggregate(programSlotCount);
   }
-  const acrossPrograms =
-    agg.segmentsWithData > 1 ? " across programs" : "";
-  return `Overall, the client demonstrated low to moderate independent responding${acrossPrograms} with continued need for prompting across skill acquisition targets.`;
+  return "Performance remained generally consistent with previous sessions, with continued need for prompting across skill acquisition targets.";
 }
 
 export function buildNextSessionSentence(

@@ -74,7 +74,7 @@ Every note must begin with:
 
 ## 20. Session performance language rule
 
-Must include the server-assembled performance line after the closing paragraph. When therapist-entered discrete-trial rows exist for one or more narrative segments, that line is the fixed qualitative sentence described in `.cursor/rules/aba-note-locked-prose.mdc` (with **across programs** when more than one segment contributes trial data). When no trial rows are entered, the server uses a neutral fallback that references program segment count only (see `buildPerformanceSentence` in `artifacts/api-server/src/note-assembly.ts`). Per-segment ABC text still reflects discrete-trial percentages from intake where applicable (`note-validation.ts`).
+Must include the server-assembled performance line after the closing paragraph. When therapist-entered discrete-trial rows exist for one or more narrative segments, that line is the fixed qualitative sentence described in `.cursor/rules/aba-note-locked-prose.mdc`. When no trial rows are entered, the server uses a neutral fallback that references program segment count only (see `buildPerformanceSentence` in `artifacts/api-server/src/note-assembly.ts`). Per-segment ABC text still reflects discrete-trial percentages from intake where applicable (`note-validation.ts`).
 
 **Prohibited terms (unless product policy changes):** poor, below expectations, unsuccessful, limited, inadequate, minimal engagement, regression.
 
