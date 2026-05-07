@@ -1,22 +1,39 @@
 /**
  * Replacement programs that are pure skill-acquisition targets: narratives must not
  * frame them with a maladaptive behavior catalog label (no "manifested [behavior]").
+ *
+ * Patterns are case-insensitive and tolerate the small spacing/casing variations seen
+ * in BIPs and intake (e.g. "ABLLS-R" vs "ABLLS -R", "Echoic" vs "Echoic Skills",
+ * "Respond to own name" vs "Response to her name", PECS request line variants).
  */
 
-const RESPOND_TO_OWN_NAME = /^respond\s+to\s+own\s+name$/i;
-
-/** Echoic / echoic skills / DRA-Echoic style program names (substring match, case-insensitive). */
-const ECHOIC_PROGRAM = /\bechoic/i;
+const SKILL_ACQUISITION_PATTERNS: RegExp[] = [
+  /\brespond(?:ing)?\s+to\s+(?:own|his|her|their)\s+name\b/i,
+  /\bresponse\s+to\s+(?:own|his|her|their)\s+name\b/i,
+  /\bechoic\b/i,
+  /\bmanding\b/i,
+  /\bpre-?requisite\s+skills?\b/i,
+  /\bimprove\s+eye\s+contact\b/i,
+  /\battract\s+others?\s+attention\b/i,
+  /\bimitate\s+other\s+actions?\b/i,
+  /\b(?:request|requesting)\s+access\s+to\s+item\s+activity\s+pecs?\b/i,
+  /\bpecs?\s+or\s+pointing\b/i,
+  /\btransition\s+compatible\s+with\s+ablls\s*-?\s*r\s+code\s+n\s*4\b/i,
+];
 
 /**
  * True when this segment's assigned replacement program is a skill-only target
- * (Respond to Own Name, or any program name containing "echoic").
+ * (Echoic, Manding, Pre-requisite Skills, Respond to Own Name, Improve eye contact,
+ * Attract others' attention, Imitate other actions, PECS request after one prompt,
+ * Transition Compatible with ABLLS-R Code N4, etc.). Names from intake / BIP are
+ * matched against well-known catalog wording; case-insensitive substring patterns.
  */
 export function isSkillAcquisitionOnlyReplacementProgram(programName: string): boolean {
   const t = programName.trim();
   if (!t) return false;
-  if (RESPOND_TO_OWN_NAME.test(t)) return true;
-  if (ECHOIC_PROGRAM.test(t)) return true;
+  for (const re of SKILL_ACQUISITION_PATTERNS) {
+    if (re.test(t)) return true;
+  }
   return false;
 }
 

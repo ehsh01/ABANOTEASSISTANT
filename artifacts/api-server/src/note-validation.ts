@@ -68,12 +68,32 @@ const MENTAL_STATE_PATTERNS: RegExp[] = [
   /\bthe client thought\b/i,
   /\bclient thought\b/i,
   /\bthe client believed\b/i,
-  /\bappeared (upset|angry|frustrated|sad|anxious)\b/i,
-  /\bseemed (upset|angry|frustrated|sad|anxious)\b/i,
+  /\bappeared (upset|angry|frustrated|sad|anxious|happy)\b/i,
+  /\bseemed (upset|angry|frustrated|sad|anxious|happy)\b/i,
   /\bwas upset because\b/i,
   /\binternal(ly)?\s+(upset|distressed|frustrated)\b/i,
   /\bmust have been\b/i,
   /\bprobably felt\b/i,
+];
+
+/**
+ * Subjective wording forbidden in objective ABA documentation. Catches **bare** state
+ * words (the existing MENTAL_STATE_PATTERNS only flagged compound forms such as
+ * "appeared upset" or "frustrated because"). RBTs must describe observable topography;
+ * never internal states or value judgments.
+ */
+const SUBJECTIVE_WORDING_PATTERNS: RegExp[] = [
+  /\bbecame\s+(upset|frustrated|angry|sad|anxious|happy)\b/i,
+  /\bgot\s+(upset|frustrated|angry|sad|happy)\b/i,
+  /\b(?:was|were|is|are)\s+(upset|frustrated|angry|sad|anxious|happy|stubborn|noncompliant|non-compliant)\b/i,
+  /\bbeing\s+(upset|frustrated|angry|sad|anxious|stubborn|noncompliant|non-compliant)\b/i,
+  /\bfeeling\s+(upset|frustrated|angry|sad|anxious|happy)\b/i,
+  /\bin\s+a\s+(bad|good)\s+mood\b/i,
+  /\b(bad|good)\s+day\b/i,
+  /\bfair\s+performance\b/i,
+  /\b(?:non-?compliant|stubborn|defiant|rude|lazy|moody|cooperative\s+attitude|uncooperative)\b/i,
+  /\bdid\s+(well|poorly)\b/i,
+  /\bperformed\s+(well|poorly)\b/i,
 ];
 
 /** Activities unlikely for very young clients (observable-task framing, not mental state). */
@@ -879,6 +899,20 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         `Observational-only rule: remove mental-state / interpretation phrasing (pattern "${re.source.slice(0, 48)}…") — document only observable actions and events.`,
       );
       if (++mentalHits >= 3) {
+        break;
+      }
+    }
+  }
+
+  let subjectiveHits = 0;
+  for (const re of SUBJECTIVE_WORDING_PATTERNS) {
+    const m = re.exec(clinicalBody);
+    if (m) {
+      const snippet = m[0];
+      issues.push(
+        `Subjective wording: remove "${snippet}" — ABA notes must be objective and observable. Replace with topography (e.g. "cried, dropped to the floor, kicked legs, threw materials") and measurable performance, not value words like upset/frustrated/happy/noncompliant/stubborn/bad day/fair performance/did well/did poorly.`,
+      );
+      if (++subjectiveHits >= 3) {
         break;
       }
     }

@@ -137,7 +137,7 @@ export function buildPerformanceSentence(
   }
   const acrossPrograms =
     agg.segmentsWithData > 1 ? " across programs" : "";
-  return `Overall, the client demonstrated variable performance${acrossPrograms} with emerging independence and continued need for prompting.`;
+  return `Overall, the client demonstrated low to moderate independent responding${acrossPrograms} with continued need for prompting across skill acquisition targets.`;
 }
 
 export function buildNextSessionSentence(

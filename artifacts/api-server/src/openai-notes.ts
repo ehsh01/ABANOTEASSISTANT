@@ -134,6 +134,11 @@ OBSERVATIONAL-ONLY — NO INTERPRETATION:
 - ALLOWED: observable actions only, e.g. "The client cried, dropped to the floor, and screamed." / "The client pushed the therapist's hand away."
 - Do not explain why a behavior occurred beyond observable antecedents (what was said, shown, or presented).
 
+SUBJECTIVE WORDING — FORBIDDEN (mandatory):
+- Never use these state/value words anywhere in the clinical body—for the client, the RBT, the caregiver, or the session as a whole: **upset**, **frustrated**, **happy**, **angry**, **sad**, **moody**, **stubborn**, **noncompliant**, **defiant**, **rude**, **lazy**, **fair performance**, **bad day**, **good day**, **did well**, **did poorly**, **uncooperative**, "in a good/bad mood", "became upset/frustrated/angry/sad/happy", "got upset/frustrated/angry", "was upset/frustrated/happy/stubborn/noncompliant".
+- Replace every internal-state word with **observable topography** (what the body, voice, and hands did) and **measurable** detail (trial counts, percent of trials/opportunities, prompt level, count of independent responses—never seconds/minutes for the client).
+- Examples: instead of "the client became upset" write "the client cried, dropped to the floor, kicked legs, and threw materials"; instead of "was noncompliant" write "did not initiate the response after the prompt and pushed the materials away"; instead of "did well" write a count or percent (e.g. "completed the task in 4/5 opportunities", "criterion was met on approximately 60% of trials").
+
 BEHAVIOR DESCRIPTION:
 - Describe only what the RBT could see or hear. No deductions about cause, intent, or emotional state.
 
@@ -216,6 +221,18 @@ OBJECTIVE, MEASURABLE DATA (mandatory where applicable):
 
 CAREGIVER / PRESENT PEOPLE:
 - Do NOT mention caregivers, parents, guardians, or any name from presentPeople in the clinical body. Presence is already stated in the system's fixed opening only.
+
+REINFORCERS — APPROVED LIST (mandatory):
+- Inside the clinical body (the paragraphs you write), reinforcement should reference **only** items on this approved list (or items explicitly named in JSON \`interventions\` / \`replacementProgramsInOrder\` for this client): **verbal praise**, **music**, **bubbles**, **preferred toys**, **sensory toys**, **balls**, **Disney dolls**, **outdoor play**, **water play**.
+- Do **not** invent reinforcers (e.g. **stickers**, **candy**, **screen time**, **iPad**, **food rewards**, **snacks**, **edibles**, **tickle**) unless they appear verbatim in JSON.
+- The system's fixed closing paragraph (added separately) already describes session-wide reinforcement in product-locked wording; do not duplicate or contradict it. Use this approved list only when the ABC narrative needs to reference reinforcement contingent on an in-the-moment response or replacement-program teaching step.
+
+REPLACEMENT PROGRAM — FUNCTION MATCH (guidance):
+- The server already assigns \`replacementProgramForHour[s]\` from each client's authorized replacement list and rotates by ~90-minute slots—**use that exact string verbatim**. Treat the assigned program as authoritative; do **not** override it.
+- Typical function-aligned defaults the assignment respects (so the prose you generate fits the function naturally):
+  - **Tantrum**, **Property Destruction**, **SIB**, **Physical Aggression** → Delays of Reinforcers, Accept alternatives when being redirected to more appropriate behavior.
+  - **Wandering Away**, **Climbing**, **Elopement**, **Bolting**, **Running Away** → Walk within close distance of adult (safety skills).
+- Skill-acquisition programs (**Pre-requisite Skills**, **Manding Skills**, **Echoic Skills**, **Improve eye contact**, **Attract others' attention**, **Imitate other actions**, **Response to her name** / **Respond to Own Name**, **Request access to item activity PECS or pointing after being prompted once**, **Transition Compatible with ABLLS-R Code N4**) are **never** replacements for a maladaptive behavior—those segments arrive with \`acquisitionOnlySegmentForHour[s]\` set to **true** and must follow **SKILL-ACQUISITION-ONLY SEGMENTS** (no maladaptive label, no "manifested [behavior]" framing, observable teaching only).
 
 REPLACEMENT PROGRAM PER NARRATIVE SEGMENT (mandatory — use JSON \`replacementProgramForHour\`):
 - The server assigns \`replacementProgramForHour[s]\` per **segment** \`s\` from the session’s selected programs and ~90-minute slotting; use the assigned string **verbatim**.
