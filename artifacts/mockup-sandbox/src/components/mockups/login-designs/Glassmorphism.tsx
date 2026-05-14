@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Link } from "wouter";
 import { ArrowRight, Sparkles } from "lucide-react";
 
 export function Glassmorphism() {
@@ -73,9 +72,9 @@ export function Glassmorphism() {
           <div className="space-y-2">
             <div className="flex items-center justify-between ml-1">
               <Label htmlFor="password" className="text-white/80">Password</Label>
-              <Link href="#" className="text-xs text-[#C27A8A] hover:text-white transition-colors">
+              <a href="#" className="text-xs text-[#C27A8A] hover:text-white transition-colors">
                 Forgot password?
-              </Link>
+              </a>
             </div>
             <Input 
               id="password" 
@@ -102,13 +101,13 @@ export function Glassmorphism() {
         <div className="mt-8 pt-6 border-t border-white/10 flex flex-col items-center space-y-3 text-sm">
           <p className="text-white/60">
             No account?{' '}
-            <Link href="#" className="text-white font-medium hover:text-[#C27A8A] transition-colors">
+            <a href="#" className="text-white font-medium hover:text-[#C27A8A] transition-colors">
               Register
-            </Link>
+            </a>
           </p>
-          <Link href="#" className="text-white/40 hover:text-white transition-colors">
+          <a href="#" className="text-white/40 hover:text-white transition-colors">
             See plans
-          </Link>
+          </a>
         </div>
       </div>
     </div>
