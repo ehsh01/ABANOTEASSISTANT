@@ -2,6 +2,7 @@ import { Router, type IRouter } from "express";
 import healthRouter from "./health";
 import authRouter from "./auth";
 import adminRouter from "./admin";
+import billingRouter from "./billing";
 import clientsRouter from "./clients";
 import notesRouter from "./notes";
 import assessmentExtractRouter from "./assessment-extract";
@@ -19,6 +20,9 @@ router.use(authRouter);
 // The avatar GET route uses an HMAC-signed URL token instead of a Bearer header (so an HTML <img>
 // tag can fetch it). Mount it BEFORE `requireAuth` so the JWT middleware doesn't 401 it.
 router.use(clientAvatarPublicRouter);
+// `GET /billing/plans` is intentionally public; the rest of the billing router has its own
+// `requireAuth` per route. Mount before the global `requireAuth` so unauthenticated calls work.
+router.use(billingRouter);
 router.use(requireAuth);
 // Mount at /admin only — do not use `router.use(adminRouter)` or `requireSuperAdmin`
 // runs on every authenticated route (403 for normal users on /clients, /notes, etc.).

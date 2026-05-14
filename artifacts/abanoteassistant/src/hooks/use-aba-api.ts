@@ -325,3 +325,55 @@ export function useAbcActivityAntecedents() {
     staleTime: 1000 * 60 * 10,
   });
 }
+
+// ── Billing ────────────────────────────────────────────────────────────────
+// These hooks call the new /billing/* endpoints. When the API is built without Stripe env vars,
+// `useBillingStatus` still returns success with `enforcement: "off"` so the UI can decide to hide
+// the billing panel entirely without an extra capability check.
+
+import {
+  listBillingPlans as listBillingPlansRequest,
+  getBillingStatus as getBillingStatusRequest,
+  createBillingCheckoutSession as createBillingCheckoutSessionRequest,
+  createBillingPortalSession as createBillingPortalSessionRequest,
+  type BillingPlansResponse,
+  type BillingStatusResponse,
+  type BillingCheckoutResponse,
+  type BillingCheckoutRequest,
+  type BillingPortalResponse,
+  type BillingPortalRequest,
+} from "@workspace/api-client-react";
+
+export function useBillingPlans() {
+  return useQuery({
+    queryKey: ["/api/billing/plans"],
+    queryFn: async (): Promise<BillingPlansResponse> => listBillingPlansRequest(),
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
+export function useBillingStatus() {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: ["/api/billing/status", token],
+    queryFn: async (): Promise<BillingStatusResponse> => getBillingStatusRequest(),
+    enabled: !!token,
+    staleTime: 1000 * 30,
+  });
+}
+
+export function useCreateBillingCheckout() {
+  return useMutation({
+    mutationFn: async (
+      data: BillingCheckoutRequest,
+    ): Promise<BillingCheckoutResponse> => createBillingCheckoutSessionRequest(data),
+  });
+}
+
+export function useCreateBillingPortal() {
+  return useMutation({
+    mutationFn: async (
+      data: BillingPortalRequest = {},
+    ): Promise<BillingPortalResponse> => createBillingPortalSessionRequest(data),
+  });
+}

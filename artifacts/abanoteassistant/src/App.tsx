@@ -15,6 +15,7 @@ import LoginPage from "@/pages/login";
 import RegisterPage from "@/pages/register";
 import VerifyEmailPage from "@/pages/verify-email";
 import AdminPage from "@/pages/admin";
+import BillingPage from "@/pages/billing";
 import { useAuthStore } from "@/store/auth-store";
 import { AppSidebar, SIDEBAR_WIDTH } from "@/components/app-sidebar";
 
@@ -51,6 +52,7 @@ function AuthenticatedRoutes() {
         <Switch>
           <Route path="/" component={Home} />
           <Route path="/admin" component={AdminPage} />
+          <Route path="/billing" component={BillingPage} />
           <Route path="/wizard" component={Wizard} />
           <Route path="/result" component={Result} />
           <Route path="/clients/edit/:clientId" component={EditClientPage} />

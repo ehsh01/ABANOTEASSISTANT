@@ -46,6 +46,14 @@ router.get("/users", async (_req, res) => {
   res.json(data);
 });
 
+type BillingModeLiteral = "complimentary" | "trial" | "subscription" | "suspended";
+
+function normalizeBillingMode(raw: string | null | undefined): BillingModeLiteral {
+  return raw === "complimentary" || raw === "trial" || raw === "suspended"
+    ? raw
+    : "subscription";
+}
+
 router.get("/companies", async (_req, res) => {
   const companies = await db.select().from(companiesTable);
 
@@ -65,6 +73,10 @@ router.get("/companies", async (_req, res) => {
       id: c.id,
       name: c.name,
       freeUsage: c.freeUsage,
+      billingMode: normalizeBillingMode(c.billingMode),
+      subscriptionStatus: c.subscriptionStatus ?? null,
+      stripeCustomerId: c.stripeCustomerId ?? null,
+      currentPeriodEnd: c.currentPeriodEnd?.toISOString() ?? null,
       userCount: countByCompany.get(c.id) ?? 0,
       createdAt: c.createdAt.toISOString(),
     })),
@@ -78,9 +90,24 @@ router.patch("/companies/:companyId", async (req, res) => {
   const { companyId } = PatchAdminCompanyParams.parse(req.params);
   const body = PatchAdminCompanyBody.parse(req.body);
 
+  // Patch only the explicitly-provided fields so legacy `{ freeUsage }` calls still work and we
+  // don't accidentally null out billingMode when an older client posts without it.
+  const updates: Partial<typeof companiesTable.$inferInsert> = { updatedAt: new Date() };
+  if (typeof body.freeUsage === "boolean") {
+    updates.freeUsage = body.freeUsage;
+  }
+  if (
+    body.billingMode === "complimentary" ||
+    body.billingMode === "trial" ||
+    body.billingMode === "subscription" ||
+    body.billingMode === "suspended"
+  ) {
+    updates.billingMode = body.billingMode;
+  }
+
   const [updated] = await db
     .update(companiesTable)
-    .set({ freeUsage: body.freeUsage, updatedAt: new Date() })
+    .set(updates)
     .where(eq(companiesTable.id, companyId))
     .returning();
 
@@ -102,6 +129,10 @@ router.patch("/companies/:companyId", async (req, res) => {
       id: updated.id,
       name: updated.name,
       freeUsage: updated.freeUsage,
+      billingMode: normalizeBillingMode(updated.billingMode),
+      subscriptionStatus: updated.subscriptionStatus ?? null,
+      stripeCustomerId: updated.stripeCustomerId ?? null,
+      currentPeriodEnd: updated.currentPeriodEnd?.toISOString() ?? null,
       userCount,
       createdAt: updated.createdAt.toISOString(),
     },

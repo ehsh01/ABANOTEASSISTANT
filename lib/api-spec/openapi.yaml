@@ -17,6 +17,8 @@ tags:
     description: Note generation operations
   - name: admin
     description: Super-admin (platform) operations
+  - name: billing
+    description: Stripe billing (plans, checkout, customer portal, usage, webhooks)
 paths:
   /healthz:
     get:
@@ -1065,8 +1067,180 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "402":
+          description: Payment required (subscription expired, suspended, or quota exhausted)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Note not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing/plans:
+    get:
+      operationId: listBillingPlans
+      tags: [billing]
+      summary: List available plans for the current deploy
+      description: >
+        Returns the marketing plan keys (`starter`, `growth`, `high`) the server has configured with
+        Stripe Price IDs. Price IDs themselves are not returned to the client; the server resolves
+        them when creating a Checkout Session. Safe to call without authentication.
+      responses:
+        "200":
+          description: Plans available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingPlansResponse"
+
+  /billing/status:
+    get:
+      operationId: getBillingStatus
+      tags: [billing]
+      summary: Current company's billing mode, plan, quota, and grace state
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Billing status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingStatusResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing/checkout:
+    post:
+      operationId: createBillingCheckoutSession
+      tags: [billing]
+      summary: Create a Stripe Checkout Session for a plan
+      description: >
+        Resolves the plan key to a configured Stripe Price ID, creates (or reuses) a Stripe Customer
+        for the company, then returns a Checkout Session URL. Card collection is required up front;
+        the configured trial period is applied via `subscription_data.trial_period_days` so trials
+        are Stripe-native (no app-managed trial cap). Idempotent: returning users with an active
+        subscription are sent to the Customer Portal URL instead.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BillingCheckoutRequest"
+      responses:
+        "200":
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingCheckoutResponse"
+        "400":
+          description: Unknown plan or invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Stripe not configured on this deploy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing/portal:
+    post:
+      operationId: createBillingPortalSession
+      tags: [billing]
+      summary: Create a Stripe Customer Portal session
+      description: >
+        Returns a one-time URL into Stripe's hosted Customer Portal so the user can update card,
+        cancel, change plan, and view invoices.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BillingPortalRequest"
+      responses:
+        "200":
+          description: Portal session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingPortalResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: No Stripe customer on file (user has never checked out)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Stripe not configured on this deploy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing/webhook:
+    post:
+      operationId: stripeWebhook
+      tags: [billing]
+      summary: Stripe webhook receiver (raw body)
+      description: >
+        Accepts Stripe webhook events. Signature verification is done with `STRIPE_WEBHOOK_SECRET`;
+        events are deduplicated via `processed_stripe_events`. Not part of the React/Zod codegen
+        surface — the body is the raw bytes sent by Stripe and the response is a literal `{received:true}`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Event received (idempotent)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+                required:
+                  - received
+        "400":
+          description: Invalid signature or unreadable payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Stripe webhook not configured on this deploy
           content:
             application/json:
               schema:
@@ -1185,6 +1359,10 @@ components:
         freeUsage:
           type: boolean
           description: When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server).
+        billingMode:
+          type: string
+          enum: [complimentary, trial, subscription, suspended]
+          description: Explicit billing mode (kept in sync with Stripe webhooks; complimentary overrides Stripe).
       required:
         - id
         - name
@@ -1199,6 +1377,18 @@ components:
           type: string
         freeUsage:
           type: boolean
+        billingMode:
+          type: string
+          enum: [complimentary, trial, subscription, suspended]
+        subscriptionStatus:
+          type: string
+          nullable: true
+        stripeCustomerId:
+          type: string
+          nullable: true
+        currentPeriodEnd:
+          type: string
+          nullable: true
         userCount:
           type: integer
         createdAt:
@@ -1231,8 +1421,10 @@ components:
       properties:
         freeUsage:
           type: boolean
-      required:
-        - freeUsage
+        billingMode:
+          type: string
+          enum: [complimentary, trial, subscription, suspended]
+          description: Super-admin override of billing mode. Independent from `freeUsage` for backward compatibility.
 
     AdminCompanyPatchResponse:
       type: object
@@ -2393,9 +2585,252 @@ components:
               type: integer
             status:
               type: string
+            billing:
+              $ref: "#/components/schemas/SaveNoteBillingSnapshot"
           required:
             - noteId
             - status
+        error:
+          type: string
+          nullable: true
+        warnings:
+          type: array
+          items:
+            type: string
+      required:
+        - success
+        - data
+
+    SaveNoteBillingSnapshot:
+      type: object
+      description: >
+        Best-effort snapshot of the company's billing state immediately after save. Returned only
+        when billing enforcement is on; the UI uses it to surface "X / Y notes saved" without an
+        extra round trip. When enforcement is off this is omitted entirely (backward compatible).
+      properties:
+        billingMode:
+          type: string
+          enum: [complimentary, trial, subscription, suspended]
+        savedThisPeriod:
+          type: integer
+          minimum: 0
+        savedQuota:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Plan note quota; null when complimentary / unlimited.
+        countedThisRequest:
+          type: boolean
+          description: True when this save inserted a new ledger row (i.e. first save of this note in this period).
+      required:
+        - billingMode
+        - savedThisPeriod
+        - countedThisRequest
+
+    BillingPlanKey:
+      type: string
+      enum: [starter, growth, high]
+      description: Marketing plan key. Server maps each key to a configured Stripe Price ID.
+
+    BillingPlanSummary:
+      type: object
+      properties:
+        key:
+          $ref: "#/components/schemas/BillingPlanKey"
+        label:
+          type: string
+        savedNotesQuota:
+          type: integer
+          minimum: 0
+        priceUsdMonthly:
+          type: number
+          description: Display-only USD price (charged amounts come from Stripe).
+        available:
+          type: boolean
+          description: True when the server has a Stripe Price ID configured for this plan.
+      required:
+        - key
+        - label
+        - savedNotesQuota
+        - priceUsdMonthly
+        - available
+
+    BillingPlansResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            stripeConfigured:
+              type: boolean
+            trialDays:
+              type: integer
+              minimum: 0
+            plans:
+              type: array
+              items:
+                $ref: "#/components/schemas/BillingPlanSummary"
+          required:
+            - stripeConfigured
+            - trialDays
+            - plans
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    BillingStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            companyId:
+              type: integer
+            billingMode:
+              type: string
+              enum: [complimentary, trial, subscription, suspended]
+            enforcement:
+              type: string
+              enum: [off, soft, hard]
+              description: >
+                `off` = no enforcement (legacy behavior). `soft` = warnings only, never blocks.
+                `hard` = full enforcement (block save when over quota, block generate when past grace).
+            plan:
+              $ref: "#/components/schemas/BillingPlanSummary"
+              nullable: true
+            stripeCustomerPresent:
+              type: boolean
+            subscription:
+              type: object
+              nullable: true
+              properties:
+                status:
+                  type: string
+                currentPeriodStart:
+                  type: string
+                  nullable: true
+                currentPeriodEnd:
+                  type: string
+                  nullable: true
+                cancelAt:
+                  type: string
+                  nullable: true
+              required:
+                - status
+            trialEndsAt:
+              type: string
+              nullable: true
+            paymentFailedAt:
+              type: string
+              nullable: true
+            gracePeriodUntil:
+              type: string
+              nullable: true
+            inGracePeriod:
+              type: boolean
+            generationAllowed:
+              type: boolean
+              description: True when this company is allowed to call POST /notes/generate.
+            saveAllowed:
+              type: boolean
+              description: True when this company is allowed to call POST /notes/{id}/save.
+            blockedReason:
+              type: string
+              nullable: true
+            savedThisPeriod:
+              type: integer
+              minimum: 0
+            savedQuota:
+              type: integer
+              minimum: 0
+              nullable: true
+            usagePercent:
+              type: number
+              nullable: true
+              description: 0..100 share of quota consumed (null when no quota / unlimited).
+          required:
+            - companyId
+            - billingMode
+            - enforcement
+            - stripeCustomerPresent
+            - inGracePeriod
+            - generationAllowed
+            - saveAllowed
+            - savedThisPeriod
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    BillingCheckoutRequest:
+      type: object
+      properties:
+        plan:
+          $ref: "#/components/schemas/BillingPlanKey"
+        successUrl:
+          type: string
+          description: Where Stripe should redirect after success. Server validates host against APP_ORIGIN allowlist.
+        cancelUrl:
+          type: string
+      required:
+        - plan
+        - successUrl
+        - cancelUrl
+
+    BillingCheckoutResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            url:
+              type: string
+            mode:
+              type: string
+              enum: [checkout, portal]
+              description: >
+                `checkout` is a new Stripe Checkout Session. `portal` is returned when the user
+                already has an active subscription — we send them to the Customer Portal so they
+                can change plan rather than starting a duplicate subscription.
+          required:
+            - url
+            - mode
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    BillingPortalRequest:
+      type: object
+      properties:
+        returnUrl:
+          type: string
+
+    BillingPortalResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            url:
+              type: string
+          required:
+            - url
         error:
           type: string
           nullable: true

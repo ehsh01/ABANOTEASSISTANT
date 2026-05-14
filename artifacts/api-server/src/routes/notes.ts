@@ -32,6 +32,7 @@ import {
   resolvedOpenAIModel,
   type NoteGenerationContext,
 } from "../openai-notes";
+import { evaluateBilling, recordSavedNote } from "../billing/service";
 import { maladaptiveBehaviorTargetsForNoteCatalog } from "../client-profile-maladaptive";
 import {
   approximateAgeYearsAtSession,
@@ -348,6 +349,22 @@ router.post("/notes/generate", async (req, res) => {
       });
       return;
     }
+  }
+
+  // Stripe billing gate (independent of the legacy ENFORCE_COMPLIMENTARY_ACCESS flag). When the
+  // server is configured with BILLING_ENFORCEMENT=off (default) this resolves to a permissive
+  // decision so the legacy flow is untouched. Policy:
+  //   - subscribed/trialing within grace → generation BLOCKED (user can still save in-progress)
+  //   - suspended (no sub, expired sub, manually suspended) → generation BLOCKED
+  //   - complimentary → always allowed
+  const billing = await evaluateBilling(companyId);
+  if (billing && !billing.generationAllowed) {
+    res.status(402).json({
+      success: false,
+      error: billing.blockedReason ?? "Subscription required to generate new notes.",
+      messages: [],
+    });
+    return;
   }
 
   if (!isOpenAINoteGenerationConfigured()) {
@@ -841,7 +858,8 @@ router.post("/notes/generate", async (req, res) => {
 
 router.post("/notes/:noteId/save", async (req, res) => {
   const companyId = req.companyId;
-  if (companyId === undefined) {
+  const userId = req.userId;
+  if (companyId === undefined || userId === undefined) {
     res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
     return;
   }
@@ -860,6 +878,35 @@ router.post("/notes/:noteId/save", async (req, res) => {
     return;
   }
 
+  // Stripe billing gate. When BILLING_ENFORCEMENT=off this is permissive and behaves like before.
+  // Quota check happens BEFORE the DB write so we never persist a save we won't count.
+  const billing = await evaluateBilling(companyId);
+  if (billing && !billing.saveAllowed) {
+    res.status(402).json({
+      success: false,
+      error: billing.blockedReason ?? "Plan limit reached for this period.",
+      messages: [],
+    });
+    return;
+  }
+
+  // Soft-warn just below quota when enforcement is on (any level). UI gets the message via the
+  // optional `warnings` field on SaveNoteResponse — backward compatible.
+  const warnings: string[] = [];
+  if (
+    billing &&
+    billing.enforcement !== "off" &&
+    billing.savedQuota !== null &&
+    billing.derivedMode !== "complimentary"
+  ) {
+    const remaining = billing.savedQuota - billing.savedThisPeriod;
+    if (remaining > 0 && remaining <= Math.max(1, Math.floor(billing.savedQuota * 0.15))) {
+      warnings.push(
+        `Only ${remaining} saved notes remaining in this billing period before you reach your plan limit.`,
+      );
+    }
+  }
+
   const now = new Date();
   await db
     .update(notesTable)
@@ -870,13 +917,37 @@ router.post("/notes/:noteId/save", async (req, res) => {
     })
     .where(and(eq(notesTable.id, params.noteId), eq(notesTable.companyId, companyId)));
 
+  let savedThisPeriodAfter = billing?.savedThisPeriod ?? 0;
+  let countedThisRequest = false;
+  if (billing && billing.derivedMode !== "complimentary") {
+    const ledger = await recordSavedNote({
+      decision: billing,
+      noteId: params.noteId,
+      userId,
+    });
+    savedThisPeriodAfter = ledger.savedThisPeriod;
+    countedThisRequest = ledger.countedThisRequest;
+  }
+
+  const includeBillingSnapshot = !!billing && billing.enforcement !== "off";
   const data = SaveNoteResponse.parse({
     success: true,
     data: {
       noteId: params.noteId,
       status: body.status,
+      ...(includeBillingSnapshot && billing
+        ? {
+            billing: {
+              billingMode: billing.derivedMode,
+              savedThisPeriod: savedThisPeriodAfter,
+              savedQuota: billing.savedQuota,
+              countedThisRequest,
+            },
+          }
+        : {}),
     },
     error: null,
+    ...(warnings.length > 0 ? { warnings } : {}),
   });
 
   res.json(data);

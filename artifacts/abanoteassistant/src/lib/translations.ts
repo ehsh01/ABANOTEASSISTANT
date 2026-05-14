@@ -6,6 +6,7 @@ export const translations = {
       clients: "Clients",
       notes: "Notes",
       admin: "Admin",
+      billing: "Billing",
       newNote: "New Note",
       logOut: "Log out",
       therapist: "Therapist",
@@ -232,6 +233,34 @@ export const translations = {
       removeAdmin: "Remove Admin",
       noUsers: "No users found.",
     },
+    // ── Billing ──
+    billing: {
+      title: "Billing & Usage",
+      planLabel: "Current plan",
+      noPlan: "No plan selected yet",
+      usage: "Saved notes this period",
+      unlimited: "Unlimited",
+      complimentaryNotice:
+        "Your organization has complimentary access — billing limits are waived.",
+      subscriptionStatusLabel: "Subscription status",
+      currentPeriodLabel: "Current period",
+      trialEndingLabel: "Trial ends",
+      paymentFailedNotice:
+        "Last payment failed. You can still save in-progress notes during the grace period; please update your payment method to keep generating new ones.",
+      suspendedNotice:
+        "Your subscription is inactive. Choose a plan to keep generating and saving session notes.",
+      choosePlanHeading: "Choose a plan",
+      pricePerMonth: "/mo",
+      notesPerPeriod: "{count} saved notes / month",
+      startTrial: "Start trial",
+      subscribe: "Subscribe",
+      manageBilling: "Manage billing",
+      stripeUnavailable:
+        "Stripe billing is not configured on this deploy. Contact your administrator to enable subscriptions.",
+      planUnavailable: "This plan is not configured yet",
+      backToDashboard: "Back to dashboard",
+      contactAdmin: "Contact an administrator about billing",
+    },
     // ── Login / Register ──
     auth: {
       signIn: "Sign in",
@@ -265,6 +294,7 @@ export const translations = {
       clients: "Clientes",
       notes: "Notas",
       admin: "Admin",
+      billing: "Facturación",
       newNote: "Nueva Nota",
       logOut: "Cerrar sesión",
       therapist: "Terapeuta",
@@ -492,6 +522,34 @@ export const translations = {
       makeAdmin: "Hacer Admin",
       removeAdmin: "Quitar Admin",
       noUsers: "No se encontraron usuarios.",
+    },
+    // ── Billing ──
+    billing: {
+      title: "Facturación y uso",
+      planLabel: "Plan actual",
+      noPlan: "Aún no se ha seleccionado un plan",
+      usage: "Notas guardadas este período",
+      unlimited: "Ilimitado",
+      complimentaryNotice:
+        "Tu organización tiene acceso de cortesía — no se aplican límites de facturación.",
+      subscriptionStatusLabel: "Estado de la suscripción",
+      currentPeriodLabel: "Período actual",
+      trialEndingLabel: "Fin de prueba",
+      paymentFailedNotice:
+        "El último pago falló. Aún puedes guardar las notas en curso durante el período de gracia; actualiza tu método de pago para seguir generando nuevas.",
+      suspendedNotice:
+        "Tu suscripción está inactiva. Elige un plan para seguir generando y guardando notas de sesión.",
+      choosePlanHeading: "Elige un plan",
+      pricePerMonth: "/mes",
+      notesPerPeriod: "{count} notas guardadas / mes",
+      startTrial: "Iniciar prueba",
+      subscribe: "Suscribirse",
+      manageBilling: "Administrar facturación",
+      stripeUnavailable:
+        "La facturación con Stripe no está configurada en este despliegue. Contacta a tu administrador para habilitar suscripciones.",
+      planUnavailable: "Este plan aún no está configurado",
+      backToDashboard: "Volver al panel",
+      contactAdmin: "Contactar al administrador sobre la facturación",
     },
     // ── Login / Register ──
     auth: {

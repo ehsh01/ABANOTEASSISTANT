@@ -62,6 +62,19 @@ export interface AuthUser {
   role: AuthUserRole;
 }
 
+/**
+ * Explicit billing mode (kept in sync with Stripe webhooks; complimentary overrides Stripe).
+ */
+export type AuthCompanyBillingMode =
+  (typeof AuthCompanyBillingMode)[keyof typeof AuthCompanyBillingMode];
+
+export const AuthCompanyBillingMode = {
+  complimentary: "complimentary",
+  trial: "trial",
+  subscription: "subscription",
+  suspended: "suspended",
+} as const;
+
 export interface AuthCompany {
   id: number;
   name: string;
@@ -70,12 +83,28 @@ export interface AuthCompany {
   email?: string;
   /** When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server). */
   freeUsage: boolean;
+  /** Explicit billing mode (kept in sync with Stripe webhooks; complimentary overrides Stripe). */
+  billingMode?: AuthCompanyBillingMode;
 }
+
+export type AdminCompanyBillingMode =
+  (typeof AdminCompanyBillingMode)[keyof typeof AdminCompanyBillingMode];
+
+export const AdminCompanyBillingMode = {
+  complimentary: "complimentary",
+  trial: "trial",
+  subscription: "subscription",
+  suspended: "suspended",
+} as const;
 
 export interface AdminCompany {
   id: number;
   name: string;
   freeUsage: boolean;
+  billingMode?: AdminCompanyBillingMode;
+  subscriptionStatus?: string | null;
+  stripeCustomerId?: string | null;
+  currentPeriodEnd?: string | null;
   userCount: number;
   createdAt: string;
 }
@@ -86,8 +115,23 @@ export interface AdminCompanyListResponse {
   error?: string | null;
 }
 
+/**
+ * Super-admin override of billing mode. Independent from `freeUsage` for backward compatibility.
+ */
+export type PatchAdminCompanyRequestBillingMode =
+  (typeof PatchAdminCompanyRequestBillingMode)[keyof typeof PatchAdminCompanyRequestBillingMode];
+
+export const PatchAdminCompanyRequestBillingMode = {
+  complimentary: "complimentary",
+  trial: "trial",
+  subscription: "subscription",
+  suspended: "suspended",
+} as const;
+
 export interface PatchAdminCompanyRequest {
-  freeUsage: boolean;
+  freeUsage?: boolean;
+  /** Super-admin override of billing mode. Independent from `freeUsage` for backward compatibility. */
+  billingMode?: PatchAdminCompanyRequestBillingMode;
 }
 
 export interface AdminCompanyPatchResponse {
@@ -764,18 +808,197 @@ export interface SaveNoteRequest {
   content: string;
 }
 
+export type SaveNoteBillingSnapshotBillingMode =
+  (typeof SaveNoteBillingSnapshotBillingMode)[keyof typeof SaveNoteBillingSnapshotBillingMode];
+
+export const SaveNoteBillingSnapshotBillingMode = {
+  complimentary: "complimentary",
+  trial: "trial",
+  subscription: "subscription",
+  suspended: "suspended",
+} as const;
+
+/**
+ * Best-effort snapshot of the company's billing state immediately after save. Returned only when billing enforcement is on; the UI uses it to surface "X / Y notes saved" without an extra round trip. When enforcement is off this is omitted entirely (backward compatible).
+
+ */
+export interface SaveNoteBillingSnapshot {
+  billingMode: SaveNoteBillingSnapshotBillingMode;
+  /** @minimum 0 */
+  savedThisPeriod: number;
+  /**
+   * Plan note quota; null when complimentary / unlimited.
+   * @minimum 0
+   */
+  savedQuota?: number | null;
+  /** True when this save inserted a new ledger row (i.e. first save of this note in this period). */
+  countedThisRequest: boolean;
+}
+
 export type SaveNoteResponseData = {
   noteId: number;
   status: string;
+  billing?: SaveNoteBillingSnapshot;
 };
 
 export interface SaveNoteResponse {
   success: boolean;
   data: SaveNoteResponseData;
   error?: string | null;
+  warnings?: string[];
+}
+
+/**
+ * Marketing plan key. Server maps each key to a configured Stripe Price ID.
+ */
+export type BillingPlanKey =
+  (typeof BillingPlanKey)[keyof typeof BillingPlanKey];
+
+export const BillingPlanKey = {
+  starter: "starter",
+  growth: "growth",
+  high: "high",
+} as const;
+
+export interface BillingPlanSummary {
+  key: BillingPlanKey;
+  label: string;
+  /** @minimum 0 */
+  savedNotesQuota: number;
+  /** Display-only USD price (charged amounts come from Stripe). */
+  priceUsdMonthly: number;
+  /** True when the server has a Stripe Price ID configured for this plan. */
+  available: boolean;
+}
+
+export type BillingPlansResponseData = {
+  stripeConfigured: boolean;
+  /** @minimum 0 */
+  trialDays: number;
+  plans: BillingPlanSummary[];
+};
+
+export interface BillingPlansResponse {
+  success: boolean;
+  data: BillingPlansResponseData;
+  error?: string | null;
+}
+
+export type BillingStatusResponseDataBillingMode =
+  (typeof BillingStatusResponseDataBillingMode)[keyof typeof BillingStatusResponseDataBillingMode];
+
+export const BillingStatusResponseDataBillingMode = {
+  complimentary: "complimentary",
+  trial: "trial",
+  subscription: "subscription",
+  suspended: "suspended",
+} as const;
+
+/**
+ * `off` = no enforcement (legacy behavior). `soft` = warnings only, never blocks. `hard` = full enforcement (block save when over quota, block generate when past grace).
+
+ */
+export type BillingStatusResponseDataEnforcement =
+  (typeof BillingStatusResponseDataEnforcement)[keyof typeof BillingStatusResponseDataEnforcement];
+
+export const BillingStatusResponseDataEnforcement = {
+  off: "off",
+  soft: "soft",
+  hard: "hard",
+} as const;
+
+export type BillingStatusResponseDataSubscription = {
+  status: string;
+  currentPeriodStart?: string | null;
+  currentPeriodEnd?: string | null;
+  cancelAt?: string | null;
+} | null;
+
+export type BillingStatusResponseData = {
+  companyId: number;
+  billingMode: BillingStatusResponseDataBillingMode;
+  /** `off` = no enforcement (legacy behavior). `soft` = warnings only, never blocks. `hard` = full enforcement (block save when over quota, block generate when past grace).
+   */
+  enforcement: BillingStatusResponseDataEnforcement;
+  plan?: BillingPlanSummary | null;
+  stripeCustomerPresent: boolean;
+  subscription?: BillingStatusResponseDataSubscription;
+  trialEndsAt?: string | null;
+  paymentFailedAt?: string | null;
+  gracePeriodUntil?: string | null;
+  inGracePeriod: boolean;
+  /** True when this company is allowed to call POST /notes/generate. */
+  generationAllowed: boolean;
+  /** True when this company is allowed to call POST /notes/{id}/save. */
+  saveAllowed: boolean;
+  blockedReason?: string | null;
+  /** @minimum 0 */
+  savedThisPeriod: number;
+  /** @minimum 0 */
+  savedQuota?: number | null;
+  /** 0..100 share of quota consumed (null when no quota / unlimited). */
+  usagePercent?: number | null;
+};
+
+export interface BillingStatusResponse {
+  success: boolean;
+  data: BillingStatusResponseData;
+  error?: string | null;
+}
+
+export interface BillingCheckoutRequest {
+  plan: BillingPlanKey;
+  /** Where Stripe should redirect after success. Server validates host against APP_ORIGIN allowlist. */
+  successUrl: string;
+  cancelUrl: string;
+}
+
+/**
+ * `checkout` is a new Stripe Checkout Session. `portal` is returned when the user already has an active subscription — we send them to the Customer Portal so they can change plan rather than starting a duplicate subscription.
+
+ */
+export type BillingCheckoutResponseDataMode =
+  (typeof BillingCheckoutResponseDataMode)[keyof typeof BillingCheckoutResponseDataMode];
+
+export const BillingCheckoutResponseDataMode = {
+  checkout: "checkout",
+  portal: "portal",
+} as const;
+
+export type BillingCheckoutResponseData = {
+  url: string;
+  /** `checkout` is a new Stripe Checkout Session. `portal` is returned when the user already has an active subscription — we send them to the Customer Portal so they can change plan rather than starting a duplicate subscription.
+   */
+  mode: BillingCheckoutResponseDataMode;
+};
+
+export interface BillingCheckoutResponse {
+  success: boolean;
+  data: BillingCheckoutResponseData;
+  error?: string | null;
+}
+
+export interface BillingPortalRequest {
+  returnUrl?: string;
+}
+
+export type BillingPortalResponseData = {
+  url: string;
+};
+
+export interface BillingPortalResponse {
+  success: boolean;
+  data: BillingPortalResponseData;
+  error?: string | null;
 }
 
 export type UploadClientAssessmentDocumentBody = {
   /** Assessment PDF (field name must be `file`) */
   file: Blob;
+};
+
+export type StripeWebhookBody = { [key: string]: unknown };
+
+export type StripeWebhook200 = {
+  received: boolean;
 };

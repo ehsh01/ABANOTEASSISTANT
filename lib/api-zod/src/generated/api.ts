@@ -72,6 +72,12 @@ export const RegisterResponse = zod.object({
             .describe(
               "When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server).",
             ),
+          billingMode: zod
+            .enum(["complimentary", "trial", "subscription", "suspended"])
+            .optional()
+            .describe(
+              "Explicit billing mode (kept in sync with Stripe webhooks; complimentary overrides Stripe).",
+            ),
         })
         .nullish(),
     })
@@ -139,6 +145,12 @@ export const LoginResponse = zod.object({
         .describe(
           "When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server).",
         ),
+      billingMode: zod
+        .enum(["complimentary", "trial", "subscription", "suspended"])
+        .optional()
+        .describe(
+          "Explicit billing mode (kept in sync with Stripe webhooks; complimentary overrides Stripe).",
+        ),
     }),
   }),
   error: zod.string().nullish(),
@@ -154,6 +166,12 @@ export const ListAdminCompaniesResponse = zod.object({
       id: zod.number(),
       name: zod.string(),
       freeUsage: zod.boolean(),
+      billingMode: zod
+        .enum(["complimentary", "trial", "subscription", "suspended"])
+        .optional(),
+      subscriptionStatus: zod.string().nullish(),
+      stripeCustomerId: zod.string().nullish(),
+      currentPeriodEnd: zod.string().nullish(),
       userCount: zod.number(),
       createdAt: zod.string(),
     }),
@@ -169,7 +187,13 @@ export const PatchAdminCompanyParams = zod.object({
 });
 
 export const PatchAdminCompanyBody = zod.object({
-  freeUsage: zod.boolean(),
+  freeUsage: zod.boolean().optional(),
+  billingMode: zod
+    .enum(["complimentary", "trial", "subscription", "suspended"])
+    .optional()
+    .describe(
+      "Super-admin override of billing mode. Independent from `freeUsage` for backward compatibility.",
+    ),
 });
 
 export const PatchAdminCompanyResponse = zod.object({
@@ -178,6 +202,12 @@ export const PatchAdminCompanyResponse = zod.object({
     id: zod.number(),
     name: zod.string(),
     freeUsage: zod.boolean(),
+    billingMode: zod
+      .enum(["complimentary", "trial", "subscription", "suspended"])
+      .optional(),
+    subscriptionStatus: zod.string().nullish(),
+    stripeCustomerId: zod.string().nullish(),
+    currentPeriodEnd: zod.string().nullish(),
     userCount: zod.number(),
     createdAt: zod.string(),
   }),
@@ -1592,11 +1622,231 @@ export const SaveNoteBody = zod.object({
   content: zod.string(),
 });
 
+export const saveNoteResponseDataBillingSavedThisPeriodMin = 0;
+
+export const saveNoteResponseDataBillingSavedQuotaMin = 0;
+
 export const SaveNoteResponse = zod.object({
   success: zod.boolean(),
   data: zod.object({
     noteId: zod.number(),
     status: zod.string(),
+    billing: zod
+      .object({
+        billingMode: zod.enum([
+          "complimentary",
+          "trial",
+          "subscription",
+          "suspended",
+        ]),
+        savedThisPeriod: zod
+          .number()
+          .min(saveNoteResponseDataBillingSavedThisPeriodMin),
+        savedQuota: zod
+          .number()
+          .min(saveNoteResponseDataBillingSavedQuotaMin)
+          .nullish()
+          .describe("Plan note quota; null when complimentary \/ unlimited."),
+        countedThisRequest: zod
+          .boolean()
+          .describe(
+            "True when this save inserted a new ledger row (i.e. first save of this note in this period).",
+          ),
+      })
+      .optional()
+      .describe(
+        'Best-effort snapshot of the company\'s billing state immediately after save. Returned only when billing enforcement is on; the UI uses it to surface \"X \/ Y notes saved\" without an extra round trip. When enforcement is off this is omitted entirely (backward compatible).\n',
+      ),
   }),
   error: zod.string().nullish(),
+  warnings: zod.array(zod.string()).optional(),
+});
+
+/**
+ * Returns the marketing plan keys (`starter`, `growth`, `high`) the server has configured with Stripe Price IDs. Price IDs themselves are not returned to the client; the server resolves them when creating a Checkout Session. Safe to call without authentication.
+
+ * @summary List available plans for the current deploy
+ */
+export const listBillingPlansResponseDataTrialDaysMin = 0;
+
+export const listBillingPlansResponseDataPlansItemSavedNotesQuotaMin = 0;
+
+export const ListBillingPlansResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    stripeConfigured: zod.boolean(),
+    trialDays: zod.number().min(listBillingPlansResponseDataTrialDaysMin),
+    plans: zod.array(
+      zod.object({
+        key: zod
+          .enum(["starter", "growth", "high"])
+          .describe(
+            "Marketing plan key. Server maps each key to a configured Stripe Price ID.",
+          ),
+        label: zod.string(),
+        savedNotesQuota: zod
+          .number()
+          .min(listBillingPlansResponseDataPlansItemSavedNotesQuotaMin),
+        priceUsdMonthly: zod
+          .number()
+          .describe(
+            "Display-only USD price (charged amounts come from Stripe).",
+          ),
+        available: zod
+          .boolean()
+          .describe(
+            "True when the server has a Stripe Price ID configured for this plan.",
+          ),
+      }),
+    ),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * @summary Current company's billing mode, plan, quota, and grace state
+ */
+export const getBillingStatusResponseDataPlanSavedNotesQuotaMin = 0;
+
+export const getBillingStatusResponseDataSavedThisPeriodMin = 0;
+
+export const getBillingStatusResponseDataSavedQuotaMin = 0;
+
+export const GetBillingStatusResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    companyId: zod.number(),
+    billingMode: zod.enum([
+      "complimentary",
+      "trial",
+      "subscription",
+      "suspended",
+    ]),
+    enforcement: zod
+      .enum(["off", "soft", "hard"])
+      .describe(
+        "`off` = no enforcement (legacy behavior). `soft` = warnings only, never blocks. `hard` = full enforcement (block save when over quota, block generate when past grace).\n",
+      ),
+    plan: zod
+      .object({
+        key: zod
+          .enum(["starter", "growth", "high"])
+          .describe(
+            "Marketing plan key. Server maps each key to a configured Stripe Price ID.",
+          ),
+        label: zod.string(),
+        savedNotesQuota: zod
+          .number()
+          .min(getBillingStatusResponseDataPlanSavedNotesQuotaMin),
+        priceUsdMonthly: zod
+          .number()
+          .describe(
+            "Display-only USD price (charged amounts come from Stripe).",
+          ),
+        available: zod
+          .boolean()
+          .describe(
+            "True when the server has a Stripe Price ID configured for this plan.",
+          ),
+      })
+      .nullish(),
+    stripeCustomerPresent: zod.boolean(),
+    subscription: zod
+      .object({
+        status: zod.string(),
+        currentPeriodStart: zod.string().nullish(),
+        currentPeriodEnd: zod.string().nullish(),
+        cancelAt: zod.string().nullish(),
+      })
+      .nullish(),
+    trialEndsAt: zod.string().nullish(),
+    paymentFailedAt: zod.string().nullish(),
+    gracePeriodUntil: zod.string().nullish(),
+    inGracePeriod: zod.boolean(),
+    generationAllowed: zod
+      .boolean()
+      .describe(
+        "True when this company is allowed to call POST \/notes\/generate.",
+      ),
+    saveAllowed: zod
+      .boolean()
+      .describe(
+        "True when this company is allowed to call POST \/notes\/{id}\/save.",
+      ),
+    blockedReason: zod.string().nullish(),
+    savedThisPeriod: zod
+      .number()
+      .min(getBillingStatusResponseDataSavedThisPeriodMin),
+    savedQuota: zod
+      .number()
+      .min(getBillingStatusResponseDataSavedQuotaMin)
+      .nullish(),
+    usagePercent: zod
+      .number()
+      .nullish()
+      .describe(
+        "0..100 share of quota consumed (null when no quota \/ unlimited).",
+      ),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Resolves the plan key to a configured Stripe Price ID, creates (or reuses) a Stripe Customer for the company, then returns a Checkout Session URL. Card collection is required up front; the configured trial period is applied via `subscription_data.trial_period_days` so trials are Stripe-native (no app-managed trial cap). Idempotent: returning users with an active subscription are sent to the Customer Portal URL instead.
+
+ * @summary Create a Stripe Checkout Session for a plan
+ */
+export const CreateBillingCheckoutSessionBody = zod.object({
+  plan: zod
+    .enum(["starter", "growth", "high"])
+    .describe(
+      "Marketing plan key. Server maps each key to a configured Stripe Price ID.",
+    ),
+  successUrl: zod
+    .string()
+    .describe(
+      "Where Stripe should redirect after success. Server validates host against APP_ORIGIN allowlist.",
+    ),
+  cancelUrl: zod.string(),
+});
+
+export const CreateBillingCheckoutSessionResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    url: zod.string(),
+    mode: zod
+      .enum(["checkout", "portal"])
+      .describe(
+        "`checkout` is a new Stripe Checkout Session. `portal` is returned when the user already has an active subscription — we send them to the Customer Portal so they can change plan rather than starting a duplicate subscription.\n",
+      ),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Returns a one-time URL into Stripe's hosted Customer Portal so the user can update card, cancel, change plan, and view invoices.
+
+ * @summary Create a Stripe Customer Portal session
+ */
+export const CreateBillingPortalSessionBody = zod.object({
+  returnUrl: zod.string().optional(),
+});
+
+export const CreateBillingPortalSessionResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    url: zod.string(),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Accepts Stripe webhook events. Signature verification is done with `STRIPE_WEBHOOK_SECRET`; events are deduplicated via `processed_stripe_events`. Not part of the React/Zod codegen surface — the body is the raw bytes sent by Stripe and the response is a literal `{received:true}`.
+
+ * @summary Stripe webhook receiver (raw body)
+ */
+export const StripeWebhookBody = zod.record(zod.string(), zod.unknown());
+
+export const StripeWebhookResponse = zod.object({
+  received: zod.boolean(),
 });

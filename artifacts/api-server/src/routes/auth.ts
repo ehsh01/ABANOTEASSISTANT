@@ -34,6 +34,14 @@ function dbRoleToTokenRole(role: string | null | undefined): UserRole {
   return role === "super_admin" ? "super_admin" : "user";
 }
 
+type BillingModeLiteral = "complimentary" | "trial" | "subscription" | "suspended";
+
+function normalizeBillingMode(raw: string | null | undefined): BillingModeLiteral {
+  return raw === "complimentary" || raw === "trial" || raw === "suspended"
+    ? raw
+    : "subscription";
+}
+
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
 
 const router: IRouter = Router();
@@ -164,6 +172,7 @@ router.post("/auth/register", async (req, res) => {
           phone: result.company.phone ?? undefined,
           email: result.company.email ?? undefined,
           freeUsage: result.company.freeUsage,
+          billingMode: normalizeBillingMode(result.company.billingMode),
         },
       },
       error: null,
@@ -368,6 +377,7 @@ router.post("/auth/login", async (req, res) => {
           phone: company.phone ?? undefined,
           email: company.email ?? undefined,
           freeUsage: company.freeUsage,
+          billingMode: normalizeBillingMode(company.billingMode),
         },
       },
       error: null,
