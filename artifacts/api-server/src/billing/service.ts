@@ -15,6 +15,7 @@ import {
   getEnforcementMode,
   getGracePeriodDays,
   getPlanConfig,
+  getTrialNoteCap,
   isStripeConfigured,
 } from "./config";
 
@@ -101,6 +102,21 @@ async function countSavedThisPeriod(
 }
 
 /**
+ * Count every saved-note ledger row this company has ever had. Used by the app-managed trial
+ * cap: while the company is in trial mode, the cap applies to the *total* saved notes during
+ * the trial, not a calendar-month slice. Once the company subscribes, the ledger keeps growing
+ * but the regular per-period quota (countSavedThisPeriod) takes over, so this all-time count is
+ * only read inside the trial branch.
+ */
+async function countSavedAllTime(companyId: number): Promise<number> {
+  const [row] = await db
+    .select({ n: count(noteUsageLedgerTable.id) })
+    .from(noteUsageLedgerTable)
+    .where(eq(noteUsageLedgerTable.companyId, companyId));
+  return Number(row?.n ?? 0);
+}
+
+/**
  * Read the billing state for a company and return a fully-resolved decision. The route handlers
  * use this to gate generation and save, and `/billing/status` returns it directly.
  *
@@ -120,11 +136,25 @@ export async function evaluateBilling(companyId: number): Promise<BillingDecisio
   const { start: periodStart, end: periodEnd } = resolveBillingPeriod(company);
   const inGracePeriod = isInGracePeriod(company);
 
+  // App-managed trial (no Stripe plan yet) uses an all-time-during-trial count vs. STRIPE_TRIAL_NOTE_CAP.
+  // Stripe trial / active subscription uses the regular per-period count vs. plan quota.
+  const isAppManagedTrial = derivedMode === "trial" && !plan;
+  const trialCap = isAppManagedTrial ? getTrialNoteCap() : 0;
+
   let savedThisPeriod = 0;
   if (derivedMode !== "complimentary") {
-    savedThisPeriod = await countSavedThisPeriod(company.id, periodStart, periodEnd);
+    savedThisPeriod = isAppManagedTrial
+      ? await countSavedAllTime(company.id)
+      : await countSavedThisPeriod(company.id, periodStart, periodEnd);
   }
-  const savedQuota = derivedMode === "complimentary" ? null : (plan?.savedNotesQuota ?? null);
+  const savedQuota =
+    derivedMode === "complimentary"
+      ? null
+      : isAppManagedTrial
+        ? trialCap > 0
+          ? trialCap
+          : null
+        : (plan?.savedNotesQuota ?? null);
 
   let generationAllowed = true;
   let saveAllowed = true;
@@ -157,7 +187,9 @@ export async function evaluateBilling(companyId: number): Promise<BillingDecisio
           saveAllowed = false;
           blockedReason =
             blockedReason ??
-            `You've reached your plan limit of ${savedQuota} saved notes this period. Upgrade your plan to save more.`;
+            (isAppManagedTrial
+              ? `You've reached the ${savedQuota}-note limit for the free trial. Choose a plan to keep saving notes.`
+              : `You've reached your plan limit of ${savedQuota} saved notes this period. Upgrade your plan to save more.`);
         }
       }
     }

@@ -901,8 +901,11 @@ router.post("/notes/:noteId/save", async (req, res) => {
   ) {
     const remaining = billing.savedQuota - billing.savedThisPeriod;
     if (remaining > 0 && remaining <= Math.max(1, Math.floor(billing.savedQuota * 0.15))) {
+      const isAppManagedTrial = billing.derivedMode === "trial" && !billing.plan;
       warnings.push(
-        `Only ${remaining} saved notes remaining in this billing period before you reach your plan limit.`,
+        isAppManagedTrial
+          ? `Only ${remaining} saved notes remaining in your free trial. Subscribe to keep going without interruption.`
+          : `Only ${remaining} saved notes remaining in this billing period before you reach your plan limit.`,
       );
     }
   }

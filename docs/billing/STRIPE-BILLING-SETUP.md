@@ -52,7 +52,8 @@ STRIPE_WEBHOOK_SECRET=whsec_...
 STRIPE_PRICE_STARTER=price_...
 STRIPE_PRICE_GROWTH=price_...
 STRIPE_PRICE_HIGH=price_...
-STRIPE_TRIAL_DAYS=7
+STRIPE_TRIAL_DAYS=14
+STRIPE_TRIAL_NOTE_CAP=15
 BILLING_GRACE_PERIOD_DAYS=7
 BILLING_ENFORCEMENT=off
 APP_ORIGIN=https://abanoteassistant.com,https://staging.abanoteassistant.com
@@ -113,6 +114,12 @@ loses access from running it). No data backfill needed.
   new company gets `trial_ends_at = now() + N days` and `billing_mode = 'trial'`. They can use
   the app freely until that date. After expiry they fall to `suspended` and must subscribe.
   Existing companies are untouched (already complimentary per the grandfather migration).
+- **Trial note cap** — when `STRIPE_TRIAL_NOTE_CAP > 0`, trial accounts are also bounded by total
+  saved notes during the trial. Trial ends on whichever comes first: `STRIPE_TRIAL_DAYS` of
+  calendar time OR `STRIPE_TRIAL_NOTE_CAP` notes saved. Enforced only under
+  `BILLING_ENFORCEMENT=hard`; otherwise the cap is informational (visible in `/billing/status`
+  as `savedQuota / savedThisPeriod` for UI to render a progress bar). Saves are counted via the
+  ledger so multi-device race conditions cannot exceed the cap.
 - **Stripe Checkout from trial** — the Checkout endpoint computes `trial_period_days` as the
   *remaining* days of the app-managed trial. A user 3 days into a 7-day trial who subscribes
   gets `trial_period_days = 4` in Stripe, so the total trial across both worlds matches

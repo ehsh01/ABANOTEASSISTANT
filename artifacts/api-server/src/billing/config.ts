@@ -62,6 +62,22 @@ export function getTrialDays(): number {
   return Math.floor(n);
 }
 
+/**
+ * Maximum number of notes a trial company may save during their app-managed trial. Trial ends
+ * whichever comes first: `STRIPE_TRIAL_DAYS` of calendar time OR this many saved notes.
+ *
+ * Default `0` = no cap (trial limited only by `STRIPE_TRIAL_DAYS`). When the trial cap is hit
+ * during `BILLING_ENFORCEMENT=hard`, the save endpoint returns 402 and the user must subscribe
+ * to keep going (same gate the regular plan quota uses).
+ */
+export function getTrialNoteCap(): number {
+  const raw = envTrim("STRIPE_TRIAL_NOTE_CAP");
+  if (!raw) return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return 0;
+  return Math.floor(n);
+}
+
 /** Days a company stays usable after a failed invoice before save itself is blocked. Default: 7. */
 export function getGracePeriodDays(): number {
   const raw = envTrim("BILLING_GRACE_PERIOD_DAYS");
