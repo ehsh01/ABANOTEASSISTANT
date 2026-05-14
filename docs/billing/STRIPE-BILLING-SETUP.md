@@ -71,35 +71,61 @@ Notes:
 
 ## 3. Database migration
 
-The new columns on `abanote.companies` and the two new tables (`note_usage_ledger`,
-`processed_stripe_events`) are managed by Drizzle. On the droplet:
+Two SQL scripts ship with the billing rollout. **Apply them in this order**, with `psql` against
+the production DB (drizzle-kit push has been observed to mis-resolve the schema source and
+propose dropping the whole `abanote` schema; the SQL files below are the canonical, safe path):
 
 ```
-cd /var/www/abanoteassistant
+# 1. Additive schema (10 nullable columns on companies, 2 new tables, 2 unique indices)
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f lib/db/migrations/2026-05-14-billing.sql
+
+# 2. Grandfather every pre-billing company as complimentary (idempotent)
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f lib/db/migrations/2026-05-14-billing-grandfather-existing.sql
+```
+
+The grandfather script flips `free_usage = TRUE` and `billing_mode = 'complimentary'` on every
+company that exists at rollout time (defined as: no Stripe state and no `trial_ends_at`). Those
+accounts are permanently exempted from quota checks. The script is safe to re-run — new trial
+signups and paying customers are filtered out by its WHERE clause.
+
+Then rebuild + reload:
+
+```
+cd /var/www/ABANOTEASSISTANT
 git pull
-pnpm install --frozen-lockfile
-pnpm --filter @workspace/db run push        # applies schema additions
+pnpm install
 pnpm --filter @workspace/api-server run build
 pm2 reload abanoteassistant-api
-pm2 reload abanoteassistant-api-staging     # if separate process
+pm2 reload abanoteassistant-api-staging
 ```
 
-The schema push is additive only — existing rows keep working. No data backfill needed.
+The schema additions are additive only; the grandfather script only widens access (no row ever
+loses access from running it). No data backfill needed.
 
 ---
 
 ## 4. Behaviour summary
 
 - **Complimentary access** (`companies.free_usage = true` OR `billing_mode = 'complimentary'`) —
-  unlimited generation and save, no Stripe interaction.
-- **Subscribed (Stripe `active`/`trialing`)** — generation allowed up to plan quota for save.
+  unlimited generation and save, no Stripe interaction. All pre-billing companies are in this
+  bucket (see §3, grandfather script).
+- **App-managed trial (new registrations, no card)** — when `STRIPE_TRIAL_DAYS > 0`, every brand
+  new company gets `trial_ends_at = now() + N days` and `billing_mode = 'trial'`. They can use
+  the app freely until that date. After expiry they fall to `suspended` and must subscribe.
+  Existing companies are untouched (already complimentary per the grandfather migration).
+- **Stripe Checkout from trial** — the Checkout endpoint computes `trial_period_days` as the
+  *remaining* days of the app-managed trial. A user 3 days into a 7-day trial who subscribes
+  gets `trial_period_days = 4` in Stripe, so the total trial across both worlds matches
+  `STRIPE_TRIAL_DAYS`. No double-trial.
+- **Subscribed (Stripe `active`/`trialing`)** — generation allowed; save allowed up to plan quota.
   - Each saved note (first save only) inserts a row into `note_usage_ledger`; the unique index on
     `note_id` makes simultaneous saves race-safe.
   - At 85% of quota the save endpoint returns a `warnings: […]` string for soft-warning UI.
   - At 100% with `BILLING_ENFORCEMENT=hard`, save returns 402.
 - **Past-due in grace period** (within `grace_period_until` after `payment_failed_at`) —
   **saves still allowed; new note generation BLOCKED with 402**. Policy: protect in-progress work.
-- **Past grace, suspended, or no subscription** — both generation and save return 402.
+- **Past grace, suspended, expired trial without subscription** — both generation and save return
+  402. UI should route the user to `/billing`.
 - All webhook events are deduped via `processed_stripe_events` (Stripe retries are idempotent).
 - `/billing/checkout` automatically routes existing active subscribers to the Customer Portal
   rather than starting a duplicate subscription.

@@ -190,7 +190,23 @@ router.post("/billing/checkout", requireAuth, async (req, res) => {
       .where(eq(companiesTable.id, company.id));
   }
 
-  const trialDays = getTrialDays();
+  // Trial policy: the app already gave this company an app-managed trial at registration time
+  // (see resolveTrialForNewCompany in routes/auth.ts). The Stripe Checkout trial should be the
+  // *remaining* portion of that window, not a fresh STRIPE_TRIAL_DAYS — otherwise users get two
+  // back-to-back trials. We round up so a few-hours-remaining trial still grants 1 free day.
+  //
+  // Stripe requires trial_period_days >= 1 (it rejects 0 and negatives), so anything below 1
+  // means "no trial — charge at first invoice". We also fall back to STRIPE_TRIAL_DAYS when the
+  // company has no trial_ends_at on file (legacy rows; pre-grandfather edge case).
+  const MS_PER_DAY_CHECKOUT = 24 * 60 * 60 * 1000;
+  const nowMs = Date.now();
+  let stripeTrialDays = 0;
+  if (company.trialEndsAt) {
+    const remainingMs = company.trialEndsAt.getTime() - nowMs;
+    if (remainingMs > 0) stripeTrialDays = Math.ceil(remainingMs / MS_PER_DAY_CHECKOUT);
+  } else {
+    stripeTrialDays = getTrialDays();
+  }
   const checkout = await stripe.checkout.sessions.create({
     customer: customerId,
     mode: "subscription",
@@ -199,7 +215,7 @@ router.post("/billing/checkout", requireAuth, async (req, res) => {
     cancel_url: body.cancelUrl,
     line_items: [{ price: plan.stripePriceId, quantity: 1 }],
     subscription_data: {
-      ...(trialDays > 0 ? { trial_period_days: trialDays } : {}),
+      ...(stripeTrialDays >= 1 ? { trial_period_days: stripeTrialDays } : {}),
       metadata: {
         companyId: String(company.id),
         planKey: plan.key,

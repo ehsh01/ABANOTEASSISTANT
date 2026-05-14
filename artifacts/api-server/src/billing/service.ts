@@ -68,6 +68,13 @@ function deriveMode(company: Company): DerivedBillingMode {
   const status = company.subscriptionStatus ?? "";
   if (status === "trialing") return "trial";
   if (status === "active" || status === "past_due") return "subscription";
+  // App-managed trial: registration set `trial_ends_at` but the user has not yet entered Stripe
+  // Checkout, so `subscription_status` is still null. While the trial window is open, treat the
+  // account as `trial` (allowed); once the window closes without a subscription, fall through to
+  // the suspended branch below so generation/save get blocked until they subscribe.
+  if (!status && company.trialEndsAt && company.trialEndsAt.getTime() > Date.now()) {
+    return "trial";
+  }
   if (status === "" || status === "canceled" || status === "unpaid" || status === "incomplete_expired") {
     return "suspended";
   }
