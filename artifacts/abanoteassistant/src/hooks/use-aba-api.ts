@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type {
   ClientListResponse,
   ClientDetailResponse,
@@ -12,6 +17,7 @@ import type {
   SaveNoteRequest,
   SaveNoteResponse,
   DeleteNoteResponse,
+  DeleteClientResponse,
   DeleteClientProgramResponse,
   UpdateClientProgramBody,
   UpdateClientProgramResponse,
@@ -31,12 +37,16 @@ import {
   generateNote,
   saveNote,
   deleteNote as deleteNoteRequest,
+  deleteClient as deleteClientRequest,
   updateClientProgram,
   deleteClientProgram,
   extractAssessmentFromPdf,
   listAbcBuilderActivityAntecedents,
+  generateClientAvatar as generateClientAvatarRequest,
+  deleteClientAvatar as deleteClientAvatarRequest,
   type AssessmentExtractSuccessResponse,
 } from "@workspace/api-client-react";
+import type { GenerateClientAvatarResponse } from "@workspace/api-client-react";
 import { useAuthStore } from "@/store/auth-store";
 
 export function useClients() {
@@ -73,6 +83,7 @@ export function useClientBehaviorProgramApprovals(clientId: number | undefined) 
     enabled: !!token && clientId !== undefined && clientId !== null,
     queryFn: async (): Promise<ListBehaviorProgramApprovalsResponse> =>
       listClientBehaviorProgramApprovals(clientId!),
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -104,9 +115,26 @@ export function usePutClientBehaviorApprovedPrograms() {
       const fresh = res.data.items;
 
       queryClient.setQueriesData(
-        { queryKey: ["/api/clients", vars.clientId, "behavior-program-approvals"] },
+        {
+          predicate: (q) => {
+            const k = q.queryKey;
+            return (
+              Array.isArray(k) &&
+              k[0] === "/api/clients" &&
+              k[1] === vars.clientId &&
+              k[2] === "behavior-program-approvals"
+            );
+          },
+        },
         (old: ListBehaviorProgramApprovalsResponse | undefined) => {
-          if (!old?.data?.items) {
+          if (old == null) {
+            return {
+              success: true,
+              data: { items: [...fresh] },
+              error: null,
+            };
+          }
+          if (!Array.isArray(old.data?.items)) {
             return old;
           }
           const cl = canonical.toLowerCase();
@@ -184,6 +212,19 @@ export function useDeleteSessionNote() {
   });
 }
 
+export function useDeleteClient() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (clientId: number): Promise<DeleteClientResponse> =>
+      deleteClientRequest(clientId),
+    onSuccess: (_res, clientId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.removeQueries({ queryKey: ["/api/clients", clientId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
+    },
+  });
+}
+
 export function useUpdateClientProgram() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -234,6 +275,46 @@ export function useExtractAssessmentFromPdf() {
   });
 }
 
+/**
+ * Generate (or regenerate) the AI cartoon avatar for a client. The backend stores the bytes and returns
+ * a fresh signed `avatarUrl` plus the updated `Client` row, which we splat into the React Query caches
+ * so consumers (clients list, detail, wizard) see the new image without refetching.
+ */
+export function useGenerateClientAvatar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (clientId: number): Promise<GenerateClientAvatarResponse> =>
+      generateClientAvatarRequest(clientId),
+    onSuccess: (res, clientId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/clients", clientId] });
+      // Best-effort: update the detail-cache eagerly so the avatar swaps in immediately even before
+      // the network refetch lands. Falls through silently if the cache isn't populated yet.
+      const updatedClient = res?.data?.client;
+      if (updatedClient) {
+        queryClient.setQueriesData<{ success: boolean; data: typeof updatedClient }>(
+          { queryKey: ["/api/clients", clientId] },
+          (prev) => (prev ? { ...prev, data: updatedClient } : prev),
+        );
+      }
+    },
+  });
+}
+
+/**
+ * Clear the stored AI avatar for a client. The client falls back to initials in the UI.
+ */
+export function useDeleteClientAvatar() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (clientId: number) => deleteClientAvatarRequest(clientId),
+    onSuccess: (_res, clientId) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/clients", clientId] });
+    },
+  });
+}
+
 export function useAbcActivityAntecedents() {
   const token = useAuthStore((s) => s.token);
   return useQuery({
@@ -242,5 +323,57 @@ export function useAbcActivityAntecedents() {
       listAbcBuilderActivityAntecedents(),
     enabled: !!token,
     staleTime: 1000 * 60 * 10,
+  });
+}
+
+// ── Billing ────────────────────────────────────────────────────────────────
+// These hooks call the new /billing/* endpoints. When the API is built without Stripe env vars,
+// `useBillingStatus` still returns success with `enforcement: "off"` so the UI can decide to hide
+// the billing panel entirely without an extra capability check.
+
+import {
+  listBillingPlans as listBillingPlansRequest,
+  getBillingStatus as getBillingStatusRequest,
+  createBillingCheckoutSession as createBillingCheckoutSessionRequest,
+  createBillingPortalSession as createBillingPortalSessionRequest,
+  type BillingPlansResponse,
+  type BillingStatusResponse,
+  type BillingCheckoutResponse,
+  type BillingCheckoutRequest,
+  type BillingPortalResponse,
+  type BillingPortalRequest,
+} from "@workspace/api-client-react";
+
+export function useBillingPlans() {
+  return useQuery({
+    queryKey: ["/api/billing/plans"],
+    queryFn: async (): Promise<BillingPlansResponse> => listBillingPlansRequest(),
+    staleTime: 1000 * 60 * 10,
+  });
+}
+
+export function useBillingStatus() {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: ["/api/billing/status", token],
+    queryFn: async (): Promise<BillingStatusResponse> => getBillingStatusRequest(),
+    enabled: !!token,
+    staleTime: 1000 * 30,
+  });
+}
+
+export function useCreateBillingCheckout() {
+  return useMutation({
+    mutationFn: async (
+      data: BillingCheckoutRequest,
+    ): Promise<BillingCheckoutResponse> => createBillingCheckoutSessionRequest(data),
+  });
+}
+
+export function useCreateBillingPortal() {
+  return useMutation({
+    mutationFn: async (
+      data: BillingPortalRequest = {},
+    ): Promise<BillingPortalResponse> => createBillingPortalSessionRequest(data),
   });
 }

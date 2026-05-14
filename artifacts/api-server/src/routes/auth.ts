@@ -29,12 +29,46 @@ import {
   isVerificationDisabled,
   sendVerificationEmail,
 } from "../lib/mailer";
+import { getTrialDays } from "../billing/config";
 
 function dbRoleToTokenRole(role: string | null | undefined): UserRole {
   return role === "super_admin" ? "super_admin" : "user";
 }
 
+type BillingModeLiteral = "complimentary" | "trial" | "subscription" | "suspended";
+
+function normalizeBillingMode(raw: string | null | undefined): BillingModeLiteral {
+  return raw === "complimentary" || raw === "trial" || raw === "suspended"
+    ? raw
+    : "subscription";
+}
+
 const VERIFICATION_TTL_MS = 24 * 60 * 60 * 1000;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * Compute the app-managed trial window for a brand-new registration.
+ *
+ * Policy: when STRIPE_TRIAL_DAYS is set (> 0) we give every new company that many days of
+ * card-free access to the app. After expiry, evaluateBilling() flips them to `suspended` and
+ * forces a Stripe Checkout before they can generate or save more notes. Existing companies are
+ * not touched — they were grandfathered to `free_usage = true` at billing rollout (see
+ * `lib/db/migrations/2026-05-14-billing-grandfather-existing.sql`).
+ *
+ * When STRIPE_TRIAL_DAYS = 0 we keep the legacy default (`billing_mode = 'subscription'`, no
+ * trial_ends_at) so deploys that never want a trial behave exactly as before.
+ */
+function resolveTrialForNewCompany(): {
+  trialEndsAt: Date | null;
+  billingMode: "trial" | "subscription";
+} {
+  const days = getTrialDays();
+  if (days <= 0) return { trialEndsAt: null, billingMode: "subscription" };
+  return {
+    trialEndsAt: new Date(Date.now() + days * MS_PER_DAY),
+    billingMode: "trial",
+  };
+}
 
 const router: IRouter = Router();
 
@@ -80,6 +114,9 @@ router.post("/auth/register", async (req, res) => {
   const tokenExpires = needsVerification ? new Date(Date.now() + VERIFICATION_TTL_MS) : null;
 
   try {
+    const { trialEndsAt: newTrialEndsAt, billingMode: newBillingMode } =
+      resolveTrialForNewCompany();
+
     const result = await db.transaction(async (tx) => {
       const [company] = await tx
         .insert(companiesTable)
@@ -88,6 +125,8 @@ router.post("/auth/register", async (req, res) => {
           address: body.companyAddress ?? null,
           phone: body.companyPhone ?? null,
           email: body.companyEmail ?? null,
+          trialEndsAt: newTrialEndsAt,
+          billingMode: newBillingMode,
         })
         .returning();
 
@@ -164,6 +203,7 @@ router.post("/auth/register", async (req, res) => {
           phone: result.company.phone ?? undefined,
           email: result.company.email ?? undefined,
           freeUsage: result.company.freeUsage,
+          billingMode: normalizeBillingMode(result.company.billingMode),
         },
       },
       error: null,
@@ -368,6 +408,7 @@ router.post("/auth/login", async (req, res) => {
           phone: company.phone ?? undefined,
           email: company.email ?? undefined,
           freeUsage: company.freeUsage,
+          billingMode: normalizeBillingMode(company.billingMode),
         },
       },
       error: null,

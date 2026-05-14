@@ -45,7 +45,8 @@ export type NoteComplianceContext = {
   interventions: string[];
   /**
    * Per narrative segment: therapist-entered discrete-trial rollup for `replacementProgramForHour[s]`.
-   * When set, the clinical paragraph must state success counts as **N out of M trials were/was successful** (see validators).
+   * When set, the clinical paragraph must state outcomes as a **rounded success percentage** tied to that program
+   * (e.g. successful ~P% of the time / P% of trials), not "N out of M trials" counts (see validators).
    */
   therapistTrialSummaryForReplacementHour?: TherapistTrialSummaryForHourEntry[] | undefined;
   /** Approximate age in years from DOB + session date; null if unknown */
@@ -67,12 +68,32 @@ const MENTAL_STATE_PATTERNS: RegExp[] = [
   /\bthe client thought\b/i,
   /\bclient thought\b/i,
   /\bthe client believed\b/i,
-  /\bappeared (upset|angry|frustrated|sad|anxious)\b/i,
-  /\bseemed (upset|angry|frustrated|sad|anxious)\b/i,
+  /\bappeared (upset|angry|frustrated|sad|anxious|happy)\b/i,
+  /\bseemed (upset|angry|frustrated|sad|anxious|happy)\b/i,
   /\bwas upset because\b/i,
   /\binternal(ly)?\s+(upset|distressed|frustrated)\b/i,
   /\bmust have been\b/i,
   /\bprobably felt\b/i,
+];
+
+/**
+ * Subjective wording forbidden in objective ABA documentation. Catches **bare** state
+ * words (the existing MENTAL_STATE_PATTERNS only flagged compound forms such as
+ * "appeared upset" or "frustrated because"). RBTs must describe observable topography;
+ * never internal states or value judgments.
+ */
+const SUBJECTIVE_WORDING_PATTERNS: RegExp[] = [
+  /\bbecame\s+(upset|frustrated|angry|sad|anxious|happy)\b/i,
+  /\bgot\s+(upset|frustrated|angry|sad|happy)\b/i,
+  /\b(?:was|were|is|are)\s+(upset|frustrated|angry|sad|anxious|happy|stubborn|noncompliant|non-compliant)\b/i,
+  /\bbeing\s+(upset|frustrated|angry|sad|anxious|stubborn|noncompliant|non-compliant)\b/i,
+  /\bfeeling\s+(upset|frustrated|angry|sad|anxious|happy)\b/i,
+  /\bin\s+a\s+(bad|good)\s+mood\b/i,
+  /\b(bad|good)\s+day\b/i,
+  /\bfair\s+performance\b/i,
+  /\b(?:non-?compliant|stubborn|defiant|rude|lazy|moody|cooperative\s+attitude|uncooperative)\b/i,
+  /\bdid\s+(well|poorly)\b/i,
+  /\bperformed\s+(well|poorly)\b/i,
 ];
 
 /** Activities unlikely for very young clients (observable-task framing, not mental state). */
@@ -751,18 +772,53 @@ export function countInterventionImplementationsInParagraph(
   return spans.length;
 }
 
-function therapistTrialRollupPhrasePresent(
+/** Rounded % of trials that met criterion (standard rounding of successes/total). */
+function therapistTrialSuccessPercentRounded(successfulTrialCount: number, totalTrials: number): number {
+  const m = totalTrials;
+  let n = successfulTrialCount;
+  if (!Number.isFinite(n) || !Number.isFinite(m) || m < 1 || n < 0) return 0;
+  n = Math.min(n, m);
+  return Math.round((n / m) * 100);
+}
+
+/**
+ * True when the paragraph states therapist-entered discrete-trial outcomes as a **percentage** aligned with JSON
+ * (rounded successes/total), not as "N out of M trials were successful".
+ */
+function therapistTrialPercentRollupPhrasePresent(
   paragraph: string,
   successfulTrialCount: number,
   totalTrials: number,
 ): boolean {
-  const n = successfulTrialCount;
   const m = totalTrials;
+  let n = successfulTrialCount;
   if (!Number.isFinite(n) || !Number.isFinite(m) || m < 1 || n < 0) return false;
-  const wasWere = n === 1 ? "(?:was|were)" : "were";
-  const outOf = new RegExp(`\\b${n}\\s+out\\s+of\\s+${m}\\s+trials?\\s+${wasWere}\\s+successful\\b`, "i");
-  const ofOnly = new RegExp(`\\b${n}\\s+of\\s+${m}\\s+trials?\\s+${wasWere}\\s+successful\\b`, "i");
-  return outOf.test(paragraph) || ofOnly.test(paragraph);
+  n = Math.min(n, m);
+  const p = therapistTrialSuccessPercentRounded(n, m);
+  const pStr = String(p);
+
+  const legacyOut = new RegExp(`\\b${n}\\s+out\\s+of\\s+${m}\\s+trials?\\b`, "i");
+  const legacyOf = new RegExp(`\\b${n}\\s+of\\s+${m}\\s+trials?\\b`, "i");
+  const legacyWasWere = new RegExp(
+    `\\b${n}\\s+out\\s+of\\s+${m}\\s+trials?\\s+(?:was|were)\\s+successful\\b`,
+    "i",
+  );
+  if (legacyOut.test(paragraph) || legacyOf.test(paragraph) || legacyWasWere.test(paragraph)) {
+    return false;
+  }
+
+  if (!new RegExp(`\\b${pStr}%\\b`, "i").test(paragraph)) return false;
+
+  return new RegExp(
+    `\\b${pStr}%\\s+of\\s+the\\s+time|` +
+      `\\bsuccessful\\b[^.;]{0,160}?\\b${pStr}%|` +
+      `\\b${pStr}%\\b[^.;]{0,160}?\\bsuccessful|` +
+      `\\bsucceeded\\b[^.;]{0,160}?\\b${pStr}%|` +
+      `\\b${pStr}%\\s+of\\s+(?:recorded\\s+)?(?:discrete\\s+)?trials?|` +
+      `\\bcriterion\\b[^.;]{0,160}?\\b${pStr}%|` +
+      `\\b${pStr}%[^.;]{0,160}?\\bcriterion`,
+    "i",
+  ).test(paragraph);
 }
 
 /** Exact intervention string from the client's list when it is the canonical Response Block label. */
@@ -843,6 +899,20 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         `Observational-only rule: remove mental-state / interpretation phrasing (pattern "${re.source.slice(0, 48)}…") — document only observable actions and events.`,
       );
       if (++mentalHits >= 3) {
+        break;
+      }
+    }
+  }
+
+  let subjectiveHits = 0;
+  for (const re of SUBJECTIVE_WORDING_PATTERNS) {
+    const m = re.exec(clinicalBody);
+    if (m) {
+      const snippet = m[0];
+      issues.push(
+        `Subjective wording: remove "${snippet}" — ABA notes must be objective and observable. Replace with topography (e.g. "cried, dropped to the floor, kicked legs, threw materials") and measurable performance, not value words like upset/frustrated/happy/noncompliant/stubborn/bad day/fair performance/did well/did poorly.`,
+      );
+      if (++subjectiveHits >= 3) {
         break;
       }
     }
@@ -1007,9 +1077,10 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     const trialEntry = trialSummaries?.[i];
     if (trialEntry && trialEntry.totalTrials >= 1) {
       const successN = trialEntry.successfulTrialNumbers.length;
-      if (!therapistTrialRollupPhrasePresent(p, successN, trialEntry.totalTrials)) {
+      const pct = therapistTrialSuccessPercentRounded(successN, trialEntry.totalTrials);
+      if (!therapistTrialPercentRollupPhrasePresent(p, successN, trialEntry.totalTrials)) {
         issues.push(
-          `Therapist trial counts: paragraph ${i + 1} must state discrete-trial outcomes as "${successN} out of ${trialEntry.totalTrials} trials were successful" (use "was" instead of "were" when ${successN} is 1 if you prefer standard agreement). Do not use "trials were conducted" plus separate "trial … was successful" / "trials … and … were successful" wording.`,
+          `Therapist trial counts: paragraph ${i + 1} must state discrete-trial outcomes as a **percentage** tied to that program (rounded from intake: **${pct}%** of trials met criterion / **~${pct}%** of the time / **successful ~${pct}%** of the time — same rounding as the end-of-note performance line). Do **not** use "${successN} out of ${trialEntry.totalTrials} trials were successful" or other N-of-M trial count rollups. Do not use "trials were conducted" plus separate per-trial success lists.`,
         );
       }
     }

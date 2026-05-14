@@ -72,6 +72,12 @@ export const RegisterResponse = zod.object({
             .describe(
               "When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server).",
             ),
+          billingMode: zod
+            .enum(["complimentary", "trial", "subscription", "suspended"])
+            .optional()
+            .describe(
+              "Explicit billing mode (kept in sync with Stripe webhooks; complimentary overrides Stripe).",
+            ),
         })
         .nullish(),
     })
@@ -139,6 +145,12 @@ export const LoginResponse = zod.object({
         .describe(
           "When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server).",
         ),
+      billingMode: zod
+        .enum(["complimentary", "trial", "subscription", "suspended"])
+        .optional()
+        .describe(
+          "Explicit billing mode (kept in sync with Stripe webhooks; complimentary overrides Stripe).",
+        ),
     }),
   }),
   error: zod.string().nullish(),
@@ -154,6 +166,12 @@ export const ListAdminCompaniesResponse = zod.object({
       id: zod.number(),
       name: zod.string(),
       freeUsage: zod.boolean(),
+      billingMode: zod
+        .enum(["complimentary", "trial", "subscription", "suspended"])
+        .optional(),
+      subscriptionStatus: zod.string().nullish(),
+      stripeCustomerId: zod.string().nullish(),
+      currentPeriodEnd: zod.string().nullish(),
       userCount: zod.number(),
       createdAt: zod.string(),
     }),
@@ -169,7 +187,13 @@ export const PatchAdminCompanyParams = zod.object({
 });
 
 export const PatchAdminCompanyBody = zod.object({
-  freeUsage: zod.boolean(),
+  freeUsage: zod.boolean().optional(),
+  billingMode: zod
+    .enum(["complimentary", "trial", "subscription", "suspended"])
+    .optional()
+    .describe(
+      "Super-admin override of billing mode. Independent from `freeUsage` for backward compatibility.",
+    ),
 });
 
 export const PatchAdminCompanyResponse = zod.object({
@@ -178,6 +202,12 @@ export const PatchAdminCompanyResponse = zod.object({
     id: zod.number(),
     name: zod.string(),
     freeUsage: zod.boolean(),
+    billingMode: zod
+      .enum(["complimentary", "trial", "subscription", "suspended"])
+      .optional(),
+    subscriptionStatus: zod.string().nullish(),
+    stripeCustomerId: zod.string().nullish(),
+    currentPeriodEnd: zod.string().nullish(),
     userCount: zod.number(),
     createdAt: zod.string(),
   }),
@@ -223,6 +253,18 @@ export const ListClientsResponse = zod.object({
         "ready",
         "missing",
       ]),
+      avatarUrl: zod
+        .string()
+        .nullish()
+        .describe(
+          "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+        ),
+      avatarUpdatedAt: zod
+        .string()
+        .nullish()
+        .describe(
+          "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
+        ),
       profile: zod
         .object({
           firstName: zod.string(),
@@ -286,6 +328,12 @@ export const ListClientsResponse = zod.object({
             .nullish()
             .describe(
               "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+            ),
+          assessmentAuthorizationExpiresOn: zod
+            .string()
+            .nullish()
+            .describe(
+              'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
             ),
         })
         .nullish(),
@@ -360,6 +408,12 @@ export const CreateClientBody = zod.object({
     .describe(
       "Exact strings authorized on the client assessment. Maps must only reference keys\/values present in the arrays.\n",
     ),
+  assessmentAuthorizationExpiresOn: zod
+    .string()
+    .nullish()
+    .describe(
+      'ISO `yyyy-MM-dd` date the client\'s authorization expires. Optional; null\/missing means \"no expiration on file.\"\n',
+    ),
 });
 
 export const CreateClientResponse = zod.object({
@@ -371,6 +425,18 @@ export const CreateClientResponse = zod.object({
     ageBand: zod.string().optional(),
     hasAssessment: zod.boolean(),
     assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    avatarUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+      ),
+    avatarUpdatedAt: zod
+      .string()
+      .nullish()
+      .describe(
+        "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
+      ),
     profile: zod
       .object({
         firstName: zod.string(),
@@ -434,6 +500,12 @@ export const CreateClientResponse = zod.object({
           .nullish()
           .describe(
             "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+          ),
+        assessmentAuthorizationExpiresOn: zod
+          .string()
+          .nullish()
+          .describe(
+            'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
           ),
       })
       .nullish(),
@@ -457,6 +529,18 @@ export const GetClientResponse = zod.object({
     ageBand: zod.string().optional(),
     hasAssessment: zod.boolean(),
     assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    avatarUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+      ),
+    avatarUpdatedAt: zod
+      .string()
+      .nullish()
+      .describe(
+        "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
+      ),
     profile: zod
       .object({
         firstName: zod.string(),
@@ -520,6 +604,12 @@ export const GetClientResponse = zod.object({
           .nullish()
           .describe(
             "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+          ),
+        assessmentAuthorizationExpiresOn: zod
+          .string()
+          .nullish()
+          .describe(
+            'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
           ),
       })
       .nullish(),
@@ -599,6 +689,12 @@ export const UpdateClientBody = zod.object({
     .describe(
       "Exact strings authorized on the client assessment. Maps must only reference keys\/values present in the arrays.\n",
     ),
+  assessmentAuthorizationExpiresOn: zod
+    .string()
+    .nullish()
+    .describe(
+      "ISO `yyyy-MM-dd` date the client's authorization expires. Send null to clear the stored value; omit to leave it unchanged.\n",
+    ),
   clearAssessment: zod
     .boolean()
     .optional()
@@ -616,6 +712,18 @@ export const UpdateClientResponse = zod.object({
     ageBand: zod.string().optional(),
     hasAssessment: zod.boolean(),
     assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    avatarUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+      ),
+    avatarUpdatedAt: zod
+      .string()
+      .nullish()
+      .describe(
+        "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
+      ),
     profile: zod
       .object({
         firstName: zod.string(),
@@ -680,8 +788,31 @@ export const UpdateClientResponse = zod.object({
           .describe(
             "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
           ),
+        assessmentAuthorizationExpiresOn: zod
+          .string()
+          .nullish()
+          .describe(
+            'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
+          ),
       })
       .nullish(),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Permanently removes the client and cascades related session notes, program links, and behavior–program approval rows for this company. Cannot be undone.
+
+ * @summary Delete a client
+ */
+export const DeleteClientParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const DeleteClientResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    clientId: zod.number(),
   }),
   error: zod.string().nullish(),
 });
@@ -710,6 +841,18 @@ export const UploadClientAssessmentDocumentResponse = zod.object({
     ageBand: zod.string().optional(),
     hasAssessment: zod.boolean(),
     assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    avatarUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+      ),
+    avatarUpdatedAt: zod
+      .string()
+      .nullish()
+      .describe(
+        "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
+      ),
     profile: zod
       .object({
         firstName: zod.string(),
@@ -773,6 +916,237 @@ export const UploadClientAssessmentDocumentResponse = zod.object({
           .nullish()
           .describe(
             "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+          ),
+        assessmentAuthorizationExpiresOn: zod
+          .string()
+          .nullish()
+          .describe(
+            'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
+          ),
+      })
+      .nullish(),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Uses the client's first name (cultural / ethnic cue), approximate age (from DOB), and gender to produce a stylized cartoon-style portrait via OpenAI's image API and stores it on the client row. Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
+
+ * @summary Generate an AI cartoon avatar for the client
+ */
+export const GenerateClientAvatarParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const GenerateClientAvatarResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    avatarUrl: zod.string().nullable(),
+    avatarUpdatedAt: zod
+      .string()
+      .nullable()
+      .describe(
+        "ISO timestamp; plain string for Zod compatibility (see Client.avatarUpdatedAt).",
+      ),
+    client: zod.object({
+      id: zod.number(),
+      companyId: zod.number(),
+      name: zod.string(),
+      ageBand: zod.string().optional(),
+      hasAssessment: zod.boolean(),
+      assessmentStatus: zod.enum([
+        "uploaded",
+        "processing",
+        "ready",
+        "missing",
+      ]),
+      avatarUrl: zod
+        .string()
+        .nullish()
+        .describe(
+          "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+        ),
+      avatarUpdatedAt: zod
+        .string()
+        .nullish()
+        .describe(
+          "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
+        ),
+      profile: zod
+        .object({
+          firstName: zod.string(),
+          lastName: zod.string(),
+          dateOfBirth: zod.string(),
+          gender: zod.string(),
+          maladaptiveBehaviors: zod.array(zod.string()),
+          maladaptiveBehaviorTargets: zod
+            .array(
+              zod
+                .object({
+                  name: zod.string(),
+                  topography: zod
+                    .string()
+                    .nullable()
+                    .describe(
+                      "Operational definition; may be null when not entered.",
+                    ),
+                })
+                .describe(
+                  "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+                ),
+            )
+            .describe(
+              "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
+            ),
+          replacementPrograms: zod.array(zod.string()),
+          interventions: zod.array(zod.string()),
+          assessmentFileName: zod.string().nullish(),
+          assessmentStructured: zod
+            .object({
+              behaviors: zod.array(zod.string()),
+              replacement_programs: zod.array(zod.string()),
+              interventions: zod.array(zod.string()),
+              behavior_to_replacements_map: zod.record(
+                zod.string(),
+                zod.array(zod.string()),
+              ),
+              behavior_to_interventions_map: zod.record(
+                zod.string(),
+                zod.array(zod.string()),
+              ),
+              replacement_program_functions: zod
+                .record(
+                  zod.string(),
+                  zod.array(
+                    zod.enum(["escape", "attention", "tangible", "automatic"]),
+                  ),
+                )
+                .optional()
+                .describe(
+                  "Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.\n",
+                ),
+              general_interventions: zod
+                .array(zod.string())
+                .optional()
+                .describe(
+                  "Optional interventions allowed when a behavior has no behavior_to_interventions_map entry (must be subset of interventions).\n",
+                ),
+            })
+            .nullish()
+            .describe(
+              "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+            ),
+          assessmentAuthorizationExpiresOn: zod
+            .string()
+            .nullish()
+            .describe(
+              'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
+            ),
+        })
+        .nullish(),
+    }),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Clears the avatar bytes; the client falls back to initials in the UI.
+ * @summary Remove the stored AI avatar for a client
+ */
+export const DeleteClientAvatarParams = zod.object({
+  clientId: zod.coerce.number(),
+});
+
+export const DeleteClientAvatarResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    id: zod.number(),
+    companyId: zod.number(),
+    name: zod.string(),
+    ageBand: zod.string().optional(),
+    hasAssessment: zod.boolean(),
+    assessmentStatus: zod.enum(["uploaded", "processing", "ready", "missing"]),
+    avatarUrl: zod
+      .string()
+      .nullish()
+      .describe(
+        "Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.\n",
+      ),
+    avatarUpdatedAt: zod
+      .string()
+      .nullish()
+      .describe(
+        "ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.\n",
+      ),
+    profile: zod
+      .object({
+        firstName: zod.string(),
+        lastName: zod.string(),
+        dateOfBirth: zod.string(),
+        gender: zod.string(),
+        maladaptiveBehaviors: zod.array(zod.string()),
+        maladaptiveBehaviorTargets: zod
+          .array(
+            zod
+              .object({
+                name: zod.string(),
+                topography: zod
+                  .string()
+                  .nullable()
+                  .describe(
+                    "Operational definition; may be null when not entered.",
+                  ),
+              })
+              .describe(
+                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+              ),
+          )
+          .describe(
+            "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
+          ),
+        replacementPrograms: zod.array(zod.string()),
+        interventions: zod.array(zod.string()),
+        assessmentFileName: zod.string().nullish(),
+        assessmentStructured: zod
+          .object({
+            behaviors: zod.array(zod.string()),
+            replacement_programs: zod.array(zod.string()),
+            interventions: zod.array(zod.string()),
+            behavior_to_replacements_map: zod.record(
+              zod.string(),
+              zod.array(zod.string()),
+            ),
+            behavior_to_interventions_map: zod.record(
+              zod.string(),
+              zod.array(zod.string()),
+            ),
+            replacement_program_functions: zod
+              .record(
+                zod.string(),
+                zod.array(
+                  zod.enum(["escape", "attention", "tangible", "automatic"]),
+                ),
+              )
+              .optional()
+              .describe(
+                "Optional. Replacement program name (exact string) to FBA functions used for filtering recommendations.\n",
+              ),
+            general_interventions: zod
+              .array(zod.string())
+              .optional()
+              .describe(
+                "Optional interventions allowed when a behavior has no behavior_to_interventions_map entry (must be subset of interventions).\n",
+              ),
+          })
+          .nullish()
+          .describe(
+            "Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST \/notes\/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST \/clients\/{clientId}\/recommendations uses them for audit-safe suggestions.\n",
+          ),
+        assessmentAuthorizationExpiresOn: zod
+          .string()
+          .nullish()
+          .describe(
+            'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
           ),
       })
       .nullish(),
@@ -1164,20 +1538,22 @@ export const GenerateNoteBody = zod.object({
           .number()
           .nullable()
           .describe(
-            "Total trials conducted for this replacement program when known; when null, the server does not inject therapist-entered trial-count prose (use default quantified language).\n",
+            'Total trials conducted for this replacement program when therapist-entered. `null` means \"no trial data entered\" — the server falls back to default quantified language. `>= 1` means trials were entered (including a deliberate 0% selection, encoded as `count >= 1` plus an empty `effectiveTrials`).\n',
           ),
         effectiveTrials: zod
           .array(zod.number())
           .describe(
-            "1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty, therapist-entered trial-detail prose is not used for that program.\n",
+            "1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty AND `count >= 1`, this represents \*\*0 successes \/ count trials\*\* (a 0% entry); the server still injects the rounded percentage into the prose. When empty AND `count` is null, no data was entered.\n",
           ),
       }),
     )
     .optional()
     .describe(
-      'Optional. Maps replacement program id (string keys, e.g. \"42\") to trial metadata. When `count` is non-null and `effectiveTrials` is non-empty for a program assigned to an hour, the clinical narrative for that hour must incorporate that exact count and those trial indices in natural prose for the verbatim replacement program name. When `count` is null or `effectiveTrials` is empty, use default quantified replacement-program language for that hour. Ignored for hours that document RBT-only replacement programs (not selected session targets).\n',
+      'Optional. Maps replacement program id (string keys, e.g. \"42\") to trial metadata. When `count` is \*\*null\*\*, no trial data was entered and the server uses default quantified replacement-program language for that hour. When `count` is \*\*>= 1\*\*, the therapist entered trial data for that program — `effectiveTrials` lists the 1-based trial indices that met criterion (so an empty `effectiveTrials` paired with `count >= 1` represents \*\*0 successes \/ count trials\*\*, i.e. a deliberate 0% entry, not \"no data\"). The clinical narrative for that hour must incorporate the rounded percentage (`successfulTrialNumbers.length` \/ `totalTrials`) for the verbatim replacement program name. Ignored for hours that document RBT-only replacement programs (not selected session targets).\n',
     ),
 });
+
+export const generateNoteResponseDataMaladaptiveReplacementPairingsItemSegmentIndexMin = 0;
 
 export const GenerateNoteResponse = zod.object({
   success: zod.boolean(),
@@ -1198,6 +1574,37 @@ export const GenerateNoteResponse = zod.object({
       .string()
       .nullable()
       .describe("OpenAI model id used for the clinical body (set on success)"),
+    maladaptiveReplacementPairings: zod
+      .array(
+        zod
+          .object({
+            segmentIndex: zod
+              .number()
+              .min(
+                generateNoteResponseDataMaladaptiveReplacementPairingsItemSegmentIndexMin,
+              )
+              .describe(
+                "Zero-based narrative segment index after session collapse (replacement-program slots).",
+              ),
+            maladaptiveBehavior: zod
+              .string()
+              .describe(
+                "Maladaptive behavior catalog label for this segment (never a replacement program name).",
+              ),
+            replacementProgramName: zod
+              .string()
+              .describe(
+                "Replacement program name documented for this segment in the generated note.",
+              ),
+          })
+          .describe(
+            "One row for integrations that need \*\*maladaptive catalog behavior → replacement program\*\* pairings only. Omitted for skill-acquisition-only narrative segments (no maladaptive episode).\n",
+          ),
+      )
+      .optional()
+      .describe(
+        'Authoritative \*\*behavior → replacement program\*\* rows for this session (post-collapse segments). \*\*Excludes\*\* skill-acquisition-only segments (e.g. program names containing \"Echoic\", or \"Respond to Own Name\"), which are not maladaptive-behavior episodes. Downstream `replacementProgramImplementation`-style lists should use this array instead of inferring a \"behavior\" from replacement program names for every paragraph.\n',
+      ),
   }),
   warnings: zod.array(zod.string()).optional(),
   error: zod.string().nullish(),
@@ -1215,11 +1622,231 @@ export const SaveNoteBody = zod.object({
   content: zod.string(),
 });
 
+export const saveNoteResponseDataBillingSavedThisPeriodMin = 0;
+
+export const saveNoteResponseDataBillingSavedQuotaMin = 0;
+
 export const SaveNoteResponse = zod.object({
   success: zod.boolean(),
   data: zod.object({
     noteId: zod.number(),
     status: zod.string(),
+    billing: zod
+      .object({
+        billingMode: zod.enum([
+          "complimentary",
+          "trial",
+          "subscription",
+          "suspended",
+        ]),
+        savedThisPeriod: zod
+          .number()
+          .min(saveNoteResponseDataBillingSavedThisPeriodMin),
+        savedQuota: zod
+          .number()
+          .min(saveNoteResponseDataBillingSavedQuotaMin)
+          .nullish()
+          .describe("Plan note quota; null when complimentary \/ unlimited."),
+        countedThisRequest: zod
+          .boolean()
+          .describe(
+            "True when this save inserted a new ledger row (i.e. first save of this note in this period).",
+          ),
+      })
+      .optional()
+      .describe(
+        'Best-effort snapshot of the company\'s billing state immediately after save. Returned only when billing enforcement is on; the UI uses it to surface \"X \/ Y notes saved\" without an extra round trip. When enforcement is off this is omitted entirely (backward compatible).\n',
+      ),
   }),
   error: zod.string().nullish(),
+  warnings: zod.array(zod.string()).optional(),
+});
+
+/**
+ * Returns the marketing plan keys (`starter`, `growth`, `high`) the server has configured with Stripe Price IDs. Price IDs themselves are not returned to the client; the server resolves them when creating a Checkout Session. Safe to call without authentication.
+
+ * @summary List available plans for the current deploy
+ */
+export const listBillingPlansResponseDataTrialDaysMin = 0;
+
+export const listBillingPlansResponseDataPlansItemSavedNotesQuotaMin = 0;
+
+export const ListBillingPlansResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    stripeConfigured: zod.boolean(),
+    trialDays: zod.number().min(listBillingPlansResponseDataTrialDaysMin),
+    plans: zod.array(
+      zod.object({
+        key: zod
+          .enum(["starter", "growth", "high"])
+          .describe(
+            "Marketing plan key. Server maps each key to a configured Stripe Price ID.",
+          ),
+        label: zod.string(),
+        savedNotesQuota: zod
+          .number()
+          .min(listBillingPlansResponseDataPlansItemSavedNotesQuotaMin),
+        priceUsdMonthly: zod
+          .number()
+          .describe(
+            "Display-only USD price (charged amounts come from Stripe).",
+          ),
+        available: zod
+          .boolean()
+          .describe(
+            "True when the server has a Stripe Price ID configured for this plan.",
+          ),
+      }),
+    ),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * @summary Current company's billing mode, plan, quota, and grace state
+ */
+export const getBillingStatusResponseDataPlanSavedNotesQuotaMin = 0;
+
+export const getBillingStatusResponseDataSavedThisPeriodMin = 0;
+
+export const getBillingStatusResponseDataSavedQuotaMin = 0;
+
+export const GetBillingStatusResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    companyId: zod.number(),
+    billingMode: zod.enum([
+      "complimentary",
+      "trial",
+      "subscription",
+      "suspended",
+    ]),
+    enforcement: zod
+      .enum(["off", "soft", "hard"])
+      .describe(
+        "`off` = no enforcement (legacy behavior). `soft` = warnings only, never blocks. `hard` = full enforcement (block save when over quota, block generate when past grace).\n",
+      ),
+    plan: zod
+      .object({
+        key: zod
+          .enum(["starter", "growth", "high"])
+          .describe(
+            "Marketing plan key. Server maps each key to a configured Stripe Price ID.",
+          ),
+        label: zod.string(),
+        savedNotesQuota: zod
+          .number()
+          .min(getBillingStatusResponseDataPlanSavedNotesQuotaMin),
+        priceUsdMonthly: zod
+          .number()
+          .describe(
+            "Display-only USD price (charged amounts come from Stripe).",
+          ),
+        available: zod
+          .boolean()
+          .describe(
+            "True when the server has a Stripe Price ID configured for this plan.",
+          ),
+      })
+      .nullish(),
+    stripeCustomerPresent: zod.boolean(),
+    subscription: zod
+      .object({
+        status: zod.string(),
+        currentPeriodStart: zod.string().nullish(),
+        currentPeriodEnd: zod.string().nullish(),
+        cancelAt: zod.string().nullish(),
+      })
+      .nullish(),
+    trialEndsAt: zod.string().nullish(),
+    paymentFailedAt: zod.string().nullish(),
+    gracePeriodUntil: zod.string().nullish(),
+    inGracePeriod: zod.boolean(),
+    generationAllowed: zod
+      .boolean()
+      .describe(
+        "True when this company is allowed to call POST \/notes\/generate.",
+      ),
+    saveAllowed: zod
+      .boolean()
+      .describe(
+        "True when this company is allowed to call POST \/notes\/{id}\/save.",
+      ),
+    blockedReason: zod.string().nullish(),
+    savedThisPeriod: zod
+      .number()
+      .min(getBillingStatusResponseDataSavedThisPeriodMin),
+    savedQuota: zod
+      .number()
+      .min(getBillingStatusResponseDataSavedQuotaMin)
+      .nullish(),
+    usagePercent: zod
+      .number()
+      .nullish()
+      .describe(
+        "0..100 share of quota consumed (null when no quota \/ unlimited).",
+      ),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Resolves the plan key to a configured Stripe Price ID, creates (or reuses) a Stripe Customer for the company, then returns a Checkout Session URL. Card collection is required up front; the configured trial period is applied via `subscription_data.trial_period_days` so trials are Stripe-native (no app-managed trial cap). Idempotent: returning users with an active subscription are sent to the Customer Portal URL instead.
+
+ * @summary Create a Stripe Checkout Session for a plan
+ */
+export const CreateBillingCheckoutSessionBody = zod.object({
+  plan: zod
+    .enum(["starter", "growth", "high"])
+    .describe(
+      "Marketing plan key. Server maps each key to a configured Stripe Price ID.",
+    ),
+  successUrl: zod
+    .string()
+    .describe(
+      "Where Stripe should redirect after success. Server validates host against APP_ORIGIN allowlist.",
+    ),
+  cancelUrl: zod.string(),
+});
+
+export const CreateBillingCheckoutSessionResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    url: zod.string(),
+    mode: zod
+      .enum(["checkout", "portal"])
+      .describe(
+        "`checkout` is a new Stripe Checkout Session. `portal` is returned when the user already has an active subscription — we send them to the Customer Portal so they can change plan rather than starting a duplicate subscription.\n",
+      ),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Returns a one-time URL into Stripe's hosted Customer Portal so the user can update card, cancel, change plan, and view invoices.
+
+ * @summary Create a Stripe Customer Portal session
+ */
+export const CreateBillingPortalSessionBody = zod.object({
+  returnUrl: zod.string().optional(),
+});
+
+export const CreateBillingPortalSessionResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    url: zod.string(),
+  }),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Accepts Stripe webhook events. Signature verification is done with `STRIPE_WEBHOOK_SECRET`; events are deduplicated via `processed_stripe_events`. Not part of the React/Zod codegen surface — the body is the raw bytes sent by Stripe and the response is a literal `{received:true}`.
+
+ * @summary Stripe webhook receiver (raw body)
+ */
+export const StripeWebhookBody = zod.record(zod.string(), zod.unknown());
+
+export const StripeWebhookResponse = zod.object({
+  received: zod.boolean(),
 });

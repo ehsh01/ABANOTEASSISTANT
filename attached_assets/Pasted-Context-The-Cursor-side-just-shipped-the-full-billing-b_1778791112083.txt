@@ -1,0 +1,77 @@
+Context
+The Cursor side just shipped the full billing backend (commits a98cd16 → cec868e on main). Stripe billing is wired but dormant on the droplet — server has no STRIPE_SECRET_KEY yet, so /billing/checkout and /billing/portal return 503 and enforcement is forced off. Once we set the Stripe env vars and flip BILLING_ENFORCEMENT=hard, your UI activates automatically — please build for the eventual enforced state.
+
+Trial policy now in production:
+
+New registrations get a 14-day / 15-note app-managed free trial (no card required at signup). Backend writes trial_ends_at and billing_mode = 'trial' on the company row at /auth/register.
+Trial ends on whichever comes first: 14 days OR 15 notes saved.
+All companies that existed before 2026-05-14 were grandfathered to permanent complimentary access. They will never see paywalls.
+Super admins can mark any company complimentary at any time via PATCH /admin/companies/:id { freeUsage: true }.
+What you must not touch:
+
+Anything under artifacts/api-server/, lib/, or .cursor/rules/. Backend, generated code, OpenAPI, and binding rules are Cursor's domain.
+Existing note generation pages, ABC builder, results pages — only add billing-aware overlays/banners, do not redesign them.
+API contract (already generated; use the hooks)
+All four endpoints are in @workspace/api-client-react. Hooks already exist in artifacts/abanoteassistant/src/hooks/use-aba-api.ts:
+
+useBillingPlans() — public, no auth. Returns { stripeConfigured, trialDays, plans: [{ key, label, savedNotesQuota, priceUsdMonthly, available }] }. When stripeConfigured: false, every plan has available: false — render the page but disable subscribe buttons.
+useBillingStatus() — requires auth. Returns the full decision (billingMode, plan, subscription, trialEndsAt, paymentFailedAt, gracePeriodUntil, inGracePeriod, generationAllowed, saveAllowed, blockedReason, savedThisPeriod, savedQuota, usagePercent).
+useCreateBillingCheckout() — POST { plan, successUrl, cancelUrl } → returns { url, mode: 'checkout' | 'portal' }. Redirect the user to url.
+useCreateBillingPortal() — POST { returnUrl } → returns { url }. Redirect.
+What to build
+1. Public /pricing page (new route)
+A marketing/pre-signup page that anyone can land on. Use useBillingPlans() (no auth header). Render the three plan cards (Starter $19/mo, Growth $49/mo, High Volume $119/mo) with savedNotesQuota per month visible on each.
+
+Header: "Plans" + subhead mentioning the 14-day, 15-note free trial — no credit card required. Read both numbers from the API response: trialDays (14) and the trial cap is fixed at 15 (you can hard-code "15 notes" or pull from the savedQuota of a future endpoint; today it's not exposed publicly — hard-coding 15 is fine until we add it).
+Each card has a "Start free trial" button. When the user is signed-out, the button routes to /register?plan=<key>. When signed-in, the button routes to /billing?subscribe=<key> (so the existing /billing page can auto-open Checkout for that plan).
+When stripeConfigured: false (today), still show the cards; disable the Subscribe buttons and show a small "Plans launching soon" note instead.
+Add a small footer link from /register and /login to /pricing ("See plans").
+2. Trial banner component (site-wide for trial users)
+A small dismissible banner at the top of the app shell that renders only when useBillingStatus().data.billingMode === 'trial' AND the user is not on /billing or /pricing. Reads from useBillingStatus():
+
+Days left from trialEndsAt minus now (round up, minimum 0).
+Notes left = savedQuota - savedThisPeriod (use 15 - savedThisPeriod if savedQuota is null; that's a server config gap, default to 15).
+Format: "Free trial: 9 days left · 11 notes left. Choose a plan →" (link to /billing).
+Turn the banner amber when either remaining is ≤ 3, red when either remaining is 0 (which shouldn't happen — at 0 the user transitions to suspended, see #3).
+3. Suspended (trial-ended) full-page interceptor
+When useBillingStatus().data.billingMode === 'suspended' OR generationAllowed === false AND the user navigates to /wizard (note creation) or tries to generate, show a full-page card:
+
+Title from blockedReason (the server already tailors it):
+Note cap hit: "You've used all 15 notes from your free trial. Choose a plan to keep going — your subscription starts as soon as you pick one."
+Time hit: "Your free trial has ended. Choose a plan to keep generating and saving notes — your subscription starts as soon as you pick one."
+Neither (canceled / legacy): generic "This account is not on an active subscription. Choose a plan to continue generating and saving notes."
+Render blockedReason verbatim — do not paraphrase. The backend is the source of truth for these strings; they were chosen to match the product spec.
+Below it, the 3 plan cards from /billing/plans, each with a Subscribe button that fires useCreateBillingCheckout and redirects to the Stripe Checkout URL.
+The user can still navigate to /clients, /notes (list/view), and /billing. They cannot start a new note (generation is blocked by the 402 from the server; show this banner instead of the wizard).
+4. Save-time warning toast
+The /notes/:noteId/save response now includes an optional warnings: string[] array. When present, surface each entry as a toast. The relevant trial messages from the server look like:
+
+"Only 2 saved notes remaining in your free trial. Subscribe to keep going without interruption."
+Already wired in the existing save flow — just verify the toast renders it.
+
+5. Existing /billing page enhancements
+The page exists at artifacts/abanoteassistant/src/pages/billing.tsx. Add:
+
+Trial countdown card at the top when billingMode === 'trial': "Free trial · 9 days left · 11 of 15 notes used", with a progress bar for the notes (savedThisPeriod / savedQuota).
+Auto-open Checkout via query string: if URL is /billing?subscribe=growth, immediately call useCreateBillingCheckout({ plan: 'growth', successUrl, cancelUrl }) and redirect. This is how the public /pricing page hands off signed-in users.
+Success/cancel return URLs: successUrl = ${window.location.origin}/billing?status=success, cancelUrl = ${window.location.origin}/billing?status=canceled. On ?status=success, show a green toast "Welcome — your subscription is active." On ?status=canceled, show a neutral toast "Checkout canceled. You can try again anytime."
+Manage subscription button when subscription is non-null in the status response — opens the Customer Portal via useCreateBillingPortal.
+6. Translations
+Add EN + ES strings for everything above to artifacts/abanoteassistant/src/lib/translations.ts under a new billing.trial.* namespace (and reuse existing billing.* strings where they fit). Existing keys you can lean on: billing.title, billing.subscribe, billing.choosePlan, billing.notConfiguredYet.
+
+Acceptance criteria
+Hitting /pricing while signed out shows three plan cards and a "Start free trial" CTA → routes to /register?plan=<key>. Sign-up flow proceeds normally after that (don't change /auth/register — the backend already handles the trial setup).
+Signing up a new test user → /billing/status returns billingMode: 'trial', trialEndsAt: <~14 days out>, savedQuota: 15, savedThisPeriod: 0. The trial banner appears.
+Existing pre-billing users → billingMode: 'complimentary', no banner, no paywall ever.
+Once Stripe is wired (we'll do this server-side later) and a trial user crosses 15 notes OR 14 days, /billing/status will return billingMode: 'suspended' and blockedReason with the relevant string. The wizard becomes blocked, the interceptor card renders, and Subscribe buttons work.
+Do not call /billing/checkout or /billing/portal against an unconfigured server expecting 200 — they return 503. Handle that gracefully (toast: "Billing isn't enabled yet — please try again later.").
+The /billing page renders a useful empty state when useBillingPlans().data.stripeConfigured === false.
+Don't do
+Don't change lib/api-spec/openapi.yaml or anything generated under lib/api-zod/ or lib/api-client-react/src/generated/. If a contract needs to change, ask Cursor to update OpenAPI first.
+Don't modify the AI clinical body, note assembly, or any rules under .cursor/rules/.
+Don't add a separate "Pricing" item to the super-admin sidebar — super admins already have /admin.
+Don't store billing state in local storage. Always read from /billing/status; React Query handles caching.
+Quick reference
+API base in production: same-origin, paths under /api.
+Backend env state today: STRIPE_TRIAL_DAYS=14, STRIPE_TRIAL_NOTE_CAP=15, BILLING_ENFORCEMENT=off, no Stripe keys yet.
+Full spec: docs/billing/STRIPE-BILLING-SETUP.md on main.

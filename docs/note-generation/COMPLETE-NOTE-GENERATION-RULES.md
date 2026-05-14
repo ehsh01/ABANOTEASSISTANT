@@ -74,13 +74,13 @@ Every note must begin with:
 
 ## 20. Session performance language rule
 
-Must include the server-assembled performance line after the closing paragraph: the client completed **N** program(s) (N = replacement-program narrative segments for the session) with varying levels of prompting and successful responding in the majority of trials across skill acquisition and behavior reduction targets (see locked prose rules).
+Must include the server-assembled performance line after the closing paragraph. When therapist-entered discrete-trial rows exist for one or more narrative segments, that line is the fixed qualitative sentence described in `.cursor/rules/aba-note-locked-prose.mdc`. When no trial rows are entered, the server uses a neutral fallback that references program segment count only (see `buildPerformanceSentence` in `artifacts/api-server/src/note-assembly.ts`). Per-segment ABC text still reflects discrete-trial percentages from intake where applicable (`note-validation.ts`).
 
-**Prohibited terms:** poor, below expectations, unsuccessful, limited, inadequate, minimal engagement, regression.
+**Prohibited terms (unless product policy changes):** poor, below expectations, unsuccessful, limited, inadequate, minimal engagement, regression.
 
 ## 21. Mandatory closing paragraph (verbatim)
 
-"Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., 'Good job,' 'Wow,' and 'Good attention to detail'), preferred toys, and videos contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned, with the caregiver present during implementation."
+"Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., 'Good job,' 'Wow,' and 'Good attention to detail'), preferred toys, music, bubbles, and sensory play activities contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned."
 
 ## 22. End-of-note sequence (exact order)
 

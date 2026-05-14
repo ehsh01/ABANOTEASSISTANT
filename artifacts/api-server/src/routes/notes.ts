@@ -32,6 +32,7 @@ import {
   resolvedOpenAIModel,
   type NoteGenerationContext,
 } from "../openai-notes";
+import { evaluateBilling, recordSavedNote } from "../billing/service";
 import { maladaptiveBehaviorTargetsForNoteCatalog } from "../client-profile-maladaptive";
 import {
   approximateAgeYearsAtSession,
@@ -62,12 +63,22 @@ import {
 } from "../assessment-structured";
 import { resolveAbcHintsForNoteGeneration } from "../abc-hints";
 import { isLanguageMaladaptiveBehaviorLabel } from "../language-maladaptive-behavior";
-import { isSkillAcquisitionOnlyReplacementProgram } from "../skill-acquisition-programs";
+import {
+  isSkillAcquisitionOnlyReplacementProgram,
+  maladaptiveReplacementPairingsForSessionNote,
+} from "../skill-acquisition-programs";
 import { ABC_ACTIVITY_ANTECEDENT_CATALOG } from "../abc-activity-antecedent-catalog";
 
 /**
  * Per-hour trial summary for the AI when `programTrialData` has a usable entry for that hour's program id.
  * Indices outside 1..count are dropped; duplicates removed; list sorted ascending.
+ *
+ * Contract: `count == null` means "no trial data entered" (skip the hour). `count >= 1` means trials
+ * were entered for that program — even when `effectiveTrials` is empty, we keep the entry as a
+ * **0-success / count-trial** record so the wizard's "0%" selection genuinely flows through to the
+ * end-of-note performance line and the per-paragraph percentage prose (the AI will write
+ * "successful approximately 0% of the time"). Previously an empty `effectiveTrials` was treated the
+ * same as missing data and the hour was dropped entirely.
  */
 function buildTherapistTrialSummaryForReplacementHour(params: {
   sessionHours: number;
@@ -85,16 +96,16 @@ function buildTherapistTrialSummaryForReplacementHour(params: {
     const entry = programTrialData?.[String(id)];
     if (!entry) return null;
     const count = entry.count;
-    const trials = entry.effectiveTrials;
-    if (count == null || trials.length === 0) return null;
     if (typeof count !== "number" || !Number.isFinite(count) || !Number.isInteger(count) || count < 1) {
       return null;
     }
+    const trials = entry.effectiveTrials ?? [];
     const inRange = trials.filter(
       (t): t is number => typeof t === "number" && Number.isInteger(t) && t >= 1 && t <= count,
     );
-    if (inRange.length === 0) return null;
     const uniqueSorted = [...new Set(inRange)].sort((a, b) => a - b);
+    // Empty `successfulTrialNumbers` is intentional for 0% selections — keep the entry instead of
+    // returning null, so the percentage rollup downstream sees 0/count for this hour.
     return { totalTrials: count, successfulTrialNumbers: uniqueSorted };
   });
 }
@@ -143,6 +154,7 @@ function assembleSessionNote(
   const performance = buildPerformanceSentence(
     narrativeProgramSegmentCount,
     therapistTrialSummaryForReplacementHour,
+    clientFirstName,
   );
   const nextSession = buildNextSessionSentence(nextSessionDate, clientFirstName);
 
@@ -337,6 +349,22 @@ router.post("/notes/generate", async (req, res) => {
       });
       return;
     }
+  }
+
+  // Stripe billing gate (independent of the legacy ENFORCE_COMPLIMENTARY_ACCESS flag). When the
+  // server is configured with BILLING_ENFORCEMENT=off (default) this resolves to a permissive
+  // decision so the legacy flow is untouched. Policy:
+  //   - subscribed/trialing within grace → generation BLOCKED (user can still save in-progress)
+  //   - suspended (no sub, expired sub, manually suspended) → generation BLOCKED
+  //   - complimentary → always allowed
+  const billing = await evaluateBilling(companyId);
+  if (billing && !billing.generationAllowed) {
+    res.status(402).json({
+      success: false,
+      error: billing.blockedReason ?? "Subscription required to generate new notes.",
+      messages: [],
+    });
+    return;
   }
 
   if (!isOpenAINoteGenerationConfigured()) {
@@ -801,6 +829,12 @@ router.post("/notes/generate", async (req, res) => {
   res.setHeader("X-ABA-Clinical-Body-Source", "openai");
   res.setHeader("X-ABA-OpenAI-Model", generationModel);
 
+  const maladaptiveReplacementPairings = maladaptiveReplacementPairingsForSessionNote({
+    acquisitionOnlySegmentForHour,
+    maladaptiveBehaviorForNarrative,
+    replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
+  });
+
   const data = GenerateNoteResponse.parse({
     success: true,
     data: {
@@ -813,6 +847,7 @@ router.post("/notes/generate", async (req, res) => {
       generatedAt: generatedAt.toISOString(),
       generationSource,
       generationModel,
+      maladaptiveReplacementPairings,
     },
     warnings: warnings.length > 0 ? warnings : undefined,
     error: null,
@@ -823,7 +858,8 @@ router.post("/notes/generate", async (req, res) => {
 
 router.post("/notes/:noteId/save", async (req, res) => {
   const companyId = req.companyId;
-  if (companyId === undefined) {
+  const userId = req.userId;
+  if (companyId === undefined || userId === undefined) {
     res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
     return;
   }
@@ -842,6 +878,38 @@ router.post("/notes/:noteId/save", async (req, res) => {
     return;
   }
 
+  // Stripe billing gate. When BILLING_ENFORCEMENT=off this is permissive and behaves like before.
+  // Quota check happens BEFORE the DB write so we never persist a save we won't count.
+  const billing = await evaluateBilling(companyId);
+  if (billing && !billing.saveAllowed) {
+    res.status(402).json({
+      success: false,
+      error: billing.blockedReason ?? "Plan limit reached for this period.",
+      messages: [],
+    });
+    return;
+  }
+
+  // Soft-warn just below quota when enforcement is on (any level). UI gets the message via the
+  // optional `warnings` field on SaveNoteResponse — backward compatible.
+  const warnings: string[] = [];
+  if (
+    billing &&
+    billing.enforcement !== "off" &&
+    billing.savedQuota !== null &&
+    billing.derivedMode !== "complimentary"
+  ) {
+    const remaining = billing.savedQuota - billing.savedThisPeriod;
+    if (remaining > 0 && remaining <= Math.max(1, Math.floor(billing.savedQuota * 0.15))) {
+      const isAppManagedTrial = billing.derivedMode === "trial" && !billing.plan;
+      warnings.push(
+        isAppManagedTrial
+          ? `Only ${remaining} saved notes remaining in your free trial. Subscribe to keep going without interruption.`
+          : `Only ${remaining} saved notes remaining in this billing period before you reach your plan limit.`,
+      );
+    }
+  }
+
   const now = new Date();
   await db
     .update(notesTable)
@@ -852,13 +920,37 @@ router.post("/notes/:noteId/save", async (req, res) => {
     })
     .where(and(eq(notesTable.id, params.noteId), eq(notesTable.companyId, companyId)));
 
+  let savedThisPeriodAfter = billing?.savedThisPeriod ?? 0;
+  let countedThisRequest = false;
+  if (billing && billing.derivedMode !== "complimentary") {
+    const ledger = await recordSavedNote({
+      decision: billing,
+      noteId: params.noteId,
+      userId,
+    });
+    savedThisPeriodAfter = ledger.savedThisPeriod;
+    countedThisRequest = ledger.countedThisRequest;
+  }
+
+  const includeBillingSnapshot = !!billing && billing.enforcement !== "off";
   const data = SaveNoteResponse.parse({
     success: true,
     data: {
       noteId: params.noteId,
       status: body.status,
+      ...(includeBillingSnapshot && billing
+        ? {
+            billing: {
+              billingMode: billing.derivedMode,
+              savedThisPeriod: savedThisPeriodAfter,
+              savedQuota: billing.savedQuota,
+              countedThisRequest,
+            },
+          }
+        : {}),
     },
     error: null,
+    ...(warnings.length > 0 ? { warnings } : {}),
   });
 
   res.json(data);

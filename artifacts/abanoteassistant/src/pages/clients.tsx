@@ -4,8 +4,16 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { motion } from "framer-motion";
 import {
   Sparkles,
@@ -13,16 +21,21 @@ import {
   Search,
   UserPlus,
   FileText,
+  FileUp,
+  ArrowRight,
   Clock,
   CheckCircle2,
   AlertCircle,
   Loader2,
   Users,
   Pencil,
+  Trash2,
 } from "lucide-react";
 import type { Client } from "@workspace/api-client-react";
-import { useClients } from "@/hooks/use-aba-api";
+import { useClients, useDeleteClient } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
+import { formatAuthorizationExpiresOn } from "@/lib/utils";
+import { ClientAvatar } from "@/components/client-avatar";
 
 function displayNames(client: Client) {
   const p = client.profile;
@@ -34,6 +47,7 @@ function displayNames(client: Client) {
       gender: p.gender,
       maladaptiveBehaviors: p.maladaptiveBehaviors,
       replacementPrograms: p.replacementPrograms,
+      assessmentAuthorizationExpiresOn: p.assessmentAuthorizationExpiresOn ?? null,
     };
   }
   const parts = client.name.trim().split(/\s+/).filter(Boolean);
@@ -44,11 +58,8 @@ function displayNames(client: Client) {
     gender: "—",
     maladaptiveBehaviors: [] as string[],
     replacementPrograms: [] as string[],
+    assessmentAuthorizationExpiresOn: null as string | null,
   };
-}
-
-function getInitials(firstName: string, lastName: string) {
-  return `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
 }
 
 function calcAge(dob: string): string {
@@ -66,6 +77,23 @@ function ClientCard({ client }: { client: Client }) {
   const [, setLocation] = useLocation();
   const t = useT();
   const d = displayNames(client);
+  const deleteClientMutation = useDeleteClient();
+  const fullName = `${d.firstName} ${d.lastName}`.trim() || client.name;
+
+  function handleDeleteClient() {
+    if (deleteClientMutation.isPending) return;
+    const confirmed = window.confirm(
+      `Delete client "${fullName}"?\n\nThis permanently removes the client, their session notes, program links, and behavior approvals. This cannot be undone.`,
+    );
+    if (!confirmed) return;
+    deleteClientMutation.mutate(client.id, {
+      onError: (err) => {
+        window.alert(
+          err instanceof Error ? `Could not delete client: ${err.message}` : "Could not delete client.",
+        );
+      },
+    });
+  }
 
   const STATUS_CONFIG = {
     ready: { label: t.clients.assessmentReady, icon: CheckCircle2, bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
@@ -100,12 +128,17 @@ function ClientCard({ client }: { client: Client }) {
     >
       <div className="flex items-start justify-between mb-5 gap-3">
         <div className="flex items-center gap-4 min-w-0">
-          <div
-            className="w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg text-white shrink-0 group-hover:scale-105 transition-transform pop-text-white"
-            style={{ background: "linear-gradient(135deg, #C27A8A 0%, #e8c4cc 100%)" }}
-          >
-            {getInitials(d.firstName, d.lastName)}
-          </div>
+          <ClientAvatar
+            client={{
+              avatarUrl: client.avatarUrl,
+              avatarUpdatedAt: client.avatarUpdatedAt,
+              firstName: d.firstName,
+              lastName: d.lastName,
+              name: client.name,
+            }}
+            size="md"
+            className="group-hover:scale-105 transition-transform"
+          />
           <div className="min-w-0">
             <h3 className="font-bold text-[#2D2523] text-lg leading-tight pop-text truncate">
               {d.firstName} {d.lastName}
@@ -114,6 +147,19 @@ function ClientCard({ client }: { client: Client }) {
               {d.dateOfBirth ? `${calcAge(d.dateOfBirth)} · ` : ""}
               {d.gender}
             </p>
+            {(() => {
+              const exp = formatAuthorizationExpiresOn(d.assessmentAuthorizationExpiresOn);
+              if (!exp) return null;
+              return (
+                <p
+                  className="text-xs font-bold text-red-600 mt-1 leading-tight"
+                  title={exp.isPast ? "Authorization is past its expiration date" : "Authorization expiration date"}
+                >
+                  {exp.isPast ? "Authorization expired on " : "Authorization expires on "}
+                  {exp.display}
+                </p>
+              );
+            })()}
           </div>
         </div>
         <div
@@ -165,6 +211,18 @@ function ClientCard({ client }: { client: Client }) {
                 className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-[#2D2523] focus:bg-[#F0E4E1] focus:text-[#C27A8A] data-[highlighted]:bg-[#F0E4E1] data-[highlighted]:text-[#C27A8A]"
               >
                 <Link href={`/clients/edit/${client.id}?section=interventions`}>Edit interventions</Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator className="my-1 h-px bg-[#F0E4E1]" />
+              <DropdownMenuItem
+                disabled={deleteClientMutation.isPending}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  handleDeleteClient();
+                }}
+                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-semibold text-rose-700 focus:bg-rose-50 focus:text-rose-700 data-[highlighted]:bg-rose-50 data-[highlighted]:text-rose-700 flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                {deleteClientMutation.isPending ? "Deleting…" : "Delete client"}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -262,9 +320,89 @@ function ClientCard({ client }: { client: Client }) {
   );
 }
 
+/**
+ * Two-card chooser shown when the RBT clicks "+ New Client". Lets them either start with the assessment PDF
+ * (auto-fills name, behaviors, replacement programs, interventions, topographies, and authorization expiration
+ * date in the wizard) or fill the form manually step-by-step. The choice maps to a query param on the
+ * `/clients/new` route — `?intent=assessment` reorders the wizard so the upload step comes first.
+ */
+function CreateClientPickerModal({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (next: boolean) => void;
+}) {
+  const [, setLocation] = useLocation();
+
+  function go(href: string) {
+    onOpenChange(false);
+    setLocation(href);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl rounded-2xl border border-[#E8D8D3] bg-white/95 p-0 shadow-[0_24px_60px_-12px_rgba(44,37,35,0.25)]">
+        <div className="px-6 pt-6 pb-2">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-[#2D2523] tracking-tight">
+              Create Client
+            </DialogTitle>
+            <DialogDescription className="text-[#877870]">
+              How would you like to create a client?
+            </DialogDescription>
+          </DialogHeader>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 px-6 pb-6">
+          <button
+            type="button"
+            onClick={() => go("/clients/new?intent=assessment")}
+            className="group flex flex-col items-start gap-4 text-left p-5 rounded-2xl border border-[#F0E4E1] bg-[#FDFAF7] hover:bg-white hover:border-[#C27A8A]/40 hover:shadow-[0_10px_28px_-10px_rgba(194,122,138,0.35)] transition-all"
+          >
+            <div className="w-11 h-11 rounded-xl bg-[#F4E8FC] flex items-center justify-center text-[#7C4DB1]">
+              <FileUp className="w-5 h-5 pop-icon" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base font-bold text-[#2D2523]">From Assessment PDF</h3>
+              <p className="text-sm text-[#877870] leading-relaxed">
+                Upload a BIP or assessment and we'll automatically extract client info, behaviors,
+                replacements, and interventions.
+              </p>
+            </div>
+            <span className="mt-auto inline-flex items-center gap-1 text-sm font-semibold text-[#7C4DB1] group-hover:gap-1.5 transition-all">
+              Get started <ArrowRight className="w-4 h-4 pop-icon" />
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => go("/clients/new")}
+            className="group flex flex-col items-start gap-4 text-left p-5 rounded-2xl border border-[#F0E4E1] bg-[#FDFAF7] hover:bg-white hover:border-emerald-300 hover:shadow-[0_10px_28px_-10px_rgba(16,185,129,0.30)] transition-all"
+          >
+            <div className="w-11 h-11 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+              <Pencil className="w-5 h-5 pop-icon" />
+            </div>
+            <div className="space-y-1.5">
+              <h3 className="text-base font-bold text-[#2D2523]">Enter Manually</h3>
+              <p className="text-sm text-[#877870] leading-relaxed">
+                Fill in client details, behaviors, replacements, and interventions step by step.
+              </p>
+            </div>
+            <span className="mt-auto inline-flex items-center gap-1 text-sm font-semibold text-emerald-700 group-hover:gap-1.5 transition-all">
+              Start form <ArrowRight className="w-4 h-4 pop-icon" />
+            </span>
+          </button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export default function Clients() {
   const { data: clientsRes, isLoading, isError } = useClients();
   const [search, setSearch] = useState("");
+  const [createPickerOpen, setCreatePickerOpen] = useState(false);
   const t = useT();
 
   const clients = clientsRes?.data ?? [];
@@ -319,12 +457,14 @@ export default function Clients() {
               {isLoading ? t.common.loading : `${clients.length} total`}
             </p>
           </div>
-          <Link href="/clients/new">
-            <button className="flex items-center gap-2 bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-3 rounded-xl font-semibold transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:-translate-y-0.5">
-              <UserPlus className="w-5 h-5 pop-icon-white" />
-              {t.clients.newClient}
-            </button>
-          </Link>
+          <button
+            type="button"
+            onClick={() => setCreatePickerOpen(true)}
+            className="flex items-center gap-2 bg-[#C27A8A] hover:bg-[#b06a79] text-white px-5 py-3 rounded-xl font-semibold transition-all shadow-[0_8px_20px_rgba(194,122,138,0.25)] hover:-translate-y-0.5"
+          >
+            <UserPlus className="w-5 h-5 pop-icon-white" />
+            {t.clients.newClient}
+          </button>
         </div>
 
         {/* Search */}
@@ -359,12 +499,14 @@ export default function Clients() {
               {search ? `"${search}"` : t.clients.noClientsHint}
             </p>
             {!search && (
-              <Link href="/clients/new">
-                <button className="flex items-center gap-2 bg-[#C27A8A] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all hover:bg-[#b06a79]">
-                  <UserPlus className="w-4 h-4 pop-icon-white" />
-                  {t.clients.newClient}
-                </button>
-              </Link>
+              <button
+                type="button"
+                onClick={() => setCreatePickerOpen(true)}
+                className="flex items-center gap-2 bg-[#C27A8A] text-white px-5 py-2.5 rounded-xl font-semibold text-sm transition-all hover:bg-[#b06a79]"
+              >
+                <UserPlus className="w-4 h-4 pop-icon-white" />
+                {t.clients.newClient}
+              </button>
             )}
           </div>
         ) : !isLoading && !isError ? (
@@ -375,6 +517,11 @@ export default function Clients() {
           </div>
         ) : null}
       </div>
+
+      <CreateClientPickerModal
+        open={createPickerOpen}
+        onOpenChange={setCreatePickerOpen}
+      />
     </div>
   );
 }

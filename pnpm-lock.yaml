@@ -411,6 +411,9 @@ importers:
       resend:
         specifier: ^6.9.4
         version: 6.9.4
+      stripe:
+        specifier: ^22.1.1
+        version: 22.1.1(@types/node@25.3.5)
       zod:
         specifier: 'catalog:'
         version: 3.25.76
@@ -4196,6 +4199,15 @@ packages:
   strip-final-newline@4.0.0:
     resolution: {integrity: sha512-aulFJcD6YK8V1G7iRB5tigAP4TsHBZZrOV8pjV++zdUwmeV8uzbY7yn6h9MswN62adStNZFuCIx4haBnRuMDaw==}
     engines: {node: '>=18'}
+
+  stripe@22.1.1:
+    resolution: {integrity: sha512-cmodIYP27tBkJ8G7DuGgWw0PFuemlFZbuF3Wwr1TrjFjUa3T7NIgCe6TVwX8BO2ynu+xtTuDGfHafNDCPt9lXA==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      '@types/node': '>=18'
+    peerDependenciesMeta:
+      '@types/node':
+        optional: true
 
   supports-preserve-symlinks-flag@1.0.0:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
@@ -8464,6 +8476,10 @@ snapshots:
   strip-comments@2.0.1: {}
 
   strip-final-newline@4.0.0: {}
+
+  stripe@22.1.1(@types/node@25.3.5):
+    optionalDependencies:
+      '@types/node': 25.3.5
 
   supports-preserve-symlinks-flag@1.0.0: {}
 

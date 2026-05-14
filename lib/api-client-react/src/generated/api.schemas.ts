@@ -62,6 +62,19 @@ export interface AuthUser {
   role: AuthUserRole;
 }
 
+/**
+ * Explicit billing mode (kept in sync with Stripe webhooks; complimentary overrides Stripe).
+ */
+export type AuthCompanyBillingMode =
+  (typeof AuthCompanyBillingMode)[keyof typeof AuthCompanyBillingMode];
+
+export const AuthCompanyBillingMode = {
+  complimentary: "complimentary",
+  trial: "trial",
+  subscription: "subscription",
+  suspended: "suspended",
+} as const;
+
 export interface AuthCompany {
   id: number;
   name: string;
@@ -70,12 +83,28 @@ export interface AuthCompany {
   email?: string;
   /** When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server). */
   freeUsage: boolean;
+  /** Explicit billing mode (kept in sync with Stripe webhooks; complimentary overrides Stripe). */
+  billingMode?: AuthCompanyBillingMode;
 }
+
+export type AdminCompanyBillingMode =
+  (typeof AdminCompanyBillingMode)[keyof typeof AdminCompanyBillingMode];
+
+export const AdminCompanyBillingMode = {
+  complimentary: "complimentary",
+  trial: "trial",
+  subscription: "subscription",
+  suspended: "suspended",
+} as const;
 
 export interface AdminCompany {
   id: number;
   name: string;
   freeUsage: boolean;
+  billingMode?: AdminCompanyBillingMode;
+  subscriptionStatus?: string | null;
+  stripeCustomerId?: string | null;
+  currentPeriodEnd?: string | null;
   userCount: number;
   createdAt: string;
 }
@@ -86,8 +115,23 @@ export interface AdminCompanyListResponse {
   error?: string | null;
 }
 
+/**
+ * Super-admin override of billing mode. Independent from `freeUsage` for backward compatibility.
+ */
+export type PatchAdminCompanyRequestBillingMode =
+  (typeof PatchAdminCompanyRequestBillingMode)[keyof typeof PatchAdminCompanyRequestBillingMode];
+
+export const PatchAdminCompanyRequestBillingMode = {
+  complimentary: "complimentary",
+  trial: "trial",
+  subscription: "subscription",
+  suspended: "suspended",
+} as const;
+
 export interface PatchAdminCompanyRequest {
-  freeUsage: boolean;
+  freeUsage?: boolean;
+  /** Super-admin override of billing mode. Independent from `freeUsage` for backward compatibility. */
+  billingMode?: PatchAdminCompanyRequestBillingMode;
 }
 
 export interface AdminCompanyPatchResponse {
@@ -240,6 +284,9 @@ export interface ClientProfile {
   /** Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST /notes/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST /clients/{clientId}/recommendations uses them for audit-safe suggestions.
    */
   assessmentStructured?: AssessmentStructured | null;
+  /** ISO `yyyy-MM-dd` date the client's authorization (assessment / treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null/missing means "no expiration on file" (UI hides the badge).
+   */
+  assessmentAuthorizationExpiresOn?: string | null;
 }
 
 export type ClinicalRecommendationRequestFunction =
@@ -313,6 +360,9 @@ export interface CreateClientRequest {
   replacementPrograms: string[];
   interventions: string[];
   assessmentStructured?: AssessmentStructured | null;
+  /** ISO `yyyy-MM-dd` date the client's authorization expires. Optional; null/missing means "no expiration on file."
+   */
+  assessmentAuthorizationExpiresOn?: string | null;
 }
 
 export type UpdateClientRequestAssessmentStatus =
@@ -341,6 +391,9 @@ export interface UpdateClientRequest {
   replacementPrograms?: string[];
   interventions?: string[];
   assessmentStructured?: AssessmentStructured | null;
+  /** ISO `yyyy-MM-dd` date the client's authorization expires. Send null to clear the stored value; omit to leave it unchanged.
+   */
+  assessmentAuthorizationExpiresOn?: string | null;
   /** When true, removes the stored assessment PDF file name, excerpt text snapshot, and structured assessment allow-lists from the client profile; sets hasAssessment to false and assessmentStatus to missing. Use when the RBT removes the assessment without uploading a replacement in the same request. Ignored when false or omitted.
    */
   clearAssessment?: boolean;
@@ -363,6 +416,12 @@ export interface Client {
   ageBand?: string;
   hasAssessment: boolean;
   assessmentStatus: ClientAssessmentStatus;
+  /** Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar. The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the browser cache invalidates automatically. Null when the client has no avatar on file.
+   */
+  avatarUrl?: string | null;
+  /** ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated. Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()` and accepts the JSON wire shape directly. Null when no avatar is on file.
+   */
+  avatarUpdatedAt?: string | null;
   profile?: ClientProfile | null;
 }
 
@@ -375,6 +434,19 @@ export interface ClientListResponse {
 export interface ClientDetailResponse {
   success: boolean;
   data: Client;
+  error?: string | null;
+}
+
+export type GenerateClientAvatarResponseData = {
+  avatarUrl: string | null;
+  /** ISO timestamp; plain string for Zod compatibility (see Client.avatarUpdatedAt). */
+  avatarUpdatedAt: string | null;
+  client: Client;
+};
+
+export interface GenerateClientAvatarResponse {
+  success: boolean;
+  data: GenerateClientAvatarResponseData;
   error?: string | null;
 }
 
@@ -534,16 +606,16 @@ export const GenerateNoteRequestTherapySetting = {
 } as const;
 
 export interface ProgramTrialDataEntry {
-  /** Total trials conducted for this replacement program when known; when null, the server does not inject therapist-entered trial-count prose (use default quantified language).
+  /** Total trials conducted for this replacement program when therapist-entered. `null` means "no trial data entered" — the server falls back to default quantified language. `>= 1` means trials were entered (including a deliberate 0% selection, encoded as `count >= 1` plus an empty `effectiveTrials`).
    */
   count: number | null;
-  /** 1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty, therapist-entered trial-detail prose is not used for that program.
+  /** 1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty AND `count >= 1`, this represents **0 successes / count trials** (a 0% entry); the server still injects the rounded percentage into the prose. When empty AND `count` is null, no data was entered.
    */
   effectiveTrials: number[];
 }
 
 /**
- * Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is non-null and `effectiveTrials` is non-empty for a program assigned to an hour, the clinical narrative for that hour must incorporate that exact count and those trial indices in natural prose for the verbatim replacement program name. When `count` is null or `effectiveTrials` is empty, use default quantified replacement-program language for that hour. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+ * Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is **null**, no trial data was entered and the server uses default quantified replacement-program language for that hour. When `count` is **>= 1**, the therapist entered trial data for that program — `effectiveTrials` lists the 1-based trial indices that met criterion (so an empty `effectiveTrials` paired with `count >= 1` represents **0 successes / count trials**, i.e. a deliberate 0% entry, not "no data"). The clinical narrative for that hour must incorporate the rounded percentage (`successfulTrialNumbers.length` / `totalTrials`) for the verbatim replacement program name. Ignored for hours that document RBT-only replacement programs (not selected session targets).
 
  */
 export type GenerateNoteRequestProgramTrialData = {
@@ -586,7 +658,7 @@ export interface GenerateNoteRequest {
    * @maxItems 8
    */
   abcHints?: AbcHintEntry[];
-  /** Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is non-null and `effectiveTrials` is non-empty for a program assigned to an hour, the clinical narrative for that hour must incorporate that exact count and those trial indices in natural prose for the verbatim replacement program name. When `count` is null or `effectiveTrials` is empty, use default quantified replacement-program language for that hour. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+  /** Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is **null**, no trial data was entered and the server uses default quantified replacement-program language for that hour. When `count` is **>= 1**, the therapist entered trial data for that program — `effectiveTrials` lists the 1-based trial indices that met criterion (so an empty `effectiveTrials` paired with `count >= 1` represents **0 successes / count trials**, i.e. a deliberate 0% entry, not "no data"). The clinical narrative for that hour must incorporate the rounded percentage (`successfulTrialNumbers.length` / `totalTrials`) for the verbatim replacement program name. Ignored for hours that document RBT-only replacement programs (not selected session targets).
    */
   programTrialData?: GenerateNoteRequestProgramTrialData;
 }
@@ -612,6 +684,22 @@ export const GeneratedNoteGenerationSource = {
   template: "template",
 } as const;
 
+/**
+ * One row for integrations that need **maladaptive catalog behavior → replacement program** pairings only. Omitted for skill-acquisition-only narrative segments (no maladaptive episode).
+
+ */
+export interface MaladaptiveReplacementPairing {
+  /**
+   * Zero-based narrative segment index after session collapse (replacement-program slots).
+   * @minimum 0
+   */
+  segmentIndex: number;
+  /** Maladaptive behavior catalog label for this segment (never a replacement program name). */
+  maladaptiveBehavior: string;
+  /** Replacement program name documented for this segment in the generated note. */
+  replacementProgramName: string;
+}
+
 export interface GeneratedNote {
   noteId: number;
   content: string;
@@ -624,6 +712,9 @@ export interface GeneratedNote {
   generationSource: GeneratedNoteGenerationSource;
   /** OpenAI model id used for the clinical body (set on success) */
   generationModel: string | null;
+  /** Authoritative **behavior → replacement program** rows for this session (post-collapse segments). **Excludes** skill-acquisition-only segments (e.g. program names containing "Echoic", or "Respond to Own Name"), which are not maladaptive-behavior episodes. Downstream `replacementProgramImplementation`-style lists should use this array instead of inferring a "behavior" from replacement program names for every paragraph.
+   */
+  maladaptiveReplacementPairings?: MaladaptiveReplacementPairing[];
 }
 
 export interface GenerateNoteResponse {
@@ -694,6 +785,16 @@ export interface DeleteNoteResponse {
   error?: string | null;
 }
 
+export type DeleteClientResponseData = {
+  clientId: number;
+};
+
+export interface DeleteClientResponse {
+  success: boolean;
+  data: DeleteClientResponseData;
+  error?: string | null;
+}
+
 export type SaveNoteRequestStatus =
   (typeof SaveNoteRequestStatus)[keyof typeof SaveNoteRequestStatus];
 
@@ -707,18 +808,197 @@ export interface SaveNoteRequest {
   content: string;
 }
 
+export type SaveNoteBillingSnapshotBillingMode =
+  (typeof SaveNoteBillingSnapshotBillingMode)[keyof typeof SaveNoteBillingSnapshotBillingMode];
+
+export const SaveNoteBillingSnapshotBillingMode = {
+  complimentary: "complimentary",
+  trial: "trial",
+  subscription: "subscription",
+  suspended: "suspended",
+} as const;
+
+/**
+ * Best-effort snapshot of the company's billing state immediately after save. Returned only when billing enforcement is on; the UI uses it to surface "X / Y notes saved" without an extra round trip. When enforcement is off this is omitted entirely (backward compatible).
+
+ */
+export interface SaveNoteBillingSnapshot {
+  billingMode: SaveNoteBillingSnapshotBillingMode;
+  /** @minimum 0 */
+  savedThisPeriod: number;
+  /**
+   * Plan note quota; null when complimentary / unlimited.
+   * @minimum 0
+   */
+  savedQuota?: number | null;
+  /** True when this save inserted a new ledger row (i.e. first save of this note in this period). */
+  countedThisRequest: boolean;
+}
+
 export type SaveNoteResponseData = {
   noteId: number;
   status: string;
+  billing?: SaveNoteBillingSnapshot;
 };
 
 export interface SaveNoteResponse {
   success: boolean;
   data: SaveNoteResponseData;
   error?: string | null;
+  warnings?: string[];
+}
+
+/**
+ * Marketing plan key. Server maps each key to a configured Stripe Price ID.
+ */
+export type BillingPlanKey =
+  (typeof BillingPlanKey)[keyof typeof BillingPlanKey];
+
+export const BillingPlanKey = {
+  starter: "starter",
+  growth: "growth",
+  high: "high",
+} as const;
+
+export interface BillingPlanSummary {
+  key: BillingPlanKey;
+  label: string;
+  /** @minimum 0 */
+  savedNotesQuota: number;
+  /** Display-only USD price (charged amounts come from Stripe). */
+  priceUsdMonthly: number;
+  /** True when the server has a Stripe Price ID configured for this plan. */
+  available: boolean;
+}
+
+export type BillingPlansResponseData = {
+  stripeConfigured: boolean;
+  /** @minimum 0 */
+  trialDays: number;
+  plans: BillingPlanSummary[];
+};
+
+export interface BillingPlansResponse {
+  success: boolean;
+  data: BillingPlansResponseData;
+  error?: string | null;
+}
+
+export type BillingStatusResponseDataBillingMode =
+  (typeof BillingStatusResponseDataBillingMode)[keyof typeof BillingStatusResponseDataBillingMode];
+
+export const BillingStatusResponseDataBillingMode = {
+  complimentary: "complimentary",
+  trial: "trial",
+  subscription: "subscription",
+  suspended: "suspended",
+} as const;
+
+/**
+ * `off` = no enforcement (legacy behavior). `soft` = warnings only, never blocks. `hard` = full enforcement (block save when over quota, block generate when past grace).
+
+ */
+export type BillingStatusResponseDataEnforcement =
+  (typeof BillingStatusResponseDataEnforcement)[keyof typeof BillingStatusResponseDataEnforcement];
+
+export const BillingStatusResponseDataEnforcement = {
+  off: "off",
+  soft: "soft",
+  hard: "hard",
+} as const;
+
+export type BillingStatusResponseDataSubscription = {
+  status: string;
+  currentPeriodStart?: string | null;
+  currentPeriodEnd?: string | null;
+  cancelAt?: string | null;
+} | null;
+
+export type BillingStatusResponseData = {
+  companyId: number;
+  billingMode: BillingStatusResponseDataBillingMode;
+  /** `off` = no enforcement (legacy behavior). `soft` = warnings only, never blocks. `hard` = full enforcement (block save when over quota, block generate when past grace).
+   */
+  enforcement: BillingStatusResponseDataEnforcement;
+  plan?: BillingPlanSummary | null;
+  stripeCustomerPresent: boolean;
+  subscription?: BillingStatusResponseDataSubscription;
+  trialEndsAt?: string | null;
+  paymentFailedAt?: string | null;
+  gracePeriodUntil?: string | null;
+  inGracePeriod: boolean;
+  /** True when this company is allowed to call POST /notes/generate. */
+  generationAllowed: boolean;
+  /** True when this company is allowed to call POST /notes/{id}/save. */
+  saveAllowed: boolean;
+  blockedReason?: string | null;
+  /** @minimum 0 */
+  savedThisPeriod: number;
+  /** @minimum 0 */
+  savedQuota?: number | null;
+  /** 0..100 share of quota consumed (null when no quota / unlimited). */
+  usagePercent?: number | null;
+};
+
+export interface BillingStatusResponse {
+  success: boolean;
+  data: BillingStatusResponseData;
+  error?: string | null;
+}
+
+export interface BillingCheckoutRequest {
+  plan: BillingPlanKey;
+  /** Where Stripe should redirect after success. Server validates host against APP_ORIGIN allowlist. */
+  successUrl: string;
+  cancelUrl: string;
+}
+
+/**
+ * `checkout` is a new Stripe Checkout Session. `portal` is returned when the user already has an active subscription — we send them to the Customer Portal so they can change plan rather than starting a duplicate subscription.
+
+ */
+export type BillingCheckoutResponseDataMode =
+  (typeof BillingCheckoutResponseDataMode)[keyof typeof BillingCheckoutResponseDataMode];
+
+export const BillingCheckoutResponseDataMode = {
+  checkout: "checkout",
+  portal: "portal",
+} as const;
+
+export type BillingCheckoutResponseData = {
+  url: string;
+  /** `checkout` is a new Stripe Checkout Session. `portal` is returned when the user already has an active subscription — we send them to the Customer Portal so they can change plan rather than starting a duplicate subscription.
+   */
+  mode: BillingCheckoutResponseDataMode;
+};
+
+export interface BillingCheckoutResponse {
+  success: boolean;
+  data: BillingCheckoutResponseData;
+  error?: string | null;
+}
+
+export interface BillingPortalRequest {
+  returnUrl?: string;
+}
+
+export type BillingPortalResponseData = {
+  url: string;
+};
+
+export interface BillingPortalResponse {
+  success: boolean;
+  data: BillingPortalResponseData;
+  error?: string | null;
 }
 
 export type UploadClientAssessmentDocumentBody = {
   /** Assessment PDF (field name must be `file`) */
   file: Blob;
+};
+
+export type StripeWebhookBody = { [key: string]: unknown };
+
+export type StripeWebhook200 = {
+  received: boolean;
 };

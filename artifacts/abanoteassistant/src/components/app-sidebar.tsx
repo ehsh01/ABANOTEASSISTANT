@@ -1,6 +1,6 @@
 import { useLocation, Link } from "wouter";
 import { useQueryClient } from "@tanstack/react-query";
-import { LayoutDashboard, Users, FileText, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Settings, LogOut, CreditCard } from "lucide-react";
 import { useAuthStore } from "@/store/auth-store";
 import { useLanguageStore } from "@/store/language-store";
 import { useT } from "@/hooks/use-translation";
@@ -68,7 +68,7 @@ export function AppSidebar() {
     ...NAV_ITEMS,
     ...(user?.role === "super_admin"
       ? [{ label: t.nav.admin, href: "/admin", icon: Settings }]
-      : []),
+      : [{ label: t.nav.billing, href: "/billing", icon: CreditCard }]),
   ];
 
   return (

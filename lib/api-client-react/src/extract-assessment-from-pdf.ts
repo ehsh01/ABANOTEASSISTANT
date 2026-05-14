@@ -7,8 +7,15 @@ export type AssessmentExtractedFields = {
   dateOfBirth?: string;
   gender?: string;
   maladaptiveBehaviors: string[];
+  /**
+   * Per-behavior operational definition / topography copied from the assessment when present. `name` matches
+   * an entry in `maladaptiveBehaviors` (server aligns case-insensitively); `topography` is the short description.
+   */
+  maladaptiveBehaviorTopographies?: { name: string; topography: string }[];
   replacementPrograms: string[];
   interventions: string[];
+  /** ISO `yyyy-MM-dd` authorization / treatment plan expiration date when stated on the assessment. */
+  assessmentAuthorizationExpiresOn?: string;
   confidenceNotes?: string;
 };
 

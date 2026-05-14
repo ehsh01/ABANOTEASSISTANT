@@ -21,14 +21,22 @@ import type {
   AdminCompanyListResponse,
   AdminCompanyPatchResponse,
   AdminUserListResponse,
+  BillingCheckoutRequest,
+  BillingCheckoutResponse,
+  BillingPlansResponse,
+  BillingPortalRequest,
+  BillingPortalResponse,
+  BillingStatusResponse,
   ClientDetailResponse,
   ClientListResponse,
   ClinicalRecommendationRequest,
   ClinicalRecommendationResponse,
   CreateClientRequest,
   DeleteClientProgramResponse,
+  DeleteClientResponse,
   DeleteNoteResponse,
   ErrorResponse,
+  GenerateClientAvatarResponse,
   GenerateNoteRequest,
   GenerateNoteResponse,
   HealthStatus,
@@ -48,6 +56,8 @@ import type {
   ResendVerificationResponse,
   SaveNoteRequest,
   SaveNoteResponse,
+  StripeWebhook200,
+  StripeWebhookBody,
   UpdateClientProgramBody,
   UpdateClientProgramResponse,
   UpdateClientRequest,
@@ -1063,6 +1073,92 @@ export const useUpdateClient = <
 };
 
 /**
+ * Permanently removes the client and cascades related session notes, program links, and behavior–program approval rows for this company. Cannot be undone.
+
+ * @summary Delete a client
+ */
+export const getDeleteClientUrl = (clientId: number) => {
+  return `/api/clients/${clientId}`;
+};
+
+export const deleteClient = async (
+  clientId: number,
+  options?: RequestInit,
+): Promise<DeleteClientResponse> => {
+  return customFetch<DeleteClientResponse>(getDeleteClientUrl(clientId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteClientMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClient>>,
+    TError,
+    { clientId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteClient>>,
+  TError,
+  { clientId: number },
+  TContext
+> => {
+  const mutationKey = ["deleteClient"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteClient>>,
+    { clientId: number }
+  > = (props) => {
+    const { clientId } = props ?? {};
+
+    return deleteClient(clientId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteClientMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteClient>>
+>;
+
+export type DeleteClientMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Delete a client
+ */
+export const useDeleteClient = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClient>>,
+    TError,
+    { clientId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteClient>>,
+  TError,
+  { clientId: number },
+  TContext
+> => {
+  return useMutation(getDeleteClientMutationOptions(options));
+};
+
+/**
  * Parses PDF text server-side, stores a truncated excerpt on the client profile (not returned in API JSON), and sets assessment status to ready. Call after creating or updating a client when the RBT selects an assessment file.
 
  * @summary Upload assessment PDF and store text for AI note grounding
@@ -1156,6 +1252,180 @@ export const useUploadClientAssessmentDocument = <
   TContext
 > => {
   return useMutation(getUploadClientAssessmentDocumentMutationOptions(options));
+};
+
+/**
+ * Uses the client's first name (cultural / ethnic cue), approximate age (from DOB), and gender to produce a stylized cartoon-style portrait via OpenAI's image API and stores it on the client row. Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
+
+ * @summary Generate an AI cartoon avatar for the client
+ */
+export const getGenerateClientAvatarUrl = (clientId: number) => {
+  return `/api/clients/${clientId}/avatar/generate`;
+};
+
+export const generateClientAvatar = async (
+  clientId: number,
+  options?: RequestInit,
+): Promise<GenerateClientAvatarResponse> => {
+  return customFetch<GenerateClientAvatarResponse>(
+    getGenerateClientAvatarUrl(clientId),
+    {
+      ...options,
+      method: "POST",
+    },
+  );
+};
+
+export const getGenerateClientAvatarMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateClientAvatar>>,
+    TError,
+    { clientId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof generateClientAvatar>>,
+  TError,
+  { clientId: number },
+  TContext
+> => {
+  const mutationKey = ["generateClientAvatar"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof generateClientAvatar>>,
+    { clientId: number }
+  > = (props) => {
+    const { clientId } = props ?? {};
+
+    return generateClientAvatar(clientId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type GenerateClientAvatarMutationResult = NonNullable<
+  Awaited<ReturnType<typeof generateClientAvatar>>
+>;
+
+export type GenerateClientAvatarMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Generate an AI cartoon avatar for the client
+ */
+export const useGenerateClientAvatar = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof generateClientAvatar>>,
+    TError,
+    { clientId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof generateClientAvatar>>,
+  TError,
+  { clientId: number },
+  TContext
+> => {
+  return useMutation(getGenerateClientAvatarMutationOptions(options));
+};
+
+/**
+ * Clears the avatar bytes; the client falls back to initials in the UI.
+ * @summary Remove the stored AI avatar for a client
+ */
+export const getDeleteClientAvatarUrl = (clientId: number) => {
+  return `/api/clients/${clientId}/avatar`;
+};
+
+export const deleteClientAvatar = async (
+  clientId: number,
+  options?: RequestInit,
+): Promise<ClientDetailResponse> => {
+  return customFetch<ClientDetailResponse>(getDeleteClientAvatarUrl(clientId), {
+    ...options,
+    method: "DELETE",
+  });
+};
+
+export const getDeleteClientAvatarMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClientAvatar>>,
+    TError,
+    { clientId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof deleteClientAvatar>>,
+  TError,
+  { clientId: number },
+  TContext
+> => {
+  const mutationKey = ["deleteClientAvatar"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof deleteClientAvatar>>,
+    { clientId: number }
+  > = (props) => {
+    const { clientId } = props ?? {};
+
+    return deleteClientAvatar(clientId, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteClientAvatarMutationResult = NonNullable<
+  Awaited<ReturnType<typeof deleteClientAvatar>>
+>;
+
+export type DeleteClientAvatarMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Remove the stored AI avatar for a client
+ */
+export const useDeleteClientAvatar = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof deleteClientAvatar>>,
+    TError,
+    { clientId: number },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof deleteClientAvatar>>,
+  TError,
+  { clientId: number },
+  TContext
+> => {
+  return useMutation(getDeleteClientAvatarMutationOptions(options));
 };
 
 /**
@@ -2357,4 +2627,429 @@ export const useSaveNote = <
   TContext
 > => {
   return useMutation(getSaveNoteMutationOptions(options));
+};
+
+/**
+ * Returns the marketing plan keys (`starter`, `growth`, `high`) the server has configured with Stripe Price IDs. Price IDs themselves are not returned to the client; the server resolves them when creating a Checkout Session. Safe to call without authentication.
+
+ * @summary List available plans for the current deploy
+ */
+export const getListBillingPlansUrl = () => {
+  return `/api/billing/plans`;
+};
+
+export const listBillingPlans = async (
+  options?: RequestInit,
+): Promise<BillingPlansResponse> => {
+  return customFetch<BillingPlansResponse>(getListBillingPlansUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getListBillingPlansQueryKey = () => {
+  return [`/api/billing/plans`] as const;
+};
+
+export const getListBillingPlansQueryOptions = <
+  TData = Awaited<ReturnType<typeof listBillingPlans>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listBillingPlans>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getListBillingPlansQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof listBillingPlans>>
+  > = ({ signal }) => listBillingPlans({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listBillingPlans>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type ListBillingPlansQueryResult = NonNullable<
+  Awaited<ReturnType<typeof listBillingPlans>>
+>;
+export type ListBillingPlansQueryError = ErrorType<unknown>;
+
+/**
+ * @summary List available plans for the current deploy
+ */
+
+export function useListBillingPlans<
+  TData = Awaited<ReturnType<typeof listBillingPlans>>,
+  TError = ErrorType<unknown>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof listBillingPlans>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListBillingPlansQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * @summary Current company's billing mode, plan, quota, and grace state
+ */
+export const getGetBillingStatusUrl = () => {
+  return `/api/billing/status`;
+};
+
+export const getBillingStatus = async (
+  options?: RequestInit,
+): Promise<BillingStatusResponse> => {
+  return customFetch<BillingStatusResponse>(getGetBillingStatusUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetBillingStatusQueryKey = () => {
+  return [`/api/billing/status`] as const;
+};
+
+export const getGetBillingStatusQueryOptions = <
+  TData = Awaited<ReturnType<typeof getBillingStatus>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getBillingStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetBillingStatusQueryKey();
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getBillingStatus>>
+  > = ({ signal }) => getBillingStatus({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getBillingStatus>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetBillingStatusQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getBillingStatus>>
+>;
+export type GetBillingStatusQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Current company's billing mode, plan, quota, and grace state
+ */
+
+export function useGetBillingStatus<
+  TData = Awaited<ReturnType<typeof getBillingStatus>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getBillingStatus>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetBillingStatusQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Resolves the plan key to a configured Stripe Price ID, creates (or reuses) a Stripe Customer for the company, then returns a Checkout Session URL. Card collection is required up front; the configured trial period is applied via `subscription_data.trial_period_days` so trials are Stripe-native (no app-managed trial cap). Idempotent: returning users with an active subscription are sent to the Customer Portal URL instead.
+
+ * @summary Create a Stripe Checkout Session for a plan
+ */
+export const getCreateBillingCheckoutSessionUrl = () => {
+  return `/api/billing/checkout`;
+};
+
+export const createBillingCheckoutSession = async (
+  billingCheckoutRequest: BillingCheckoutRequest,
+  options?: RequestInit,
+): Promise<BillingCheckoutResponse> => {
+  return customFetch<BillingCheckoutResponse>(
+    getCreateBillingCheckoutSessionUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(billingCheckoutRequest),
+    },
+  );
+};
+
+export const getCreateBillingCheckoutSessionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createBillingCheckoutSession>>,
+    TError,
+    { data: BodyType<BillingCheckoutRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createBillingCheckoutSession>>,
+  TError,
+  { data: BodyType<BillingCheckoutRequest> },
+  TContext
+> => {
+  const mutationKey = ["createBillingCheckoutSession"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createBillingCheckoutSession>>,
+    { data: BodyType<BillingCheckoutRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createBillingCheckoutSession(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateBillingCheckoutSessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createBillingCheckoutSession>>
+>;
+export type CreateBillingCheckoutSessionMutationBody =
+  BodyType<BillingCheckoutRequest>;
+export type CreateBillingCheckoutSessionMutationError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create a Stripe Checkout Session for a plan
+ */
+export const useCreateBillingCheckoutSession = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createBillingCheckoutSession>>,
+    TError,
+    { data: BodyType<BillingCheckoutRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createBillingCheckoutSession>>,
+  TError,
+  { data: BodyType<BillingCheckoutRequest> },
+  TContext
+> => {
+  return useMutation(getCreateBillingCheckoutSessionMutationOptions(options));
+};
+
+/**
+ * Returns a one-time URL into Stripe's hosted Customer Portal so the user can update card, cancel, change plan, and view invoices.
+
+ * @summary Create a Stripe Customer Portal session
+ */
+export const getCreateBillingPortalSessionUrl = () => {
+  return `/api/billing/portal`;
+};
+
+export const createBillingPortalSession = async (
+  billingPortalRequest?: BillingPortalRequest,
+  options?: RequestInit,
+): Promise<BillingPortalResponse> => {
+  return customFetch<BillingPortalResponse>(
+    getCreateBillingPortalSessionUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(billingPortalRequest),
+    },
+  );
+};
+
+export const getCreateBillingPortalSessionMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createBillingPortalSession>>,
+    TError,
+    { data: BodyType<BillingPortalRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createBillingPortalSession>>,
+  TError,
+  { data: BodyType<BillingPortalRequest> },
+  TContext
+> => {
+  const mutationKey = ["createBillingPortalSession"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createBillingPortalSession>>,
+    { data: BodyType<BillingPortalRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createBillingPortalSession(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateBillingPortalSessionMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createBillingPortalSession>>
+>;
+export type CreateBillingPortalSessionMutationBody =
+  BodyType<BillingPortalRequest>;
+export type CreateBillingPortalSessionMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Create a Stripe Customer Portal session
+ */
+export const useCreateBillingPortalSession = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createBillingPortalSession>>,
+    TError,
+    { data: BodyType<BillingPortalRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createBillingPortalSession>>,
+  TError,
+  { data: BodyType<BillingPortalRequest> },
+  TContext
+> => {
+  return useMutation(getCreateBillingPortalSessionMutationOptions(options));
+};
+
+/**
+ * Accepts Stripe webhook events. Signature verification is done with `STRIPE_WEBHOOK_SECRET`; events are deduplicated via `processed_stripe_events`. Not part of the React/Zod codegen surface — the body is the raw bytes sent by Stripe and the response is a literal `{received:true}`.
+
+ * @summary Stripe webhook receiver (raw body)
+ */
+export const getStripeWebhookUrl = () => {
+  return `/api/billing/webhook`;
+};
+
+export const stripeWebhook = async (
+  stripeWebhookBody: StripeWebhookBody,
+  options?: RequestInit,
+): Promise<StripeWebhook200> => {
+  return customFetch<StripeWebhook200>(getStripeWebhookUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...options?.headers },
+    body: JSON.stringify(stripeWebhookBody),
+  });
+};
+
+export const getStripeWebhookMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof stripeWebhook>>,
+    TError,
+    { data: BodyType<StripeWebhookBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof stripeWebhook>>,
+  TError,
+  { data: BodyType<StripeWebhookBody> },
+  TContext
+> => {
+  const mutationKey = ["stripeWebhook"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof stripeWebhook>>,
+    { data: BodyType<StripeWebhookBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return stripeWebhook(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type StripeWebhookMutationResult = NonNullable<
+  Awaited<ReturnType<typeof stripeWebhook>>
+>;
+export type StripeWebhookMutationBody = BodyType<StripeWebhookBody>;
+export type StripeWebhookMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Stripe webhook receiver (raw body)
+ */
+export const useStripeWebhook = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof stripeWebhook>>,
+    TError,
+    { data: BodyType<StripeWebhookBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof stripeWebhook>>,
+  TError,
+  { data: BodyType<StripeWebhookBody> },
+  TContext
+> => {
+  return useMutation(getStripeWebhookMutationOptions(options));
 };

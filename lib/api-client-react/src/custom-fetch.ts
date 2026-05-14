@@ -29,6 +29,24 @@ export function setApiBaseUrl(url: string | undefined | null): void {
   apiOriginPrefix = t.replace(/\/$/, "");
 }
 
+/**
+ * Returns the configured API origin prefix (set by `setApiBaseUrl`) or `""` when same-origin. Useful
+ * for non-fetch contexts that still need to point at the API host (e.g. `<img src=…>` for an
+ * AI-generated avatar served by `GET /api/clients/:id/avatar`). Callers must concatenate manually:
+ * `getApiBaseUrl() + "/api/clients/123/avatar?..."`.
+ */
+export function getApiBaseUrl(): string {
+  return apiOriginPrefix;
+}
+
+/** Convenience: prefix an `/api/...` path with the configured origin (or pass through unchanged). */
+export function resolveApiUrl(pathOrUrl: string | null | undefined): string | null {
+  if (!pathOrUrl) return null;
+  if (apiOriginPrefix === "") return pathOrUrl;
+  if (!pathOrUrl.startsWith("/api")) return pathOrUrl;
+  return `${apiOriginPrefix}${pathOrUrl}`;
+}
+
 function resolveFetchInput(input: RequestInfo | URL): RequestInfo | URL {
   if (apiOriginPrefix === "" || typeof input !== "string") {
     return input;

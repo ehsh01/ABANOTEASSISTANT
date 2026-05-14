@@ -83,6 +83,7 @@ lib/
 - `JWT_SECRET` — required for `/auth/*` and all Bearer-protected routes (see `artifacts/api-server/.env.example`)
 - `SUPER_ADMIN_EMAILS` — optional comma-separated list; matching emails get `super_admin` on **registration** (bootstrap). Existing users: `UPDATE users SET role = 'super_admin' WHERE email = '...'`
 - `ENFORCE_COMPLIMENTARY_ACCESS` — when `true`, note generation requires `companies.free_usage` (set via super admin API or DB)
+- **Stripe billing (optional, off by default):** `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_GROWTH`, `STRIPE_PRICE_HIGH`, `STRIPE_TRIAL_DAYS`, `BILLING_GRACE_PERIOD_DAYS`, `BILLING_ENFORCEMENT` (`off|soft|hard`), `APP_ORIGIN` (comma-separated redirect allowlist). When `STRIPE_SECRET_KEY` is unset, every `/billing/*` route returns 503 and the legacy behavior (only `ENFORCE_COMPLIMENTARY_ACCESS`) is preserved. Full setup: **`docs/billing/STRIPE-BILLING-SETUP.md`**.
 
 ## Response Format
 

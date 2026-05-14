@@ -26,12 +26,15 @@ import { useWizardStore } from "@/store/wizard-store";
 import {
   useClients,
   useClient,
+  useDeleteClient,
   useExtractAssessmentFromPdf,
   useClientBehaviorProgramApprovals,
   useClientReplacementProgramsList,
   usePutClientBehaviorApprovedPrograms,
+  useGenerateClientAvatar,
 } from "@/hooks/use-aba-api";
 import { ApiError, type AssessmentExtractResultPayload } from "@workspace/api-client-react";
+import { ClientAvatar } from "@/components/client-avatar";
 import { cn } from "@/lib/utils";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -677,12 +680,13 @@ function SectionEditHeader({
 }
 
 // ── Step progress bar ─────────────────────────────────────────────────────────
-function StepBar({ step }: { step: number }) {
+function StepBar({ progress }: { progress: number }) {
+  const clamped = Math.max(0, Math.min(1, progress));
   return (
     <div className="w-full h-1 bg-[#F0E4E1]">
       <div
         className="h-full bg-[#C27A8A] transition-all duration-500 ease-out"
-        style={{ width: `${(step / 3) * 100}%` }}
+        style={{ width: `${clamped * 100}%` }}
       />
     </div>
   );
@@ -692,9 +696,12 @@ function StepBar({ step }: { step: number }) {
 function Step1({
   data,
   onChange,
+  avatarPanel,
 }: {
   data: Step1Data;
   onChange: (d: Step1Data) => void;
+  /** Optional avatar panel rendered above the name fields (edit mode only). */
+  avatarPanel?: React.ReactNode;
 }) {
   const genders = ["Male", "Female", "Non-binary", "Prefer not to say"];
   const [dobOpen, setDobOpen] = useState(false);
@@ -705,6 +712,7 @@ function Step1({
 
   return (
     <div className="space-y-5">
+      {avatarPanel}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
         {/* First name */}
         <div>
@@ -803,6 +811,8 @@ function Step2({
   onExtractFromPdf,
   onClearStoredAssessment,
   clearingStoredAssessment,
+  authorizationExpiresOn,
+  onAuthorizationExpiresOnChange,
 }: {
   data: Step2Data;
   onChange: (d: Step2Data) => void;
@@ -815,6 +825,9 @@ function Step2({
   /** When set, show a control to remove the stored PDF from the server (edit flows only). */
   onClearStoredAssessment?: () => void | Promise<void>;
   clearingStoredAssessment?: boolean;
+  /** ISO yyyy-MM-dd authorization expiration (auto-filled from PDF; editable by RBT). */
+  authorizationExpiresOn?: string | null;
+  onAuthorizationExpiresOnChange?: (next: string | null) => void;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
@@ -953,10 +966,67 @@ function Step2({
         </div>
       )}
 
+      {onAuthorizationExpiresOnChange ? (
+        <AuthorizationExpiresField
+          value={authorizationExpiresOn ?? null}
+          onChange={onAuthorizationExpiresOnChange}
+        />
+      ) : null}
+
       <p className="text-xs text-[#877870] flex items-center gap-1.5">
         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 pop-icon" />
         This is optional — you can upload the assessment at any time from the client's profile.
       </p>
+    </div>
+  );
+}
+
+// ── Authorization-expires-on input ──────────────────────────────────────────
+/**
+ * Lightweight date input for the authorization / treatment-plan expiration date. Auto-fills from the assessment
+ * PDF when present; the RBT can review or override before saving. Renders the stored ISO `yyyy-MM-dd` value
+ * (which is what we send back to the API) in a native HTML5 date picker for accessibility + browser support.
+ */
+function AuthorizationExpiresField({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (next: string | null) => void;
+}) {
+  const isExpired =
+    !!value && /^\d{4}-\d{2}-\d{2}$/.test(value) && value < new Date().toISOString().slice(0, 10);
+  return (
+    <div className="bg-white rounded-2xl border border-[#F0E4E1] p-5">
+      <label className="block text-sm font-semibold text-[#2D2523] mb-1">
+        Authorization expires on
+      </label>
+      <p className="text-xs text-[#877870] mb-3 leading-relaxed">
+        Auto-filled from the assessment PDF when stated. Surfaces in red on the client's card so RBTs know
+        when the assessment lapses.
+      </p>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+        <input
+          type="date"
+          value={value ?? ""}
+          onChange={(e) => onChange(e.target.value ? e.target.value : null)}
+          className="px-3 py-2 rounded-lg border border-[#F0E4E1] bg-[#FDFAF7] text-sm text-[#2D2523] focus:outline-none focus:ring-2 focus:ring-[#C27A8A]/40 focus:border-[#C27A8A]/40"
+        />
+        {value ? (
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="text-xs text-[#877870] hover:text-[#C27A8A] underline self-start sm:self-auto"
+          >
+            Clear
+          </button>
+        ) : null}
+      </div>
+      {isExpired ? (
+        <p className="mt-2 text-xs font-semibold text-rose-700">
+          This authorization is past its expiration date.
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -1233,10 +1303,27 @@ function NewClientForm({
 
   const [hydrated, setHydrated] = useState(!isEdit);
   const searchParams = new URLSearchParams(window.location.search);
-  const initialStep = isEdit ? Math.min(3, Math.max(1, Number(searchParams.get("step") || 1))) : 1;
+
+  // `?intent=assessment` (set by the "From Assessment PDF" picker on the clients page) reorders the create
+  // wizard so the assessment upload comes FIRST. The wizard then walks the user through Step 2 → Step 1 →
+  // Step 3 so they can review the auto-extracted name/DOB/gender before reviewing programs and saving.
+  // Edit flows always use the canonical 1→2→3 order.
+  const intentRaw = (searchParams.get("intent") ?? "").toLowerCase();
+  const STEP_ORDER: readonly number[] =
+    !isEdit && intentRaw === "assessment" ? [2, 1, 3] : [1, 2, 3];
+  const initialStep = isEdit
+    ? Math.min(3, Math.max(1, Number(searchParams.get("step") || 1)))
+    : STEP_ORDER[0];
   const [step, setStep] = useState(initialStep);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const stepIndex = STEP_ORDER.indexOf(step);
+  const safeStepIndex = stepIndex < 0 ? 0 : stepIndex;
+  const isFirstStep = safeStepIndex === 0;
+  const isLastStep = safeStepIndex === STEP_ORDER.length - 1;
+  const nextStep = STEP_ORDER[safeStepIndex + 1];
+  const prevStep = STEP_ORDER[safeStepIndex - 1];
 
   // Detect return destination from query param (?returnTo=wizard)
   const returnTo = searchParams.get("returnTo");
@@ -1257,10 +1344,111 @@ function NewClientForm({
     interventions: [],
   });
 
+  // Authorization / treatment-plan expiration date (ISO yyyy-MM-dd). Pulled from the assessment when present;
+  // sent on create + update so the clients list / detail header can show the red expiration badge.
+  const [authorizationExpiresOn, setAuthorizationExpiresOn] = useState<string | null>(null);
+
   const extractMutation = useExtractAssessmentFromPdf();
   const [extractError, setExtractError] = useState<string | null>(null);
   const [extractSuccess, setExtractSuccess] = useState<string | null>(null);
   const [clearingStoredAssessment, setClearingStoredAssessment] = useState(false);
+  // Identity of the most recently auto-extracted file (name + size) so we don't re-run extraction repeatedly
+  // for the same PDF the user picked. Switching to a different file re-arms the auto-extract effect.
+  const lastAutoExtractedFileKeyRef = useRef<string | null>(null);
+  const deleteClientMutation = useDeleteClient();
+  const generateAvatarMutation = useGenerateClientAvatar();
+
+  /** Fires the avatar regenerate request for an existing client (edit mode + section-edit "personal"). */
+  function regenerateAvatarForCurrentClient() {
+    if (!isEdit || !Number.isFinite(numericId) || numericId <= 0) return;
+    if (generateAvatarMutation.isPending) return;
+    generateAvatarMutation.mutate(numericId, {
+      onError: (err) => {
+        const msg =
+          err instanceof Error ? `Could not generate avatar: ${err.message}` : "Could not generate avatar.";
+        setSaveError(msg);
+      },
+      onSuccess: () => {
+        setSaveError(null);
+      },
+    });
+  }
+
+  /** Renders the clickable avatar circle + helper copy used in the wizard Step 1 (edit mode only). */
+  function renderEditModeAvatarPanel() {
+    if (!isEdit) return null;
+    const stored = detailRes?.data;
+    if (!stored) return null;
+    const subject = {
+      avatarUrl: stored.avatarUrl,
+      avatarUpdatedAt: stored.avatarUpdatedAt,
+      firstName: step1.firstName || stored.profile?.firstName || "",
+      lastName: step1.lastName || stored.profile?.lastName || "",
+      name: stored.name,
+    };
+    const hasAvatar = Boolean(stored.avatarUrl);
+    return (
+      <div className="flex items-center gap-4 rounded-2xl border border-[#F0E4E1] bg-[#FDFAF7] p-4 mb-2">
+        <ClientAvatar
+          client={subject}
+          size="xl"
+          onRegenerate={regenerateAvatarForCurrentClient}
+          isRegenerating={generateAvatarMutation.isPending}
+          hoverLabel={hasAvatar ? "Click to regenerate avatar with AI" : "Click to generate avatar with AI"}
+        />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-[#2D2523]">Profile avatar</p>
+          <p className="text-xs text-[#877870] mt-0.5 leading-relaxed">
+            {generateAvatarMutation.isPending
+              ? "Generating a new avatar with AI…"
+              : hasAvatar
+                ? "Click the picture to regenerate a new AI cartoon avatar from this client's name, age, and gender."
+                : "Click the initials to generate an AI cartoon avatar from this client's name, age, and gender."}
+          </p>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              regenerateAvatarForCurrentClient();
+            }}
+            disabled={generateAvatarMutation.isPending}
+            className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white border border-[#F0E4E1] text-xs font-semibold text-[#C27A8A] hover:bg-[#F9EEF1] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {generateAvatarMutation.isPending
+              ? "Generating…"
+              : hasAvatar
+                ? "Regenerate avatar"
+                : "Generate avatar"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  async function handleDeleteClientFromEdit() {
+    if (!isEdit || !Number.isFinite(numericId) || numericId <= 0) return;
+    if (deleteClientMutation.isPending) return;
+    const stored = detailRes?.data;
+    const fromProfile =
+      stored?.profile?.firstName || stored?.profile?.lastName
+        ? `${stored?.profile?.firstName ?? ""} ${stored?.profile?.lastName ?? ""}`.trim()
+        : "";
+    const fromForm = `${step1.firstName} ${step1.lastName}`.trim();
+    const namePart = fromProfile || stored?.name || fromForm || "this client";
+    const ok = window.confirm(
+      `Delete client "${namePart}"?\n\nThis permanently removes the client, their session notes, program links, and behavior approvals. This cannot be undone.`,
+    );
+    if (!ok) return;
+    setSaveError(null);
+    deleteClientMutation.mutate(numericId, {
+      onSuccess: () => setLocation("/clients"),
+      onError: (err) => {
+        setSaveError(
+          err instanceof Error ? `Could not delete client: ${err.message}` : "Could not delete client.",
+        );
+      },
+    });
+  }
 
   // Lets BehaviorSection register a function to flush every behavior's draft approved-program
   // selections in one shot. The bottom "Save changes" button calls it after PATCHing behaviors,
@@ -1297,12 +1485,33 @@ function NewClientForm({
         s.dateOfBirth.length === 10 ? s.dateOfBirth : normalizeExtractedDob(e.dateOfBirth) || s.dateOfBirth,
       gender: s.gender || normalizeExtractedGender(e.gender) || s.gender,
     }));
-    setStep3((s) => ({
-      maladaptiveBehaviors: appendDedupedTags(s.maladaptiveBehaviors, e.maladaptiveBehaviors),
-      maladaptiveBehaviorTargets: s.maladaptiveBehaviorTargets,
-      replacementPrograms: appendDedupedTags(s.replacementPrograms, e.replacementPrograms),
-      interventions: appendDedupedTags(s.interventions, e.interventions),
-    }));
+    setStep3((s) => {
+      const nextBehaviors = appendDedupedTags(s.maladaptiveBehaviors, e.maladaptiveBehaviors);
+      // Build a case-insensitive map of behaviors already on the form (kept) and fill topographies for any
+      // behavior the user has not typed one for, using the assessment's operational definitions when present.
+      const lowerByName = new Map(nextBehaviors.map((n) => [n.toLowerCase(), n] as const));
+      const nextTargets: Record<string, string> = { ...s.maladaptiveBehaviorTargets };
+      for (const t of e.maladaptiveBehaviorTopographies ?? []) {
+        const desc = (t.topography ?? "").trim();
+        if (!desc) continue;
+        const aligned = lowerByName.get((t.name ?? "").trim().toLowerCase()) ?? null;
+        if (!aligned) continue;
+        const existing = (nextTargets[aligned] ?? "").trim();
+        if (!existing) {
+          nextTargets[aligned] = desc;
+        }
+      }
+      return {
+        maladaptiveBehaviors: nextBehaviors,
+        maladaptiveBehaviorTargets: nextTargets,
+        replacementPrograms: appendDedupedTags(s.replacementPrograms, e.replacementPrograms),
+        interventions: appendDedupedTags(s.interventions, e.interventions),
+      };
+    });
+    if (e.assessmentAuthorizationExpiresOn) {
+      // Only auto-fill when nothing has been entered yet; never overwrite an explicitly-set value.
+      setAuthorizationExpiresOn((prev) => prev ?? e.assessmentAuthorizationExpiresOn ?? null);
+    }
   }
 
   async function handleClearStoredAssessment() {
@@ -1321,6 +1530,7 @@ function NewClientForm({
       await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       await queryClient.invalidateQueries({ queryKey: ["/api/clients", numericId] });
       setStep2({ file: null });
+      setAuthorizationExpiresOn(null);
       setExtractError(null);
       setExtractSuccess(null);
     } catch (e) {
@@ -1338,13 +1548,18 @@ function NewClientForm({
       const res = await extractMutation.mutateAsync(step2.file);
       applyAssessmentExtract(res.data);
       const e = res.data.extracted;
+      const topographyCount = (e.maladaptiveBehaviorTopographies ?? []).filter(
+        (t) => (t.topography ?? "").trim().length > 0,
+      ).length;
       const counts = [
         e.firstName || e.lastName ? "name" : null,
         e.dateOfBirth ? "DOB" : null,
         e.gender ? "gender" : null,
         e.maladaptiveBehaviors.length ? `${e.maladaptiveBehaviors.length} behaviors` : null,
+        topographyCount ? `${topographyCount} topographies` : null,
         e.replacementPrograms.length ? `${e.replacementPrograms.length} programs` : null,
         e.interventions.length ? `${e.interventions.length} interventions` : null,
+        e.assessmentAuthorizationExpiresOn ? "authorization expiration date" : null,
       ].filter(Boolean);
       const warn = res.data.warnings.length ? ` Note: ${res.data.warnings.join(" ")}` : "";
       setExtractSuccess(
@@ -1363,6 +1578,25 @@ function NewClientForm({
       setExtractError(msg);
     }
   }
+
+  // Auto-trigger extraction the moment the RBT picks (or drops) a PDF, so name / behaviors / programs /
+  // interventions / topographies / authorization expiration date are auto-filled without an extra click.
+  // Re-arms only when a different file is selected (different name+size).
+  useEffect(() => {
+    const file = step2.file;
+    if (!file) {
+      lastAutoExtractedFileKeyRef.current = null;
+      return;
+    }
+    const key = `${file.name}|${file.size}`;
+    if (lastAutoExtractedFileKeyRef.current === key) return;
+    if (extractMutation.isPending) return;
+    lastAutoExtractedFileKeyRef.current = key;
+    void handleExtractFromPdf();
+    // We intentionally depend only on the file identity; handleExtractFromPdf is recreated each render
+    // but reads the latest file via closure on `step2.file` inside.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step2.file]);
 
   useEffect(() => {
     if (!isEdit) {
@@ -1392,6 +1626,7 @@ function NewClientForm({
       replacementPrograms: [...(p?.replacementPrograms ?? [])],
       interventions: [...(p?.interventions ?? [])],
     });
+    setAuthorizationExpiresOn(p?.assessmentAuthorizationExpiresOn ?? null);
     // Preserve step parameter from URL if provided, otherwise default to 1
     const urlStep = searchParams.get("step");
     if (!urlStep) {
@@ -1410,8 +1645,8 @@ function NewClientForm({
       setLocation("/clients");
       return;
     }
-    if (step === 1) setLocation(cancelDestination());
-    else setStep(step - 1);
+    if (isFirstStep) setLocation(cancelDestination());
+    else if (typeof prevStep === "number") setStep(prevStep);
   }
 
   function canContinue() {
@@ -1517,9 +1752,9 @@ function NewClientForm({
 
   async function handleNext() {
     if (isSectionEdit) return;
-    if (step < 3) {
+    if (!isLastStep && typeof nextStep === "number") {
       setSaveError(null);
-      setStep(step + 1);
+      setStep(nextStep);
       return;
     }
     setSaving(true);
@@ -1538,6 +1773,7 @@ function NewClientForm({
           })),
           replacementPrograms: step3.replacementPrograms,
           interventions: step3.interventions,
+          assessmentAuthorizationExpiresOn: authorizationExpiresOn,
         };
         if (step2.file) {
           payload.hasAssessment = true;
@@ -1581,10 +1817,23 @@ function NewClientForm({
           })),
           replacementPrograms: step3.replacementPrograms,
           interventions: step3.interventions,
+          assessmentAuthorizationExpiresOn: authorizationExpiresOn,
         });
         if (step2.file) {
           await uploadClientAssessmentDocument(created.data.id, { file: step2.file });
         }
+        // Fire-and-forget avatar generation. We don't await: the request can take ~5–15s and we want
+        // the user back on the clients page immediately. The clients-list query is invalidated by the
+        // hook on success, so the avatar swaps in for the new card the next time it renders.
+        const newClientId = created.data.id;
+        generateAvatarMutation.mutate(newClientId, {
+          onError: (err) => {
+            // Log only — never block the create flow on avatar generation. The user can retry later
+            // from the edit screen.
+            const msg = err instanceof Error ? err.message : "Avatar generation failed";
+            console.warn(`Avatar generation failed for new client ${newClientId}:`, msg);
+          },
+        });
       }
       await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       if (isEdit && !isSectionEdit) {
@@ -1637,7 +1886,9 @@ function NewClientForm({
                 <p className="text-[#877870] mt-1">{SECTION_EDIT_SUBTITLES[editSection]}</p>
               </div>
 
-              {editSection === "personal" && <Step1 data={step1} onChange={setStep1} />}
+              {editSection === "personal" && (
+                <Step1 data={step1} onChange={setStep1} avatarPanel={renderEditModeAvatarPanel()} />
+              )}
               {editSection === "assessment" && (
                 <Step2
                   data={step2}
@@ -1649,6 +1900,8 @@ function NewClientForm({
                   onExtractFromPdf={handleExtractFromPdf}
                   onClearStoredAssessment={handleClearStoredAssessment}
                   clearingStoredAssessment={clearingStoredAssessment}
+                  authorizationExpiresOn={authorizationExpiresOn}
+                  onAuthorizationExpiresOnChange={setAuthorizationExpiresOn}
                 />
               )}
               {editSection !== "personal" && editSection !== "assessment" && (
@@ -1704,6 +1957,26 @@ function NewClientForm({
                   </span>
                 </div>
               </div>
+
+              <div className="mt-12 rounded-xl border border-rose-200 bg-rose-50/60 p-5">
+                <h3 className="text-sm font-bold text-rose-700 flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  Danger zone
+                </h3>
+                <p className="text-xs text-rose-700/80 mt-1 leading-relaxed">
+                  Permanently delete this client, all their session notes, program links, and behavior approvals.
+                  This cannot be undone.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleDeleteClientFromEdit}
+                  disabled={deleteClientMutation.isPending}
+                  className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-4 h-4 pop-icon-white" />
+                  {deleteClientMutation.isPending ? "Deleting…" : "Delete client"}
+                </button>
+              </div>
             </motion.div>
           </AnimatePresence>
         </main>
@@ -1719,19 +1992,24 @@ function NewClientForm({
         onCancel={() => setLocation(cancelDestination())}
         mode={isEdit ? "edit" : "create"}
       />
-      {!isSectionEdit && <StepBar step={step} />}
+      {!isSectionEdit && (
+        <StepBar
+          progress={(safeStepIndex + 1) / STEP_ORDER.length}
+        />
+      )}
 
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 py-10">
-        {/* Step indicator dots — full wizard only (not section edit) */}
+        {/* Step indicator dots — full wizard only (not section edit). Render in the wizard's actual order
+            (assessment-first vs canonical) so the highlighted dot tracks the user's true position. */}
         {!isSectionEdit && (
           <div className="flex items-center justify-center gap-3 mb-8">
-            {[1, 2, 3].map((n) => (
+            {STEP_ORDER.map((n, i) => (
               <div
                 key={n}
                 className={`rounded-full transition-all duration-300 ${
-                  n < step
+                  i < safeStepIndex
                     ? "w-6 h-2 bg-[#C27A8A]"
-                    : n === step
+                    : i === safeStepIndex
                     ? "w-8 h-2 bg-[#C27A8A]"
                     : "w-2 h-2 bg-[#F0E4E1]"
                 }`}
@@ -1775,7 +2053,13 @@ function NewClientForm({
               <WizardExistingClientPicker onChosen={() => setLocation("/wizard")} />
             )}
 
-            {step === 1 && <Step1 data={step1} onChange={setStep1} />}
+            {step === 1 && (
+              <Step1
+                data={step1}
+                onChange={setStep1}
+                avatarPanel={isEdit ? renderEditModeAvatarPanel() : undefined}
+              />
+            )}
             {step === 2 && (
               <Step2
                 data={step2}
@@ -1787,6 +2071,8 @@ function NewClientForm({
                 onExtractFromPdf={handleExtractFromPdf}
                 onClearStoredAssessment={isEdit ? handleClearStoredAssessment : undefined}
                 clearingStoredAssessment={clearingStoredAssessment}
+                authorizationExpiresOn={authorizationExpiresOn}
+                onAuthorizationExpiresOnChange={setAuthorizationExpiresOn}
               />
             )}
             {step === 3 && (
@@ -1812,7 +2098,7 @@ function NewClientForm({
                 >
                   {saving ? (
                     <>Saving...</>
-                  ) : step === 3 ? (
+                  ) : isLastStep ? (
                     <>
                       <User className="w-4 h-4 pop-icon-white" /> {isEdit ? "Save changes" : "Save Client"}
                     </>
@@ -1833,6 +2119,28 @@ function NewClientForm({
                 </span>
               </div>
             </div>
+
+            {isEdit && step === 3 && (
+              <div className="mt-12 rounded-xl border border-rose-200 bg-rose-50/60 p-5">
+                <h3 className="text-sm font-bold text-rose-700 flex items-center gap-2">
+                  <Trash2 className="w-4 h-4" />
+                  Danger zone
+                </h3>
+                <p className="text-xs text-rose-700/80 mt-1 leading-relaxed">
+                  Permanently delete this client, all their session notes, program links, and behavior approvals.
+                  This cannot be undone.
+                </p>
+                <button
+                  type="button"
+                  onClick={handleDeleteClientFromEdit}
+                  disabled={deleteClientMutation.isPending}
+                  className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <Trash2 className="w-4 h-4 pop-icon-white" />
+                  {deleteClientMutation.isPending ? "Deleting…" : "Delete client"}
+                </button>
+              </div>
+            )}
           </motion.div>
         </AnimatePresence>
       </main>

@@ -14,6 +14,8 @@ export type SessionCompany = {
   id: number;
   name: string;
   freeUsage: boolean;
+  /** Optional explicit billing mode. Older sessions may not have it; treated as "subscription". */
+  billingMode?: "complimentary" | "trial" | "subscription" | "suspended";
   address?: string;
   phone?: string;
   email?: string;

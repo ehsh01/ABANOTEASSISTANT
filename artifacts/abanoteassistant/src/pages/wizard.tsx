@@ -130,13 +130,19 @@ const MAX_PROGRAM_TRIALS = 10;
  * Stored on the API as `count` = fixed denominator and `effectiveTrials` = trials 1..N that met criterion.
  */
 const TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT = 10;
-const CRITERION_MET_PERCENT_OPTIONS = [10, 20, 30, 40, 50, 60, 70, 80, 100] as const;
+const CRITERION_MET_PERCENT_OPTIONS = [0, 10, 20, 30, 40, 50, 60, 70, 80, 100] as const;
 
+/**
+ * Derive the dropdown's selected percent from a stored trial entry. We treat `count == null` as
+ * "not entered" (dropdown shows "Optional"). When `count >= 1` we always return a percent — including
+ * **0** for empty `effectiveTrials` — so a saved 0% round-trips correctly instead of regressing back to
+ * "Optional" on next render.
+ */
 function criterionPercentFromTrialEntry(entry: ProgramTrialDataEntry): number | null {
   const n = normalizeProgramTrialEntry(entry);
   const c = n.count;
+  if (c == null || c < 1) return null;
   const s = n.effectiveTrials.length;
-  if (c == null || c < 1 || s < 1) return null;
   const rawPct = Math.round((s / c) * 100);
   let best: number | null = null;
   let bestDiff = Infinity;

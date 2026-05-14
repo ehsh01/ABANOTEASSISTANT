@@ -3,6 +3,7 @@
  * Source of truth for wording: .cursor/rules/aba-note-locked-prose.mdc
  */
 
+import type { TherapistTrialSummaryForHourEntry } from "./note-validation";
 import type { TherapySetting } from "@workspace/therapy-settings";
 import { therapySettingLocationPhrase } from "@workspace/therapy-settings";
 
@@ -34,7 +35,7 @@ export function formatUsDateFromIso(iso: string): string {
 
 /** Verbatim mandatory closing paragraph (do not paraphrase). */
 export const LOCKED_CLOSING_PARAGRAPH =
-  'Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., "Good job," "Wow," and "Good attention to detail"), preferred toys, and videos contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned.';
+  'Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., "Good job," "Wow," and "Good attention to detail"), preferred toys, music, bubbles, and sensory play activities contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned.';
 
 /** Used when the client profile has no first name for locked opening / location lines. */
 export const SESSION_NOTE_CLIENT_REFERRAL = "the client";
@@ -88,14 +89,59 @@ export function buildLockedOpening(
 }
 
 /**
+ * Pools per-segment therapist-entered discrete-trial rows (same contract as `therapistTrialSummaryForReplacementHour`
+ * after narrative collapse). Returns null when no segment has `totalTrials >= 1`.
+ */
+export function aggregateTherapistTrialSummariesForPerformanceLine(
+  summaries: TherapistTrialSummaryForHourEntry[] | undefined,
+): { successes: number; trials: number; segmentsWithData: number } | null {
+  if (!summaries?.length) return null;
+  let successes = 0;
+  let trials = 0;
+  let segmentsWithData = 0;
+  for (const entry of summaries) {
+    if (!entry || !Number.isFinite(entry.totalTrials) || entry.totalTrials < 1) continue;
+    const rawN = Array.isArray(entry.successfulTrialNumbers) ? entry.successfulTrialNumbers.length : 0;
+    if (!Number.isFinite(rawN) || rawN < 0) continue;
+    const capped = Math.min(rawN, entry.totalTrials);
+    successes += capped;
+    trials += entry.totalTrials;
+    segmentsWithData++;
+  }
+  if (trials < 1 || segmentsWithData < 1) return null;
+  return { successes, trials, segmentsWithData };
+}
+
+function buildPerformanceSentenceWithoutTrialAggregate(programSlotCount: number): string {
+  const n = Math.max(1, Math.floor(programSlotCount));
+  const programsWord = n === 1 ? "program" : "programs";
+  return `The client completed ${n} ${programsWord}. Discrete-trial success counts were not entered for enough narrative segments to compute a session-wide percentage from intake data; continue acquisition and behavior-reduction documentation per the Behavior Plan and session-specific data collection.`;
+}
+
+/**
  * End-of-note performance line after the mandatory closing paragraph.
  * `programSlotCount` = number of replacement-program narrative segments for this session (aligned with
  * `replacementProgramSlotCount(sessionHours)` / collapsed narrative segments).
+ *
+ * When therapist-entered discrete trials exist for at least one narrative segment, emits one fixed qualitative
+ * sentence (no session-wide percent on this line). Per-hour ABC text still carries trial percentages where required
+ * by validation. When no trial rows qualify, uses the program-count fallback (see `buildPerformanceSentenceWithoutTrialAggregate`).
+ *
+ * Learner reference matches the locked opening: client profile **first name** when non-empty after trim; otherwise
+ * **The client** (sentence-initial capitalization for the generic referral).
  */
-export function buildPerformanceSentence(programSlotCount: number): string {
-  const n = Math.max(1, Math.floor(programSlotCount));
-  const programsWord = n === 1 ? "program" : "programs";
-  return `The client completed ${n} ${programsWord} with varying levels of prompting and demonstrated successful responding in the majority of trials across skill acquisition and behavior reduction targets.`;
+export function buildPerformanceSentence(
+  programSlotCount: number,
+  therapistTrialSummaryForReplacementHour?: TherapistTrialSummaryForHourEntry[] | undefined,
+  clientFirstName?: string | null,
+): string {
+  const agg = aggregateTherapistTrialSummariesForPerformanceLine(therapistTrialSummaryForReplacementHour);
+  if (!agg) {
+    return buildPerformanceSentenceWithoutTrialAggregate(programSlotCount);
+  }
+  const trimmed = clientFirstName?.trim() ?? "";
+  const who = trimmed.length > 0 ? trimmed : "The client";
+  return `${who} participated in session activities with inconsistent responding and required prompting across tasks.`;
 }
 
 export function buildNextSessionSentence(

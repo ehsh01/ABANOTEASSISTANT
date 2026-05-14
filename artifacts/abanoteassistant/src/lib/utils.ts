@@ -22,6 +22,42 @@ export function formatSessionDate(dateStr: string | undefined | null, fallback =
   return dateStr;
 }
 
+/**
+ * Format an authorization-expires value (ISO `yyyy-MM-dd` from the API) for the client cards / detail header.
+ * Returns null when the input is missing/unparseable so callers can hide the badge.
+ */
+export function formatAuthorizationExpiresOn(raw: string | null | undefined): {
+  display: string;
+  isPast: boolean;
+} | null {
+  if (!raw) return null;
+  const t = raw.trim();
+  if (!t) return null;
+  let y: number, m: number, d: number;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) {
+    [y, m, d] = t.split("-").map(Number);
+  } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(t)) {
+    const [mo, da, yr] = t.split("/").map(Number);
+    y = yr;
+    m = mo;
+    d = da;
+  } else {
+    return null;
+  }
+  const dt = new Date(y, m - 1, d);
+  if (
+    dt.getFullYear() !== y ||
+    dt.getMonth() !== m - 1 ||
+    dt.getDate() !== d
+  ) {
+    return null;
+  }
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const display = dt.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return { display, isPast: dt < today };
+}
+
 /** Display-only session clock range when the API stores duration in hours only. */
 export function sessionTimeRangeFromHours(sessionHours: number): { startTime: string; endTime: string } {
   const start = new Date();

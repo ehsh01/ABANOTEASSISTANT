@@ -23,11 +23,10 @@
     "openai": "^4.104.0",
     "pdf-parse": "^1.1.1",
     "resend": "^6.9.4",
+    "stripe": "^22.1.1",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "pg": "^8.20.0",
-    "pg-connection-string": "^2.7.0",
     "@types/bcrypt": "^5.0.2",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
@@ -37,6 +36,8 @@
     "@types/node": "catalog:",
     "@types/pdf-parse": "^1.1.5",
     "esbuild": "^0.27.3",
+    "pg": "^8.20.0",
+    "pg-connection-string": "^2.7.0",
     "tsx": "catalog:"
   }
 }

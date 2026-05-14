@@ -1,4 +1,4 @@
-import { useParams, Link } from "wouter";
+import { useParams, Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useMemo, Fragment } from "react";
 import {
@@ -18,8 +18,15 @@ import {
   Trash2,
   Plus,
 } from "lucide-react";
-import { useDeleteSessionNote, useUpdateClientProgram, useDeleteClientProgram } from "@/hooks/use-aba-api";
-import { sessionTimeRangeFromHours, formatSessionDate } from "@/lib/utils";
+import {
+  useDeleteSessionNote,
+  useUpdateClientProgram,
+  useDeleteClientProgram,
+  useDeleteClient,
+  useGenerateClientAvatar,
+} from "@/hooks/use-aba-api";
+import { sessionTimeRangeFromHours, formatSessionDate, formatAuthorizationExpiresOn } from "@/lib/utils";
+import { ClientAvatar } from "@/components/client-avatar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClient, useClientPrograms, useNotesList } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
@@ -93,6 +100,7 @@ function TagListSection({
 export default function ClientDetail() {
   const { clientId } = useParams<{ clientId: string }>();
   const id = clientId ? Number(clientId) : undefined;
+  const [, setLocation] = useLocation();
   const { data: clientResp, isLoading: clientLoading } = useClient(id);
   const {
     data: programsResp,
@@ -104,6 +112,8 @@ export default function ClientDetail() {
   const deleteMutation = useDeleteSessionNote();
   const updateProgramMutation = useUpdateClientProgram();
   const deleteProgramMutation = useDeleteClientProgram();
+  const deleteClientMutation = useDeleteClient();
+  const generateAvatarMutation = useGenerateClientAvatar();
   const t = useT();
   const [activeTab, setActiveTab] = useState("sessionNotes");
 
@@ -153,6 +163,27 @@ export default function ClientDetail() {
     deleteProgramMutation.mutate({ clientId: id, programId });
   };
 
+  const handleDeleteClient = () => {
+    if (!id || deleteClientMutation.isPending) return;
+    const client = clientResp?.data;
+    const namePart = client
+      ? `${client.profile?.firstName ?? ""} ${client.profile?.lastName ?? ""}`.trim() ||
+        client.name
+      : "this client";
+    const ok = window.confirm(
+      `Delete client "${namePart}"?\n\nThis permanently removes the client, their session notes, program links, and behavior approvals. This cannot be undone.`,
+    );
+    if (!ok) return;
+    deleteClientMutation.mutate(id, {
+      onSuccess: () => setLocation("/clients"),
+      onError: (err) => {
+        window.alert(
+          err instanceof Error ? `Could not delete client: ${err.message}` : "Could not delete client.",
+        );
+      },
+    });
+  };
+
   const client = clientResp?.data;
   const programs = programsResp?.data ?? [];
   const clientNotes = useMemo(() => {
@@ -164,8 +195,6 @@ export default function ClientDetail() {
   const firstName = p?.firstName ?? client?.name?.split(" ")[0] ?? "";
   const lastName = p?.lastName ?? client?.name?.split(" ").slice(1).join(" ") ?? "";
   const fullName = `${firstName} ${lastName}`.trim();
-  const initials = `${firstName[0] ?? ""}${lastName[0] ?? ""}`.toUpperCase();
-
   const behaviors = p?.maladaptiveBehaviors ?? [];
   const targets = p?.maladaptiveBehaviorTargets ?? [];
   const behaviorTopographyMap = Object.fromEntries(
@@ -208,12 +237,50 @@ export default function ClientDetail() {
         >
           {/* Header card */}
           <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6 flex items-start gap-4">
-            <div className="w-14 h-14 rounded-full bg-[#F9EEF1] flex items-center justify-center text-[#C27A8A] font-bold text-xl shrink-0">
-              {initials || <User className="w-6 h-6" />}
-            </div>
+            <ClientAvatar
+              client={{
+                avatarUrl: client.avatarUrl,
+                avatarUpdatedAt: client.avatarUpdatedAt,
+                firstName,
+                lastName,
+                name: client.name,
+              }}
+              size="lg"
+              onRegenerate={() => {
+                if (!id || generateAvatarMutation.isPending) return;
+                generateAvatarMutation.mutate(id, {
+                  onError: (err) => {
+                    window.alert(
+                      err instanceof Error
+                        ? `Could not generate avatar: ${err.message}`
+                        : "Could not generate avatar.",
+                    );
+                  },
+                });
+              }}
+              isRegenerating={generateAvatarMutation.isPending}
+              hoverLabel={
+                client.avatarUrl
+                  ? "Click to regenerate avatar with AI"
+                  : "Click to generate avatar with AI"
+              }
+            />
             <div className="flex-1 min-w-0">
               <h1 className="text-xl font-bold text-[#2D2523]">{fullName || client.name}</h1>
               {client.ageBand && <p className="text-sm text-[#877870] mt-0.5">{client.ageBand}</p>}
+              {(() => {
+                const exp = formatAuthorizationExpiresOn(p?.assessmentAuthorizationExpiresOn);
+                if (!exp) return null;
+                return (
+                  <p
+                    className="text-sm font-bold text-red-600 mt-1 leading-tight"
+                    title={exp.isPast ? "Authorization is past its expiration date" : "Authorization expiration date"}
+                  >
+                    {exp.isPast ? "Authorization expired on " : "Authorization expires on "}
+                    {exp.display}
+                  </p>
+                );
+              })()}
               <div className="mt-2 flex flex-wrap gap-2">
                 {client.assessmentStatus === "ready" && (
                   <span className="inline-flex items-center gap-1 text-xs font-medium text-teal-700 bg-teal-50 border border-teal-200 px-2.5 py-1 rounded-full">
@@ -274,6 +341,15 @@ export default function ClientDetail() {
                   Assessment PDF
                 </button>
               </Link>
+              <button
+                type="button"
+                onClick={handleDeleteClient}
+                disabled={deleteClientMutation.isPending}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-rose-50 border border-rose-200 text-xs font-semibold text-rose-700 hover:bg-rose-100 hover:border-rose-300 transition-all w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {deleteClientMutation.isPending ? "Deleting…" : "Delete client"}
+              </button>
             </div>
           </div>
 

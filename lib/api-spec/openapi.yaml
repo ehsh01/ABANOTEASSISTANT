@@ -17,6 +17,8 @@ tags:
     description: Note generation operations
   - name: admin
     description: Super-admin (platform) operations
+  - name: billing
+    description: Stripe billing (plans, checkout, customer portal, usage, webhooks)
 paths:
   /healthz:
     get:
@@ -379,6 +381,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteClient
+      tags: [clients]
+      summary: Delete a client
+      description: >
+        Permanently removes the client and cascades related session notes, program links, and
+        behavior–program approval rows for this company. Cannot be undone.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Client deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DeleteClientResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /clients/{clientId}/assessment/document:
     post:
@@ -422,6 +458,89 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clients/{clientId}/avatar/generate:
+    post:
+      operationId: generateClientAvatar
+      tags: [clients]
+      summary: Generate an AI cartoon avatar for the client
+      description: >
+        Uses the client's first name (cultural / ethnic cue), approximate age (from DOB), and gender to
+        produce a stylized cartoon-style portrait via OpenAI's image API and stores it on the client row.
+        Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Avatar generated and stored
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateClientAvatarResponse"
+        "400":
+          description: Missing first name on client (cannot generate)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: Upstream image-generation failure (model error, content policy refusal, quota)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /clients/{clientId}/avatar:
+    delete:
+      operationId: deleteClientAvatar
+      tags: [clients]
+      summary: Remove the stored AI avatar for a client
+      description: Clears the avatar bytes; the client falls back to initials in the UI.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Avatar cleared
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientDetailResponse"
         "401":
           description: Unauthorized
           content:
@@ -948,8 +1067,180 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "402":
+          description: Payment required (subscription expired, suspended, or quota exhausted)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Note not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing/plans:
+    get:
+      operationId: listBillingPlans
+      tags: [billing]
+      summary: List available plans for the current deploy
+      description: >
+        Returns the marketing plan keys (`starter`, `growth`, `high`) the server has configured with
+        Stripe Price IDs. Price IDs themselves are not returned to the client; the server resolves
+        them when creating a Checkout Session. Safe to call without authentication.
+      responses:
+        "200":
+          description: Plans available
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingPlansResponse"
+
+  /billing/status:
+    get:
+      operationId: getBillingStatus
+      tags: [billing]
+      summary: Current company's billing mode, plan, quota, and grace state
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Billing status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingStatusResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing/checkout:
+    post:
+      operationId: createBillingCheckoutSession
+      tags: [billing]
+      summary: Create a Stripe Checkout Session for a plan
+      description: >
+        Resolves the plan key to a configured Stripe Price ID, creates (or reuses) a Stripe Customer
+        for the company, then returns a Checkout Session URL. Card collection is required up front;
+        the configured trial period is applied via `subscription_data.trial_period_days` so trials
+        are Stripe-native (no app-managed trial cap). Idempotent: returning users with an active
+        subscription are sent to the Customer Portal URL instead.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BillingCheckoutRequest"
+      responses:
+        "200":
+          description: Checkout session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingCheckoutResponse"
+        "400":
+          description: Unknown plan or invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Stripe not configured on this deploy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing/portal:
+    post:
+      operationId: createBillingPortalSession
+      tags: [billing]
+      summary: Create a Stripe Customer Portal session
+      description: >
+        Returns a one-time URL into Stripe's hosted Customer Portal so the user can update card,
+        cancel, change plan, and view invoices.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BillingPortalRequest"
+      responses:
+        "200":
+          description: Portal session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BillingPortalResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: No Stripe customer on file (user has never checked out)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Stripe not configured on this deploy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /billing/webhook:
+    post:
+      operationId: stripeWebhook
+      tags: [billing]
+      summary: Stripe webhook receiver (raw body)
+      description: >
+        Accepts Stripe webhook events. Signature verification is done with `STRIPE_WEBHOOK_SECRET`;
+        events are deduplicated via `processed_stripe_events`. Not part of the React/Zod codegen
+        surface — the body is the raw bytes sent by Stripe and the response is a literal `{received:true}`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        "200":
+          description: Event received (idempotent)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  received:
+                    type: boolean
+                required:
+                  - received
+        "400":
+          description: Invalid signature or unreadable payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Stripe webhook not configured on this deploy
           content:
             application/json:
               schema:
@@ -1068,6 +1359,10 @@ components:
         freeUsage:
           type: boolean
           description: When true, company has complimentary access (used when ENFORCE_COMPLIMENTARY_ACCESS is enabled on the server).
+        billingMode:
+          type: string
+          enum: [complimentary, trial, subscription, suspended]
+          description: Explicit billing mode (kept in sync with Stripe webhooks; complimentary overrides Stripe).
       required:
         - id
         - name
@@ -1082,6 +1377,18 @@ components:
           type: string
         freeUsage:
           type: boolean
+        billingMode:
+          type: string
+          enum: [complimentary, trial, subscription, suspended]
+        subscriptionStatus:
+          type: string
+          nullable: true
+        stripeCustomerId:
+          type: string
+          nullable: true
+        currentPeriodEnd:
+          type: string
+          nullable: true
         userCount:
           type: integer
         createdAt:
@@ -1114,8 +1421,10 @@ components:
       properties:
         freeUsage:
           type: boolean
-      required:
-        - freeUsage
+        billingMode:
+          type: string
+          enum: [complimentary, trial, subscription, suspended]
+          description: Super-admin override of billing mode. Independent from `freeUsage` for backward compatibility.
 
     AdminCompanyPatchResponse:
       type: object
@@ -1342,6 +1651,13 @@ components:
             Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST /notes/generate
             intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and
             POST /clients/{clientId}/recommendations uses them for audit-safe suggestions.
+        assessmentAuthorizationExpiresOn:
+          type: string
+          nullable: true
+          description: >
+            ISO `yyyy-MM-dd` date the client's authorization (assessment / treatment plan) expires. Surfaced in red
+            on the clients list and detail header so the RBT knows when the assessment lapses. Null/missing means
+            "no expiration on file" (UI hides the badge).
       required:
         - firstName
         - lastName
@@ -1516,6 +1832,12 @@ components:
         assessmentStructured:
           $ref: "#/components/schemas/AssessmentStructured"
           nullable: true
+        assessmentAuthorizationExpiresOn:
+          type: string
+          nullable: true
+          description: >
+            ISO `yyyy-MM-dd` date the client's authorization expires. Optional; null/missing means
+            "no expiration on file."
       required:
         - firstName
         - lastName
@@ -1569,6 +1891,12 @@ components:
         assessmentStructured:
           $ref: "#/components/schemas/AssessmentStructured"
           nullable: true
+        assessmentAuthorizationExpiresOn:
+          type: string
+          nullable: true
+          description: >
+            ISO `yyyy-MM-dd` date the client's authorization expires. Send null to clear the stored value;
+            omit to leave it unchanged.
         clearAssessment:
           type: boolean
           description: >
@@ -1593,6 +1921,20 @@ components:
         assessmentStatus:
           type: string
           enum: [uploaded, processing, ready, missing]
+        avatarUrl:
+          type: string
+          nullable: true
+          description: >
+            Signed URL the browser can drop directly into `<img src=…>` to load the AI-generated avatar.
+            The signature is bound to `avatarUpdatedAt`, so any regeneration mints a new URL and the
+            browser cache invalidates automatically. Null when the client has no avatar on file.
+        avatarUpdatedAt:
+          type: string
+          nullable: true
+          description: >
+            ISO timestamp (e.g. `2026-05-03T21:55:40.123Z`) when the avatar was most recently generated.
+            Plain string (not `format: date-time`) so the generated Zod validator stays as `z.string()`
+            and accepts the JSON wire shape directly. Null when no avatar is on file.
         profile:
           $ref: "#/components/schemas/ClientProfile"
           nullable: true
@@ -1626,6 +1968,34 @@ components:
           type: boolean
         data:
           $ref: "#/components/schemas/Client"
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    GenerateClientAvatarResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            avatarUrl:
+              type: string
+              nullable: true
+            avatarUpdatedAt:
+              type: string
+              nullable: true
+              description: ISO timestamp; plain string for Zod compatibility (see Client.avatarUpdatedAt).
+            client:
+              $ref: "#/components/schemas/Client"
+          required:
+            - avatarUrl
+            - avatarUpdatedAt
+            - client
         error:
           type: string
           nullable: true
@@ -1908,7 +2278,7 @@ components:
           additionalProperties:
             $ref: "#/components/schemas/ProgramTrialDataEntry"
           description: >
-            Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is non-null and `effectiveTrials` is non-empty for a program assigned to an hour, the clinical narrative for that hour must incorporate that exact count and those trial indices in natural prose for the verbatim replacement program name. When `count` is null or `effectiveTrials` is empty, use default quantified replacement-program language for that hour. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+            Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is **null**, no trial data was entered and the server uses default quantified replacement-program language for that hour. When `count` is **>= 1**, the therapist entered trial data for that program — `effectiveTrials` lists the 1-based trial indices that met criterion (so an empty `effectiveTrials` paired with `count >= 1` represents **0 successes / count trials**, i.e. a deliberate 0% entry, not "no data"). The clinical narrative for that hour must incorporate the rounded percentage (`successfulTrialNumbers.length` / `totalTrials`) for the verbatim replacement program name. Ignored for hours that document RBT-only replacement programs (not selected session targets).
       required:
         - clientId
         - sessionHours
@@ -1925,13 +2295,13 @@ components:
           type: integer
           nullable: true
           description: >
-            Total trials conducted for this replacement program when known; when null, the server does not inject therapist-entered trial-count prose (use default quantified language).
+            Total trials conducted for this replacement program when therapist-entered. `null` means "no trial data entered" — the server falls back to default quantified language. `>= 1` means trials were entered (including a deliberate 0% selection, encoded as `count >= 1` plus an empty `effectiveTrials`).
         effectiveTrials:
           type: array
           items:
             type: integer
           description: >
-            1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty, therapist-entered trial-detail prose is not used for that program.
+            1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty AND `count >= 1`, this represents **0 successes / count trials** (a 0% entry); the server still injects the rounded percentage into the prose. When empty AND `count` is null, no data was entered.
       required:
         - count
         - effectiveTrials
@@ -1994,6 +2364,27 @@ components:
         - success
         - data
 
+    MaladaptiveReplacementPairing:
+      type: object
+      description: >
+        One row for integrations that need **maladaptive catalog behavior → replacement program** pairings only.
+        Omitted for skill-acquisition-only narrative segments (no maladaptive episode).
+      required:
+        - segmentIndex
+        - maladaptiveBehavior
+        - replacementProgramName
+      properties:
+        segmentIndex:
+          type: integer
+          minimum: 0
+          description: Zero-based narrative segment index after session collapse (replacement-program slots).
+        maladaptiveBehavior:
+          type: string
+          description: Maladaptive behavior catalog label for this segment (never a replacement program name).
+        replacementProgramName:
+          type: string
+          description: Replacement program name documented for this segment in the generated note.
+
     GeneratedNote:
       type: object
       properties:
@@ -2019,6 +2410,15 @@ components:
           type: string
           nullable: true
           description: OpenAI model id used for the clinical body (set on success)
+        maladaptiveReplacementPairings:
+          type: array
+          items:
+            $ref: "#/components/schemas/MaladaptiveReplacementPairing"
+          description: >
+            Authoritative **behavior → replacement program** rows for this session (post-collapse segments).
+            **Excludes** skill-acquisition-only segments (e.g. program names containing "Echoic", or "Respond to Own Name"),
+            which are not maladaptive-behavior episodes. Downstream `replacementProgramImplementation`-style lists should
+            use this array instead of inferring a "behavior" from replacement program names for every paragraph.
       required:
         - noteId
         - content
@@ -2142,6 +2542,25 @@ components:
         - success
         - data
 
+    DeleteClientResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            clientId:
+              type: integer
+          required:
+            - clientId
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
     SaveNoteRequest:
       type: object
       properties:
@@ -2166,9 +2585,252 @@ components:
               type: integer
             status:
               type: string
+            billing:
+              $ref: "#/components/schemas/SaveNoteBillingSnapshot"
           required:
             - noteId
             - status
+        error:
+          type: string
+          nullable: true
+        warnings:
+          type: array
+          items:
+            type: string
+      required:
+        - success
+        - data
+
+    SaveNoteBillingSnapshot:
+      type: object
+      description: >
+        Best-effort snapshot of the company's billing state immediately after save. Returned only
+        when billing enforcement is on; the UI uses it to surface "X / Y notes saved" without an
+        extra round trip. When enforcement is off this is omitted entirely (backward compatible).
+      properties:
+        billingMode:
+          type: string
+          enum: [complimentary, trial, subscription, suspended]
+        savedThisPeriod:
+          type: integer
+          minimum: 0
+        savedQuota:
+          type: integer
+          minimum: 0
+          nullable: true
+          description: Plan note quota; null when complimentary / unlimited.
+        countedThisRequest:
+          type: boolean
+          description: True when this save inserted a new ledger row (i.e. first save of this note in this period).
+      required:
+        - billingMode
+        - savedThisPeriod
+        - countedThisRequest
+
+    BillingPlanKey:
+      type: string
+      enum: [starter, growth, high]
+      description: Marketing plan key. Server maps each key to a configured Stripe Price ID.
+
+    BillingPlanSummary:
+      type: object
+      properties:
+        key:
+          $ref: "#/components/schemas/BillingPlanKey"
+        label:
+          type: string
+        savedNotesQuota:
+          type: integer
+          minimum: 0
+        priceUsdMonthly:
+          type: number
+          description: Display-only USD price (charged amounts come from Stripe).
+        available:
+          type: boolean
+          description: True when the server has a Stripe Price ID configured for this plan.
+      required:
+        - key
+        - label
+        - savedNotesQuota
+        - priceUsdMonthly
+        - available
+
+    BillingPlansResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            stripeConfigured:
+              type: boolean
+            trialDays:
+              type: integer
+              minimum: 0
+            plans:
+              type: array
+              items:
+                $ref: "#/components/schemas/BillingPlanSummary"
+          required:
+            - stripeConfigured
+            - trialDays
+            - plans
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    BillingStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            companyId:
+              type: integer
+            billingMode:
+              type: string
+              enum: [complimentary, trial, subscription, suspended]
+            enforcement:
+              type: string
+              enum: [off, soft, hard]
+              description: >
+                `off` = no enforcement (legacy behavior). `soft` = warnings only, never blocks.
+                `hard` = full enforcement (block save when over quota, block generate when past grace).
+            plan:
+              $ref: "#/components/schemas/BillingPlanSummary"
+              nullable: true
+            stripeCustomerPresent:
+              type: boolean
+            subscription:
+              type: object
+              nullable: true
+              properties:
+                status:
+                  type: string
+                currentPeriodStart:
+                  type: string
+                  nullable: true
+                currentPeriodEnd:
+                  type: string
+                  nullable: true
+                cancelAt:
+                  type: string
+                  nullable: true
+              required:
+                - status
+            trialEndsAt:
+              type: string
+              nullable: true
+            paymentFailedAt:
+              type: string
+              nullable: true
+            gracePeriodUntil:
+              type: string
+              nullable: true
+            inGracePeriod:
+              type: boolean
+            generationAllowed:
+              type: boolean
+              description: True when this company is allowed to call POST /notes/generate.
+            saveAllowed:
+              type: boolean
+              description: True when this company is allowed to call POST /notes/{id}/save.
+            blockedReason:
+              type: string
+              nullable: true
+            savedThisPeriod:
+              type: integer
+              minimum: 0
+            savedQuota:
+              type: integer
+              minimum: 0
+              nullable: true
+            usagePercent:
+              type: number
+              nullable: true
+              description: 0..100 share of quota consumed (null when no quota / unlimited).
+          required:
+            - companyId
+            - billingMode
+            - enforcement
+            - stripeCustomerPresent
+            - inGracePeriod
+            - generationAllowed
+            - saveAllowed
+            - savedThisPeriod
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    BillingCheckoutRequest:
+      type: object
+      properties:
+        plan:
+          $ref: "#/components/schemas/BillingPlanKey"
+        successUrl:
+          type: string
+          description: Where Stripe should redirect after success. Server validates host against APP_ORIGIN allowlist.
+        cancelUrl:
+          type: string
+      required:
+        - plan
+        - successUrl
+        - cancelUrl
+
+    BillingCheckoutResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            url:
+              type: string
+            mode:
+              type: string
+              enum: [checkout, portal]
+              description: >
+                `checkout` is a new Stripe Checkout Session. `portal` is returned when the user
+                already has an active subscription — we send them to the Customer Portal so they
+                can change plan rather than starting a duplicate subscription.
+          required:
+            - url
+            - mode
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    BillingPortalRequest:
+      type: object
+      properties:
+        returnUrl:
+          type: string
+
+    BillingPortalResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            url:
+              type: string
+          required:
+            - url
         error:
           type: string
           nullable: true
