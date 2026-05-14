@@ -116,10 +116,17 @@ loses access from running it). No data backfill needed.
   Existing companies are untouched (already complimentary per the grandfather migration).
 - **Trial note cap** — when `STRIPE_TRIAL_NOTE_CAP > 0`, trial accounts are also bounded by total
   saved notes during the trial. Trial ends on whichever comes first: `STRIPE_TRIAL_DAYS` of
-  calendar time OR `STRIPE_TRIAL_NOTE_CAP` notes saved. Enforced only under
-  `BILLING_ENFORCEMENT=hard`; otherwise the cap is informational (visible in `/billing/status`
-  as `savedQuota / savedThisPeriod` for UI to render a progress bar). Saves are counted via the
+  calendar time OR `STRIPE_TRIAL_NOTE_CAP` notes saved. Hitting either limit flips the company
+  to `derivedMode = 'suspended'` and blocks **both** generate and save (not just save) — same
+  treatment whether the limit was time or notes. Enforced only under `BILLING_ENFORCEMENT=hard`;
+  otherwise the cap is informational (visible in `/billing/status` as
+  `savedQuota / savedThisPeriod` for UI to render a progress bar). Saves are counted via the
   ledger so multi-device race conditions cannot exceed the cap.
+- **Trial-ended messaging** — `/billing/status.blockedReason` is tailored to the cause so the
+  frontend can render the right banner verbatim:
+  - Note-cap exhausted: `"You've used all 15 notes from your free trial. Choose a plan to keep going — your subscription starts as soon as you pick one."`
+  - Time expired: `"Your free trial has ended. Choose a plan to keep generating and saving notes — your subscription starts as soon as you pick one."`
+  - No trial / canceled: generic `"This account is not on an active subscription. Choose a plan to continue generating and saving notes."`
 - **Stripe Checkout from trial** — the Checkout endpoint computes `trial_period_days` as the
   *remaining* days of the app-managed trial. A user 3 days into a 7-day trial who subscribes
   gets `trial_period_days = 4` in Stripe, so the total trial across both worlds matches

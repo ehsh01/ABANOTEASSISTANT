@@ -131,7 +131,7 @@ export async function evaluateBilling(companyId: number): Promise<BillingDecisio
     .limit(1);
   if (!company) return null;
   const enforcement = getEnforcementMode();
-  const derivedMode = deriveMode(company);
+  let derivedMode = deriveMode(company);
   const plan = findPlanByPriceId(company.stripePriceId);
   const { start: periodStart, end: periodEnd } = resolveBillingPeriod(company);
   const inGracePeriod = isInGracePeriod(company);
@@ -156,6 +156,16 @@ export async function evaluateBilling(companyId: number): Promise<BillingDecisio
           : null
         : (plan?.savedNotesQuota ?? null);
 
+  // Trial-cap exhaustion ends the *entire* trial (block generate + save), not just block save.
+  // The time-based path (trial_ends_at < now()) already maps to 'suspended' via deriveMode(); here
+  // we extend the same treatment to "trial ended because the note cap was hit". Either limit ends
+  // the trial as the product spec states ("14 days OR 15 notes, whichever first").
+  const trialEndedByNoteCap =
+    isAppManagedTrial && trialCap > 0 && savedThisPeriod >= trialCap;
+  if (trialEndedByNoteCap) {
+    derivedMode = "suspended";
+  }
+
   let generationAllowed = true;
   let saveAllowed = true;
   let blockedReason: string | null = null;
@@ -166,8 +176,22 @@ export async function evaluateBilling(companyId: number): Promise<BillingDecisio
     } else if (derivedMode === "suspended") {
       generationAllowed = false;
       saveAllowed = false;
-      blockedReason =
-        "This account is not on an active subscription. Choose a plan to continue generating and saving notes.";
+      // Tailor the message to the cause so the frontend can render the right banner:
+      //  - hit the note cap first → "you've used all N trial notes"
+      //  - hit the time limit first → "your N-day free trial has ended"
+      //  - never had a trial (canceled / legacy) → generic "choose a plan"
+      // All three end with "your plan is going to start" wording so the user understands billing
+      // starts the moment they pick a plan.
+      const trialEndedByTime =
+        !!company.trialEndsAt && company.trialEndsAt.getTime() <= Date.now();
+      if (trialEndedByNoteCap && trialCap > 0) {
+        blockedReason = `You've used all ${trialCap} notes from your free trial. Choose a plan to keep going — your subscription starts as soon as you pick one.`;
+      } else if (trialEndedByTime) {
+        blockedReason = `Your free trial has ended. Choose a plan to keep generating and saving notes — your subscription starts as soon as you pick one.`;
+      } else {
+        blockedReason =
+          "This account is not on an active subscription. Choose a plan to continue generating and saving notes.";
+      }
     } else if (derivedMode === "trial" || derivedMode === "subscription") {
       // Grace policy: allow saves of EXISTING notes, block NEW note generation.
       if (inGracePeriod) {
