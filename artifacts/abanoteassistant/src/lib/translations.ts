@@ -260,6 +260,25 @@ export const translations = {
       planUnavailable: "This plan is not configured yet",
       backToDashboard: "Back to dashboard",
       contactAdmin: "Contact an administrator about billing",
+      trial: {
+        banner: "Free trial: {days} days left · {notes} notes left.",
+        choosePlan: "Choose a plan →",
+        countdownTitle: "Free trial",
+        usedOf: "{used} of {quota} notes used",
+        plansLaunchingSoon: "Plans launching soon",
+        pricingHeader: "Plans",
+        pricingSubhead:
+          "Start free — {days} days or 15 notes, no credit card required.",
+        startFreeTrial: "Start free trial",
+        noCardRequired: "No credit card required",
+        successToast: "Welcome — your subscription is active.",
+        canceledToast: "Checkout canceled. You can try again anytime.",
+        billingUnavailableToast:
+          "Billing isn't enabled yet — please try again later.",
+        seePlans: "See plans",
+        blockedTitle: "Trial ended",
+        choosePlanToContinue: "Choose a plan to continue",
+      },
     },
     // ── Login / Register ──
     auth: {
@@ -550,6 +569,25 @@ export const translations = {
       planUnavailable: "Este plan aún no está configurado",
       backToDashboard: "Volver al panel",
       contactAdmin: "Contactar al administrador sobre la facturación",
+      trial: {
+        banner: "Prueba gratuita: {days} días restantes · {notes} notas restantes.",
+        choosePlan: "Elige un plan →",
+        countdownTitle: "Prueba gratuita",
+        usedOf: "{used} de {quota} notas usadas",
+        plansLaunchingSoon: "Planes próximamente",
+        pricingHeader: "Planes",
+        pricingSubhead:
+          "Comienza gratis — {days} días o 15 notas, sin tarjeta de crédito.",
+        startFreeTrial: "Comenzar prueba gratuita",
+        noCardRequired: "Sin tarjeta de crédito",
+        successToast: "Bienvenido — tu suscripción está activa.",
+        canceledToast: "Compra cancelada. Puedes intentarlo de nuevo cuando quieras.",
+        billingUnavailableToast:
+          "La facturación aún no está habilitada — inténtalo más tarde.",
+        seePlans: "Ver planes",
+        blockedTitle: "Prueba terminada",
+        choosePlanToContinue: "Elige un plan para continuar",
+      },
     },
     // ── Login / Register ──
     auth: {

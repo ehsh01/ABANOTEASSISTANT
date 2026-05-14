@@ -150,6 +150,11 @@ export default function LoginPage() {
               Register
             </Link>
           </p>
+          <p className="text-sm text-muted-foreground text-center">
+            <Link href="/pricing" className="text-primary underline">
+              See plans
+            </Link>
+          </p>
         </CardContent>
       </Card>
     </div>

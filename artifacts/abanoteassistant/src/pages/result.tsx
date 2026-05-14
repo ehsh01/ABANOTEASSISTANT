@@ -5,6 +5,7 @@ import { Copy, Save, Edit3, RotateCcw, CheckCircle2, ChevronLeft, Calendar, Cloc
 import { useWizardStore } from "@/store/wizard-store";
 import { useSaveSessionNote } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
+import { useToast } from "@/hooks/use-toast";
 import { translateNote } from "@/lib/translate-note";
 import { cn, formatSessionDate } from "@/lib/utils";
 
@@ -13,6 +14,7 @@ export default function Result() {
   const { generatedNote, reset, resetWizardForm } = useWizardStore();
   const saveMutation = useSaveSessionNote();
   const t = useT();
+  const { toast } = useToast();
 
   const [copied, setCopied] = useState(false);
   const [copiedPairings, setCopiedPairings] = useState(false);
@@ -52,12 +54,16 @@ export default function Result() {
         data: { status, content },
       },
       {
-        onSuccess: () => {
+        onSuccess: (res) => {
           setSaveBanner("success");
           window.setTimeout(() => {
             setSaveBanner(null);
             saveMutation.reset();
           }, 3500);
+          const warnings = (res as { warnings?: string[] }).warnings ?? [];
+          warnings.forEach((msg) => {
+            toast({ title: msg });
+          });
         },
         onError: (err) => {
           setSaveBanner("error");

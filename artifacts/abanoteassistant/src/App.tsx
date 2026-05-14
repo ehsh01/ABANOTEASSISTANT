@@ -16,8 +16,10 @@ import RegisterPage from "@/pages/register";
 import VerifyEmailPage from "@/pages/verify-email";
 import AdminPage from "@/pages/admin";
 import BillingPage from "@/pages/billing";
+import PricingPage from "@/pages/pricing";
 import { useAuthStore } from "@/store/auth-store";
 import { AppSidebar, SIDEBAR_WIDTH } from "@/components/app-sidebar";
+import { TrialBanner } from "@/components/trial-banner";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -46,25 +48,28 @@ function AuthenticatedRoutes() {
   return (
     <div className="flex min-h-screen">
       {showSidebar && <AppSidebar />}
-      <main
-        className={`flex-1 min-h-screen overflow-auto ${showSidebar ? "md:ml-[220px] pb-16 md:pb-0" : ""}`}
+      <div
+        className={`flex-1 min-h-screen flex flex-col overflow-auto ${showSidebar ? "md:ml-[220px] pb-16 md:pb-0" : ""}`}
       >
-        <Switch>
-          <Route path="/" component={Home} />
-          <Route path="/admin" component={AdminPage} />
-          <Route path="/billing" component={BillingPage} />
-          <Route path="/wizard" component={Wizard} />
-          <Route path="/result" component={Result} />
-          <Route path="/clients/edit/:clientId" component={EditClientPage} />
-          <Route path="/clients/new" component={NewClient} />
-          <Route path="/clients/:clientId" component={ClientDetail} />
-          <Route path="/clients" component={Clients} />
-          <Route path="/new-client" component={NewClient} />
-          <Route path="/notes" component={Notes} />
-          <Route path="/notes/:id" component={NoteDetail} />
-          <Route component={NotFound} />
-        </Switch>
-      </main>
+        <TrialBanner />
+        <main className="flex-1">
+          <Switch>
+            <Route path="/" component={Home} />
+            <Route path="/admin" component={AdminPage} />
+            <Route path="/billing" component={BillingPage} />
+            <Route path="/wizard" component={Wizard} />
+            <Route path="/result" component={Result} />
+            <Route path="/clients/edit/:clientId" component={EditClientPage} />
+            <Route path="/clients/new" component={NewClient} />
+            <Route path="/clients/:clientId" component={ClientDetail} />
+            <Route path="/clients" component={Clients} />
+            <Route path="/new-client" component={NewClient} />
+            <Route path="/notes" component={Notes} />
+            <Route path="/notes/:id" component={NoteDetail} />
+            <Route component={NotFound} />
+          </Switch>
+        </main>
+      </div>
     </div>
   );
 }
@@ -75,6 +80,7 @@ function Router() {
       <Route path="/login" component={LoginPage} />
       <Route path="/register" component={RegisterPage} />
       <Route path="/verify-email" component={VerifyEmailPage} />
+      <Route path="/pricing" component={PricingPage} />
       <Route component={AuthenticatedRoutes} />
     </Switch>
   );
