@@ -35,10 +35,12 @@ import type {
   DeleteClientProgramResponse,
   DeleteClientResponse,
   DeleteNoteResponse,
+  DiscardDraftsResponse,
   ErrorResponse,
   GenerateClientAvatarResponse,
   GenerateNoteRequest,
   GenerateNoteResponse,
+  GetDraftQuotaResponse,
   HealthStatus,
   ListBehaviorProgramApprovalsResponse,
   LoginRequest,
@@ -2540,6 +2542,166 @@ export const useGenerateNote = <
   TContext
 > => {
   return useMutation(getGenerateNoteMutationOptions(options));
+};
+
+/**
+ * Returns the per-user counter of generated-but-not-yet-saved drafts and the configured cap. The UI uses this on page load (and after any generate/save/discard) to decide whether the Generate button should be disabled and to render the "X of N drafts" hint. Per-user, not per-company — two RBTs in the same company each have their own pool.
+
+ * @summary Current unsaved-draft slots for the authenticated user
+ */
+export const getGetDraftQuotaUrl = () => {
+  return `/api/notes/draft-quota`;
+};
+
+export const getDraftQuota = async (
+  options?: RequestInit,
+): Promise<GetDraftQuotaResponse> => {
+  return customFetch<GetDraftQuotaResponse>(getGetDraftQuotaUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export const getGetDraftQuotaQueryKey = () => {
+  return [`/api/notes/draft-quota`] as const;
+};
+
+export const getGetDraftQuotaQueryOptions = <
+  TData = Awaited<ReturnType<typeof getDraftQuota>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDraftQuota>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey = queryOptions?.queryKey ?? getGetDraftQuotaQueryKey();
+
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getDraftQuota>>> = ({
+    signal,
+  }) => getDraftQuota({ signal, ...requestOptions });
+
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof getDraftQuota>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetDraftQuotaQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getDraftQuota>>
+>;
+export type GetDraftQuotaQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Current unsaved-draft slots for the authenticated user
+ */
+
+export function useGetDraftQuota<
+  TData = Awaited<ReturnType<typeof getDraftQuota>>,
+  TError = ErrorType<ErrorResponse>,
+>(options?: {
+  query?: UseQueryOptions<
+    Awaited<ReturnType<typeof getDraftQuota>>,
+    TError,
+    TData
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetDraftQuotaQueryOptions(options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+/**
+ * Resets `unsaved_draft_count` to 0. Called by the "Discard drafts" / "Reset" action so the user can generate a fresh batch after deciding none of the existing drafts are worth saving. The generated note bodies themselves live only in the client UI; the server never persisted them, so there is nothing else to clean up.
+
+ * @summary Reset the unsaved-draft counter for the authenticated user
+ */
+export const getDiscardDraftsUrl = () => {
+  return `/api/notes/drafts/discard`;
+};
+
+export const discardDrafts = async (
+  options?: RequestInit,
+): Promise<DiscardDraftsResponse> => {
+  return customFetch<DiscardDraftsResponse>(getDiscardDraftsUrl(), {
+    ...options,
+    method: "POST",
+  });
+};
+
+export const getDiscardDraftsMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof discardDrafts>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof discardDrafts>>,
+  TError,
+  void,
+  TContext
+> => {
+  const mutationKey = ["discardDrafts"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof discardDrafts>>,
+    void
+  > = () => {
+    return discardDrafts(requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type DiscardDraftsMutationResult = NonNullable<
+  Awaited<ReturnType<typeof discardDrafts>>
+>;
+
+export type DiscardDraftsMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Reset the unsaved-draft counter for the authenticated user
+ */
+export const useDiscardDrafts = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof discardDrafts>>,
+    TError,
+    void,
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof discardDrafts>>,
+  TError,
+  void,
+  TContext
+> => {
+  return useMutation(getDiscardDraftsMutationOptions(options));
 };
 
 /**

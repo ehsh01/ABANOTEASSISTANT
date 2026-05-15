@@ -33,6 +33,13 @@ import {
   type NoteGenerationContext,
 } from "../openai-notes";
 import { evaluateBilling, recordSavedNote } from "../billing/service";
+import {
+  draftCapMessage,
+  getMaxUnsavedDraftsForCompany,
+  readDraftQuotaForUser,
+  resetDraftQuotaForUser,
+  tryConsumeDraftSlot,
+} from "../draft-quota";
 import { maladaptiveBehaviorTargetsForNoteCatalog } from "../client-profile-maladaptive";
 import {
   approximateAgeYearsAtSession,
@@ -226,6 +233,44 @@ router.get("/notes/abc-builder/activity-antecedents", async (req, res) => {
   res.json(data);
 });
 
+// Static `/notes/draft-quota` and `/notes/drafts/discard` are registered BEFORE the dynamic
+// `/notes/:noteId` route so Express matches them as literal paths rather than parsing
+// "draft-quota" / "drafts" as a noteId. Per Express semantics, route order in the router
+// determines match precedence.
+router.get("/notes/draft-quota", async (req, res) => {
+  const companyId = req.companyId;
+  const userId = req.userId;
+  if (companyId === undefined || userId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+  const [companyRow] = await db
+    .select()
+    .from(companiesTable)
+    .where(eq(companiesTable.id, companyId))
+    .limit(1);
+  const max = getMaxUnsavedDraftsForCompany(companyRow ?? null);
+  const snapshot = await readDraftQuotaForUser(userId, max);
+  res.json({ success: true, data: snapshot, error: null });
+});
+
+router.post("/notes/drafts/discard", async (req, res) => {
+  const companyId = req.companyId;
+  const userId = req.userId;
+  if (companyId === undefined || userId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+  const [companyRow] = await db
+    .select()
+    .from(companiesTable)
+    .where(eq(companiesTable.id, companyId))
+    .limit(1);
+  const max = getMaxUnsavedDraftsForCompany(companyRow ?? null);
+  const snapshot = await resetDraftQuotaForUser(userId, max);
+  res.json({ success: true, data: snapshot, error: null });
+});
+
 router.get("/notes/:noteId", async (req, res) => {
   const companyId = req.companyId;
   if (companyId === undefined) {
@@ -316,7 +361,8 @@ router.delete("/notes/:noteId", async (req, res) => {
 
 router.post("/notes/generate", async (req, res) => {
   const companyId = req.companyId;
-  if (companyId === undefined) {
+  const userId = req.userId;
+  if (companyId === undefined || userId === undefined) {
     res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
     return;
   }
@@ -398,6 +444,31 @@ router.post("/notes/generate", async (req, res) => {
       messages: [
         "This client does not have an assessment on file. Upload an assessment (e.g. FBA/BIP PDF) for the client before generating session notes.",
       ],
+    });
+    return;
+  }
+
+  // Unsaved-draft cap. Atomically reserves one of MAX_UNSAVED_DRAFTS slots BEFORE we make the
+  // expensive OpenAI call. Two concurrent requests from two tabs can't race past the cap because
+  // the slot-consume update is a single CAS-style WHERE count < max. On 429 the UI shows the
+  // calm SaaS copy from `draftCapMessage()` and either saves a draft or POSTs /notes/drafts/discard
+  // to free the pool. Slots are also reserved even when generation later fails — intentional, so
+  // a flaky AI provider can't be turned into an unlimited-regenerate loophole; the user can
+  // always click "Discard drafts" to recover. Validation/lookup failures above this point don't
+  // burn a slot because they short-circuit before we get here.
+  const [companyForCap] = await db
+    .select()
+    .from(companiesTable)
+    .where(eq(companiesTable.id, companyId))
+    .limit(1);
+  const maxUnsavedDrafts = getMaxUnsavedDraftsForCompany(companyForCap ?? null);
+  const slot = await tryConsumeDraftSlot(userId, maxUnsavedDrafts);
+  if (!slot.ok) {
+    res.status(429).json({
+      success: false,
+      error: draftCapMessage(maxUnsavedDrafts),
+      messages: [],
+      draftQuota: { used: slot.used, max: slot.max },
     });
     return;
   }
@@ -848,6 +919,7 @@ router.post("/notes/generate", async (req, res) => {
       generationSource,
       generationModel,
       maladaptiveReplacementPairings,
+      draftQuota: { used: slot.used, max: slot.max },
     },
     warnings: warnings.length > 0 ? warnings : undefined,
     error: null,
@@ -932,6 +1004,14 @@ router.post("/notes/:noteId/save", async (req, res) => {
     countedThisRequest = ledger.countedThisRequest;
   }
 
+  // Saving *any* draft frees the entire unsaved-draft pool for this user. The UI uses the
+  // returned `draftQuota: { used: 0, max }` snapshot to re-enable Generate without an extra
+  // round trip. `billing` is set on every save path (evaluateBilling always returns a decision
+  // when the company exists, which we just verified above by looking up the note); we still
+  // null-check it to satisfy the type system.
+  const maxUnsavedDraftsAfterSave = getMaxUnsavedDraftsForCompany(billing?.company ?? null);
+  const draftQuotaAfterSave = await resetDraftQuotaForUser(userId, maxUnsavedDraftsAfterSave);
+
   const includeBillingSnapshot = !!billing && billing.enforcement !== "off";
   const data = SaveNoteResponse.parse({
     success: true,
@@ -948,6 +1028,7 @@ router.post("/notes/:noteId/save", async (req, res) => {
             },
           }
         : {}),
+      draftQuota: draftQuotaAfterSave,
     },
     error: null,
     ...(warnings.length > 0 ? { warnings } : {}),

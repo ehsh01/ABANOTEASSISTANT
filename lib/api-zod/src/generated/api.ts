@@ -1555,6 +1555,8 @@ export const GenerateNoteBody = zod.object({
 
 export const generateNoteResponseDataMaladaptiveReplacementPairingsItemSegmentIndexMin = 0;
 
+export const generateNoteResponseDataDraftQuotaUsedMin = 0;
+
 export const GenerateNoteResponse = zod.object({
   success: zod.boolean(),
   data: zod.object({
@@ -1605,8 +1607,81 @@ export const GenerateNoteResponse = zod.object({
       .describe(
         'Authoritative \*\*behavior → replacement program\*\* rows for this session (post-collapse segments). \*\*Excludes\*\* skill-acquisition-only segments (e.g. program names containing \"Echoic\", or \"Respond to Own Name\"), which are not maladaptive-behavior episodes. Downstream `replacementProgramImplementation`-style lists should use this array instead of inferring a \"behavior\" from replacement program names for every paragraph.\n',
       ),
+    draftQuota: zod
+      .object({
+        used: zod
+          .number()
+          .min(generateNoteResponseDataDraftQuotaUsedMin)
+          .describe("Current count of unsaved drafts this user has generated."),
+        max: zod
+          .number()
+          .min(1)
+          .describe(
+            "Configured cap. Default 3 (env `MAX_UNSAVED_DRAFTS`). May vary per plan in future.",
+          ),
+      })
+      .optional()
+      .describe(
+        "Updated unsaved-draft slot snapshot AFTER this generation was counted. The UI uses `used == max` to disable the Generate button until the user saves or discards.\n",
+      ),
   }),
   warnings: zod.array(zod.string()).optional(),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Returns the per-user counter of generated-but-not-yet-saved drafts and the configured cap. The UI uses this on page load (and after any generate/save/discard) to decide whether the Generate button should be disabled and to render the "X of N drafts" hint. Per-user, not per-company — two RBTs in the same company each have their own pool.
+
+ * @summary Current unsaved-draft slots for the authenticated user
+ */
+export const getDraftQuotaResponseDataUsedMin = 0;
+
+export const GetDraftQuotaResponse = zod.object({
+  success: zod.boolean(),
+  data: zod
+    .object({
+      used: zod
+        .number()
+        .min(getDraftQuotaResponseDataUsedMin)
+        .describe("Current count of unsaved drafts this user has generated."),
+      max: zod
+        .number()
+        .min(1)
+        .describe(
+          "Configured cap. Default 3 (env `MAX_UNSAVED_DRAFTS`). May vary per plan in future.",
+        ),
+    })
+    .describe(
+      "Per-user counter of generated-but-not-yet-saved notes. The server caps `used` at `max`; once they're equal, POST \/notes\/generate returns 429 until the user POSTs to \/notes\/drafts\/discard or saves a note (either resets used to 0).\n",
+    ),
+  error: zod.string().nullish(),
+});
+
+/**
+ * Resets `unsaved_draft_count` to 0. Called by the "Discard drafts" / "Reset" action so the user can generate a fresh batch after deciding none of the existing drafts are worth saving. The generated note bodies themselves live only in the client UI; the server never persisted them, so there is nothing else to clean up.
+
+ * @summary Reset the unsaved-draft counter for the authenticated user
+ */
+export const discardDraftsResponseDataUsedMin = 0;
+
+export const DiscardDraftsResponse = zod.object({
+  success: zod.boolean(),
+  data: zod
+    .object({
+      used: zod
+        .number()
+        .min(discardDraftsResponseDataUsedMin)
+        .describe("Current count of unsaved drafts this user has generated."),
+      max: zod
+        .number()
+        .min(1)
+        .describe(
+          "Configured cap. Default 3 (env `MAX_UNSAVED_DRAFTS`). May vary per plan in future.",
+        ),
+    })
+    .describe(
+      "Per-user counter of generated-but-not-yet-saved notes. The server caps `used` at `max`; once they're equal, POST \/notes\/generate returns 429 until the user POSTs to \/notes\/drafts\/discard or saves a note (either resets used to 0).\n",
+    ),
   error: zod.string().nullish(),
 });
 
@@ -1625,6 +1700,8 @@ export const SaveNoteBody = zod.object({
 export const saveNoteResponseDataBillingSavedThisPeriodMin = 0;
 
 export const saveNoteResponseDataBillingSavedQuotaMin = 0;
+
+export const saveNoteResponseDataDraftQuotaUsedMin = 0;
 
 export const SaveNoteResponse = zod.object({
   success: zod.boolean(),
@@ -1656,6 +1733,23 @@ export const SaveNoteResponse = zod.object({
       .optional()
       .describe(
         'Best-effort snapshot of the company\'s billing state immediately after save. Returned only when billing enforcement is on; the UI uses it to surface \"X \/ Y notes saved\" without an extra round trip. When enforcement is off this is omitted entirely (backward compatible).\n',
+      ),
+    draftQuota: zod
+      .object({
+        used: zod
+          .number()
+          .min(saveNoteResponseDataDraftQuotaUsedMin)
+          .describe("Current count of unsaved drafts this user has generated."),
+        max: zod
+          .number()
+          .min(1)
+          .describe(
+            "Configured cap. Default 3 (env `MAX_UNSAVED_DRAFTS`). May vary per plan in future.",
+          ),
+      })
+      .optional()
+      .describe(
+        "Unsaved-draft slot snapshot after the save reset the counter (always `{ used: 0, max }`). Included so the UI can re-enable the Generate button without a follow-up round trip.\n",
       ),
   }),
   error: zod.string().nullish(),

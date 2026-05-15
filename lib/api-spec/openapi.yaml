@@ -1016,6 +1016,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: >
+            Too many unsaved drafts. The user already has `MAX_UNSAVED_DRAFTS` (default 3)
+            generated drafts that have not been saved or discarded; they must save one or
+            POST `/notes/drafts/discard` before generating another. The body's `error` field
+            carries the calm SaaS copy the UI should surface verbatim.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "502":
           description: AI provider error — OpenAI call failed (no template fallback; fix key, model, quota, or network)
           content:
@@ -1030,6 +1040,58 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: Generation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /notes/draft-quota:
+    get:
+      operationId: getDraftQuota
+      tags: [notes]
+      summary: Current unsaved-draft slots for the authenticated user
+      description: >
+        Returns the per-user counter of generated-but-not-yet-saved drafts and the configured
+        cap. The UI uses this on page load (and after any generate/save/discard) to decide
+        whether the Generate button should be disabled and to render the "X of N drafts" hint.
+        Per-user, not per-company — two RBTs in the same company each have their own pool.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Quota snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetDraftQuotaResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /notes/drafts/discard:
+    post:
+      operationId: discardDrafts
+      tags: [notes]
+      summary: Reset the unsaved-draft counter for the authenticated user
+      description: >
+        Resets `unsaved_draft_count` to 0. Called by the "Discard drafts" / "Reset" action so
+        the user can generate a fresh batch after deciding none of the existing drafts are
+        worth saving. The generated note bodies themselves live only in the client UI; the
+        server never persisted them, so there is nothing else to clean up.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Counter reset
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiscardDraftsResponse"
+        "401":
+          description: Unauthorized
           content:
             application/json:
               schema:
@@ -2419,6 +2481,11 @@ components:
             **Excludes** skill-acquisition-only segments (e.g. program names containing "Echoic", or "Respond to Own Name"),
             which are not maladaptive-behavior episodes. Downstream `replacementProgramImplementation`-style lists should
             use this array instead of inferring a "behavior" from replacement program names for every paragraph.
+        draftQuota:
+          $ref: "#/components/schemas/DraftQuota"
+          description: >
+            Updated unsaved-draft slot snapshot AFTER this generation was counted. The UI uses
+            `used == max` to disable the Generate button until the user saves or discards.
       required:
         - noteId
         - content
@@ -2587,6 +2654,12 @@ components:
               type: string
             billing:
               $ref: "#/components/schemas/SaveNoteBillingSnapshot"
+            draftQuota:
+              $ref: "#/components/schemas/DraftQuota"
+              description: >
+                Unsaved-draft slot snapshot after the save reset the counter (always
+                `{ used: 0, max }`). Included so the UI can re-enable the Generate button
+                without a follow-up round trip.
           required:
             - noteId
             - status
@@ -2597,6 +2670,53 @@ components:
           type: array
           items:
             type: string
+      required:
+        - success
+        - data
+
+    DraftQuota:
+      type: object
+      description: >
+        Per-user counter of generated-but-not-yet-saved notes. The server caps `used` at `max`;
+        once they're equal, POST /notes/generate returns 429 until the user POSTs to
+        /notes/drafts/discard or saves a note (either resets used to 0).
+      required:
+        - used
+        - max
+      properties:
+        used:
+          type: integer
+          minimum: 0
+          description: Current count of unsaved drafts this user has generated.
+        max:
+          type: integer
+          minimum: 1
+          description: Configured cap. Default 3 (env `MAX_UNSAVED_DRAFTS`). May vary per plan in future.
+
+    GetDraftQuotaResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/DraftQuota"
+        error:
+          type: string
+          nullable: true
+      required:
+        - success
+        - data
+
+    DiscardDraftsResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/DraftQuota"
+        error:
+          type: string
+          nullable: true
       required:
         - success
         - data
