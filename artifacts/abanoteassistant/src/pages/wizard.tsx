@@ -21,7 +21,9 @@ import {
   useGenerateSessionNote,
   useAbcActivityAntecedents,
   useClient,
+  useBillingStatus,
 } from "@/hooks/use-aba-api";
+import { SuspendedInterceptor } from "@/components/suspended-interceptor";
 import { useT } from "@/hooks/use-translation";
 import { cn, formatSessionDate } from "@/lib/utils";
 import {
@@ -1674,6 +1676,7 @@ export default function Wizard() {
   const generateMutation = useGenerateSessionNote();
   const t = useT();
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const billingStatus = useBillingStatus();
 
   const totalSteps = 10;
   const isGenerating = generateMutation.isPending;
@@ -1756,6 +1759,15 @@ export default function Wizard() {
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, []);
+
+  const billingStatusData = billingStatus.data?.data;
+  const isSuspended =
+    !!billingStatusData &&
+    (billingStatusData.billingMode === "suspended" || !billingStatusData.generationAllowed);
+
+  if (isSuspended) {
+    return <SuspendedInterceptor blockedReason={billingStatusData?.blockedReason} />;
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
