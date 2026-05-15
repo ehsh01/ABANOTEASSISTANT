@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Redirect, useLocation } from "wouter";
 import {
   Check,
@@ -45,6 +45,7 @@ export default function BillingPage() {
   const statusQuery = useBillingStatus();
   const checkout = useCreateBillingCheckout();
   const portal = useCreateBillingPortal();
+  const autoOpenFired = useRef(false);
 
   const baseUrl = useMemo(() => {
     const origin =
@@ -52,6 +53,33 @@ export default function BillingPage() {
     const base = import.meta.env.BASE_URL.replace(/\/$/, "");
     return `${origin}${base}`;
   }, []);
+
+  // Handle ?status=success / ?status=canceled return from Stripe
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("status");
+    if (status === "success") {
+      toast({ title: t.billing.trial.successToast });
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (status === "canceled") {
+      toast({ title: t.billing.trial.canceledToast });
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-open Checkout when ?subscribe=<plan> is in the URL
+  useEffect(() => {
+    if (autoOpenFired.current) return;
+    if (!plansQuery.data) return;
+    const params = new URLSearchParams(window.location.search);
+    const planParam = params.get("subscribe") as BillingPlanKey | null;
+    if (!planParam) return;
+    autoOpenFired.current = true;
+    window.history.replaceState({}, "", window.location.pathname);
+    startCheckout(planParam);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plansQuery.data]);
 
   if (!token || !user) return <Redirect to="/login" />;
   // Super admins manage tenant billing via the Admin page; this is the org-user-facing screen.
@@ -69,6 +97,21 @@ export default function BillingPage() {
   const isComplimentary = statusData?.billingMode === "complimentary";
   const inGracePeriod = !!statusData?.inGracePeriod;
   const suspended = statusData?.billingMode === "suspended";
+  const isTrial = statusData?.billingMode === "trial";
+
+  const trialDaysLeft = statusData?.trialEndsAt
+    ? Math.max(
+        0,
+        Math.ceil(
+          (new Date(statusData.trialEndsAt).getTime() - Date.now()) /
+            (1000 * 60 * 60 * 24),
+        ),
+      )
+    : null;
+  const trialQuota = statusData?.savedQuota ?? 15;
+  const trialUsed = statusData?.savedThisPeriod ?? 0;
+  const trialUsagePercent =
+    trialQuota > 0 ? Math.min(100, (trialUsed / trialQuota) * 100) : 0;
 
   async function startCheckout(plan: BillingPlanKey) {
     setPendingPlan(plan);
@@ -145,6 +188,49 @@ export default function BillingPage() {
             {t.billing.title}
           </h1>
         </header>
+
+        {/* Trial countdown card */}
+        {isTrial && statusData && (
+          <section className="bg-white rounded-2xl border border-[#F0E4E1] shadow-sm p-6 mb-6">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wider text-[#C27A8A] mb-1">
+                  {t.billing.trial.countdownTitle}
+                </div>
+                <p className="text-lg font-semibold text-[#2D2523]">
+                  {trialDaysLeft !== null ? `${trialDaysLeft} days left` : ""}{" "}
+                  ·{" "}
+                  {t.billing.trial.usedOf
+                    .replace("{used}", String(trialUsed))
+                    .replace("{quota}", String(trialQuota))}
+                </p>
+              </div>
+              {statusData.trialEndsAt && (
+                <div className="text-sm text-[#877870]">
+                  {t.billing.trialEndingLabel}:{" "}
+                  {new Date(statusData.trialEndsAt).toLocaleDateString()}
+                </div>
+              )}
+            </div>
+            <div className="mt-4 h-2.5 w-full bg-[#FCEEF1] rounded-full overflow-hidden">
+              <div
+                className="h-2.5 rounded-full transition-all"
+                style={{
+                  width: `${trialUsagePercent}%`,
+                  background:
+                    trialUsagePercent >= 90
+                      ? "#dc2626"
+                      : trialUsagePercent >= 70
+                        ? "#f59e0b"
+                        : "#C27A8A",
+                }}
+              />
+            </div>
+            <p className="mt-2 text-xs text-[#877870]">
+              {trialUsed} of {trialQuota} notes used
+            </p>
+          </section>
+        )}
 
         {/* Status card */}
         <section className="bg-white rounded-2xl border border-[#F0E4E1] shadow-sm p-6 mb-8">
