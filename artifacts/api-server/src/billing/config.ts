@@ -34,8 +34,8 @@ export type BillingPlanConfig = {
  */
 export const PLAN_DEFINITIONS: Readonly<Record<BillingPlanKey, Omit<BillingPlanConfig, "stripePriceId">>> = {
   starter: { key: "starter", label: "Starter", savedNotesQuota: 30, priceUsdMonthly: 19 },
-  growth: { key: "growth", label: "Growth", savedNotesQuota: 100, priceUsdMonthly: 49 },
-  high: { key: "high", label: "High Volume", savedNotesQuota: 300, priceUsdMonthly: 119 },
+  growth: { key: "growth", label: "Growth", savedNotesQuota: 120, priceUsdMonthly: 39 },
+  high: { key: "high", label: "High Volume", savedNotesQuota: 250, priceUsdMonthly: 59 },
 };
 
 function envTrim(name: string): string | undefined {
