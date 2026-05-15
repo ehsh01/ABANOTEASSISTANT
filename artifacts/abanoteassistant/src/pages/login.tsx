@@ -119,12 +119,13 @@ export default function LoginPage() {
           </div>
 
           {/* Hero photo */}
-          <div className="mt-auto relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
-            <div className="absolute inset-0 bg-gradient-to-t from-[#1A0B2E] via-transparent to-transparent z-10" />
+          <div className="mt-8 relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl">
+            <div className="absolute inset-0 bg-gradient-to-t from-[#1A0B2E]/60 via-transparent to-transparent z-10" />
             <img
               src="/images/therapist-hero.png"
               alt="ABA therapist with child"
-              className="w-full h-64 object-cover opacity-80"
+              className="w-full h-72 object-cover opacity-90"
+              style={{ objectPosition: "center 65%" }}
             />
           </div>
         </div>
