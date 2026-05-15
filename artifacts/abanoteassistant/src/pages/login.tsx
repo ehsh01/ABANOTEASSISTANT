@@ -4,7 +4,7 @@ import { useLogin, useResendVerification } from "@workspace/api-client-react";
 import { useAuthStore } from "@/store/auth-store";
 import { navigateToAppRoot } from "@/lib/navigate-app-root";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowRight, Lock, Zap, Shield, Users, Mail, Eye, EyeOff, Apple } from "lucide-react";
+import { ArrowRight, Lock, Zap, Shield, Users, Mail, Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const token = useAuthStore((s) => s.token);
@@ -247,14 +247,6 @@ export default function LoginPage() {
                   <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
                 </svg>
                 <span className="text-sm font-semibold text-slate-700">Google</span>
-              </button>
-              <button
-                disabled
-                className="flex items-center justify-center gap-2 py-2.5 px-4 bg-white border-2 border-[#F3E8FF] rounded-xl opacity-50 cursor-not-allowed"
-                title="Coming soon"
-              >
-                <Apple size={20} className="text-slate-800" />
-                <span className="text-sm font-semibold text-slate-700">Apple</span>
               </button>
             </div>
           </div>
