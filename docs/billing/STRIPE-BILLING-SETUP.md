@@ -17,8 +17,8 @@ gates note generation). Turn it on by walking through the steps below.
 
 1. **Create three recurring Products + Prices in Stripe** (monthly):
    - Starter — $19/mo (saved-note quota 30)
-   - Growth — $39/mo (saved-note quota 120)
-   - High Volume — $59/mo (saved-note quota 250)
+   - Growth — $39/mo (saved-note quota 100)
+   - High Volume — $59/mo (saved-note quota 200)
    - These display values live in code at
      `artifacts/api-server/src/billing/config.ts → PLAN_DEFINITIONS`. **Keep the Stripe Price
      amounts in sync** with the constants in that file (Stripe is the billing source of truth;
