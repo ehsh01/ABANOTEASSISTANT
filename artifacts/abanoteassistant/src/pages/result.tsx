@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, Save, Edit3, RotateCcw, CheckCircle2, ChevronLeft, Calendar, Clock, User, Languages, Loader2 } from "lucide-react";
+import { Copy, Save, Edit3, RotateCcw, CheckCircle2, ChevronLeft, Calendar, Clock, User, Languages, Loader2, FilePlus } from "lucide-react";
 import { useWizardStore } from "@/store/wizard-store";
 import { useGenerateSessionNote, useSaveSessionNote } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
@@ -60,15 +60,29 @@ export default function Result() {
       },
       {
         onSuccess: (res) => {
+          const warnings = (res as { warnings?: string[] }).warnings ?? [];
+          warnings.forEach((msg) => {
+            toast({ title: msg });
+          });
+
+          if (status === "final") {
+            setSaveBanner("success");
+            toast({
+              title: t.result.noteSaved,
+              description: t.result.savedFinalRedirect,
+            });
+            window.setTimeout(() => {
+              reset();
+              setLocation("/");
+            }, 1500);
+            return;
+          }
+
           setSaveBanner("success");
           window.setTimeout(() => {
             setSaveBanner(null);
             saveMutation.reset();
           }, 3500);
-          const warnings = (res as { warnings?: string[] }).warnings ?? [];
-          warnings.forEach((msg) => {
-            toast({ title: msg });
-          });
         },
         onError: (err) => {
           setSaveBanner("error");
@@ -330,9 +344,10 @@ export default function Result() {
             <button
               type="button"
               onClick={handleStartOver}
-              disabled={isRegenerating}
-              className="w-full text-sm font-semibold text-muted-foreground hover:text-foreground py-2 transition-colors disabled:opacity-50"
+              disabled={isRegenerating || saveMutation.isPending}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-primary/25 bg-primary/5 text-primary font-semibold hover:border-primary/50 hover:bg-primary/10 transition-all hover-elevate disabled:opacity-50 disabled:cursor-not-allowed"
             >
+              <FilePlus className="w-4 h-4" />
               {t.result.startOver}
             </button>
           </div>
