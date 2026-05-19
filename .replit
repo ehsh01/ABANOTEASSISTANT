@@ -28,3 +28,11 @@ timeoutMs = 20000
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+BILLING_ENFORCEMENT = "soft"
+STRIPE_TRIAL_DAYS = "14"
+STRIPE_TRIAL_NOTE_CAP = "15"
+BILLING_GRACE_PERIOD_DAYS = "7"
