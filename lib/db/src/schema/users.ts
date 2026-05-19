@@ -23,6 +23,14 @@ export const usersTable = abanote.table("users", {
   companyId: integer("company_id")
     .notNull()
     .references(() => companiesTable.id, { onDelete: "cascade" }),
+  /**
+   * Number of *unsaved* note generations in flight for this user. Incremented by
+   * POST /notes/generate (via an atomic CAS so two tabs can't race past the cap),
+   * reset to 0 by POST /notes/:noteId/save and POST /notes/drafts/discard. The
+   * server-side gate refuses to generate once this hits the configured cap
+   * (default 3, env override `MAX_UNSAVED_DRAFTS`). Per-user, not per-company.
+   */
+  unsavedDraftCount: integer("unsaved_draft_count").notNull().default(0),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });

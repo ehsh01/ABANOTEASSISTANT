@@ -700,6 +700,23 @@ export interface MaladaptiveReplacementPairing {
   replacementProgramName: string;
 }
 
+/**
+ * Per-user counter of generated-but-not-yet-saved notes. The server caps `used` at `max`; once they're equal, POST /notes/generate returns 429 until the user POSTs to /notes/drafts/discard or saves a note (either resets used to 0).
+
+ */
+export interface DraftQuota {
+  /**
+   * Current count of unsaved drafts this user has generated.
+   * @minimum 0
+   */
+  used: number;
+  /**
+   * Configured cap. Default 3 (env `MAX_UNSAVED_DRAFTS`). May vary per plan in future.
+   * @minimum 1
+   */
+  max: number;
+}
+
 export interface GeneratedNote {
   noteId: number;
   content: string;
@@ -715,6 +732,9 @@ export interface GeneratedNote {
   /** Authoritative **behavior → replacement program** rows for this session (post-collapse segments). **Excludes** skill-acquisition-only segments (e.g. program names containing "Echoic", or "Respond to Own Name"), which are not maladaptive-behavior episodes. Downstream `replacementProgramImplementation`-style lists should use this array instead of inferring a "behavior" from replacement program names for every paragraph.
    */
   maladaptiveReplacementPairings?: MaladaptiveReplacementPairing[];
+  /** Updated unsaved-draft slot snapshot AFTER this generation was counted. The UI uses `used == max` to disable the Generate button until the user saves or discards.
+   */
+  draftQuota?: DraftQuota;
 }
 
 export interface GenerateNoteResponse {
@@ -839,6 +859,9 @@ export type SaveNoteResponseData = {
   noteId: number;
   status: string;
   billing?: SaveNoteBillingSnapshot;
+  /** Unsaved-draft slot snapshot after the save reset the counter (always `{ used: 0, max }`). Included so the UI can re-enable the Generate button without a follow-up round trip.
+   */
+  draftQuota?: DraftQuota;
 };
 
 export interface SaveNoteResponse {
@@ -846,6 +869,18 @@ export interface SaveNoteResponse {
   data: SaveNoteResponseData;
   error?: string | null;
   warnings?: string[];
+}
+
+export interface GetDraftQuotaResponse {
+  success: boolean;
+  data: DraftQuota;
+  error?: string | null;
+}
+
+export interface DiscardDraftsResponse {
+  success: boolean;
+  data: DraftQuota;
+  error?: string | null;
 }
 
 /**
