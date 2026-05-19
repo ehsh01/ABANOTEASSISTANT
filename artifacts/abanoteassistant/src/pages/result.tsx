@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
-import { motion } from "framer-motion";
-import { Copy, Save, Edit3, RotateCcw, CheckCircle2, ChevronLeft, Calendar, Clock, User, Languages } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Copy, Save, Edit3, RotateCcw, CheckCircle2, ChevronLeft, Calendar, Clock, User, Languages, Loader2 } from "lucide-react";
 import { useWizardStore } from "@/store/wizard-store";
-import { useSaveSessionNote } from "@/hooks/use-aba-api";
+import { useGenerateSessionNote, useSaveSessionNote } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
 import { useToast } from "@/hooks/use-toast";
 import { translateNote } from "@/lib/translate-note";
+import { formatGenerateNoteFailure, toGenerateNoteRequest } from "@/lib/generate-note-payload";
 import { cn, formatSessionDate } from "@/lib/utils";
 
 export default function Result() {
   const [, setLocation] = useLocation();
-  const { generatedNote, reset, resetWizardForm } = useWizardStore();
+  const { generatedNote, reset, data, setGeneratedNote } = useWizardStore();
   const saveMutation = useSaveSessionNote();
+  const generateMutation = useGenerateSessionNote();
   const t = useT();
   const { toast } = useToast();
 
@@ -25,6 +27,9 @@ export default function Result() {
   const [translateError, setTranslateError] = useState<string | null>(null);
   const [saveBanner, setSaveBanner] = useState<"success" | "error" | null>(null);
   const [saveMessage, setSaveMessage] = useState("");
+  const [regenerateError, setRegenerateError] = useState<string | null>(null);
+
+  const isRegenerating = generateMutation.isPending;
 
   useEffect(() => {
     if (!generatedNote) {
@@ -78,6 +83,31 @@ export default function Result() {
     setLocation("/");
   };
 
+  const handleRegenerate = () => {
+    setRegenerateError(null);
+    const payload = toGenerateNoteRequest(data);
+    if (!payload) {
+      setRegenerateError(t.result.regenerateSettingsLost);
+      return;
+    }
+    generateMutation.mutate(payload, {
+      onSuccess: (res) => {
+        setGeneratedNote(res.data, res.warnings);
+        setContent(res.data.content);
+        setTranslatedContent(null);
+        setIsEditing(false);
+        setRegenerateError(null);
+        const warnings = res.warnings ?? [];
+        warnings.forEach((msg) => {
+          toast({ title: msg });
+        });
+      },
+      onError: (err) => {
+        setRegenerateError(formatGenerateNoteFailure(err));
+      },
+    });
+  };
+
   const handleTranslate = async () => {
     if (isTranslated) {
       setTranslatedContent(null);
@@ -99,7 +129,22 @@ export default function Result() {
   const maladaptivePairings = generatedNote.maladaptiveReplacementPairings ?? [];
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col relative">
+      <AnimatePresence>
+        {isRegenerating && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm flex flex-col items-center justify-center p-6"
+          >
+            <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
+            <h2 className="text-xl font-display font-bold text-foreground">{t.result.regeneratingTitle}</h2>
+            <p className="text-muted-foreground text-sm mt-2 text-center max-w-sm">{t.result.regeneratingBody}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <header className="bg-primary sticky top-0 z-10 px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
           <button onClick={() => setLocation("/")} className="text-white/80 hover:text-white transition-colors p-2 -ml-2 rounded-lg hover:bg-white/15">
@@ -267,15 +312,26 @@ export default function Result() {
           {/* Secondary Actions */}
           <div className="space-y-3">
             <button
-              onClick={() => { resetWizardForm(); setLocation("/wizard"); }}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-border bg-card text-foreground font-semibold hover:border-primary/50 hover:bg-secondary/30 transition-all hover-elevate"
+              type="button"
+              onClick={handleRegenerate}
+              disabled={isRegenerating || saveMutation.isPending}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border-2 border-border bg-card text-foreground font-semibold hover:border-primary/50 hover:bg-secondary/30 transition-all hover-elevate disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <RotateCcw className="w-4 h-4 text-muted-foreground pop-icon" />
+              {isRegenerating ? (
+                <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+              ) : (
+                <RotateCcw className="w-4 h-4 text-muted-foreground pop-icon" />
+              )}
               {t.result.regenerate}
             </button>
+            {regenerateError && (
+              <p className="text-xs text-destructive text-center leading-snug">{regenerateError}</p>
+            )}
             <button
+              type="button"
               onClick={handleStartOver}
-              className="w-full text-sm font-semibold text-muted-foreground hover:text-foreground py-2 transition-colors"
+              disabled={isRegenerating}
+              className="w-full text-sm font-semibold text-muted-foreground hover:text-foreground py-2 transition-colors disabled:opacity-50"
             >
               {t.result.startOver}
             </button>

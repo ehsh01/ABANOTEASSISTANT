@@ -108,6 +108,9 @@ export const translations = {
       aiNotice:
         "This note was generated based on your inputs. Please review carefully and edit as needed to ensure complete clinical accuracy before saving as final.",
       regenerate: "Regenerate Note",
+      regeneratingTitle: "Generating a new draft…",
+      regeneratingBody: "Using the same session settings you entered. This may take a moment.",
+      regenerateSettingsLost: "Session settings were lost. Use Start Over (New Note) to begin again.",
       startOver: "Start Over (New Note)",
       noteSaved: "Note Saved",
       savedAs: "Saved as",
@@ -416,6 +419,9 @@ export const translations = {
       aiNotice:
         "Esta nota fue generada en base a tus entradas. Revisa cuidadosamente y edita según sea necesario para asegurar precisión clínica antes de guardar como final.",
       regenerate: "Regenerar Nota",
+      regeneratingTitle: "Generando un nuevo borrador…",
+      regeneratingBody: "Usando la misma configuración de sesión que ingresó. Esto puede tardar un momento.",
+      regenerateSettingsLost: "Se perdió la configuración de la sesión. Use Comenzar de nuevo para empezar otra vez.",
       startOver: "Comenzar de nuevo (Nueva nota)",
       noteSaved: "Nota guardada",
       savedAs: "Guardado como",
