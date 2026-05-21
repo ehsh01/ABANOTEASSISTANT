@@ -7,6 +7,7 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import {
+  normalizeClinicalBodyInterventionDetailPhrases,
   normalizeClinicalBodyInterventionLabels,
   normalizeClinicalBodyReplacementLikePhrases,
   validateClinicalBodyCompliance,
@@ -165,9 +166,10 @@ INTERVENTIONS — ONE PER ABC (default) + EXACT MATCH (mandatory):
 - **Never join two different catalog intervention names into one combined label** using **and**, a comma, **or**, **plus**, etc. (forbidden: **Premack principle and Prompt Hierarchy** as one noun phrase; **Redirection, DRA** as one label before one period; \`The RBT implemented A and B.\` when A and B are two different JSON strings).
 - **Forbidden:** \`The RBT implemented "Redirection."\` with quotes around the catalog name; \`The RBT implemented Redirection, by …\` or \`The RBT implemented Redirection by …\` (any **by** clause attached to the catalog name in the naming sentence); \`The RBT implemented behavioral momentum.\` when JSON lists **Behavioral momentum** (wrong casing). **Semicolons** must not chain two catalog intervention names in one breath.
 - **INTERVENTION EXACT MATCH (mandatory for validators):** In the **naming** sentence, write the **exact** JSON intervention substring with **no straight double quotes** around it and **character-for-character** spelling and capitalization from JSON \`interventions\`, then end that sentence with **.** right after the name. All **how/what was done** belongs in **following** sentences (never in the same sentence as the catalog label).
-- When JSON lists **Differential Reinforcement of Alternative Behavior (DRA)**, use the **full** string including **(DRA)** in the naming sentence—never shorten to **Differential Reinforcement of Alternative Behavior** without the parenthetical.
-- **Wrong:** The RBT implemented Redirection by guiding the client back to the table. / The RBT implemented Differential Reinforcement of Alternative Behavior DRA by reinforcing gentle hands. / wrong-case catalog text vs JSON.
-- **Right (typical segment):** The RBT implemented Redirection. Following this intervention, the client returned to the table and re-engaged with the activity. **Right (safety chain only):** To address this behavior, the RBT immediately implemented Response Block. Following this intervention, the RBT blocked further contact. The RBT implemented Environmental Manipulation. Following this intervention, …
+- When JSON lists an intervention with a parenthetical acronym—e.g. **Differential Reinforcement of Alternative Behavior (DRA)**, **Differential Reinforcement of Incompatible Behavior (DRI)**, **Differential Reinforcement of Other Behavior (DRO)**—use the **full** string including the parenthetical in the naming sentence; never drop **(DRA)**, **(DRI)**, **(DRO)**, etc.
+- **INTERVENTION DETAIL — plain prose only (mandatory):** In **Following this intervention,** sentences, describe observable RBT actions in **plain clinical prose**. Do **not** phrase reinforcement, modeling, or redirection with labels that sound like catalog intervention names. **Forbidden examples:** *reinforced appropriate task engagement with verbal praise*; *reinforced appropriate task engagement*; *modeled placing* (as a stand-in intervention title). **Preferred:** *delivered verbal praise contingent on engagement with the task materials*; *demonstrated placing one item in the bin*; *redirected the client back to the worksheet*. Verbal praise and modeling are **techniques**, not substitute names for JSON \`interventions\` unless you are writing the **one** exact catalog naming sentence for an approved label such as **Pivot Praise** or **Time-Contingent Attention Delivery** when that exact string is in JSON \`interventions\`.
+- **Wrong:** The RBT implemented Redirection by guiding the client back to the table. / The RBT implemented Differential Reinforcement of Incompatible Behavior. (missing **(DRI)**) / Following this intervention, the RBT reinforced appropriate task engagement with verbal praise.
+- **Right (typical segment):** The RBT implemented Redirection. Following this intervention, the RBT guided the client back to the table and delivered verbal praise when the client re-engaged. **Right (safety chain only):** To address this behavior, the RBT immediately implemented Response Block. Following this intervention, the RBT blocked further contact. The RBT implemented Environmental Manipulation. Following this intervention, …
 - Use **only** intervention strings that appear in JSON \`interventions\`; do not invent or rename. If a strategy is not in the JSON list, do not label it with a catalog intervention name. If a single JSON string itself contains the word **and** (e.g. one BIP line reads Offer Choices and Redirection as one list entry), treat that entire string as **one** intervention label—do not split it.
 
 TASK REFUSAL (exact catalog string **Task Refusal** for \`maladaptiveBehaviorForHour[s]\`) — INTERVENTION + REPLACEMENT COHERENCE:
@@ -449,7 +451,9 @@ export async function generateClinicalBodyOpenAI(
 
   const authorizedPrograms = ctx.replacementProgramsInOrder ?? [];
   let body = await generateInitialBody(ctx);
-  body = normalizeClinicalBodyInterventionLabels(body, ctx.interventions ?? []);
+  const interventions = ctx.interventions ?? [];
+  body = normalizeClinicalBodyInterventionLabels(body, interventions);
+  body = normalizeClinicalBodyInterventionDetailPhrases(body, interventions);
   body = normalizeClinicalBodyReplacementLikePhrases(body, authorizedPrograms);
   let issues = validateClinicalBodyCompliance(body, compliance);
 
@@ -460,7 +464,9 @@ export async function generateClinicalBodyOpenAI(
     try {
       const revised = await generateRepairBody(ctx, body, issues);
       if (revised.trim().length > 0) {
-        body = normalizeClinicalBodyInterventionLabels(revised, ctx.interventions ?? []);
+        body = revised;
+        body = normalizeClinicalBodyInterventionLabels(body, interventions);
+        body = normalizeClinicalBodyInterventionDetailPhrases(body, interventions);
         body = normalizeClinicalBodyReplacementLikePhrases(body, authorizedPrograms);
         issues = validateClinicalBodyCompliance(body, compliance);
         if (issues.length === 0) {

@@ -1078,12 +1078,28 @@ function firstInterventionMentionInText(text: string, interventionNames: string[
   return bestName;
 }
 
-/** Fix common partial intervention labels (e.g. DRA without parenthetical) before validation. */
+/** Catalog label with trailing parenthetical acronym, e.g. "... Behavior (DRI)". */
+function catalogInterventionBaseWithoutParenthetical(full: string): string | null {
+  const m = /^(.*)\s*\(([A-Za-z][A-Za-z0-9/-]*)\)\s*$/.exec(full.trim());
+  if (!m) return null;
+  const base = m[1]!.replace(/\s+/g, " ").trim();
+  return base.length > 0 ? base : null;
+}
+
+function phraseMatchesAuthorizedIntervention(phrase: string, interventionCatalog: string[]): boolean {
+  const p = phrase.trim().toLowerCase();
+  if (!p) return false;
+  return interventionCatalog.some((name) => {
+    const n = name.trim().toLowerCase();
+    return n === p || n.includes(p) || p.includes(n);
+  });
+}
+
+/** Fix partial intervention labels (e.g. DRI without parenthetical) before validation. */
 export function normalizeClinicalBodyInterventionLabels(body: string, interventionCatalog: string[]): string {
   let out = body;
   for (const full of interventionCatalog) {
-    if (!/\(DRA\)/i.test(full)) continue;
-    const base = full.replace(/\s*\(DRA\)\s*/gi, " ").replace(/\s+/g, " ").trim();
+    const base = catalogInterventionBaseWithoutParenthetical(full);
     if (!base || out.includes(full)) continue;
     const re = new RegExp(`((?:implemented|applied)\\s+)${escapeRegExp(base)}(\\s*\\.)`, "gi");
     out = out.replace(re, `$1${full}$2`);
@@ -1093,14 +1109,82 @@ export function normalizeClinicalBodyInterventionLabels(body: string, interventi
 
 function findInterventionPartialMatchIssue(paragraph: string, catalog: string[]): string | null {
   for (const full of catalog) {
-    if (!/\(DRA\)/i.test(full)) continue;
-    const base = full.replace(/\s*\(DRA\)\s*/gi, " ").replace(/\s+/g, " ").trim();
+    const base = catalogInterventionBaseWithoutParenthetical(full);
     if (!base || paragraph.includes(full)) continue;
     const re = new RegExp(`(?:implemented|applied)\\s+${escapeRegExp(base)}\\s*\\.`, "i");
     if (re.test(paragraph)) {
-      return `Interventions: use exact catalog string "${full}" including (DRA), not "${base}" without the parenthetical.`;
+      const suffix = full.match(/\(([^)]+)\)\s*$/)?.[1] ?? "acronym";
+      return `Interventions: use exact catalog string "${full}" including (${suffix}), not "${base}" without the parenthetical.`;
     }
   }
+  return null;
+}
+
+/** Phrases in "Following this intervention" detail that reviewers treat as invented intervention names. */
+const DEFAULT_UNAUTHORIZED_INTERVENTION_LIKE_PHRASES: RegExp[] = [
+  /\breinforced appropriate task engagement with verbal praise\b/i,
+  /\breinforced appropriate task engagement\b/i,
+  /\bmodeled placing\b/i,
+];
+
+/**
+ * Rewrite intervention-detail prose that external review misreads as catalog intervention names.
+ */
+export function normalizeClinicalBodyInterventionDetailPhrases(
+  body: string,
+  interventionCatalog: string[],
+): string {
+  const replacements: [RegExp, string][] = [
+    [
+      /\breinforced appropriate task engagement with verbal praise\b/gi,
+      "delivered verbal praise contingent on engagement with the task materials",
+    ],
+    [
+      /\breinforced appropriate task engagement\b/gi,
+      "delivered reinforcement contingent on engagement with the task materials",
+    ],
+    [/\bmodeled placing\b/gi, "demonstrated placing"],
+  ];
+
+  let out = body;
+  for (const [pat, substitute] of replacements) {
+    const m = pat.exec(out);
+    if (!m) continue;
+    if (phraseMatchesAuthorizedIntervention(m[0], interventionCatalog)) {
+      continue;
+    }
+    out = out.replace(pat, substitute);
+  }
+  return out;
+}
+
+function findInventedInterventionLikePhraseIssues(
+  paragraph: string,
+  interventionCatalog: string[],
+): string | null {
+  for (const pat of DEFAULT_UNAUTHORIZED_INTERVENTION_LIKE_PHRASES) {
+    const m = pat.exec(paragraph);
+    if (!m) continue;
+    const matched = m[0].trim();
+    if (phraseMatchesAuthorizedIntervention(matched, interventionCatalog)) {
+      continue;
+    }
+    return `Interventions: do not use detail phrasing that resembles an unauthorized intervention name (found "${matched}"). After the single catalog naming sentence, describe RBT actions in plain prose only (e.g. delivered verbal praise, demonstrated placing an item)—do not title reinforcement or modeling with invented intervention-like labels.`;
+  }
+
+  const reinforcedWithPraise =
+    /\breinforced\s+((?:[a-z]+\s+){1,6}?)\s+with\s+verbal\s+praise\b/gi;
+  let rp: RegExpExecArray | null;
+  while ((rp = reinforcedWithPraise.exec(paragraph)) !== null) {
+    const label = rp[1]!.trim();
+    if (label.length < 6) continue;
+    if (phraseMatchesAuthorizedIntervention(label, interventionCatalog)) continue;
+    if (phraseMatchesAuthorizedIntervention(`${label} with verbal praise`, interventionCatalog)) {
+      continue;
+    }
+    return `Interventions: do not write "reinforced ${label} with verbal praise" as if it were a catalog intervention; use plain prose (e.g. delivered verbal praise contingent on …) after the one exact naming sentence for the catalog intervention.`;
+  }
+
   return null;
 }
 
@@ -1411,6 +1495,10 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const partial = findInterventionPartialMatchIssue(p, interventionCatalog);
       if (partial) {
         issues.push(`Interventions: paragraph ${i + 1}: ${partial}`);
+      }
+      const inventedIntervention = findInventedInterventionLikePhraseIssues(p, interventionCatalog);
+      if (inventedIntervention) {
+        issues.push(`Interventions: paragraph ${i + 1}: ${inventedIntervention}`);
       }
     }
   }
