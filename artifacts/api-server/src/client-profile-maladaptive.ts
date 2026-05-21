@@ -2,6 +2,10 @@ import type {
   ClientProfileRow,
   MaladaptiveBehaviorProfileEntry,
 } from "@workspace/db/schema";
+import {
+  canonicalMaladaptiveBehaviorLabel,
+  maladaptiveBehaviorLabelsEquivalent,
+} from "./note-validation";
 
 const MAX_TOPOGRAPHY_CHARS = 16_000;
 
@@ -147,13 +151,20 @@ export function maladaptiveBehaviorTargetsForNoteCatalog(
   behaviorCatalog: string[],
   profile: ClientProfileRow | null | undefined,
 ): MaladaptiveBehaviorProfileEntry[] {
-  const byName = new Map(
-    profile
-      ? expandMaladaptiveTargetsFromProfile(profile).map((t) => [t.name, t] as const)
-      : [],
-  );
+  const byCanonical = new Map<string, MaladaptiveBehaviorProfileEntry>();
+  if (profile) {
+    for (const t of expandMaladaptiveTargetsFromProfile(profile)) {
+      const key = canonicalMaladaptiveBehaviorLabel(t.name);
+      if (!byCanonical.has(key)) {
+        byCanonical.set(key, { name: key, topography: t.topography ?? null });
+      }
+    }
+  }
   return behaviorCatalog.map((name) => {
-    const hit = byName.get(name);
-    return { name, topography: hit?.topography ?? null };
+    const canonical = canonicalMaladaptiveBehaviorLabel(name);
+    const hit =
+      byCanonical.get(canonical) ??
+      [...byCanonical.values()].find((t) => maladaptiveBehaviorLabelsEquivalent(t.name, name));
+    return { name: canonical, topography: hit?.topography ?? null };
   });
 }

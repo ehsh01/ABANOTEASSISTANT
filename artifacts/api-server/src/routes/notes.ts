@@ -43,6 +43,7 @@ import {
 import { maladaptiveBehaviorTargetsForNoteCatalog } from "../client-profile-maladaptive";
 import {
   approximateAgeYearsAtSession,
+  canonicalMaladaptiveBehaviorLabel,
   maladaptiveBehaviorsCatalogForRotation,
   maladaptiveBehaviorsForSessionHours,
   replacementProgramAssignmentsForSessionHours,
@@ -615,9 +616,12 @@ router.post("/notes/generate", async (req, res) => {
     profileBehaviorList,
     rawAssessmentSnapshot,
   );
-  let behaviorCatalog = rotationResult.catalog;
+  let behaviorCatalog = rotationResult.catalog.map(canonicalMaladaptiveBehaviorLabel);
   if (structuredForNote) {
-    behaviorCatalog = intersectCatalog(behaviorCatalog, structuredForNote.behaviors);
+    behaviorCatalog = intersectCatalog(
+      behaviorCatalog,
+      structuredForNote.behaviors.map(canonicalMaladaptiveBehaviorLabel),
+    );
     if (behaviorCatalog.length === 0) {
       res.status(422).json({
         success: false,
@@ -655,7 +659,10 @@ router.post("/notes/generate", async (req, res) => {
     return;
   }
 
-  const { maladaptiveBehaviorForHour, activityAntecedentForHour } = abcResolved;
+  const maladaptiveBehaviorForHour = abcResolved.maladaptiveBehaviorForHour.map(
+    canonicalMaladaptiveBehaviorLabel,
+  );
+  const activityAntecedentForHour = abcResolved.activityAntecedentForHour;
 
   const linkedIdsUnique = [...new Set(allowedProgramRows.map((r) => r.id))].sort((a, b) => a - b);
   const idToNameForPrograms = allowedIdToName.size > 0 ? allowedIdToName : nameById;

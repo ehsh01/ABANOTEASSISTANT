@@ -7,8 +7,10 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import {
+  MALADAPTIVE_BEHAVIOR_SIB_CANONICAL,
   normalizeClinicalBodyInterventionDetailPhrases,
   normalizeClinicalBodyInterventionLabels,
+  normalizeClinicalBodyMaladaptiveBehaviorLabels,
   normalizeClinicalBodyReplacementLikePhrases,
   validateClinicalBodyCompliance,
   type NoteComplianceContext,
@@ -115,6 +117,7 @@ CLIENT ASSESSMENT EXCERPT (BIP/FBA text — when provided in JSON):
 - **Never copy personal names, initials, or nicknames from the excerpt into your output.** The assessment may name the individual; your clinical body must still refer to them only as **the client** (plus pronouns from JSON gender).
 - When \`clientAssessmentTextExcerpt\` is non-empty: treat it as the authoritative clinical document for **definitions, topography, and contexts** of target/problem behaviors described there. Align observable descriptions and episode context with that document. Do **not** contradict explicit behavior definitions or operational descriptions stated in the excerpt.
 - **Catalog strings still win for labels:** maladaptive behavior names, intervention names, and replacement program names must match the JSON lists **exactly** (exact spelling/capitalization). If the excerpt uses different wording for a behavior than the JSON catalog label, use the **JSON label** when naming the behavior and keep observable detail consistent with the excerpt's meaning.
+- **Self-injury label:** When JSON lists **${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}** (or an equivalent entry that normalizes to it), the manifested-behavior line must use that **full** string verbatim—never shorten to **SIB** alone, even if the assessment excerpt uses the acronym.
 - Do not paste long quotes from the excerpt; paraphrase into observable session narrative.
 - When \`clientAssessmentTextExcerpt\` is empty: rely on the JSON behavior, intervention, and replacement program lists only; do not invent assessment-level detail.
 
@@ -242,7 +245,7 @@ REPLACEMENT PROGRAM — FUNCTION MATCH (guidance):
 - JSON \`behaviorReplacementCandidatesForHour[s]\` lists BIP-aligned replacement programs for \`maladaptiveBehaviorForHour[s]\` when the assessment maps behaviors to programs. The server assigns one of these when possible; your prose should **fit the assigned program's function** naturally.
 - Typical function-aligned defaults the assignment respects (so the prose you generate fits the function naturally):
   - **Verbal Aggression**, **Inappropriate Language** → Functional Communication Training (FCT), Request help, Accepting No, Following Non-preferred instructions—not transition-wait programs unless that is the assigned \`replacementProgramForHour[s]\`.
-  - **Tantrum**, **Property Destruction**, **SIB**, **Physical Aggression** → Delays of Reinforcers, Accept alternatives when being redirected to more appropriate behavior.
+  - **Tantrum**, **Property Destruction**, **self-injurious behavior (SIB)**, **Physical Aggression** → Delays of Reinforcers, Accept alternatives when being redirected to more appropriate behavior.
   - **Wandering Away**, **Climbing**, **Elopement**, **Bolting**, **Running Away** → Functional Communication Training (FCT), Accepting No, Compliance with visual schedule, Following Non-preferred instructions, Walk within close distance of adult (safety skills)—not generic on-task engagement unless that is the assigned string.
 - Skill-acquisition programs (**Pre-requisite Skills**, **Manding Skills**, **Echoic Skills**, **Improve eye contact**, **Attract others' attention**, **Imitate other actions**, **Response to her name** / **Respond to Own Name**, **Request access to item activity PECS or pointing after being prompted once**, **Transition Compatible with ABLLS-R Code N4**) are **never** replacements for a maladaptive behavior—those segments arrive with \`acquisitionOnlySegmentForHour[s]\` set to **true** and must follow **SKILL-ACQUISITION-ONLY SEGMENTS** (no maladaptive label, no "manifested [behavior]" framing, observable teaching only).
 
@@ -296,7 +299,7 @@ SKILL-ACQUISITION-ONLY SEGMENTS (JSON \`acquisitionOnlySegmentForHour\`):
 - \`maladaptiveBehaviorForHour[s]\` is the empty string for these segments—treat it as **no assigned maladaptive label** for paragraph \`s\`.
 
 MALADAPTIVE BEHAVIOR ROTATION (mandatory — use JSON \`maladaptiveBehaviorForHour\`):
-- The JSON \`maladaptiveBehaviors\` array is the **full rotation catalog** for this client: every BIP-listed target behavior from the client profile, plus any standard BIP names detected from the stored assessment document that were not already on the profile. Use **only** those strings for behavior names—do not cite labels that are not listed in \`maladaptiveBehaviors\`.
+- The JSON \`maladaptiveBehaviors\` array is the **full rotation catalog** for this client: every BIP-listed target behavior from the client profile, plus any standard BIP names detected from the stored assessment document that were not already on the profile. Use **only** those strings for behavior names—do not cite labels that are not listed in \`maladaptiveBehaviors\`. When the catalog string is **self-injurious behavior (SIB)**, write that **entire** label in "the client manifested …"—do **not** abbreviate to **SIB**.
 - The stored assessment excerpt is the source for **how each of those targets is operationalized**; the JSON catalog is authoritative for **which behavior names** may appear and how they are spelled. For **each** segment \`s\`, the narrative topography for \`maladaptiveBehaviorForHour[s]\` must follow **EVERY MALADAPTIVE BEHAVIOR — IMPLEMENT TOPOGRAPHY FROM THE ASSESSMENT** when \`clientAssessmentTextExcerpt\` is non-empty.
 - The JSON includes \`maladaptiveBehaviorForHour\`: an array with **exactly** \`narrativeSegmentCount\` strings. Index 0 is the first paragraph (first ~90-minute segment, or first hour when \`sessionHours\` is 2), index 1 the second paragraph, and so on.
 - For segment index \`s\` when \`acquisitionOnlySegmentForHour[s]\` is **false**: that paragraph's manifested behavior MUST be **exactly** the string \`maladaptiveBehaviorForHour[s]\` (verbatim character-for-character). That value is always one of the entries in \`maladaptiveBehaviors\`; the server assigns labels per segment from the hourly rotation.
@@ -450,10 +453,12 @@ export async function generateClinicalBodyOpenAI(
   const compliance = toComplianceCtx(ctx);
 
   const authorizedPrograms = ctx.replacementProgramsInOrder ?? [];
+  const maladaptiveCatalog = ctx.maladaptiveBehaviors ?? [];
   let body = await generateInitialBody(ctx);
   const interventions = ctx.interventions ?? [];
   body = normalizeClinicalBodyInterventionLabels(body, interventions);
   body = normalizeClinicalBodyInterventionDetailPhrases(body, interventions);
+  body = normalizeClinicalBodyMaladaptiveBehaviorLabels(body, maladaptiveCatalog);
   body = normalizeClinicalBodyReplacementLikePhrases(body, authorizedPrograms);
   let issues = validateClinicalBodyCompliance(body, compliance);
 
@@ -467,6 +472,7 @@ export async function generateClinicalBodyOpenAI(
         body = revised;
         body = normalizeClinicalBodyInterventionLabels(body, interventions);
         body = normalizeClinicalBodyInterventionDetailPhrases(body, interventions);
+        body = normalizeClinicalBodyMaladaptiveBehaviorLabels(body, maladaptiveCatalog);
         body = normalizeClinicalBodyReplacementLikePhrases(body, authorizedPrograms);
         issues = validateClinicalBodyCompliance(body, compliance);
         if (issues.length === 0) {

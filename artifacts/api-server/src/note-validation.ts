@@ -251,12 +251,49 @@ function firstInterventionNameWithAttachedByClause(
   return null;
 }
 
+/**
+ * Full BIP catalog label for self-injury — use verbatim in notes; never substitute bare "SIB"
+ * when this label is on the client's catalog or assigned for the hour/segment.
+ */
+export const MALADAPTIVE_BEHAVIOR_SIB_CANONICAL = "self-injurious behavior (SIB)";
+
+/** Map common profile/assessment aliases to the catalog string used in rotation and narrative. */
+export function canonicalMaladaptiveBehaviorLabel(raw: string): string {
+  const t = raw.trim();
+  if (!t) return t;
+  const lower = t.toLowerCase();
+  if (
+    lower === "sib" ||
+    lower === "self-injurious behavior" ||
+    lower === "self injurious behavior" ||
+    lower === "self-injurious behavior (sib)"
+  ) {
+    return MALADAPTIVE_BEHAVIOR_SIB_CANONICAL;
+  }
+  return t;
+}
+
+export function maladaptiveBehaviorLabelsEquivalent(a: string, b: string): boolean {
+  return canonicalMaladaptiveBehaviorLabel(a) === canonicalMaladaptiveBehaviorLabel(b);
+}
+
+function assessmentTextMentionsStandardMaladaptiveBehavior(
+  assessment: string,
+  standardLabel: string,
+): boolean {
+  if (assessment.includes(standardLabel)) return true;
+  if (maladaptiveBehaviorLabelsEquivalent(standardLabel, MALADAPTIVE_BEHAVIOR_SIB_CANONICAL)) {
+    return /\bSIB\b/i.test(assessment) || /self[- ]?injurious\s+behavior/i.test(assessment);
+  }
+  return false;
+}
+
 /** Canonical rotation order for common BIP maladaptive behavior names (exact spelling for substring match in assessment text). */
 export const STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER: readonly string[] = [
   "Physical Aggression",
   "Task Refusal",
   "Property Destruction",
-  "SIB",
+  MALADAPTIVE_BEHAVIOR_SIB_CANONICAL,
   "Inappropriate Social Behavior",
   "Bolting",
   "Disruption",
@@ -266,7 +303,7 @@ function dedupeMaladaptiveBehaviorOrder(catalog: string[]): string[] {
   const seen = new Set<string>();
   const ordered: string[] = [];
   for (const raw of catalog) {
-    const s = raw.trim();
+    const s = canonicalMaladaptiveBehaviorLabel(raw.trim());
     if (!s || seen.has(s)) continue;
     seen.add(s);
     ordered.push(s);
@@ -302,13 +339,20 @@ export function maladaptiveBehaviorsCatalogForRotation(
   const profile = dedupeMaladaptiveBehaviorOrder(profileBehaviors);
   const assessment = assessmentTextFull.trim();
 
-  const head = STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER.filter((s) => profile.some((p) => p === s));
-  const profileRemainder = profile.filter((p) => !head.includes(p));
+  const head = STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER.filter((s) =>
+    profile.some((p) => maladaptiveBehaviorLabelsEquivalent(p, s)),
+  );
+  const profileRemainder = profile.filter(
+    (p) => !head.some((h) => maladaptiveBehaviorLabelsEquivalent(p, h)),
+  );
 
   const labelsAddedFromAssessmentText: string[] = [];
   if (assessment.length > 0) {
     for (const s of STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER) {
-      if (assessment.includes(s) && !profile.some((p) => p === s)) {
+      if (
+        assessmentTextMentionsStandardMaladaptiveBehavior(assessment, s) &&
+        !profile.some((p) => maladaptiveBehaviorLabelsEquivalent(p, s))
+      ) {
         labelsAddedFromAssessmentText.push(s);
       }
     }
@@ -320,7 +364,7 @@ export function maladaptiveBehaviorsCatalogForRotation(
 
   const labelsOmittedNotFoundInAssessment =
     assessment.length > 0 && catalog.length > 0
-      ? catalog.filter((c) => !assessment.includes(c))
+      ? catalog.filter((c) => !assessmentTextMentionsStandardMaladaptiveBehavior(assessment, c))
       : [];
 
   return {
@@ -1261,6 +1305,42 @@ export function normalizeClinicalBodyReplacementLikePhrases(
   return out;
 }
 
+/** Expand bare "SIB" in manifested-behavior lines when the catalog uses the full label. */
+export function normalizeClinicalBodyMaladaptiveBehaviorLabels(
+  body: string,
+  maladaptiveCatalog: string[],
+): string {
+  const catalogHasFullSib = maladaptiveCatalog.some((c) =>
+    maladaptiveBehaviorLabelsEquivalent(c, MALADAPTIVE_BEHAVIOR_SIB_CANONICAL),
+  );
+  if (!catalogHasFullSib) return body;
+
+  return body.replace(
+    /\b((?:the client )?manifested)\s+SIB\b/gi,
+    `$1 ${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}`,
+  );
+}
+
+function findMaladaptiveBehaviorAbbreviationIssue(
+  paragraph: string,
+  assigned: string,
+  catalog: string[],
+): string | null {
+  const catalogHasFullSib = catalog.some((c) =>
+    maladaptiveBehaviorLabelsEquivalent(c, MALADAPTIVE_BEHAVIOR_SIB_CANONICAL),
+  );
+  if (!catalogHasFullSib) return null;
+  if (!maladaptiveBehaviorLabelsEquivalent(assigned, MALADAPTIVE_BEHAVIOR_SIB_CANONICAL)) {
+    return null;
+  }
+  if (!/\bmanifested\b/i.test(paragraph)) return null;
+  if (paragraph.includes(MALADAPTIVE_BEHAVIOR_SIB_CANONICAL)) return null;
+  if (/\bmanifested\s+SIB\b/i.test(paragraph) || /\bmanifested\s+[^.;]{0,80}\bSIB\b/i.test(paragraph)) {
+    return `Maladaptive behavior: use the full catalog label "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" in the manifested-behavior line, not "SIB" alone.`;
+  }
+  return null;
+}
+
 function findUnauthorizedQuotedReplacementProgramIssue(
   paragraph: string,
   assignedProgram: string,
@@ -1451,6 +1531,13 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         `Maladaptive behavior rotation: paragraph ${i + 1} must cite the assigned catalog label "${assigned}" (maladaptiveBehaviorForHour[${i}]) verbatim in the manifested-behavior portion.`,
       );
       break;
+    }
+    if (!acquisitionOnly && assigned) {
+      const abbrev = findMaladaptiveBehaviorAbbreviationIssue(p, assigned, behaviorCatalog);
+      if (abbrev) {
+        issues.push(`Maladaptive behavior rotation: paragraph ${i + 1}: ${abbrev}`);
+        break;
+      }
     }
     if (!acquisitionOnly && tantrumWithoutTopography(p)) {
       issues.push(
