@@ -646,6 +646,235 @@ export function isIndicateAllDoneReplacementProgramName(name: string): boolean {
 
 const TASK_REFUSAL_CATALOG = "Task Refusal";
 
+/** BIP map lookup with case-insensitive key fallback. */
+function mappedReplacementsForBehaviorKey(
+  behaviorName: string,
+  map: Record<string, string[]>,
+): string[] {
+  const behavior = behaviorName.trim();
+  if (!behavior) return [];
+  let mapped = map[behavior];
+  if (!mapped?.length) {
+    const key = Object.keys(map).find((k) => k.toLowerCase() === behavior.toLowerCase());
+    if (key) mapped = map[key];
+  }
+  return mapped?.map((s) => s.trim()).filter((s) => s.length > 0) ?? [];
+}
+
+function preferencePredicatesForBehaviorPattern(behaviorName: string): ((n: string) => boolean)[] {
+  const b = behaviorName.toLowerCase();
+  if (
+    b.includes("verbal aggression") ||
+    b.includes("inappropriate language") ||
+    b.includes("inappropriate remark")
+  ) {
+    return [
+      (n) => /functional communication|\bfct\b/i.test(n),
+      (n) => n.toLowerCase().includes("request help"),
+      (n) => n.toLowerCase().includes("accepting no"),
+      (n) => /follow.*non-preferred|following non-preferred/i.test(n),
+      (n) => /\bdra\b|\(dra\)/i.test(n),
+      (n) => n.toLowerCase().includes("redirection"),
+    ];
+  }
+  if (/\belope/.test(b) || /\bwandering\b/.test(b) || /\bbolting\b/.test(b) || /\brunning\s+away\b/.test(b)) {
+    return [
+      (n) => /functional communication|\bfct\b/i.test(n),
+      (n) => n.toLowerCase().includes("accepting no"),
+      (n) => /visual schedule|3-element/i.test(n),
+      (n) => /follow.*non-preferred|following non-preferred/i.test(n),
+      (n) => /walk within close|close distance|safety skills/i.test(n),
+    ];
+  }
+  return [];
+}
+
+/**
+ * Ordered BIP-aligned replacement program names for a maladaptive behavior (map first, then heuristics).
+ */
+export function behaviorReplacementCandidatesForMaladaptiveBehavior(
+  behaviorName: string,
+  behaviorToReplacementsMap: Record<string, string[]>,
+  authorizedProgramNames: string[],
+): string[] {
+  const authorized = [...new Set(authorizedProgramNames.map((s) => s.trim()).filter((s) => s.length > 0))];
+  const mapped = mappedReplacementsForBehaviorKey(behaviorName, behaviorToReplacementsMap);
+  if (mapped.length > 0) {
+    return mapped.filter((p) => authorized.includes(p));
+  }
+  const preds = preferencePredicatesForBehaviorPattern(behaviorName);
+  const ordered: string[] = [];
+  for (const pred of preds) {
+    for (const p of authorized) {
+      if (pred(p) && !ordered.includes(p)) ordered.push(p);
+    }
+  }
+  return ordered;
+}
+
+/**
+ * True when auto-assigned replacement program is a poor function match for the maladaptive behavior.
+ */
+export function isMisfitReplacementForMaladaptiveBehavior(
+  behaviorName: string,
+  replacementProgramName: string,
+  behaviorToReplacementsMap: Record<string, string[]>,
+): boolean {
+  const behavior = behaviorName.trim();
+  const program = replacementProgramName.trim();
+  if (!behavior || !program) return false;
+
+  const mapped = mappedReplacementsForBehaviorKey(behavior, behaviorToReplacementsMap);
+  if (mapped.length > 0) {
+    return !mapped.includes(program);
+  }
+
+  const b = behavior.toLowerCase();
+  const p = program.toLowerCase();
+  if (
+    (b.includes("verbal aggression") ||
+      b.includes("inappropriate language") ||
+      b.includes("inappropriate remark")) &&
+    /wait/.test(p) &&
+    /transition/.test(p)
+  ) {
+    return true;
+  }
+  if (
+    (/\belope/.test(b) || /\bwandering\b/.test(b) || /\bbolting\b/.test(b) || /\brunning\s+away\b/.test(b)) &&
+    p === "on task behavior"
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Per narrative segment: BIP-aligned replacement candidates for the assigned maladaptive behavior.
+ */
+export function buildBehaviorReplacementCandidatesForNarrativeSegments(params: {
+  narrativeSegmentCount: number;
+  maladaptiveBehaviorForHour: string[];
+  acquisitionOnlySegmentForHour: boolean[];
+  behaviorToReplacementsMap: Record<string, string[]>;
+  authorizedProgramNames: string[];
+}): string[][] {
+  const result: string[][] = [];
+  for (let s = 0; s < params.narrativeSegmentCount; s++) {
+    if (params.acquisitionOnlySegmentForHour[s]) {
+      result.push([]);
+      continue;
+    }
+    const b = params.maladaptiveBehaviorForHour[s]?.trim() ?? "";
+    if (!b) {
+      result.push([]);
+      continue;
+    }
+    result.push(
+      behaviorReplacementCandidatesForMaladaptiveBehavior(
+        b,
+        params.behaviorToReplacementsMap,
+        params.authorizedProgramNames,
+      ),
+    );
+  }
+  return result;
+}
+
+/**
+ * Auto-assignment sometimes pairs a maladaptive behavior with a function-mismatched replacement program
+ * (e.g. Verbal Aggression + Wait during Transitions, Elopement + On task Behavior). When the hour's
+ * replacement was not explicitly pinned in ABC hints, swap to a BIP-mapped candidate from the pool.
+ *
+ * Returns human-readable swap summaries for optional warning lines.
+ */
+export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
+  sessionHours: number;
+  maladaptiveBehaviorForHour: string[];
+  names: string[];
+  rbtActionsOnlyOutcomeForHour: boolean[];
+  programIdForHour: (number | null)[];
+  explicitProgramIdByHour: (number | null | undefined)[];
+  poolIds: number[];
+  idToName: Map<number, string>;
+  selectedIdSet: Set<number>;
+  behaviorToReplacementsMap: Record<string, string[]>;
+  authorizedProgramNames: string[];
+}): string[] {
+  const {
+    sessionHours: H,
+    maladaptiveBehaviorForHour: beh,
+    names,
+    rbtActionsOnlyOutcomeForHour: rbt,
+    programIdForHour: pids,
+    explicitProgramIdByHour: explicit,
+    poolIds,
+    idToName,
+    selectedIdSet,
+    behaviorToReplacementsMap,
+    authorizedProgramNames,
+  } = params;
+
+  const swapped: string[] = [];
+
+  for (let h = 0; h < H; h++) {
+    const behavior = beh[h]?.trim() ?? "";
+    if (!behavior) continue;
+    const currentName = names[h]?.trim() ?? "";
+    if (!currentName) continue;
+    if (typeof explicit[h] === "number") continue;
+    if (
+      !isMisfitReplacementForMaladaptiveBehavior(behavior, currentName, behaviorToReplacementsMap)
+    ) {
+      continue;
+    }
+
+    const candidates = behaviorReplacementCandidatesForMaladaptiveBehavior(
+      behavior,
+      behaviorToReplacementsMap,
+      authorizedProgramNames,
+    );
+
+    const poolCandidates = poolIds.filter((id) => {
+      const n = idToName.get(id)?.trim();
+      if (!n || n === currentName) return false;
+      if (isMisfitReplacementForMaladaptiveBehavior(behavior, n, behaviorToReplacementsMap)) {
+        return false;
+      }
+      return candidates.length === 0 || candidates.includes(n);
+    });
+    if (poolCandidates.length === 0) continue;
+
+    const sortedPool = [...poolCandidates].sort((a, b) => {
+      const aSel = selectedIdSet.has(a) ? 0 : 1;
+      const bSel = selectedIdSet.has(b) ? 0 : 1;
+      return aSel - bSel;
+    });
+
+    let pick: number | undefined;
+    for (const prefName of candidates) {
+      const found = sortedPool.find((id) => idToName.get(id) === prefName);
+      if (found !== undefined) {
+        pick = found;
+        break;
+      }
+    }
+    if (pick === undefined) {
+      pick = sortedPool[0];
+    }
+
+    const newName = idToName.get(pick)!;
+    names[h] = newName;
+    pids[h] = pick;
+    rbt[h] = !selectedIdSet.has(pick);
+    swapped.push(
+      `Hour ${h + 1} (${behavior}): replacement program rebalanced from "${currentName}" to "${newName}" for BIP function alignment.`,
+    );
+  }
+
+  return swapped;
+}
+
 /**
  * Auto-assignment sometimes pairs **Task Refusal** with **Indicate … All Done …**, which external
  * reviewers often flag when the episode is noncompliance with a **new instructional demand** (not
@@ -847,6 +1076,70 @@ function firstInterventionMentionInText(text: string, interventionNames: string[
     }
   }
   return bestName;
+}
+
+/** Fix common partial intervention labels (e.g. DRA without parenthetical) before validation. */
+export function normalizeClinicalBodyInterventionLabels(body: string, interventionCatalog: string[]): string {
+  let out = body;
+  for (const full of interventionCatalog) {
+    if (!/\(DRA\)/i.test(full)) continue;
+    const base = full.replace(/\s*\(DRA\)\s*/gi, " ").replace(/\s+/g, " ").trim();
+    if (!base || out.includes(full)) continue;
+    const re = new RegExp(`((?:implemented|applied)\\s+)${escapeRegExp(base)}(\\s*\\.)`, "gi");
+    out = out.replace(re, `$1${full}$2`);
+  }
+  return out;
+}
+
+function findInterventionPartialMatchIssue(paragraph: string, catalog: string[]): string | null {
+  for (const full of catalog) {
+    if (!/\(DRA\)/i.test(full)) continue;
+    const base = full.replace(/\s*\(DRA\)\s*/gi, " ").replace(/\s+/g, " ").trim();
+    if (!base || paragraph.includes(full)) continue;
+    const re = new RegExp(`(?:implemented|applied)\\s+${escapeRegExp(base)}\\s*\\.`, "i");
+    if (re.test(paragraph)) {
+      return `Interventions: use exact catalog string "${full}" including (DRA), not "${base}" without the parenthetical.`;
+    }
+  }
+  return null;
+}
+
+const INVENTED_REPLACEMENT_PROGRAM_PHRASES: RegExp[] = [
+  /\brequest a break\b/i,
+  /\bfunctional phrase to request\b/i,
+];
+
+function findInventedReplacementProgramPhraseIssues(
+  paragraph: string,
+  authorizedPrograms: string[],
+): string | null {
+  const authorizedLower = authorizedPrograms.map((a) => a.toLowerCase());
+  if (authorizedLower.some((a) => /request a break/i.test(a))) {
+    return null;
+  }
+  for (const pat of INVENTED_REPLACEMENT_PROGRAM_PHRASES) {
+    if (pat.test(paragraph)) {
+      return `Do not label teaching with unauthorized replacement-program-like titles (e.g. "request a break"); describe observable prompting in plain prose only—the only replacement program name in the paragraph must be the verbatim replacementProgramForHour[s] in the required quoted sentence.`;
+    }
+  }
+  return null;
+}
+
+function findUnauthorizedQuotedReplacementProgramIssue(
+  paragraph: string,
+  assignedProgram: string,
+  authorizedPrograms: string[],
+): string | null {
+  const authorized = new Set(authorizedPrograms.map((s) => s.trim()).filter(Boolean));
+  const re = /replacement program\s+["']([^"']+)["']/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(paragraph)) !== null) {
+    const quoted = m[1]!.trim();
+    if (quoted !== assignedProgram.trim() && !authorized.has(quoted)) {
+      return `Unauthorized replacement program "${quoted}" — use only the verbatim assigned program "${assignedProgram}" in the replacement-program sentence.`;
+    }
+  }
+  return null;
 }
 
 /** First sentence = text up to first ". " (MVP; avoids most abbreviations in our locked prose). */
@@ -1063,6 +1356,28 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
           `Interventions: paragraph ${i + 1}: do not attach "by …" to "${attachedBy}" in the same sentence as implemented/applied. Use two sentences: (1) "The RBT implemented ${attachedBy}." or "To address this behavior, the RBT implemented ${attachedBy}." with the exact JSON string and a period immediately after the name; (2) a separate sentence describing what was done (for example beginning with "Following this intervention, …").`,
         );
       }
+      const partial = findInterventionPartialMatchIssue(p, interventionCatalog);
+      if (partial) {
+        issues.push(`Interventions: paragraph ${i + 1}: ${partial}`);
+      }
+    }
+  }
+
+  const replacementCatalog = (ctx.replacementProgramsInOrder ?? [])
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  for (let i = 0; i < paragraphs.length; i++) {
+    const p = paragraphs[i]!;
+    const assigned = ctx.replacementProgramForHour[i]?.trim() ?? "";
+    const invented = findInventedReplacementProgramPhraseIssues(p, replacementCatalog);
+    if (invented) {
+      issues.push(`Replacement programs: paragraph ${i + 1}: ${invented}`);
+    }
+    if (assigned) {
+      const unauthorized = findUnauthorizedQuotedReplacementProgramIssue(p, assigned, replacementCatalog);
+      if (unauthorized) {
+        issues.push(`Replacement programs: paragraph ${i + 1}: ${unauthorized}`);
+      }
     }
   }
 
@@ -1157,7 +1472,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
 type Ymd = { y: number; mo: number; d: number };
 
 /** Parse leading yyyy-MM-dd or MM/dd/yyyy (or M/d/yyyy). */
-function parseFlexibleYmd(s: string | undefined | null): Ymd | null {
+export function parseFlexibleYmd(s: string | undefined | null): Ymd | null {
   if (!s?.trim()) return null;
   const t = s.trim();
   let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
@@ -1175,6 +1490,14 @@ function parseFlexibleYmd(s: string | undefined | null): Ymd | null {
     return Number.isFinite(y) && Number.isFinite(mo) && Number.isFinite(d) ? { y, mo, d } : null;
   }
   return null;
+}
+
+/** True when session date falls on a Sunday (US-style or ISO date strings). */
+export function isSundaySessionDate(sessionDate: string | undefined | null): boolean {
+  const ymd = parseFlexibleYmd(sessionDate);
+  if (!ymd) return false;
+  const dt = new Date(ymd.y, ymd.mo - 1, ymd.d);
+  return dt.getDay() === 0;
 }
 
 /** Approximate whole years between DOB and session date (supports yyyy-MM-dd or MM/dd/yyyy). */

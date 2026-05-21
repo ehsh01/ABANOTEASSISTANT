@@ -7,6 +7,7 @@
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import {
+  normalizeClinicalBodyInterventionLabels,
   validateClinicalBodyCompliance,
   type NoteComplianceContext,
 } from "./note-validation";
@@ -94,6 +95,11 @@ export type NoteGenerationContext = {
    * do **not** frame the segment with a maladaptive catalog label. \`maladaptiveBehaviorForHour[s]\` is empty in JSON for those segments.
    */
   acquisitionOnlySegmentForHour: boolean[];
+  /**
+   * Per narrative segment \`s\`: BIP-aligned replacement program names for \`maladaptiveBehaviorForHour[s]\`
+   * (from assessment \`behavior_to_replacements_map\` when present). Empty when acquisition-only or no behavior.
+   */
+  behaviorReplacementCandidatesForHour: string[][];
 };
 
 const SYSTEM_PROMPT = `You write ABA session note clinical narratives for RBT documentation.
@@ -158,6 +164,7 @@ INTERVENTIONS — ONE PER ABC (default) + EXACT MATCH (mandatory):
 - **Never join two different catalog intervention names into one combined label** using **and**, a comma, **or**, **plus**, etc. (forbidden: **Premack principle and Prompt Hierarchy** as one noun phrase; **Redirection, DRA** as one label before one period; \`The RBT implemented A and B.\` when A and B are two different JSON strings).
 - **Forbidden:** \`The RBT implemented "Redirection."\` with quotes around the catalog name; \`The RBT implemented Redirection, by …\` or \`The RBT implemented Redirection by …\` (any **by** clause attached to the catalog name in the naming sentence); \`The RBT implemented behavioral momentum.\` when JSON lists **Behavioral momentum** (wrong casing). **Semicolons** must not chain two catalog intervention names in one breath.
 - **INTERVENTION EXACT MATCH (mandatory for validators):** In the **naming** sentence, write the **exact** JSON intervention substring with **no straight double quotes** around it and **character-for-character** spelling and capitalization from JSON \`interventions\`, then end that sentence with **.** right after the name. All **how/what was done** belongs in **following** sentences (never in the same sentence as the catalog label).
+- When JSON lists **Differential Reinforcement of Alternative Behavior (DRA)**, use the **full** string including **(DRA)** in the naming sentence—never shorten to **Differential Reinforcement of Alternative Behavior** without the parenthetical.
 - **Wrong:** The RBT implemented Redirection by guiding the client back to the table. / The RBT implemented Differential Reinforcement of Alternative Behavior DRA by reinforcing gentle hands. / wrong-case catalog text vs JSON.
 - **Right (typical segment):** The RBT implemented Redirection. Following this intervention, the client returned to the table and re-engaged with the activity. **Right (safety chain only):** To address this behavior, the RBT immediately implemented Response Block. Following this intervention, the RBT blocked further contact. The RBT implemented Environmental Manipulation. Following this intervention, …
 - Use **only** intervention strings that appear in JSON \`interventions\`; do not invent or rename. If a strategy is not in the JSON list, do not label it with a catalog intervention name. If a single JSON string itself contains the word **and** (e.g. one BIP line reads Offer Choices and Redirection as one list entry), treat that entire string as **one** intervention label—do not split it.
@@ -229,10 +236,20 @@ REINFORCERS — APPROVED LIST (mandatory):
 
 REPLACEMENT PROGRAM — FUNCTION MATCH (guidance):
 - The server already assigns \`replacementProgramForHour[s]\` from each client's authorized replacement list and rotates by ~90-minute slots—**use that exact string verbatim**. Treat the assigned program as authoritative; do **not** override it.
+- JSON \`behaviorReplacementCandidatesForHour[s]\` lists BIP-aligned replacement programs for \`maladaptiveBehaviorForHour[s]\` when the assessment maps behaviors to programs. The server assigns one of these when possible; your prose should **fit the assigned program's function** naturally.
 - Typical function-aligned defaults the assignment respects (so the prose you generate fits the function naturally):
+  - **Verbal Aggression**, **Inappropriate Language** → Functional Communication Training (FCT), Request help, Accepting No, Following Non-preferred instructions—not transition-wait programs unless that is the assigned \`replacementProgramForHour[s]\`.
   - **Tantrum**, **Property Destruction**, **SIB**, **Physical Aggression** → Delays of Reinforcers, Accept alternatives when being redirected to more appropriate behavior.
-  - **Wandering Away**, **Climbing**, **Elopement**, **Bolting**, **Running Away** → Walk within close distance of adult (safety skills).
+  - **Wandering Away**, **Climbing**, **Elopement**, **Bolting**, **Running Away** → Functional Communication Training (FCT), Accepting No, Compliance with visual schedule, Following Non-preferred instructions, Walk within close distance of adult (safety skills)—not generic on-task engagement unless that is the assigned string.
 - Skill-acquisition programs (**Pre-requisite Skills**, **Manding Skills**, **Echoic Skills**, **Improve eye contact**, **Attract others' attention**, **Imitate other actions**, **Response to her name** / **Respond to Own Name**, **Request access to item activity PECS or pointing after being prompted once**, **Transition Compatible with ABLLS-R Code N4**) are **never** replacements for a maladaptive behavior—those segments arrive with \`acquisitionOnlySegmentForHour[s]\` set to **true** and must follow **SKILL-ACQUISITION-ONLY SEGMENTS** (no maladaptive label, no "manifested [behavior]" framing, observable teaching only).
+
+NO INVENTED REPLACEMENT PROGRAM LABELS (mandatory):
+- The **only** replacement program name allowed in each paragraph is the verbatim \`replacementProgramForHour[s]\` inside the required **replacement program** sentence (straight double quotes).
+- In **Following this intervention,** teaching detail, do **not** title teaching targets with program-like labels that are **not** on the client's authorized list (forbidden examples: **Request a break**, **functional phrase to request a break** as a program title). Describe observable prompting in plain lowercase prose (e.g. *prompted the client to use a short phrase to ask for a pause*) without naming unauthorized catalog programs.
+
+SESSION PROGRESS INDICATORS (brief — session-target segments only):
+- When \`rbtActionsOnlyOutcomeForHour[s]\` is **false**, include **one short clause** comparing current performance on that segment's replacement target to **recent sessions** using observable language only—for example *prompting remained necessary at a level consistent with prior sessions*, *required a similar level of prompting as recent sessions*, or *showed slightly more independent responses on prompted trials compared to recent sessions*.
+- Do **not** invent baseline percentages, mastery claims, or regression unless \`therapistTrialSummaryForReplacementHour[s]\` supports a discrete-trial percentage. Do **not** use subjective words (did well, struggled, frustrated, upset).
 
 REPLACEMENT PROGRAM PER NARRATIVE SEGMENT (mandatory — use JSON \`replacementProgramForHour\`):
 - The server assigns \`replacementProgramForHour[s]\` per **segment** \`s\` from the session’s selected programs and ~90-minute slotting; use the assigned string **verbatim**.
@@ -428,6 +445,7 @@ export async function generateClinicalBodyOpenAI(
   const compliance = toComplianceCtx(ctx);
 
   let body = await generateInitialBody(ctx);
+  body = normalizeClinicalBodyInterventionLabels(body, ctx.interventions ?? []);
   let issues = validateClinicalBodyCompliance(body, compliance);
 
   if (issues.length > 0) {
@@ -437,7 +455,7 @@ export async function generateClinicalBodyOpenAI(
     try {
       const revised = await generateRepairBody(ctx, body, issues);
       if (revised.trim().length > 0) {
-        body = revised;
+        body = normalizeClinicalBodyInterventionLabels(revised, ctx.interventions ?? []);
         issues = validateClinicalBodyCompliance(body, compliance);
         if (issues.length === 0) {
           warnings.push("Automatic revision satisfied automated compliance checks.");

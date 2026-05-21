@@ -47,6 +47,9 @@ import {
   maladaptiveBehaviorsForSessionHours,
   replacementProgramAssignmentsForSessionHours,
   rebalanceTaskRefusalReplacementProgramsHourly,
+  rebalanceBehaviorMappedReplacementProgramsHourly,
+  buildBehaviorReplacementCandidatesForNarrativeSegments,
+  isSundaySessionDate,
   replacementProgramPoolForAutoAssignment,
   replacementProgramSlotCount,
   validateCaregiverMentionRule,
@@ -688,6 +691,21 @@ router.post("/notes/generate", async (req, res) => {
     selectedIdSet,
   });
 
+  const behaviorToReplacementsMap = structuredForNote?.behavior_to_replacements_map ?? {};
+  const behaviorRebalanceSwaps = rebalanceBehaviorMappedReplacementProgramsHourly({
+    sessionHours: body.sessionHours,
+    maladaptiveBehaviorForHour,
+    names: replacementProgramForHour,
+    rbtActionsOnlyOutcomeForHour,
+    programIdForHour,
+    explicitProgramIdByHour,
+    poolIds,
+    idToName: idToNameForPrograms,
+    selectedIdSet,
+    behaviorToReplacementsMap,
+    authorizedProgramNames: replacementProgramsCatalogForNote,
+  });
+
   const therapistTrialSummaryHourly = buildTherapistTrialSummaryForReplacementHour({
     sessionHours: body.sessionHours,
     programIdForHour,
@@ -797,6 +815,20 @@ router.post("/notes/generate", async (req, res) => {
       "ABC Builder: one or more hours use RBT-selected activity/antecedent and maladaptive behavior; the AI must keep those exact strings.",
     );
   }
+  if (isSundaySessionDate(body.sessionDate)) {
+    warnings.push(
+      "Sunday sessions require documented parental consent. Verify that a signed consent form authorizing Sunday sessions is on file for this client — otherwise the agency is in breach of the authorization requirements.",
+    );
+  }
+  warnings.push(...behaviorRebalanceSwaps);
+
+  const behaviorReplacementCandidatesForHour = buildBehaviorReplacementCandidatesForNarrativeSegments({
+    narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
+    maladaptiveBehaviorForHour: maladaptiveBehaviorForNarrative,
+    acquisitionOnlySegmentForHour,
+    behaviorToReplacementsMap,
+    authorizedProgramNames: replacementProgramsCatalogForNote,
+  });
 
   const oaCtx: NoteGenerationContext = {
     /** Deliberately not the profile name — session notes must not contain personal names. */
@@ -826,6 +858,7 @@ router.post("/notes/generate", async (req, res) => {
     activityAntecedentForHour: narrativeCollapsed.activityAntecedentForHour,
     languageMaladaptiveEpisodeForHour: narrativeCollapsed.languageMaladaptiveEpisodeForHour,
     therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
+    behaviorReplacementCandidatesForHour,
   };
 
   let clinicalBody: string;
