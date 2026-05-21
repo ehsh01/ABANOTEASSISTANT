@@ -8,6 +8,7 @@ import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import {
   normalizeClinicalBodyInterventionLabels,
+  normalizeClinicalBodyReplacementLikePhrases,
   validateClinicalBodyCompliance,
   type NoteComplianceContext,
 } from "./note-validation";
@@ -245,7 +246,9 @@ REPLACEMENT PROGRAM — FUNCTION MATCH (guidance):
 
 NO INVENTED REPLACEMENT PROGRAM LABELS (mandatory):
 - The **only** replacement program name allowed in each paragraph is the verbatim \`replacementProgramForHour[s]\` inside the required **replacement program** sentence (straight double quotes).
-- In **Following this intervention,** teaching detail, do **not** title teaching targets with program-like labels that are **not** on the client's authorized list (forbidden examples: **Request a break**, **functional phrase to request a break** as a program title). Describe observable prompting in plain lowercase prose (e.g. *prompted the client to use a short phrase to ask for a pause*) without naming unauthorized catalog programs.
+- In **Following this intervention,** teaching detail, do **not** title teaching targets with program-like labels that are **not** on the client's authorized list. Forbidden examples (even in lowercase prose): **Request a break**, **keep both hands on the table**, **hands-down behavior**, **reinforced hands-down behavior**, **hand placement maintained** as named targets.
+- **Preferred** observable wording instead: *prompted the client to place both hands flat on the table surface*; *reinforced appropriate hand placement with verbal praise*; *prompted the client to use a short phrase to ask for a pause*—never phrasing that could be read as a BIP replacement program title unless it is the verbatim \`replacementProgramForHour[s]\` inside the required quoted sentence.
+- Do **not** write **reinforced [descriptive phrase] behavior** (e.g. *reinforced hands-down behavior*) unless that exact phrase is an approved replacement program name in JSON \`replacementProgramsInOrder\`.
 
 SESSION PROGRESS INDICATORS (brief — session-target segments only):
 - When \`rbtActionsOnlyOutcomeForHour[s]\` is **false**, include **one short clause** comparing current performance on that segment's replacement target to **recent sessions** using observable language only—for example *prompting remained necessary at a level consistent with prior sessions*, *required a similar level of prompting as recent sessions*, or *showed slightly more independent responses on prompted trials compared to recent sessions*.
@@ -444,8 +447,10 @@ export async function generateClinicalBodyOpenAI(
   const warnings: string[] = [];
   const compliance = toComplianceCtx(ctx);
 
+  const authorizedPrograms = ctx.replacementProgramsInOrder ?? [];
   let body = await generateInitialBody(ctx);
   body = normalizeClinicalBodyInterventionLabels(body, ctx.interventions ?? []);
+  body = normalizeClinicalBodyReplacementLikePhrases(body, authorizedPrograms);
   let issues = validateClinicalBodyCompliance(body, compliance);
 
   if (issues.length > 0) {
@@ -456,6 +461,7 @@ export async function generateClinicalBodyOpenAI(
       const revised = await generateRepairBody(ctx, body, issues);
       if (revised.trim().length > 0) {
         body = normalizeClinicalBodyInterventionLabels(revised, ctx.interventions ?? []);
+        body = normalizeClinicalBodyReplacementLikePhrases(body, authorizedPrograms);
         issues = validateClinicalBodyCompliance(body, compliance);
         if (issues.length === 0) {
           warnings.push("Automatic revision satisfied automated compliance checks.");

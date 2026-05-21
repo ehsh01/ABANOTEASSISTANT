@@ -1104,25 +1104,77 @@ function findInterventionPartialMatchIssue(paragraph: string, catalog: string[])
   return null;
 }
 
-const INVENTED_REPLACEMENT_PROGRAM_PHRASES: RegExp[] = [
+/** Teaching phrases reviewers treat as unauthorized replacement program names (case-insensitive). */
+const DEFAULT_UNAUTHORIZED_REPLACEMENT_LIKE_PHRASES: RegExp[] = [
   /\brequest a break\b/i,
   /\bfunctional phrase to request\b/i,
+  /\bkeep both hands on the table\b/i,
+  /\bhands[- ]down behavior\b/i,
+  /\breinforced hands[- ]down\b/i,
+  /\bhand placement maintained\b/i,
 ];
+
+function phraseMatchesAuthorizedReplacementProgram(phrase: string, authorizedPrograms: string[]): boolean {
+  const p = phrase.trim().toLowerCase();
+  if (!p) return false;
+  return authorizedPrograms.some((name) => {
+    const n = name.trim().toLowerCase();
+    return n === p || n.includes(p) || p.includes(n);
+  });
+}
 
 function findInventedReplacementProgramPhraseIssues(
   paragraph: string,
   authorizedPrograms: string[],
 ): string | null {
-  const authorizedLower = authorizedPrograms.map((a) => a.toLowerCase());
-  if (authorizedLower.some((a) => /request a break/i.test(a))) {
-    return null;
-  }
-  for (const pat of INVENTED_REPLACEMENT_PROGRAM_PHRASES) {
-    if (pat.test(paragraph)) {
-      return `Do not label teaching with unauthorized replacement-program-like titles (e.g. "request a break"); describe observable prompting in plain prose only—the only replacement program name in the paragraph must be the verbatim replacementProgramForHour[s] in the required quoted sentence.`;
+  for (const pat of DEFAULT_UNAUTHORIZED_REPLACEMENT_LIKE_PHRASES) {
+    const m = pat.exec(paragraph);
+    if (!m) continue;
+    const matched = m[0].trim();
+    if (phraseMatchesAuthorizedReplacementProgram(matched, authorizedPrograms)) {
+      continue;
     }
+    return `Do not use teaching target phrasing that resembles an unauthorized replacement program (found "${matched}"; not on the client's approved replacement list). Describe observable prompting in plain prose only—the only replacement program name in the paragraph must be the verbatim replacementProgramForHour[s] inside the required quoted replacement-program sentence (e.g. avoid "keep both hands on the table", "hands-down behavior").`;
   }
+
+  const reinforcedBehavior = /\breinforced\s+([a-z][a-z0-9-]*(?:\s+[a-z][a-z0-9-]*){0,4})\s+behavior\b/gi;
+  let rb: RegExpExecArray | null;
+  while ((rb = reinforcedBehavior.exec(paragraph)) !== null) {
+    const label = rb[1]!.trim();
+    if (label.length < 4) continue;
+    if (phraseMatchesAuthorizedReplacementProgram(label, authorizedPrograms)) continue;
+    if (/\b(verbal|appropriate|inappropriate|maladaptive|target)\b/i.test(label)) continue;
+    return `Do not name reinforced teaching as "${label} behavior" unless that exact phrase is an approved replacement program on the client's list; use observable wording (e.g. reinforced appropriate hand placement) and cite only the verbatim replacementProgramForHour[s] in the replacement-program sentence.`;
+  }
+
   return null;
+}
+
+/**
+ * Rewrite common invented replacement-like teaching labels before validation.
+ */
+export function normalizeClinicalBodyReplacementLikePhrases(
+  body: string,
+  authorizedPrograms: string[],
+): string {
+  const replacements: [RegExp, string][] = [
+    [/\bkeep both hands on the table\b/gi, "place both hands flat on the table surface"],
+    [/\bhands[- ]down behavior\b/gi, "appropriate hand placement at the table"],
+    [/\breinforced hands[- ]down\b/gi, "reinforced appropriate hand placement"],
+    [/\bhand placement maintained\b/gi, "appropriate hand placement was maintained"],
+  ];
+
+  let out = body;
+  for (const [pat, substitute] of replacements) {
+    const m = pat.exec(out);
+    if (!m) continue;
+    const matched = m[0];
+    if (phraseMatchesAuthorizedReplacementProgram(matched, authorizedPrograms)) {
+      continue;
+    }
+    out = out.replace(pat, substitute);
+  }
+  return out;
 }
 
 function findUnauthorizedQuotedReplacementProgramIssue(
