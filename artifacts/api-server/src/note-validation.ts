@@ -1166,8 +1166,14 @@ function findInterventionPartialMatchIssue(paragraph: string, catalog: string[])
 
 /** Phrases in "Following this intervention" detail that reviewers treat as invented intervention names. */
 const DEFAULT_UNAUTHORIZED_INTERVENTION_LIKE_PHRASES: RegExp[] = [
+  /\bverbal praise contingent on each instance of task engagement\b/i,
   /\breinforced appropriate task engagement with verbal praise\b/i,
   /\breinforced appropriate task engagement\b/i,
+  /\bredirected the client(?:'|’)s hands back to the worksheet\b/i,
+  /\bredirected hands back to worksheet\b/i,
+  /\bguided the client to place one marker at a time into the bin\b/i,
+  /\bguided client to place one marker at a time into bin\b/i,
+  /\bprovided verbal praise contingent on each completed step\b/i,
   /\bmodeled placing\b/i,
 ];
 
@@ -1180,12 +1186,36 @@ export function normalizeClinicalBodyInterventionDetailPhrases(
 ): string {
   const replacements: [RegExp, string][] = [
     [
+      /\bverbal praise contingent on each instance of task engagement\b/gi,
+      "brief praise after worksheet responses",
+    ],
+    [
       /\breinforced appropriate task engagement with verbal praise\b/gi,
-      "delivered verbal praise contingent on engagement with the task materials",
+      "delivered brief praise after worksheet responses",
     ],
     [
       /\breinforced appropriate task engagement\b/gi,
-      "delivered reinforcement contingent on engagement with the task materials",
+      "delivered reinforcement after worksheet responses",
+    ],
+    [
+      /\bredirected the client(?:'|’)s hands back to the worksheet\b/gi,
+      "pointed to the worksheet and re-presented the instruction",
+    ],
+    [
+      /\bredirected hands back to worksheet\b/gi,
+      "pointed to the worksheet and re-presented the instruction",
+    ],
+    [
+      /\bguided the client to place one marker at a time into the bin\b/gi,
+      "pointed to one marker and the bin while re-presenting the cleanup instruction",
+    ],
+    [
+      /\bguided client to place one marker at a time into bin\b/gi,
+      "pointed to one marker and the bin while re-presenting the cleanup instruction",
+    ],
+    [
+      /\bprovided verbal praise contingent on each completed step\b/gi,
+      "delivered brief praise after completed cleanup steps",
     ],
     [/\bmodeled placing\b/gi, "demonstrated placing"],
   ];
@@ -1236,6 +1266,7 @@ function findInventedInterventionLikePhraseIssues(
 const DEFAULT_UNAUTHORIZED_REPLACEMENT_LIKE_PHRASES: RegExp[] = [
   /\brequest a break\b/i,
   /\bfunctional phrase to request\b/i,
+  /\btask engagement\b/i,
   /\bkeep both hands on the table\b/i,
   /\bhands[- ]down behavior\b/i,
   /\breinforced hands[- ]down\b/i,
@@ -1286,6 +1317,7 @@ export function normalizeClinicalBodyReplacementLikePhrases(
   authorizedPrograms: string[],
 ): string {
   const replacements: [RegExp, string][] = [
+    [/\btask engagement\b/gi, "worksheet responding"],
     [/\bkeep both hands on the table\b/gi, "place both hands flat on the table surface"],
     [/\bhands[- ]down behavior\b/gi, "appropriate hand placement at the table"],
     [/\breinforced hands[- ]down\b/gi, "reinforced appropriate hand placement"],
