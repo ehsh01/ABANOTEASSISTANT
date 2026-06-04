@@ -255,7 +255,7 @@ function firstInterventionNameWithAttachedByClause(
  * Full BIP catalog label for self-injury — use verbatim in notes; never substitute bare "SIB"
  * when this label is on the client's catalog or assigned for the hour/segment.
  */
-export const MALADAPTIVE_BEHAVIOR_SIB_CANONICAL = "self-injurious behavior (SIB)";
+export const MALADAPTIVE_BEHAVIOR_SIB_CANONICAL = "Self-Injurious Behavior (SIB)";
 
 /** Map common profile/assessment aliases to the catalog string used in rotation and narrative. */
 export function canonicalMaladaptiveBehaviorLabel(raw: string): string {
@@ -1105,6 +1105,17 @@ function findResponseBlockInterventionLabel(interventions: string[]): string | n
   return null;
 }
 
+function findDraOrDriInterventionLabel(interventions: string[]): string | null {
+  const names = interventions.map((s) => s.trim()).filter((s) => s.length > 0);
+  return (
+    names.find((s) => /differential reinforcement of alternative behaviors?\s*\(DRA\)/i.test(s)) ??
+    names.find((s) => /differential reinforcement of incompatible behaviors?\s*\(DRI\)/i.test(s)) ??
+    names.find((s) => /\(DRA\)/i.test(s)) ??
+    names.find((s) => /\(DRI\)/i.test(s)) ??
+    null
+  );
+}
+
 /** Smallest index in `text` among catalog intervention names that appear; longest names first to reduce substring ambiguity. */
 function firstInterventionMentionInText(text: string, interventionNames: string[]): string | null {
   const names = [...new Set(interventionNames.map((s) => s.trim()).filter((s) => s.length > 0))].sort(
@@ -1643,6 +1654,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   const trialSummaries = ctx.therapistTrialSummaryForReplacementHour;
   const responseBlockLabel = findResponseBlockInterventionLabel(ctx.interventions ?? []);
   const interventionList = ctx.interventions ?? [];
+  const sibFunctionInterventionLabel = findDraOrDriInterventionLabel(interventionList);
 
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i]!;
@@ -1677,6 +1689,17 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       issues.push(
         `Interventions: paragraph ${i + 1} must document at least one catalog intervention using the exact JSON label in a naming sentence ending with a period right after the name (for example "The RBT implemented [exact label]." or "To address this behavior, the RBT implemented [exact label]."), then describe what was done in following sentences—do not put "by …" in the same sentence as the catalog name.`,
       );
+    }
+    if (
+      sibFunctionInterventionLabel &&
+      maladaptiveBehaviorLabelsEquivalent(assignedBehavior, MALADAPTIVE_BEHAVIOR_SIB_CANONICAL)
+    ) {
+      const firstNamed = firstInterventionMentionInText(p, interventionList);
+      if (firstNamed && /^redirection$/i.test(firstNamed.trim())) {
+        issues.push(
+          `SIB intervention coherence: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" with Redirection even though "${sibFunctionInterventionLabel}" is on the client's approved intervention list. Use "${sibFunctionInterventionLabel}" as the single exact naming sentence for this SIB segment, then describe protective blocking/prompting details in following plain prose. Redirection alone does not target the documented escape/attention/tangible functions.`,
+        );
+      }
     }
   }
 
