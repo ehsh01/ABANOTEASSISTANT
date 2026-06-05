@@ -254,12 +254,8 @@ export default function LoginPage() {
           {/* Footer links */}
           <p className="mt-8 text-center text-sm text-slate-500">
             No account?{" "}
-            <Link href="/register" className="font-bold text-[#C084FC] hover:text-[#A855F7] transition-colors">
+            <Link href="/pricing" className="font-bold text-[#C084FC] hover:text-[#A855F7] transition-colors">
               Register
-            </Link>
-            {" · "}
-            <Link href="/pricing" className="font-semibold text-slate-700 hover:text-[#1A0B2E] transition-colors">
-              See plans
             </Link>
           </p>
 
