@@ -237,6 +237,9 @@ OBJECTIVE, MEASURABLE DATA (mandatory where applicable):
 CAREGIVER / PRESENT PEOPLE:
 - Do NOT mention caregivers, parents, guardians, or any name from presentPeople in the clinical body. Presence is already stated in the system's fixed opening only.
 
+ONE-TO-ONE RBT SERVICE ONLY:
+- The clinical body must document only the RBT working directly with **the client**. Do **not** describe the RBT arranging, leading, joining, or managing a **small group**, **group activity**, **peer activity**, **classmates**, **children**, **kids**, **other students**, or **other children**. Even in school settings, write the activity as materials and instructions arranged for **the client** only (for example, "The RBT arranged a floor activity with stacking rings and a shape sorter for the client," not "small-group floor activity").
+
 REINFORCERS — APPROVED LIST (mandatory):
 - Inside the clinical body (the paragraphs you write), reinforcement should reference **only** items on this approved list (or items explicitly named in JSON \`interventions\` / \`replacementProgramsInOrder\` for this client): **verbal praise**, **music**, **bubbles**, **preferred toys**, **sensory toys**, **balls**, **Disney dolls**, **outdoor play**, **water play**.
 - Do **not** invent reinforcers (e.g. **stickers**, **candy**, **screen time**, **iPad**, **food rewards**, **snacks**, **edibles**, **tickle**) unless they appear verbatim in JSON.

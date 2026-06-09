@@ -189,6 +189,9 @@ function vagueProgressComparisonWithoutTrajectory(paragraph: string): boolean {
 const CAREGIVER_LEXICON =
   /\b(caregiver|caregivers|parent|parents|guardian|guardians|mother|father|mom|dad|mommy|daddy|stepmother|stepfather)\b/i;
 
+const PEER_OR_GROUP_ACTIVITY_LEXICON =
+  /\b(small[- ]group|group activity|group play|peer|peers|classmate|classmates|children|kids|other students|other children|student group)\b/i;
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -1766,6 +1769,12 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   if (CAREGIVER_LEXICON.test(clinicalBody)) {
     issues.push(
       "Clinical body must not mention caregivers, parents, or guardians; the fixed opening already covers presence once.",
+    );
+  }
+
+  if (PEER_OR_GROUP_ACTIVITY_LEXICON.test(clinicalBody)) {
+    issues.push(
+      "Clinical body must document only the RBT's one-to-one work with the client. Remove small-group, peer, classmate, children, kids, other-student, or group-play language; describe the materials/activity as arranged for the client only.",
     );
   }
 
