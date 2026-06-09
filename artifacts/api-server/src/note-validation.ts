@@ -164,6 +164,28 @@ function tantrumWithoutTopography(paragraph: string): boolean {
   return !topographyCue.test(paragraph);
 }
 
+function physicalAggressionParagraphHasVerbalTopography(paragraph: string): boolean {
+  const manifestedIdx = paragraph.search(/\bmanifested\s+physical\s+aggression\b/i);
+  if (manifestedIdx === -1) return false;
+  const behaviorSpan = paragraph.slice(Math.max(0, manifestedIdx - 260), manifestedIdx + 260);
+  return (
+    /["“][^"”]{1,80}["”]/.test(behaviorSpan) ||
+    /\b(shouted|yelled|screamed|said|stated|vocalized|vocalizations?|raised voice|above conversational level)\b/i.test(
+      behaviorSpan,
+    )
+  );
+}
+
+function vagueProgressComparisonWithoutTrajectory(paragraph: string): boolean {
+  if (!/\b(recent sessions|baseline|previous sessions|prior sessions|treatment goals?)\b/i.test(paragraph)) {
+    return false;
+  }
+  if (/\b(progress|progressing|maintenance|maintained|regression|regressed|improved|increased|decreased)\b/i.test(paragraph)) {
+    return false;
+  }
+  return /\b(similar|consistent|comparable)\b/i.test(paragraph);
+}
+
 const CAREGIVER_LEXICON =
   /\b(caregiver|caregivers|parent|parents|guardian|guardians|mother|father|mom|dad|mommy|daddy|stepmother|stepfather)\b/i;
 
@@ -1581,6 +1603,12 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         issues.push(`Maladaptive behavior rotation: paragraph ${i + 1}: ${abbrev}`);
         break;
       }
+      if (/physical\s+aggression/i.test(assigned) && physicalAggressionParagraphHasVerbalTopography(p)) {
+        issues.push(
+          `Physical Aggression topography: paragraph ${i + 1} must not include quoted speech, shouting, raised voice, or other verbal/vocal topography in the Physical Aggression episode. Use only person-directed physical contact/attempts such as hitting, kicking, pushing, scratching, pinching, headbutting, hair pulling, or throwing items at a person. If verbal aggression occurred, it requires a separate assigned verbal/language behavior paragraph; do not bundle it into Physical Aggression.`,
+        );
+        break;
+      }
     }
     if (!acquisitionOnly && tantrumWithoutTopography(p)) {
       issues.push(
@@ -1669,6 +1697,11 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
           `Therapist trial counts: paragraph ${i + 1} must state discrete-trial outcomes as a **percentage** tied to that program (rounded from intake: **${pct}%** of trials met criterion / **~${pct}%** of the time / **successful ~${pct}%** of the time — same rounding as the end-of-note performance line). Do **not** use "${successN} out of ${trialEntry.totalTrials} trials were successful" or other N-of-M trial count rollups. Do not use "trials were conducted" plus separate per-trial success lists.`,
         );
       }
+    }
+    if (ctx.rbtActionsOnlyOutcomeForHour?.[i] !== true && vagueProgressComparisonWithoutTrajectory(p)) {
+      issues.push(
+        `Progress trajectory: paragraph ${i + 1} compares performance to recent/prior sessions using vague wording (similar/consistent/comparable) but does not state whether this reflects progress, maintenance, or regression relative to treatment goals. Add a brief objective phrase such as "reflecting maintenance of current performance relative to recent sessions" or "showing increased/decreased independent responding compared with recent sessions" without inventing unsupported baseline percentages.`,
+      );
     }
 
     if (interventionCatalog.length === 0) {

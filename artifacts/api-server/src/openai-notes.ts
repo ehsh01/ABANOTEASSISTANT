@@ -155,6 +155,7 @@ BEHAVIOR DESCRIPTION:
 
 BEHAVIOR CLASSIFICATION (use exact catalog labels from JSON; describe actions consistently):
 - If a behavior label indicates physical aggression, describe actions directed AT A PERSON (hitting, kicking, pushing a person).
+- For **Physical Aggression**, do **not** include quoted speech, shouted words, raised voice, screaming, vocalizations, or other verbal topography in that same manifested-behavior episode. Physical Aggression topography must stay limited to person-directed physical contact or attempts (e.g. hitting, kicking, pushing, scratching, pinching, headbutting, hair pulling, throwing items at a person). If verbal aggression or screaming occurred, it requires a separate assigned verbal/language behavior segment; do not bundle it into Physical Aggression.
 - If a behavior label indicates property destruction or similar, describe actions toward OBJECTS (throwing toys, breaking items, slamming materials)—not labeled as person-directed aggression unless the text clearly strikes a person.
 - Do not re-label BIP vocabulary; stay faithful to the provided maladaptive behavior names while keeping descriptions observable.
 
@@ -257,7 +258,7 @@ NO INVENTED REPLACEMENT PROGRAM LABELS (mandatory):
 - Do **not** write **reinforced [descriptive phrase] behavior** (e.g. *reinforced hands-down behavior*) unless that exact phrase is an approved replacement program name in JSON \`replacementProgramsInOrder\`.
 
 SESSION PROGRESS INDICATORS (brief — session-target segments only):
-- When \`rbtActionsOnlyOutcomeForHour[s]\` is **false**, include **one short clause** comparing current performance on that segment's replacement target to **recent sessions** using observable language only—for example *prompting remained necessary at a level consistent with prior sessions*, *required a similar level of prompting as recent sessions*, or *showed slightly more independent responses on prompted trials compared to recent sessions*.
+- When \`rbtActionsOnlyOutcomeForHour[s]\` is **false**, include **one short clause** comparing current performance on that segment's replacement target to **recent sessions** using observable language only, and explicitly state whether this reflects **progress**, **maintenance**, or **regression** relative to treatment goals. Good examples: *reflecting maintenance of current performance relative to recent sessions*; *showing increased independent responding compared with recent sessions*; *showing decreased independent responding compared with recent sessions*. Avoid vague-only phrases such as *consistent with recent sessions* or *similar to recent sessions* unless the same clause also says **maintenance**, **progress**, or **regression**.
 - Do **not** invent baseline percentages, mastery claims, or regression unless \`therapistTrialSummaryForReplacementHour[s]\` supports a discrete-trial percentage. Do **not** use subjective words (did well, struggled, frustrated, upset).
 
 REPLACEMENT PROGRAM PER NARRATIVE SEGMENT (mandatory — use JSON \`replacementProgramForHour\`):
