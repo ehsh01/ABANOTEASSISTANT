@@ -596,7 +596,7 @@ function Step3Date() {
 
 function Step4People() {
   const { data, updateData } = useWizardStore();
-  const presets = ["Mother", "Father", "Grandmother", "Grandfather", "Caregiver", "Sibling"];
+  const presets = ["Mother", "Father", "Grandmother", "Grandfather", "Caregiver", "Sibling", "Teacher"];
   const [customVal, setCustomVal] = useState("");
 
   const selected = data.presentPeople || [];
