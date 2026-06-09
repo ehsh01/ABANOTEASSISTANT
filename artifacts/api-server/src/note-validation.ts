@@ -6,6 +6,8 @@
 export type NoteComplianceContext = {
   /** Billable session duration from the wizard (integer hours). */
   sessionHours: number;
+  /** Approved location label from the wizard/API; school notes use teacher-led activity wording. */
+  therapySetting?: string | undefined;
   /**
    * Number of ABC paragraphs expected in the clinical body (aligned with ~90-minute narrative/program slots).
    * When omitted, validators fall back to `sessionHours` for backward compatibility.
@@ -191,6 +193,22 @@ const CAREGIVER_LEXICON =
 
 const PEER_OR_GROUP_ACTIVITY_LEXICON =
   /\b(small[- ]group|group activity|group play|peer|peers|classmate|classmates|children|kids|other students|other children|student group)\b/i;
+
+const SCHOOL_SETTING_RE = /\bschool\b/i;
+
+function isSchoolSettingLabel(therapySetting: string | undefined): boolean {
+  return typeof therapySetting === "string" && SCHOOL_SETTING_RE.test(therapySetting);
+}
+
+function isTeacherRole(name: string): boolean {
+  return /\bteacher\b/i.test(name.trim());
+}
+
+function schoolParagraphHasRbtOwnedClassroomActivity(paragraph: string): boolean {
+  const rbtOwnedActivity =
+    /\b(?:the\s+)?RBT\s+(?:arranged|set up|setup|prepared|created|designed|led|conducted|introduced|presented)\b[^.]{0,140}\b(?:lesson|activity|worksheet|classwork|assignment|academic task|classroom task|floor activity|table activity|puzzle|board game|game|transition from|materials?)\b/i;
+  return rbtOwnedActivity.test(paragraph);
+}
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -1022,7 +1040,7 @@ export function rebalanceTaskRefusalReplacementProgramsHourly(params: {
 
 /** Catalog label denotes physical aggression (person-directed); match is on the catalog string, not free text. */
 function isPhysicalAggressionCatalogLabel(behaviorName: string): boolean {
-  return /\bphysical\s+aggression\b/i.test(behaviorName.trim());
+  return /\baggression\b/i.test(behaviorName.trim());
 }
 
 /**
@@ -1031,6 +1049,8 @@ function isPhysicalAggressionCatalogLabel(behaviorName: string): boolean {
  */
 function assignedBehaviorAllowsResponseBlockSafetyChain(behaviorName: string): boolean {
   const t = behaviorName.trim();
+  if (maladaptiveBehaviorLabelsEquivalent(t, MALADAPTIVE_BEHAVIOR_SIB_CANONICAL)) return true;
+  if (/\bSIB\b/i.test(t) || /self[- ]?injurious\s+behavior/i.test(t)) return true;
   if (isPhysicalAggressionCatalogLabel(t)) return true;
   const u = t.toLowerCase();
   return (
@@ -1468,6 +1488,7 @@ export function validateCaregiverMentionRule(fullNote: string, presentPeople: st
 
 export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteComplianceContext): string[] {
   const issues: string[] = [];
+  const schoolSetting = isSchoolSettingLabel(ctx.therapySetting);
 
   let mentalHits = 0;
   for (const re of MENTAL_STATE_PATTERNS) {
@@ -1511,6 +1532,17 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     .split(/\n\n+/)
     .map((p) => p.trim())
     .filter(Boolean);
+
+  if (schoolSetting) {
+    for (let i = 0; i < paragraphs.length; i++) {
+      if (schoolParagraphHasRbtOwnedClassroomActivity(paragraphs[i]!)) {
+        issues.push(
+          `School setting activity ownership: paragraph ${i + 1} makes the RBT sound like they created, arranged, led, or presented the classroom lesson/activity. In school notes, the teacher should present classroom lessons/activities/materials, while the RBT supports the client and implements ABA programs, prompts, interventions, reinforcement, and data collection.`,
+        );
+        break;
+      }
+    }
+  }
 
   const expectedParagraphs = ctx.narrativeSegmentCount ?? ctx.sessionHours;
   if (paragraphs.length !== expectedParagraphs) {
@@ -1781,6 +1813,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   for (const name of ctx.presentPeople) {
     const n = name.trim();
     if (n.length < 2) continue;
+    if (schoolSetting && isTeacherRole(n)) continue;
     const re = new RegExp(`\\b${escapeRegExp(n)}\\b`, "i");
     if (re.test(clinicalBody)) {
       issues.push(

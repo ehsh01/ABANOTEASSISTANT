@@ -760,6 +760,7 @@ router.post("/notes/generate", async (req, res) => {
 
   const complianceCtxBase: NoteComplianceContext = {
     sessionHours: body.sessionHours,
+    therapySetting: body.therapySetting,
     narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
     replacementProgramsInOrder: replacementProgramsCatalogForNote,
     replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
