@@ -178,14 +178,8 @@ function physicalAggressionParagraphHasVerbalTopography(paragraph: string): bool
   );
 }
 
-function vagueProgressComparisonWithoutTrajectory(paragraph: string): boolean {
-  if (!/\b(recent sessions|baseline|previous sessions|prior sessions|treatment goals?)\b/i.test(paragraph)) {
-    return false;
-  }
-  if (/\b(progress|progressing|maintenance|maintained|regression|regressed|improved|increased|decreased)\b/i.test(paragraph)) {
-    return false;
-  }
-  return /\b(similar|consistent|comparable)\b/i.test(paragraph);
+function unsupportedProgressComparison(paragraph: string): boolean {
+  return /\b(recent sessions|previous sessions|prior sessions|baseline|treatment goals?)\b/i.test(paragraph);
 }
 
 const CAREGIVER_LEXICON =
@@ -206,8 +200,16 @@ function isTeacherRole(name: string): boolean {
 
 function schoolParagraphHasRbtOwnedClassroomActivity(paragraph: string): boolean {
   const rbtOwnedActivity =
-    /\b(?:the\s+)?RBT\s+(?:arranged|set up|setup|prepared|created|designed|led|conducted|introduced|presented)\b[^.]{0,140}\b(?:lesson|activity|worksheet|classwork|assignment|academic task|classroom task|floor activity|table activity|puzzle|board game|game|transition from|materials?)\b/i;
-  return rbtOwnedActivity.test(paragraph);
+    /\b(?:the\s+)?RBT\s+(?:arranged|set up|setup|prepared|created|designed|led|conducted|introduced|presented)\b[^.]{0,140}\b(?:lesson|activity|worksheet|classwork|assignment|academic task|classroom task|floor activity|table activity|puzzle|board game|game|transition from|materials?|instruction|instructions|direction|directions)\b/i;
+  const explicitRbtMaterialOwnership =
+    /\b(?:the\s+)?RBT\s+arranged\s+(?:the\s+)?materials?\b/i;
+  const explicitRbtClassroomInstruction =
+    /\b(?:the\s+)?RBT\s+presented\s+(?:a\s+|the\s+)?(?:simple\s+|classroom\s+|academic\s+|coloring\s+)?(?:instruction|direction|task)\b/i;
+  return (
+    rbtOwnedActivity.test(paragraph) ||
+    explicitRbtMaterialOwnership.test(paragraph) ||
+    explicitRbtClassroomInstruction.test(paragraph)
+  );
 }
 
 function escapeRegExp(s: string): string {
@@ -1733,9 +1735,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         );
       }
     }
-    if (ctx.rbtActionsOnlyOutcomeForHour?.[i] !== true && vagueProgressComparisonWithoutTrajectory(p)) {
+    if (ctx.rbtActionsOnlyOutcomeForHour?.[i] !== true && unsupportedProgressComparison(p)) {
       issues.push(
-        `Progress trajectory: paragraph ${i + 1} compares performance to recent/prior sessions using vague wording (similar/consistent/comparable) but does not state whether this reflects progress, maintenance, or regression relative to treatment goals. Add a brief objective phrase such as "reflecting maintenance of current performance relative to recent sessions" or "showing increased/decreased independent responding compared with recent sessions" without inventing unsupported baseline percentages.`,
+        `Unsupported progress comparison: paragraph ${i + 1} compares current performance to recent/prior sessions, baseline, or treatment goals, but prior-session trajectory data is not part of the session context. Remove the comparison and state only current-session performance supported by the entered data.`,
       );
     }
 
