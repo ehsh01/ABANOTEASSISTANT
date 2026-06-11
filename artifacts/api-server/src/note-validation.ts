@@ -43,7 +43,7 @@ export type NoteComplianceContext = {
    * do not cite a maladaptive catalog label; `maladaptiveBehaviorForHour[i]` is cleared for validators/prompts.
    */
   acquisitionOnlySegmentForHour?: boolean[] | undefined;
-  /** BIP intervention names (exact strings) — used for physical-aggression / Response Block ordering */
+  /** BIP intervention names (exact strings) — used for safety-priority response-blocking ordering */
   interventions: string[];
   /**
    * Per narrative segment: therapist-entered discrete-trial rollup for `replacementProgramForHour[s]`.
@@ -1101,8 +1101,8 @@ function isPhysicalAggressionCatalogLabel(behaviorName: string): boolean {
 }
 
 /**
- * Assigned maladaptive labels where, if **Response Block** is on the client's intervention list, the narrative may
- * document Response Block first and then **additional** separate intervention sentences (safety chain).
+ * Assigned maladaptive labels where, if a response-blocking intervention is on the client's intervention list,
+ * the narrative may document that label first and then **additional** separate intervention sentences (safety chain).
  */
 function assignedBehaviorAllowsResponseBlockSafetyChain(behaviorName: string): boolean {
   const t = behaviorName.trim();
@@ -1837,7 +1837,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
 
     if (!safetyChainAllowed && implCount > 1) {
       issues.push(
-        `Interventions: paragraph ${i + 1} must document **one** catalog intervention for this ABC segment (one naming sentence: "… implemented [exact JSON label]." or "… applied [exact JSON label]." with a period immediately after the name, then separate sentences for detail). Pick the single best-matching entry from JSON interventions unless the segment is a safety-priority behavior with Response Block on the client's list (physical aggression, wandering, elopement, baiting, bolting, running away)—then Response Block may be first with additional interventions in separate naming sentences.`,
+        `Interventions: paragraph ${i + 1} must document **one** catalog intervention for this ABC segment (one naming sentence: "… implemented [exact JSON label]." or "… applied [exact JSON label]." with a period immediately after the name, then separate sentences for detail). Pick the single best-matching entry from JSON interventions unless the segment is a safety-priority behavior with a response-blocking label on the client's list (Self-Injurious Behavior (SIB), physical aggression, wandering, elopement, baiting, bolting, running away)—then that response-blocking label must be first with additional interventions in separate naming sentences.`,
       );
     }
     if (implCount === 0) {
@@ -1883,7 +1883,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const m = /\bto address this behavior\b|\bto address these behaviors\b/i.exec(p);
       if (!m || m.index === undefined) {
         issues.push(
-          `Safety-priority behavior (${assignedBehavior}): paragraph ${i + 1} must use "To address this behavior" or "To address these behaviors" before the first consequence intervention when Response Block is on the client's intervention list.`,
+          `Safety-priority behavior (${assignedBehavior}): paragraph ${i + 1} must start the consequence intervention chain with "To address this behavior, the RBT implemented ${responseBlockLabel}." when "${responseBlockLabel}" is on the client's intervention list, then describe blocking/protection and any additional approved interventions in following separate sentences.`,
         );
         continue;
       }
