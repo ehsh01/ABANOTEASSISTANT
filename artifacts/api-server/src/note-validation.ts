@@ -249,6 +249,53 @@ function acquisitionOnlySkillDeficitFraming(paragraph: string): string | null {
   return null;
 }
 
+function firstSentences(text: string, count: number): string {
+  const parts = text
+    .split(/(?<=[.!?])\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return parts.slice(0, count).join(" ");
+}
+
+function antecedentSpecificityIssue(paragraph: string, paragraphIndex: number): string | null {
+  const opening = firstSentences(paragraph, 2);
+  if (opening.length === 0) return null;
+  const cueChecks = [
+    /\b(?:shape sorter|stacking rings?|puzzle|peg board|blocks?|toy(?:s)?|animal figures?|cars?|bin|cards?|crayons?|paper|markers?|ball|bubbles?|musical toy|visual card|visual cue|worksheet|materials?|pieces?)\b/i,
+    /\b(?:RBT|teacher)\s+(?:placed|presented|set up|arranged|held|modeled|paused|removed|pointed|gestured|guided|positioned|called|opened|closed|handed|showed|moved|signaled)\b/i,
+    /\b(?:floor|table|chair|sofa|shelf|doorway|hallway|carpet|mat|TV stand|classroom table|living room table|small table)\b/i,
+    /\b(?:instruction|demand|clean-?up|transition|one at a time|first-then|prompted\s+to|signaled\s+to|access\s+to|return\s+to|move\s+to)\b/i,
+  ];
+  const cueCount = cueChecks.reduce((n, re) => n + (re.test(opening) ? 1 : 0), 0);
+  const vagueOpening =
+    /^(?:during|while|at|in)\s+(?:the\s+)?(?:activity|task|work|routine|cleanup|clean-up|session)\b/i.test(opening) ||
+    /\b(?:during the activity|during cleanup|while working|during the task)\b/i.test(opening);
+  if (cueCount >= 2 && !vagueOpening) return null;
+  if (cueCount >= 3) return null;
+  return `Antecedent specificity: paragraph ${paragraphIndex + 1} must make the antecedent concrete in the first one to two sentences. Include at least two clear details such as specific materials/tasks, what the RBT or teacher did, where the client/materials were positioned, and the exact instruction/demand/transition immediately before the response. Avoid vague openings like "during cleanup", "during the activity", or "while working" unless the same opening names the materials and instruction.`;
+}
+
+function postInterventionOutcomeIssue(paragraph: string, paragraphIndex: number): string | null {
+  const m = /\bFollowing (?:this|these) interventions?\b/i.exec(paragraph);
+  if (!m || m.index === undefined) {
+    return `Post-intervention outcome: paragraph ${paragraphIndex + 1} must include a "Following this intervention" or "Following these interventions" section that states the observable result after the intervention, not only the intervention label.`;
+  }
+  const tail = paragraph.slice(m.index);
+  const replacementIdx = tail.search(/\b(?:Additionally,\s+)?The RBT implemented the replacement program\b/i);
+  const detail = (replacementIdx >= 0 ? tail.slice(0, replacementIdx) : tail).trim();
+  const outcomePatterns = [
+    /\bthe client\b[^.]{0,180}\b(?:completed|returned|remained|sat|engaged|placed|picked up|moved|oriented|accepted|followed|initiated|approached|walked|kept|responded|reached|touched|used|selected|pointed|vocalized|imitated|turned|looked|contacted)\b/i,
+    /\b(?:when|after)\s+the client\b/i,
+    /\bafter each\b[^.]{0,120}\b(?:placement|response|step|trial|opportunity|completed)\b/i,
+    /\bafter\b[^.]{0,120}\b(?:responses?|steps?|placements?|task completion|worksheet responses|completed cleanup|completed step)\b/i,
+    /\bwhen\b[^.]{0,120}\b(?:orientation|head turns?|eye contact|placement|sitting|proximity|engagement|appropriate contact)\b/i,
+    /\b(?:items?|materials?|toys?|blocks?|pieces?)\s+were\s+(?:placed|returned|put|moved|removed)\b/i,
+    /\b(?:remained|returned|completed|engaged|sat|walked|oriented|responded)\b[^.]{0,120}\b(?:with|after|following|across)\b/i,
+  ];
+  if (outcomePatterns.some((re) => re.test(detail))) return null;
+  return `Post-intervention outcome: paragraph ${paragraphIndex + 1} must state an observable result after the intervention (for example, the client completed one step, returned to the task, remained seated/nearby, placed materials, or engaged with materials). Do not stop after listing only RBT actions.`;
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -1681,6 +1728,11 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i]!;
     const acquisitionOnly = acquisitionFlags[i] === true;
+    const antecedentIssue = antecedentSpecificityIssue(p, i);
+    if (antecedentIssue) {
+      issues.push(antecedentIssue);
+      break;
+    }
     const lockedActivity = activityLockedPerHour[i];
     if (typeof lockedActivity === "string" && lockedActivity.length > 0 && !p.includes(lockedActivity)) {
       issues.push(
@@ -1844,6 +1896,12 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       issues.push(
         `Interventions: paragraph ${i + 1} must document at least one catalog intervention using the exact JSON label in a naming sentence ending with a period right after the name (for example "The RBT implemented [exact label]." or "To address this behavior, the RBT implemented [exact label]."), then describe what was done in following sentences—do not put "by …" in the same sentence as the catalog name.`,
       );
+    }
+    if (implCount > 0) {
+      const outcomeIssue = postInterventionOutcomeIssue(p, i);
+      if (outcomeIssue) {
+        issues.push(outcomeIssue);
+      }
     }
     if (
       sibFunctionInterventionLabel &&
