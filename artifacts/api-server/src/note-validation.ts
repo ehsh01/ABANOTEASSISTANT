@@ -212,6 +212,43 @@ function schoolParagraphHasRbtOwnedClassroomActivity(paragraph: string): boolean
   );
 }
 
+function acquisitionOnlySkillDeficitFraming(paragraph: string): string | null {
+  const checks: { label: string; re: RegExp }[] = [
+    {
+      label: "vocalizations that did not match the model",
+      re: /\bvocalizations?\b[^.]{0,80}\bdid\s+not\s+match\b[^.]{0,40}\bmodel\b/i,
+    },
+    {
+      label: "inconsistent head turns/orienting",
+      re: /\binconsistent\b[^.]{0,60}\b(?:head\s+turns?|orient(?:ing|ation)|gaze|eye\s+contact)\b/i,
+    },
+    {
+      label: "looked down or away from the teaching target",
+      re: /\b(?:frequently\s+)?look(?:ed|ing)\s+(?:down|away)\b[^.]{0,80}\b(?:materials?|RBT'?s?\s+face|speaker|model|teaching\s+target)\b/i,
+    },
+    {
+      label: "continued manipulating materials instead of responding",
+      re: /\bcontinued\s+(?:manipulating|playing\s+with|moving)\b[^.]{0,80}\b(?:without|instead\s+of|rather\s+than|not)\b/i,
+    },
+    {
+      label: "failed/unable/struggled skill-performance wording",
+      re: /\b(?:failed\s+to|unable\s+to|struggled\s+to)\b[^.]{0,80}\b(?:imitate|echo|orient|respond|turn|look|gaze|match)\b/i,
+    },
+    {
+      label: "did not orient/respond/imitate/match wording",
+      re: /\bdid\s+not\b[^.]{0,80}\b(?:imitate|echo|orient|respond|turn|look|gaze|match)\b/i,
+    },
+    {
+      label: "required repeated prompts as skill-deficit framing",
+      re: /\brequir(?:ed|ing)\s+repeated\s+(?:prompts?|cues?|guidance)\b/i,
+    },
+  ];
+  for (const check of checks) {
+    if (check.re.test(paragraph)) return check.label;
+  }
+  return null;
+}
+
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -775,6 +812,21 @@ function preferencePredicatesForBehaviorPattern(behaviorName: string): ((n: stri
       (n) => /walk within close|close distance|safety skills/i.test(n),
     ];
   }
+  if (
+    /\bphysical\s+aggression\b/.test(b) ||
+    /\bself[- ]?injurious\s+behavior\b/.test(b) ||
+    /\bsib\b/.test(b) ||
+    /\btantrum\b/.test(b) ||
+    /\bproperty\s+destruction\b/.test(b)
+  ) {
+    return [
+      (n) => /accept.*alternative|alternative.*redirect/i.test(n),
+      (n) => /delay(?:s|ed)?\s+of\s+reinforcers?|delay.*reinforcer/i.test(n),
+      (n) => /follow.*non-preferred|following non-preferred|follow.*demand/i.test(n),
+      (n) => /functional communication|\bfct\b|request help/i.test(n),
+      (n) => /\bdra\b|\(dra\)|\bdri\b|\(dri\)/i.test(n),
+    ];
+  }
   return [];
 }
 
@@ -833,6 +885,9 @@ export function isMisfitReplacementForMaladaptiveBehavior(
     (/\belope/.test(b) || /\bwandering\b/.test(b) || /\bbolting\b/.test(b) || /\brunning\s+away\b/.test(b)) &&
     p === "on task behavior"
   ) {
+    return true;
+  }
+  if (/\bphysical\s+aggression\b/.test(b) && /walk within close|close distance|safety skills?/i.test(p)) {
     return true;
   }
   return false;
@@ -1160,6 +1215,28 @@ function findDraOrDriInterventionLabel(interventions: string[]): string | null {
     names.find((s) => /\(DRA\)/i.test(s)) ??
     names.find((s) => /\(DRI\)/i.test(s)) ??
     null
+  );
+}
+
+function findDemandEscapeInterventionLabel(interventions: string[]): string | null {
+  const names = interventions.map((s) => s.trim()).filter((s) => s.length > 0);
+  return (
+    names.find((s) => /^escape\s+extinction$/i.test(s)) ??
+    names.find((s) => /^demand\s+fading$/i.test(s)) ??
+    names.find((s) => /\bescape\s+extinction\b/i.test(s)) ??
+    names.find((s) => /\bdemand\s+fading\b/i.test(s)) ??
+    null
+  );
+}
+
+function paragraphSuggestsDemandEscapePhysicalAggression(paragraph: string): boolean {
+  return (
+    /\b(?:guided|guiding|prompted|prompting|presented|re-presented|placed|placing|instruction|demand|task|clean-?up|stacking|shape sorter|worksheet|table work|hand-over-hand|hand over hand)\b/i.test(
+      paragraph,
+    ) &&
+    /\b(?:pushed|pushing|struck|hit|hitting|swatted|kicked|scratched|pinched|bit|headbutt|head-butt|throwing\s+items?\s+at)\b/i.test(
+      paragraph,
+    )
   );
 }
 
@@ -1620,6 +1697,13 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
           );
           break;
         }
+        const deficit = acquisitionOnlySkillDeficitFraming(p);
+        if (deficit) {
+          issues.push(
+            `Skill-acquisition segment (paragraph ${i + 1}): remove deficit/nonperformance wording (${deficit}). Skill-acquisition programs such as Echoic, Respond to Own Name, and Improve eye contact are teaching targets, not maladaptive behaviors targeted for reduction. Describe RBT teaching opportunities, prompt levels, observed approximations/orienting responses, and the entered trial percentage without framing missed or inconsistent responses as problem behavior.`,
+          );
+          break;
+        }
       } else if (bCount > 1) {
         issues.push(
           `One maladaptive behavior per ABC: paragraph ${i + 1} references more than one behavior name from the client catalog; use exactly one catalog behavior per narrative segment.`,
@@ -1720,6 +1804,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   const responseBlockLabel = findResponseBlockInterventionLabel(ctx.interventions ?? []);
   const interventionList = ctx.interventions ?? [];
   const sibFunctionInterventionLabel = findDraOrDriInterventionLabel(interventionList);
+  const demandEscapeInterventionLabel = findDemandEscapeInterventionLabel(interventionList);
 
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i]!;
@@ -1768,6 +1853,18 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       if (firstNamed && /^redirection$/i.test(firstNamed.trim())) {
         issues.push(
           `SIB intervention coherence: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" with Redirection even though "${sibFunctionInterventionLabel}" is on the client's approved intervention list. Use "${sibFunctionInterventionLabel}" as the single exact naming sentence for this SIB segment, then describe protective blocking/prompting details in following plain prose. Redirection alone does not target the documented escape/attention/tangible functions.`,
+        );
+      }
+    }
+    if (
+      demandEscapeInterventionLabel &&
+      /physical\s+aggression/i.test(assignedBehavior) &&
+      paragraphSuggestsDemandEscapePhysicalAggression(p)
+    ) {
+      const firstNamed = firstInterventionMentionInText(p, interventionList);
+      if (firstNamed && firstNamed !== demandEscapeInterventionLabel) {
+        issues.push(
+          `Physical Aggression intervention coherence: paragraph ${i + 1} describes physical aggression during a demand or guided task and the approved intervention list includes "${demandEscapeInterventionLabel}". Use "${demandEscapeInterventionLabel}" as the exact catalog intervention naming sentence for this demand-escape episode, then describe DRA/prompting/reinforcement only as plain follow-up detail if clinically appropriate and approved.`,
         );
       }
     }
