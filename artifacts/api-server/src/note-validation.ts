@@ -1196,11 +1196,11 @@ function therapistTrialPercentRollupPhrasePresent(
   ).test(paragraph);
 }
 
-/** Exact intervention string from the client's list when it is the canonical Response Block label. */
+/** Exact intervention string from the client's list when it is a response-blocking safety label. */
 function findResponseBlockInterventionLabel(interventions: string[]): string | null {
   for (const raw of interventions) {
     const s = raw.trim();
-    if (s.length > 0 && /^response block$/i.test(s)) {
+    if (s.length > 0 && /^response block(?:ing)?$/i.test(s)) {
       return s;
     }
   }
