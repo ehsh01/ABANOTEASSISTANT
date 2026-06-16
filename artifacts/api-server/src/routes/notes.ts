@@ -167,7 +167,7 @@ function assembleSessionNote(
     therapistTrialSummaryForReplacementHour,
     clientFirstName,
   );
-  const nextSession = buildNextSessionSentence(nextSessionDate, clientFirstName);
+  const nextSession = buildNextSessionSentence(nextSessionDate);
 
   return [opening, "", clinicalBody, "", LOCKED_CLOSING_PARAGRAPH, "", performance, "", nextSession].join("\n");
 }

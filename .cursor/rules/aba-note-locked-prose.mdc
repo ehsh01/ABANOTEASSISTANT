@@ -44,10 +44,10 @@ No extra sentences **between** the body and this paragraph except where a valida
    - **When** no such trial rows exist: a fallback sentence that states the narrative program segment count (**N** `program` / `programs`) and that a session-wide percentage cannot be computed from entered discrete-trial data (see `buildPerformanceSentence` / `buildPerformanceSentenceWithoutTrialAggregate`).  
    - Implementation: `artifacts/api-server/src/note-assembly.ts` (`buildPerformanceSentence`, `aggregateTherapistTrialSummariesForPerformanceLine`).
 3. **Next session sentence**:  
-   - If a next session date is provided: `The next session is tentatively scheduled to take place at [POSSESSIVE_HOME] on [DATE].`  
-   - `[POSSESSIVE_HOME]` = **`[FirstName]'s home`** (possessive per `englishPossessiveFirstName` in `note-assembly.ts`) when the client profile first name is present; otherwise **`the client's home`** (unchanged legacy wording).  
+   - If a next session date is provided: `The next session is tentatively scheduled for [DATE].`  
    - `[DATE]` = US-style display (e.g. `12/10/2025`).  
-   - If no date: same possessive home fragment, then `; the date is to be determined.`
+   - If no date: `The next session is tentatively scheduled; the date is to be determined.`  
+   - Do **not** include a session location (home, school, community, etc.) on this line.
 
 Do not append other sentences after these without product approval.
 

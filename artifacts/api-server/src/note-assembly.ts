@@ -144,16 +144,10 @@ export function buildPerformanceSentence(
   return `${who} participated in session activities with inconsistent responding and required prompting across tasks.`;
 }
 
-export function buildNextSessionSentence(
-  nextSessionDate: string | undefined,
-  clientFirstName?: string | null,
-): string {
-  const trimmed = clientFirstName?.trim() ?? "";
-  const homePoss =
-    trimmed.length > 0 ? englishPossessiveFirstName(trimmed) + " home" : "the client's home";
+export function buildNextSessionSentence(nextSessionDate: string | undefined): string {
   if (nextSessionDate && nextSessionDate.trim().length > 0) {
     const formatted = formatUsDateFromIso(nextSessionDate);
-    return `The next session is tentatively scheduled to take place at ${homePoss} on ${formatted}.`;
+    return `The next session is tentatively scheduled for ${formatted}.`;
   }
-  return `The next session is tentatively scheduled to take place at ${homePoss}; the date is to be determined.`;
+  return `The next session is tentatively scheduled; the date is to be determined.`;
 }

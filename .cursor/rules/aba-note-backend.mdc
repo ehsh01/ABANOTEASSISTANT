@@ -58,7 +58,7 @@ Required SessionContext sections:
 Generation may not start until SessionContext is complete.
 
 ## Non-Negotiable Generation Rules
-- **Learner naming in session note prose:** Refer to the learner as **the client** (plus appropriate pronouns) in the **clinical body** and everywhere except the two locked exceptions below. Never place first names, last names, nicknames, or initials from the **assessment excerpt** into generated text. The **locked opening** (first sentence) and **next-session** line may use the client profile **first name** and a matching English possessive for **home** when that profile field is set; otherwise they keep **the client** / **the client's home**. See `aba-note-locked-prose.mdc` and `note-assembly.ts`.
+- **Learner naming in session note prose:** Refer to the learner as **the client** (plus appropriate pronouns) in the **clinical body** and everywhere except the locked opening (first sentence). Never place first names, last names, nicknames, or initials from the **assessment excerpt** into generated text. The **locked opening** (first sentence) may use the client profile **first name** and a matching English possessive for **home** in the session-location phrase when that profile field is set; otherwise it keeps **the client** / generic home wording. The **next-session** line is date-only and must not include a location. See `aba-note-locked-prose.mdc` and `note-assembly.ts`.
 - Use exact approved terminology only.
 - Do not paraphrase locked program, intervention, replacement, behavior, material, or trigger names.
 - Do not add any item that is not present in the runtime catalogs.

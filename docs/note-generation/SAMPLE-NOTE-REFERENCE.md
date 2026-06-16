@@ -12,4 +12,4 @@ Throughout the session, the RBT used various reinforcers, including verbal prais
 
 Bradley participated in session activities with inconsistent responding and required prompting across tasks.
 
-The next session is tentatively scheduled to take place at Bradley's home on 12/10/2025.
+The next session is tentatively scheduled for 12/10/2025.
