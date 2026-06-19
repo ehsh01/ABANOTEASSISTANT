@@ -98,6 +98,7 @@ router.post(
       maladaptiveBehaviors: [],
       maladaptiveBehaviorTargets: [],
       replacementPrograms: [],
+      skillAcquisitionPrograms: [],
       interventions: [],
     };
 

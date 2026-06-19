@@ -19,6 +19,7 @@ export type ClientProfilePublic = {
   /** Per-behavior topography aligned to `maladaptiveBehaviors` names (null when not set). */
   maladaptiveBehaviorTargets: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms: string[];
+  skillAcquisitionPrograms: string[];
   interventions: string[];
   assessmentFileName?: string | null;
   /** Curated assessment allow-lists when present on the stored profile. */
@@ -36,7 +37,8 @@ export function sanitizeClientProfileForApi(profile: ClientProfileRow): ClientPr
     gender: profile.gender,
     maladaptiveBehaviors: mal.map((t) => t.name),
     maladaptiveBehaviorTargets: mal,
-    replacementPrograms: profile.replacementPrograms,
+    replacementPrograms: profile.replacementPrograms ?? [],
+    skillAcquisitionPrograms: profile.skillAcquisitionPrograms ?? [],
     interventions: profile.interventions,
     assessmentFileName: profile.assessmentFileName ?? null,
     assessmentStructured: profile.assessmentStructured ?? null,

@@ -13,6 +13,7 @@ import {
   User,
   AlertTriangle,
   Zap,
+  BookOpen,
   Shield,
   CalendarIcon,
   ChevronsUpDown,
@@ -76,6 +77,7 @@ interface Step3Data {
   /** Maps behavior name → optional topography / operational definition text. */
   maladaptiveBehaviorTargets: Record<string, string>;
   replacementPrograms: string[];
+  skillAcquisitionPrograms: string[];
   interventions: string[];
 }
 
@@ -99,7 +101,7 @@ const SECTION_EDIT_SUBTITLES: Record<EditSection, string> = {
   personal: "Update name, date of birth, and gender.",
   assessment: "Replace or remove the FBA/BIP PDF stored for this client.",
   behaviors: "Update documented maladaptive behaviors.",
-  programs: "Update replacement programs and goals.",
+  programs: "Update replacement programs, skill acquisition programs, and goals.",
   interventions: "Update intervention strategies.",
 };
 
@@ -1046,11 +1048,11 @@ function Step3({
   onPersistBehaviors?: () => Promise<void>;
   flushApprovalsRef?: FlushApprovalsRef;
 }) {
-  function addTo(key: "replacementPrograms" | "interventions", val: string) {
+  function addTo(key: "replacementPrograms" | "skillAcquisitionPrograms" | "interventions", val: string) {
     onChange({ ...data, [key]: [...data[key], val] });
   }
 
-  function removeFrom(key: "replacementPrograms" | "interventions", i: number) {
+  function removeFrom(key: "replacementPrograms" | "skillAcquisitionPrograms" | "interventions", i: number) {
     onChange({ ...data, [key]: data[key].filter((_, idx) => idx !== i) });
   }
 
@@ -1100,6 +1102,17 @@ function Step3({
       />
 
       <TagSection
+        title="Skill Acquisition Programs"
+        icon={BookOpen}
+        iconColor="text-sky-700"
+        iconBg="bg-sky-50"
+        placeholder="e.g. Echoic skills, Manding skills, Respond to own Name..."
+        items={data.skillAcquisitionPrograms}
+        onAdd={(v) => addTo("skillAcquisitionPrograms", v)}
+        onRemove={(i) => removeFrom("skillAcquisitionPrograms", i)}
+      />
+
+      <TagSection
         title="Interventions"
         icon={Shield}
         iconColor="text-emerald-600"
@@ -1129,10 +1142,10 @@ function Step3SingleSection({
   onPersistBehaviors?: () => Promise<void>;
   flushApprovalsRef?: FlushApprovalsRef;
 }) {
-  function addTo(key: "replacementPrograms" | "interventions", val: string) {
+  function addTo(key: "replacementPrograms" | "skillAcquisitionPrograms" | "interventions", val: string) {
     onChange({ ...data, [key]: [...data[key], val] });
   }
-  function removeFrom(key: "replacementPrograms" | "interventions", i: number) {
+  function removeFrom(key: "replacementPrograms" | "skillAcquisitionPrograms" | "interventions", i: number) {
     onChange({ ...data, [key]: data[key].filter((_, idx) => idx !== i) });
   }
   function addBehavior(val: string) {
@@ -1168,16 +1181,28 @@ function Step3SingleSection({
   }
   if (section === "programs") {
     return (
-      <TagSection
-        title="Replacement Programs"
-        icon={Zap}
-        iconColor="text-[#C27A8A]"
-        iconBg="bg-[#FCEEF1]"
-        placeholder="e.g. Mand for desired items, Functional Play..."
-        items={data.replacementPrograms}
-        onAdd={(v) => addTo("replacementPrograms", v)}
-        onRemove={(i) => removeFrom("replacementPrograms", i)}
-      />
+      <div className="space-y-5">
+        <TagSection
+          title="Replacement Programs"
+          icon={Zap}
+          iconColor="text-[#C27A8A]"
+          iconBg="bg-[#FCEEF1]"
+          placeholder="e.g. Mand for desired items, Functional Play..."
+          items={data.replacementPrograms}
+          onAdd={(v) => addTo("replacementPrograms", v)}
+          onRemove={(i) => removeFrom("replacementPrograms", i)}
+        />
+        <TagSection
+          title="Skill Acquisition Programs"
+          icon={BookOpen}
+          iconColor="text-sky-700"
+          iconBg="bg-sky-50"
+          placeholder="e.g. Echoic skills, Manding skills, Respond to own Name..."
+          items={data.skillAcquisitionPrograms}
+          onAdd={(v) => addTo("skillAcquisitionPrograms", v)}
+          onRemove={(i) => removeFrom("skillAcquisitionPrograms", i)}
+        />
+      </div>
     );
   }
   return (
@@ -1341,6 +1366,7 @@ function NewClientForm({
     maladaptiveBehaviors: [],
     maladaptiveBehaviorTargets: {},
     replacementPrograms: [],
+    skillAcquisitionPrograms: [],
     interventions: [],
   });
 
@@ -1505,6 +1531,10 @@ function NewClientForm({
         maladaptiveBehaviors: nextBehaviors,
         maladaptiveBehaviorTargets: nextTargets,
         replacementPrograms: appendDedupedTags(s.replacementPrograms, e.replacementPrograms),
+        skillAcquisitionPrograms:
+          (e.skillAcquisitionPrograms ?? []).length > 0
+            ? [...(e.skillAcquisitionPrograms ?? [])]
+            : s.skillAcquisitionPrograms,
         interventions: appendDedupedTags(s.interventions, e.interventions),
       };
     });
@@ -1557,7 +1587,10 @@ function NewClientForm({
         e.gender ? "gender" : null,
         e.maladaptiveBehaviors.length ? `${e.maladaptiveBehaviors.length} behaviors` : null,
         topographyCount ? `${topographyCount} topographies` : null,
-        e.replacementPrograms.length ? `${e.replacementPrograms.length} programs` : null,
+        e.replacementPrograms.length ? `${e.replacementPrograms.length} replacement programs` : null,
+        (e.skillAcquisitionPrograms ?? []).length
+          ? `${e.skillAcquisitionPrograms!.length} skill acquisition programs`
+          : null,
         e.interventions.length ? `${e.interventions.length} interventions` : null,
         e.assessmentAuthorizationExpiresOn ? "authorization expiration date" : null,
       ].filter(Boolean);
@@ -1624,6 +1657,7 @@ function NewClientForm({
         (p?.maladaptiveBehaviorTargets ?? []).map((e) => [e.name, e.topography ?? ""])
       ),
       replacementPrograms: [...(p?.replacementPrograms ?? [])],
+      skillAcquisitionPrograms: [...(p?.skillAcquisitionPrograms ?? [])],
       interventions: [...(p?.interventions ?? [])],
     });
     setAuthorizationExpiresOn(p?.assessmentAuthorizationExpiresOn ?? null);
@@ -1699,7 +1733,10 @@ function NewClientForm({
           })),
         };
       } else if (editSection === "programs") {
-        payload = { replacementPrograms: step3.replacementPrograms };
+        payload = {
+          replacementPrograms: step3.replacementPrograms,
+          skillAcquisitionPrograms: step3.skillAcquisitionPrograms,
+        };
       } else if (editSection === "assessment") {
         if (!step2.file) {
           setSaveError("Choose a PDF file to upload.");
@@ -1772,6 +1809,7 @@ function NewClientForm({
             topography: step3.maladaptiveBehaviorTargets[name]?.trim() || null,
           })),
           replacementPrograms: step3.replacementPrograms,
+          skillAcquisitionPrograms: step3.skillAcquisitionPrograms,
           interventions: step3.interventions,
           assessmentAuthorizationExpiresOn: authorizationExpiresOn,
         };
@@ -1816,6 +1854,7 @@ function NewClientForm({
             topography: step3.maladaptiveBehaviorTargets[name]?.trim() || null,
           })),
           replacementPrograms: step3.replacementPrograms,
+          skillAcquisitionPrograms: step3.skillAcquisitionPrograms,
           interventions: step3.interventions,
           assessmentAuthorizationExpiresOn: authorizationExpiresOn,
         });

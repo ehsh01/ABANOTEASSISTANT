@@ -279,6 +279,9 @@ export interface ClientProfile {
    */
   maladaptiveBehaviorTargets: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms: string[];
+  /** Skill-acquisition program names from the client BIP (e.g. Echoic skills, Manding). Distinct from replacement/behavior-reduction programs. Imported from the assessment "Skill Acquisition Programs" section when present on client onboarding.
+   */
+  skillAcquisitionPrograms: string[];
   interventions: string[];
   assessmentFileName?: string | null;
   /** Optional curated allow-lists from the client assessment (exact BIP strings). When set, POST /notes/generate intersects maladaptive, intervention, and replacement-program catalogs with these lists only, and POST /clients/{clientId}/recommendations uses them for audit-safe suggestions.
@@ -358,6 +361,7 @@ export interface CreateClientRequest {
    */
   maladaptiveBehaviorTargets?: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms: string[];
+  skillAcquisitionPrograms: string[];
   interventions: string[];
   assessmentStructured?: AssessmentStructured | null;
   /** ISO `yyyy-MM-dd` date the client's authorization expires. Optional; null/missing means "no expiration on file."
@@ -389,6 +393,7 @@ export interface UpdateClientRequest {
    */
   maladaptiveBehaviorTargets?: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms?: string[];
+  skillAcquisitionPrograms?: string[];
   interventions?: string[];
   assessmentStructured?: AssessmentStructured | null;
   /** ISO `yyyy-MM-dd` date the client's authorization expires. Send null to clear the stored value; omit to leave it unchanged.

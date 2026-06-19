@@ -55,6 +55,11 @@ export type ClientProfileRow = {
    */
   maladaptiveBehaviorTargets?: MaladaptiveBehaviorProfileEntry[];
   replacementPrograms: string[];
+  /**
+   * Skill-acquisition program names from the client BIP (distinct from replacement/behavior-reduction programs).
+   * Populated from the assessment "Skill Acquisition Programs" section on import when present.
+   */
+  skillAcquisitionPrograms: string[];
   interventions: string[];
   assessmentFileName?: string;
   /**

@@ -355,6 +355,7 @@ function profileFromNameFallback(name: string): ClientProfileRow {
     maladaptiveBehaviors: [],
     maladaptiveBehaviorTargets: [],
     replacementPrograms: [],
+    skillAcquisitionPrograms: [],
     interventions: [],
   };
 }
@@ -367,6 +368,7 @@ const emptyMaladaptiveBase: ClientProfileRow = {
   maladaptiveBehaviors: [],
   maladaptiveBehaviorTargets: [],
   replacementPrograms: [],
+  skillAcquisitionPrograms: [],
   interventions: [],
 };
 
@@ -454,6 +456,7 @@ router.post("/clients", async (req, res) => {
       maladaptiveBehaviors: mal.maladaptiveBehaviors,
       maladaptiveBehaviorTargets: mal.maladaptiveBehaviorTargets,
       replacementPrograms: body.replacementPrograms,
+      skillAcquisitionPrograms: body.skillAcquisitionPrograms ?? [],
       interventions: body.interventions,
       assessmentFileName: body.assessmentFileName ?? undefined,
       assessmentAuthorizationExpiresOn:
@@ -1232,6 +1235,7 @@ router.patch("/clients/:clientId", async (req, res) => {
     maladaptiveBehaviors,
     maladaptiveBehaviorTargets,
     replacementPrograms: body.replacementPrograms ?? base.replacementPrograms,
+    skillAcquisitionPrograms: body.skillAcquisitionPrograms ?? base.skillAcquisitionPrograms ?? [],
     interventions: body.interventions ?? base.interventions,
     assessmentFileName,
     assessmentStructured: assessmentStructuredNext,

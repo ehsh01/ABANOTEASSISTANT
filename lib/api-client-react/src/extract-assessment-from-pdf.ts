@@ -13,6 +13,7 @@ export type AssessmentExtractedFields = {
    */
   maladaptiveBehaviorTopographies?: { name: string; topography: string }[];
   replacementPrograms: string[];
+  skillAcquisitionPrograms: string[];
   interventions: string[];
   /** ISO `yyyy-MM-dd` authorization / treatment plan expiration date when stated on the assessment. */
   assessmentAuthorizationExpiresOn?: string;

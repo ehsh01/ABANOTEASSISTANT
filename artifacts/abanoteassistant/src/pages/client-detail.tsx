@@ -201,6 +201,7 @@ export default function ClientDetail() {
     targets.map((e) => [e.name, (e.topography ?? "").trim()])
   );
   const replacements = p?.replacementPrograms ?? [];
+  const skillAcquisitionPrograms = p?.skillAcquisitionPrograms ?? [];
   const interventions = p?.interventions ?? [];
 
   return (
@@ -640,6 +641,23 @@ export default function ClientDetail() {
                         <span
                           key={program}
                           className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-teal-50 text-teal-700 border-teal-200"
+                        >
+                          {program}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-2 pt-2">
+                  <p className="text-xs font-semibold uppercase tracking-widest text-[#877870]">Skill acquisition programs</p>
+                  {skillAcquisitionPrograms.length === 0 ? (
+                    <p className="text-sm text-[#877870] italic">No skill acquisition programs on file.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {skillAcquisitionPrograms.map((program) => (
+                        <span
+                          key={program}
+                          className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-sky-50 text-sky-700 border-sky-200"
                         >
                           {program}
                         </span>

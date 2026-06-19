@@ -292,6 +292,11 @@ export const ListClientsResponse = zod.object({
               "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
             ),
           replacementPrograms: zod.array(zod.string()),
+          skillAcquisitionPrograms: zod
+            .array(zod.string())
+            .describe(
+              'Skill-acquisition program names from the client BIP (e.g. Echoic skills, Manding). Distinct from replacement\/behavior-reduction programs. Imported from the assessment \"Skill Acquisition Programs\" section when present on client onboarding.\n',
+            ),
           interventions: zod.array(zod.string()),
           assessmentFileName: zod.string().nullish(),
           assessmentStructured: zod
@@ -374,6 +379,7 @@ export const CreateClientBody = zod.object({
       "Optional. When sent, topographies are stored per behavior name; server aligns rows to `maladaptiveBehaviors`.\n",
     ),
   replacementPrograms: zod.array(zod.string()),
+  skillAcquisitionPrograms: zod.array(zod.string()),
   interventions: zod.array(zod.string()),
   assessmentStructured: zod
     .object({
@@ -464,6 +470,11 @@ export const CreateClientResponse = zod.object({
             "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
           ),
         replacementPrograms: zod.array(zod.string()),
+        skillAcquisitionPrograms: zod
+          .array(zod.string())
+          .describe(
+            'Skill-acquisition program names from the client BIP (e.g. Echoic skills, Manding). Distinct from replacement\/behavior-reduction programs. Imported from the assessment \"Skill Acquisition Programs\" section when present on client onboarding.\n',
+          ),
         interventions: zod.array(zod.string()),
         assessmentFileName: zod.string().nullish(),
         assessmentStructured: zod
@@ -568,6 +579,11 @@ export const GetClientResponse = zod.object({
             "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
           ),
         replacementPrograms: zod.array(zod.string()),
+        skillAcquisitionPrograms: zod
+          .array(zod.string())
+          .describe(
+            'Skill-acquisition program names from the client BIP (e.g. Echoic skills, Manding). Distinct from replacement\/behavior-reduction programs. Imported from the assessment \"Skill Acquisition Programs\" section when present on client onboarding.\n',
+          ),
         interventions: zod.array(zod.string()),
         assessmentFileName: zod.string().nullish(),
         assessmentStructured: zod
@@ -655,6 +671,7 @@ export const UpdateClientBody = zod.object({
       "Optional. When sent without `maladaptiveBehaviors`, names are taken from these entries in order.\n",
     ),
   replacementPrograms: zod.array(zod.string()).optional(),
+  skillAcquisitionPrograms: zod.array(zod.string()).optional(),
   interventions: zod.array(zod.string()).optional(),
   assessmentStructured: zod
     .object({
@@ -751,6 +768,11 @@ export const UpdateClientResponse = zod.object({
             "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
           ),
         replacementPrograms: zod.array(zod.string()),
+        skillAcquisitionPrograms: zod
+          .array(zod.string())
+          .describe(
+            'Skill-acquisition program names from the client BIP (e.g. Echoic skills, Manding). Distinct from replacement\/behavior-reduction programs. Imported from the assessment \"Skill Acquisition Programs\" section when present on client onboarding.\n',
+          ),
         interventions: zod.array(zod.string()),
         assessmentFileName: zod.string().nullish(),
         assessmentStructured: zod
@@ -880,6 +902,11 @@ export const UploadClientAssessmentDocumentResponse = zod.object({
             "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
           ),
         replacementPrograms: zod.array(zod.string()),
+        skillAcquisitionPrograms: zod
+          .array(zod.string())
+          .describe(
+            'Skill-acquisition program names from the client BIP (e.g. Echoic skills, Manding). Distinct from replacement\/behavior-reduction programs. Imported from the assessment \"Skill Acquisition Programs\" section when present on client onboarding.\n',
+          ),
         interventions: zod.array(zod.string()),
         assessmentFileName: zod.string().nullish(),
         assessmentStructured: zod
@@ -999,6 +1026,11 @@ export const GenerateClientAvatarResponse = zod.object({
               "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
             ),
           replacementPrograms: zod.array(zod.string()),
+          skillAcquisitionPrograms: zod
+            .array(zod.string())
+            .describe(
+              'Skill-acquisition program names from the client BIP (e.g. Echoic skills, Manding). Distinct from replacement\/behavior-reduction programs. Imported from the assessment \"Skill Acquisition Programs\" section when present on client onboarding.\n',
+            ),
           interventions: zod.array(zod.string()),
           assessmentFileName: zod.string().nullish(),
           assessmentStructured: zod
@@ -1105,6 +1137,11 @@ export const DeleteClientAvatarResponse = zod.object({
             "One row per entry in `maladaptiveBehaviors` (same order). `topography` is null when not set on the server.\n",
           ),
         replacementPrograms: zod.array(zod.string()),
+        skillAcquisitionPrograms: zod
+          .array(zod.string())
+          .describe(
+            'Skill-acquisition program names from the client BIP (e.g. Echoic skills, Manding). Distinct from replacement\/behavior-reduction programs. Imported from the assessment \"Skill Acquisition Programs\" section when present on client onboarding.\n',
+          ),
         interventions: zod.array(zod.string()),
         assessmentFileName: zod.string().nullish(),
         assessmentStructured: zod

@@ -1699,6 +1699,14 @@ components:
           type: array
           items:
             type: string
+        skillAcquisitionPrograms:
+          type: array
+          items:
+            type: string
+          description: >
+            Skill-acquisition program names from the client BIP (e.g. Echoic skills, Manding). Distinct from
+            replacement/behavior-reduction programs. Imported from the assessment "Skill Acquisition Programs"
+            section when present on client onboarding.
         interventions:
           type: array
           items:
@@ -1728,6 +1736,7 @@ components:
         - maladaptiveBehaviors
         - maladaptiveBehaviorTargets
         - replacementPrograms
+        - skillAcquisitionPrograms
         - interventions
 
     AssessmentStructured:
@@ -1887,6 +1896,10 @@ components:
           type: array
           items:
             type: string
+        skillAcquisitionPrograms:
+          type: array
+          items:
+            type: string
         interventions:
           type: array
           items:
@@ -1909,6 +1922,7 @@ components:
         - assessmentStatus
         - maladaptiveBehaviors
         - replacementPrograms
+        - skillAcquisitionPrograms
         - interventions
 
     UpdateClientRequest:
@@ -1943,6 +1957,10 @@ components:
           description: >
             Optional. When sent without `maladaptiveBehaviors`, names are taken from these entries in order.
         replacementPrograms:
+          type: array
+          items:
+            type: string
+        skillAcquisitionPrograms:
           type: array
           items:
             type: string
