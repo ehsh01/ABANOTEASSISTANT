@@ -112,7 +112,7 @@ Rules:
 - maladaptiveBehaviors: target behaviors, problem behaviors, or behavior definitions listed in the plan.
 - maladaptiveBehaviorTopographies: for EVERY behavior name in \`maladaptiveBehaviors\`, copy the short operational definition / observable description from the document when one is present. BIP/FBA documents commonly label this paragraph "Description", "Operational Definition", or "Topography" inside each behavior's section, often followed by "Onset" and "Offset". When you find such a paragraph for a behavior, include it. Use the SAME exact \`name\` string as the matching entry in \`maladaptiveBehaviors\` and put the description in \`topography\`. Keep it concise (one to three sentences). Do not invent definitions when the document does not give one (omit that name's topography in that case). Use a JSON array of \`{ "name": "<behavior>", "topography": "<short description>" }\` objects. Do not skip behaviors that have a clear definition — emit one entry per behavior whenever the document supplies one.
 - replacementPrograms: replacement skills, target behaviors to increase, BIP goals, or teaching programs (names only). Do **not** put skill-acquisition-only programs here when the document has a separate **Skill Acquisition Programs** section — use \`skillAcquisitionPrograms\` for those instead.
-- skillAcquisitionPrograms: program names listed **only** under a section explicitly titled **Skill Acquisition Programs** (or very close wording such as "Skill Acquisition Program"). Copy exact program names from that section. If the document has no such section, return an empty array — do not infer skill-acquisition programs from other sections.
+- skillAcquisitionPrograms: under a section explicitly titled **Skill Acquisition Programs**, include **only** the short skill name from each \`Goal # N: …\` line — the text **after** \`Goal # N:\` on that same line. Example: \`Goal # 2: Sharing: Allows Others to Manipulate/Touch Toys\` → \`Sharing: Allows Others to Manipulate/Touch Toys\`. Do **not** include BL/LTO/STO objectives, procedures, barriers, narrative paragraphs, addresses, page numbers, or any text that is not the goal-title fragment on a \`Goal #\` line. If the document has no **Skill Acquisition Programs** section, return [].
 - interventions: strategies, antecedent modifications, consequence procedures, prompts, token systems, DRA/DRI/DRA, redirection, etc.
 - dateOfBirth: output as MM/dd/yyyy if you can determine it; otherwise yyyy-MM-dd; omit if not in the text.
 - gender: must be exactly one of "Male", "Female", "Non-binary", "Prefer not to say" if clearly stated; otherwise omit.
@@ -377,7 +377,7 @@ export function extractTopographyFromBipText(rawText: string, behaviorName: stri
   return null;
 }
 
-/** Section headings that terminate parsing of the Skill Acquisition Programs block. */
+/** Section headings that terminate the Skill Acquisition Programs block. */
 const SKILL_ACQUISITION_SECTION_STOP_HEADINGS = [
   "Maladaptive Behaviors",
   "Maladaptive Behavior",
@@ -394,6 +394,10 @@ const SKILL_ACQUISITION_SECTION_STOP_HEADINGS = [
   "Caregiver Information",
   "Preventive Strategies",
   "Management Strategies",
+  "Parent Training",
+  "Caregiver Training",
+  "Discharge Plan",
+  "Appendix",
 ];
 
 function dedupePreserveOrderTrimmed(items: string[]): string[] {
@@ -410,53 +414,54 @@ function dedupePreserveOrderTrimmed(items: string[]): string[] {
   return out;
 }
 
-function lineLooksLikeSectionHeading(line: string): boolean {
-  const t = line.trim();
-  if (!t || t.length > 80) return false;
-  for (const heading of SKILL_ACQUISITION_SECTION_STOP_HEADINGS) {
-    if (new RegExp(`^${escapeForRegex(heading)}\\s*:?\\s*$`, "i").test(t)) return true;
-  }
-  return false;
-}
-
-function parseProgramNameFromListLine(line: string): string | null {
-  const t = line.trim();
-  if (!t) return null;
-  const bullet = /^(?:[-•*●◦▪]|(?:\d+[.)]))\s+(.+)$/.exec(t);
-  const name = (bullet ? bullet[1] : t).trim();
+/** Parse `Goal # 2: Sharing: Allows Others to Manipulate/Touch Toys` → skill title after the goal number. */
+export function parseSkillAcquisitionGoalTitle(line: string): string | null {
+  const m = /^Goal\s*#\s*\d+\s*:\s*(.+?)\s*$/i.exec(line.trim());
+  if (!m) return null;
+  const name = m[1]!.trim();
   if (!name || name.length > 240) return null;
-  if (/^description\s*:/i.test(name)) return null;
   return name;
 }
 
+function findSkillAcquisitionSectionText(rawText: string): string | null {
+  const text = rawText ?? "";
+  const headingRe = /(?:^|\n)\s*Skill Acquisition Programs?\s*(?:\n|$)/gi;
+  let match: RegExpExecArray | null;
+  while ((match = headingRe.exec(text)) !== null) {
+    const start = match.index + match[0].length;
+    const preview = text.slice(start, start + 600);
+    if (!/Goal\s*#\s*\d+\s*:/i.test(preview)) continue;
+
+    const tail = text.slice(start);
+    const stopRes = new RegExp(
+      `(?:^|\\n)\\s*(?:${SKILL_ACQUISITION_SECTION_STOP_HEADINGS.map(escapeForRegex).join("|")})\\b`,
+      "im",
+    ).exec(tail);
+    return stopRes ? tail.slice(0, stopRes.index) : tail;
+  }
+  return null;
+}
+
+/** Collect goal titles from a section chunk or from noisy LLM output (one title per Goal # line). */
+function extractSkillAcquisitionGoalTitlesFromText(chunk: string): string[] {
+  const programs: string[] = [];
+  const goalLineRe = /^Goal\s*#\s*\d+\s*:\s*(.+?)\s*$/gim;
+  let m: RegExpExecArray | null;
+  while ((m = goalLineRe.exec(chunk)) !== null) {
+    const name = m[1]!.trim();
+    if (name) programs.push(name);
+  }
+  return dedupePreserveOrderTrimmed(programs);
+}
+
 /**
- * Deterministic parse of program names under a BIP section titled "Skill Acquisition Programs".
- * Returns [] when that heading is not present in the document text.
+ * Deterministic parse of skill-acquisition program names under a BIP section titled
+ * "Skill Acquisition Programs". Uses only `Goal # N: <skill name>` lines.
  */
 export function extractSkillAcquisitionProgramsFromBipText(rawText: string): string[] {
-  const text = rawText ?? "";
-  const headingMatch = /\bSkill Acquisition Programs?\b/i.exec(text);
-  if (!headingMatch || headingMatch.index === undefined) return [];
-
-  const tail = text.slice(headingMatch.index + headingMatch[0].length);
-  const lines = tail.split(/\r?\n/);
-  const programs: string[] = [];
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed) {
-      if (programs.length > 0) continue;
-      continue;
-    }
-    if (lineLooksLikeSectionHeading(trimmed)) break;
-
-    const name = parseProgramNameFromListLine(trimmed);
-    if (!name) continue;
-    programs.push(name);
-    if (programs.length >= 80) break;
-  }
-
-  return dedupePreserveOrderTrimmed(programs);
+  const section = findSkillAcquisitionSectionText(rawText);
+  if (!section) return [];
+  return extractSkillAcquisitionGoalTitlesFromText(section);
 }
 
 /**
@@ -467,10 +472,19 @@ function resolveSkillAcquisitionProgramsFromAssessment(
   rawText: string,
   llmPrograms: string[],
 ): string[] {
-  if (!/\bSkill Acquisition Programs?\b/i.test(rawText ?? "")) {
-    return [];
-  }
-  const fromSection = extractSkillAcquisitionProgramsFromBipText(rawText);
+  const section = findSkillAcquisitionSectionText(rawText);
+  if (!section) return [];
+
+  const fromSection = extractSkillAcquisitionGoalTitlesFromText(section);
   if (fromSection.length > 0) return fromSection;
-  return dedupePreserveOrderTrimmed(llmPrograms.map((s) => s.trim()).filter(Boolean));
+
+  const fromLlm = extractSkillAcquisitionGoalTitlesFromText(llmPrograms.join("\n"));
+  if (fromLlm.length > 0) return fromLlm;
+
+  return dedupePreserveOrderTrimmed(
+    llmPrograms
+      .flatMap((entry) => entry.split(/\r?\n/))
+      .map((line) => parseSkillAcquisitionGoalTitle(line))
+      .filter((name): name is string => Boolean(name)),
+  );
 }
