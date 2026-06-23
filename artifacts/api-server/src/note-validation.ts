@@ -1654,6 +1654,10 @@ function findInventedReplacementProgramPhraseIssues(
   return null;
 }
 
+export function normalizeClinicalBodyEscapedQuotes(body: string): string {
+  return body.replace(/\\"/g, '"').replace(/\\'/g, "'");
+}
+
 /**
  * Rewrite common invented replacement-like teaching labels before validation.
  */
@@ -1778,6 +1782,12 @@ export function validateCaregiverMentionRule(fullNote: string, presentPeople: st
 export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteComplianceContext): string[] {
   const issues: string[] = [];
   const schoolSetting = isSchoolSettingLabel(ctx.therapySetting);
+
+  if (/\\["']/.test(clinicalBody)) {
+    issues.push(
+      'Quotation marks: do not use backslash characters before quotes in the clinical body. Write plain straight double quotes only (for example Respond to safety instructions "Stop" or "wait", not \\"Stop\\").',
+    );
+  }
 
   let mentalHits = 0;
   for (const re of MENTAL_STATE_PATTERNS) {
