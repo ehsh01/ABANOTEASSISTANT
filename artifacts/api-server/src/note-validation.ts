@@ -275,14 +275,67 @@ function antecedentSpecificityIssue(paragraph: string, paragraphIndex: number): 
   return `Antecedent specificity: paragraph ${paragraphIndex + 1} must make the antecedent concrete in the first one to two sentences. Include at least two clear details such as specific materials/tasks, what the RBT or teacher did, where the client/materials were positioned, and the exact instruction/demand/transition immediately before the response. Avoid vague openings like "during cleanup", "during the activity", or "while working" unless the same opening names the materials and instruction.`;
 }
 
-function postInterventionOutcomeIssue(paragraph: string, paragraphIndex: number): string | null {
+function interventionFollowUpDetail(paragraph: string): string | null {
   const m = /\bFollowing (?:this|these) interventions?\b/i.exec(paragraph);
-  if (!m || m.index === undefined) {
-    return `Post-intervention outcome: paragraph ${paragraphIndex + 1} must include a "Following this intervention" or "Following these interventions" section that states the observable result after the intervention, not only the intervention label.`;
-  }
+  if (!m || m.index === undefined) return null;
   const tail = paragraph.slice(m.index);
   const replacementIdx = tail.search(/\b(?:Additionally,\s+)?The RBT implemented the replacement program\b/i);
-  const detail = (replacementIdx >= 0 ? tail.slice(0, replacementIdx) : tail).trim();
+  return (replacementIdx >= 0 ? tail.slice(0, replacementIdx) : tail).trim();
+}
+
+function maladaptiveReinforcementContingencyIssue(paragraph: string, paragraphIndex: number): string | null {
+  if (!/\bthe client manifested\b/i.test(paragraph)) return null;
+  const detail = interventionFollowUpDetail(paragraph);
+  if (!detail) return null;
+
+  const deliversReinforcement =
+    /\b(?:delivered|provided)\b[^.]{0,140}\b(?:verbal praise|brief praise|praise|preferred toy|musical toy|preferred item|access to)\b/i.test(detail) ||
+    /\bbrief access to\b/i.test(detail);
+  if (!deliversReinforcement) return null;
+
+  const documentsWithholding =
+    /\b(?:withheld|removed access|no access|did not (?:deliver|provide)|minimal attention)\b/i.test(detail) ||
+    /\bblocked(?:\s+(?:path|movement|access|further|the client|exit|doorway))?\b/i.test(detail);
+
+  const compatibleContingency =
+    /\b(?:contingent on|after|when)\b[^.]{0,220}\b(?:the client (?:completed|placed|stopped|responded|followed|remained|maintained|accepted|initiated|kept)|(?:stop|wait|proximity|safety|shape|step|placement|task|instruction|demand|responses?|worksheet|cleanup))\b/i.test(
+      detail,
+    );
+
+  const reinforcementAfterVagueReturn =
+    /\b(?:delivered|provided)\b[^.]{0,180}\b(?:when|after)\s+the client\b[^.]{0,180}\b(?:moved back|returned toward|came back|oriented(?:\s+toward)?)\b/i.test(
+      detail,
+    ) &&
+    !/\b(?:when|after)\s+the client\b[^.]{0,180}\b(?:stopped|stop\b|wait\b|completed|placed|maintained proximity|responded to|remained within|followed the)\b/i.test(
+      detail,
+    );
+
+  if (reinforcementAfterVagueReturn) {
+    return `Reinforcement contingency: paragraph ${paragraphIndex + 1} documents praise or preferred-item access when the client only moved back or oriented after a maladaptive behavior. Document withheld access or blocked movement during the maladaptive response, then deliver reinforcement only after a specific replacement- or safety-compatible behavior (for example stop, wait, proximity, completed step, or placement)—not for returning after elopement or refusal alone.`;
+  }
+
+  if (!documentsWithholding && !compatibleContingency) {
+    return `Reinforcement contingency: paragraph ${paragraphIndex + 1} documents praise or access after a maladaptive behavior without stating that reinforcement was withheld during the maladaptive topography and without tying delivery to a specific compatible response (completed step, placement, stop/wait, proximity, or replacement-program behavior).`;
+  }
+
+  return null;
+}
+
+function compoundDraDroInterventionLabelIssue(paragraph: string, paragraphIndex: number): string | null {
+  if (
+    /\bDifferential Reinforcement\s*\(\s*DRA\s*\/\s*DRO\s*\)/i.test(paragraph) ||
+    /\bimplemented\s+DRA\s*\/\s*DRO\b/i.test(paragraph)
+  ) {
+    return `Intervention exact match: paragraph ${paragraphIndex + 1} must not combine DRA and DRO into one catalog label (for example "Differential Reinforcement (DRA/DRO)"). Document exactly one approved intervention string from JSON per naming sentence.`;
+  }
+  return null;
+}
+
+function postInterventionOutcomeIssue(paragraph: string, paragraphIndex: number): string | null {
+  const detail = interventionFollowUpDetail(paragraph);
+  if (!detail) {
+    return `Post-intervention outcome: paragraph ${paragraphIndex + 1} must include a "Following this intervention" or "Following these interventions" section that states the observable result after the intervention, not only the intervention label.`;
+  }
   const outcomePatterns = [
     /\bthe client\b[^.]{0,180}\b(?:completed|returned|remained|sat|engaged|placed|picked up|moved|oriented|accepted|followed|initiated|approached|walked|kept|responded|reached|touched|used|selected|pointed|vocalized|imitated|turned|looked|contacted)\b/i,
     /\b(?:when|after)\s+the client\b/i,
@@ -819,6 +872,27 @@ export function isIndicateAllDoneReplacementProgramName(name: string): boolean {
 
 const TASK_REFUSAL_CATALOG = "Task Refusal";
 
+/** Catalog maladaptive labels for off-task / inattention (escape or attention function). */
+export function isOffTaskInattentionMaladaptiveBehavior(behaviorName: string): boolean {
+  const b = behaviorName.trim().toLowerCase();
+  return (
+    /\boff[- ]?task\b/.test(b) ||
+    /\binattention\b/.test(b) ||
+    /\binattentive\b/.test(b) ||
+    /\bdistract/.test(b)
+  );
+}
+
+/** Replacement programs teaching safety stop/wait compliance—not primary targets for off-task/inattention. */
+export function isSafetyStopWaitReplacementProgramName(name: string): boolean {
+  const p = name.trim().toLowerCase();
+  return (
+    (/respond/.test(p) && /safety/.test(p)) ||
+    (/safety/.test(p) && (/\bstop\b/.test(p) || /\bwait\b/.test(p))) ||
+    (/\bstop\b/.test(p) && /\bwait\b/.test(p) && /instruction/.test(p))
+  );
+}
+
 /** BIP map lookup with case-insensitive key fallback. */
 function mappedReplacementsForBehaviorKey(
   behaviorName: string,
@@ -836,6 +910,17 @@ function mappedReplacementsForBehaviorKey(
 
 function preferencePredicatesForBehaviorPattern(behaviorName: string): ((n: string) => boolean)[] {
   const b = behaviorName.toLowerCase();
+  if (isOffTaskInattentionMaladaptiveBehavior(behaviorName)) {
+    return [
+      (n) => /^on task behavior$/i.test(n.trim()) || /\bon[- ]?task\b/i.test(n),
+      (n) => /time on task/i.test(n),
+      (n) => /eye contact|attend|attention/i.test(n),
+      (n) => /visual schedule|3-element/i.test(n),
+      (n) => /follow.*non-preferred|following non-preferred/i.test(n),
+      (n) => /\bdra\b|\(dra\)/i.test(n),
+      (n) => n.toLowerCase().includes("redirection"),
+    ];
+  }
   if (
     b.includes("verbal aggression") ||
     b.includes("inappropriate language") ||
@@ -887,8 +972,11 @@ export function behaviorReplacementCandidatesForMaladaptiveBehavior(
 ): string[] {
   const authorized = [...new Set(authorizedProgramNames.map((s) => s.trim()).filter((s) => s.length > 0))];
   const mapped = mappedReplacementsForBehaviorKey(behaviorName, behaviorToReplacementsMap);
-  if (mapped.length > 0) {
-    return mapped.filter((p) => authorized.includes(p));
+  const mappedViable = mapped.filter(
+    (p) => authorized.includes(p) && !isHardMisfitReplacementForMaladaptiveBehavior(behaviorName, p),
+  );
+  if (mappedViable.length > 0) {
+    return mappedViable;
   }
   const preds = preferencePredicatesForBehaviorPattern(behaviorName);
   const ordered: string[] = [];
@@ -898,6 +986,26 @@ export function behaviorReplacementCandidatesForMaladaptiveBehavior(
     }
   }
   return ordered;
+}
+
+/**
+ * Definitive function mismatches that override an incorrect BIP behavior→replacement map.
+ */
+function isHardMisfitReplacementForMaladaptiveBehavior(behaviorName: string, replacementProgramName: string): boolean {
+  const behavior = behaviorName.trim();
+  const program = replacementProgramName.trim();
+  if (!behavior || !program) return false;
+
+  if (isOffTaskInattentionMaladaptiveBehavior(behavior) && isSafetyStopWaitReplacementProgramName(program)) {
+    return true;
+  }
+  if (
+    isOffTaskInattentionMaladaptiveBehavior(behavior) &&
+    /walk within close|close distance|safety skills?/i.test(program)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -912,9 +1020,14 @@ export function isMisfitReplacementForMaladaptiveBehavior(
   const program = replacementProgramName.trim();
   if (!behavior || !program) return false;
 
+  if (isHardMisfitReplacementForMaladaptiveBehavior(behavior, program)) {
+    return true;
+  }
+
   const mapped = mappedReplacementsForBehaviorKey(behavior, behaviorToReplacementsMap);
-  if (mapped.length > 0) {
-    return !mapped.includes(program);
+  const mappedViable = mapped.filter((p) => !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p));
+  if (mappedViable.length > 0) {
+    return !mappedViable.includes(program);
   }
 
   const b = behavior.toLowerCase();
@@ -1032,7 +1145,12 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
       if (isMisfitReplacementForMaladaptiveBehavior(behavior, n, behaviorToReplacementsMap)) {
         return false;
       }
-      return candidates.length === 0 || candidates.includes(n);
+      if (candidates.length === 0) return true;
+      if (candidates.includes(n)) return true;
+      // When the BIP map only lists hard mismatches, allow heuristic-aligned pool programs.
+      const mapped = mappedReplacementsForBehaviorKey(behavior, behaviorToReplacementsMap);
+      const mappedViable = mapped.filter((p) => !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p));
+      return mappedViable.length === 0;
     });
     if (poolCandidates.length === 0) continue;
 
@@ -1745,6 +1863,8 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   const programs = ctx.replacementProgramsInOrder.filter((p) => p.trim().length > 0);
   const replacementPerHour = ctx.replacementProgramForHour ?? [];
   const behaviorCatalog = ctx.maladaptiveBehaviors ?? [];
+  const assignedPerHour = ctx.maladaptiveBehaviorForHour ?? [];
+  const acquisitionFlags = ctx.acquisitionOnlySegmentForHour ?? [];
 
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i]!;
@@ -1763,12 +1883,18 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         `Replacement program for paragraph ${i + 1}: include the assigned program exactly as given (character-for-character, including every "(" and ")"): "${assignedRp}".`,
       );
     }
+    const assignedBeh = assignedPerHour[i]?.trim() ?? "";
+    const acquisitionOnly = acquisitionFlags[i] === true;
+    if (!acquisitionOnly && assignedBeh && assignedRp) {
+      if (isMisfitReplacementForMaladaptiveBehavior(assignedBeh, assignedRp, {})) {
+        issues.push(
+          `Replacement program function: paragraph ${i + 1} pairs "${assignedBeh}" with "${assignedRp}". Use a BIP-aligned on-task or attention skill for off-task/inattention (for example On task Behavior, time on task, eye contact, or attending programs)—not safety stop/wait compliance programs. The server rebalances auto-assignment when possible; align antecedent and teaching prose to the assigned program's function.`,
+        );
+      }
+    }
   }
 
-  const assignedPerHour = ctx.maladaptiveBehaviorForHour ?? [];
   const activityLockedPerHour = ctx.activityAntecedentForHour ?? [];
-
-  const acquisitionFlags = ctx.acquisitionOnlySegmentForHour ?? [];
 
   for (let i = 0; i < paragraphs.length; i++) {
     const p = paragraphs[i]!;
@@ -1876,6 +2002,10 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       if (inventedIntervention) {
         issues.push(`Interventions: paragraph ${i + 1}: ${inventedIntervention}`);
       }
+      const draDroCompound = compoundDraDroInterventionLabelIssue(p, i);
+      if (draDroCompound) {
+        issues.push(draDroCompound);
+      }
     }
   }
 
@@ -1947,6 +2077,12 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const outcomeIssue = postInterventionOutcomeIssue(p, i);
       if (outcomeIssue) {
         issues.push(outcomeIssue);
+      }
+    }
+    if (!acquisitionOnly && /\bthe client manifested\b/i.test(p)) {
+      const reinforcementIssue = maladaptiveReinforcementContingencyIssue(p, i);
+      if (reinforcementIssue) {
+        issues.push(reinforcementIssue);
       }
     }
     if (isSibMaladaptiveBehavior(assignedBehavior)) {
