@@ -269,6 +269,29 @@ export interface AssessmentStructured {
   general_interventions?: string[];
 }
 
+/**
+ * Clinical overview sections from the client assessment PDF (summary page / intake). Imported on client onboarding; editable on the client profile.
+
+ */
+export interface ClientAssessmentSummary {
+  assessor?: string | null;
+  /** ISO `yyyy-MM-dd` assessment or report date when known. */
+  assessmentDate?: string | null;
+  /** Authorized weekly service hours block from the assessment. */
+  authorizedHours?: string | null;
+  /** Narrative clinical summary paragraph. */
+  summary?: string | null;
+  diagnoses?: string[];
+  recommendations?: string[];
+  medicalHistory?: string | null;
+  behaviorProfiles?: string[];
+  reinforcementPreferences?: string[];
+  precursorBehaviors?: string[];
+  crisisProtocol?: string | null;
+  parentTrainingGoals?: string[];
+  supervisorRequirements?: string | null;
+}
+
 export interface ClientProfile {
   firstName: string;
   lastName: string;
@@ -290,6 +313,9 @@ export interface ClientProfile {
   /** ISO `yyyy-MM-dd` date the client's authorization (assessment / treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null/missing means "no expiration on file" (UI hides the badge).
    */
   assessmentAuthorizationExpiresOn?: string | null;
+  /** Structured assessment overview imported from the PDF (summary, diagnosis, recommendations, medical history, crisis protocol, etc.).
+   */
+  assessmentSummary?: ClientAssessmentSummary | null;
 }
 
 export type ClinicalRecommendationRequestFunction =
@@ -367,6 +393,7 @@ export interface CreateClientRequest {
   /** ISO `yyyy-MM-dd` date the client's authorization expires. Optional; null/missing means "no expiration on file."
    */
   assessmentAuthorizationExpiresOn?: string | null;
+  assessmentSummary?: ClientAssessmentSummary | null;
 }
 
 export type UpdateClientRequestAssessmentStatus =
@@ -399,6 +426,8 @@ export interface UpdateClientRequest {
   /** ISO `yyyy-MM-dd` date the client's authorization expires. Send null to clear the stored value; omit to leave it unchanged.
    */
   assessmentAuthorizationExpiresOn?: string | null;
+  /** Send null to clear the stored assessment summary. */
+  assessmentSummary?: ClientAssessmentSummary | null;
   /** When true, removes the stored assessment PDF file name, excerpt text snapshot, and structured assessment allow-lists from the client profile; sets hasAssessment to false and assessmentStatus to missing. Use when the RBT removes the assessment without uploading a replacement in the same request. Ignored when false or omitted.
    */
   clearAssessment?: boolean;

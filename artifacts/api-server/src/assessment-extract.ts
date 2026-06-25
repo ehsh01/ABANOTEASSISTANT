@@ -7,10 +7,27 @@ import OpenAI from "openai";
 import { z } from "zod";
 
 import { DEFAULT_OPENAI_NOTE_MODEL } from "./openai-notes";
+import { sanitizeClientAssessmentSummary, assessmentSummaryForExtractPayload } from "./client-assessment-summary";
 
 const ExtractedTopographySchema = z.object({
   name: z.string(),
   topography: z.string().nullable().optional(),
+});
+
+const AssessmentSummaryExtractSchema = z.object({
+  assessor: z.string().optional(),
+  assessmentDate: z.string().optional(),
+  authorizedHours: z.string().optional(),
+  summary: z.string().optional(),
+  diagnoses: z.array(z.string()).default([]),
+  recommendations: z.array(z.string()).default([]),
+  medicalHistory: z.string().optional(),
+  behaviorProfiles: z.array(z.string()).default([]),
+  reinforcementPreferences: z.array(z.string()).default([]),
+  precursorBehaviors: z.array(z.string()).default([]),
+  crisisProtocol: z.string().optional(),
+  parentTrainingGoals: z.array(z.string()).default([]),
+  supervisorRequirements: z.string().optional(),
 });
 
 const ExtractedSchema = z.object({
@@ -36,6 +53,8 @@ const ExtractedSchema = z.object({
    * is also accepted. Omit when the document does not state an expiration date.
    */
   assessmentAuthorizationExpiresOn: z.string().optional(),
+  /** Structured overview sections from the assessment (summary, diagnosis, recommendations, etc.). */
+  assessmentSummary: AssessmentSummaryExtractSchema.optional(),
   /** Brief note on uncertainty or missing sections (optional). */
   confidenceNotes: z.string().optional(),
 });
@@ -118,6 +137,21 @@ Rules:
 - gender: must be exactly one of "Male", "Female", "Non-binary", "Prefer not to say" if clearly stated; otherwise omit.
 - firstName / lastName: client name if clearly labeled (not assessor names).
 - assessmentAuthorizationExpiresOn: the date the client's authorization / treatment plan / assessment authorization period expires. Look for sections labeled "Authorization Period", "Authorization Expires", "Auth End Date", "End of Authorization", "Plan End Date", "Expiration Date", "Expires On", or similar. Output as ISO **yyyy-MM-dd** when possible; MM/dd/yyyy is also acceptable. Omit when no expiration date is stated.
+- assessmentSummary: object with structured overview sections when present in the document. Copy text closely; use concise bullets/lists where the PDF uses lists. Fields:
+  - assessor: lead assessor name and credentials (e.g. "Annia Soto, BCBA") when labeled Assessor / Completed by / BCBA.
+  - assessmentDate: date of assessment or report (ISO **yyyy-MM-dd** when possible).
+  - authorizedHours: authorized weekly service hours as one block (RBT, BCBA, analyst codes, etc.) when stated.
+  - summary: the narrative **Summary** / clinical overview paragraph (age, diagnoses, presenting concerns, service need)—not the behavior list alone.
+  - diagnoses: array of diagnosis lines with codes when listed under **Diagnosis** (e.g. "ADHD, combined type (F90.2)").
+  - recommendations: bullet strings under **Recommendations** (data collection, caregiver training, hours, generalization, etc.).
+  - medicalHistory: prose under **Medical History** (medications, sleep, eating, health concerns).
+  - behaviorProfiles: short behavior names under **Behavior Profiles** / target behavior list when distinct from detailed BIP behavior sections (e.g. "Elopement", "Tantrum").
+  - reinforcementPreferences: people, items, activities, praise phrases under **Reinforcement Preferences**.
+  - precursorBehaviors: items under **Precursor Behaviors** when listed.
+  - crisisProtocol: prose under **Crisis Protocol** / crisis plan (prevention, de-escalation, post-incident steps).
+  - parentTrainingGoals: caregiver training goal bullets under **Parent Training Goals**.
+  - supervisorRequirements: prose under **Supervisor Requirements** / BCBA supervision expectations.
+  Omit empty strings; use [] for empty lists. Omit the whole \`assessmentSummary\` key only when none of these sections appear.
 - Omit empty arrays; use [] only when truly nothing found for that category.
 - confidenceNotes: one short sentence if text was partial, ambiguous, or lists were merged from multiple sections.
 
@@ -154,7 +188,7 @@ Document text:
 ${text}
 """
 
-Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBehaviors, maladaptiveBehaviorTopographies, replacementPrograms, skillAcquisitionPrograms, interventions, assessmentAuthorizationExpiresOn, confidenceNotes (all optional except arrays default to []).`;
+Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBehaviors, maladaptiveBehaviorTopographies, replacementPrograms, skillAcquisitionPrograms, interventions, assessmentAuthorizationExpiresOn, assessmentSummary, confidenceNotes (all optional except arrays default to []).`;
 
   // GPT-5.x chat models only accept the default temperature; older models still benefit from a low value
   // (0.2) for deterministic JSON extraction. Branch the request shape so we don't trigger
@@ -232,6 +266,8 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
     extracted.skillAcquisitionPrograms,
   );
 
+  const assessmentSummary = sanitizeClientAssessmentSummary(extracted.assessmentSummary ?? null);
+
   return {
     extracted: {
       ...extracted,
@@ -241,6 +277,9 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
       skillAcquisitionPrograms,
       interventions: [...new Set(extracted.interventions.map((s) => s.trim()).filter(Boolean))],
       assessmentAuthorizationExpiresOn: normalizeIsoDateOrUndef(extracted.assessmentAuthorizationExpiresOn),
+      assessmentSummary: assessmentSummary
+        ? assessmentSummaryForExtractPayload(assessmentSummary)
+        : undefined,
     },
     warnings,
     pdfPageCount,

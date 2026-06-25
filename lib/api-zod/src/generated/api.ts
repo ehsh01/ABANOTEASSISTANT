@@ -340,6 +340,39 @@ export const ListClientsResponse = zod.object({
             .describe(
               'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
             ),
+          assessmentSummary: zod
+            .object({
+              assessor: zod.string().nullish(),
+              assessmentDate: zod
+                .string()
+                .nullish()
+                .describe(
+                  "ISO `yyyy-MM-dd` assessment or report date when known.",
+                ),
+              authorizedHours: zod
+                .string()
+                .nullish()
+                .describe(
+                  "Authorized weekly service hours block from the assessment.",
+                ),
+              summary: zod
+                .string()
+                .nullish()
+                .describe("Narrative clinical summary paragraph."),
+              diagnoses: zod.array(zod.string()).optional(),
+              recommendations: zod.array(zod.string()).optional(),
+              medicalHistory: zod.string().nullish(),
+              behaviorProfiles: zod.array(zod.string()).optional(),
+              reinforcementPreferences: zod.array(zod.string()).optional(),
+              precursorBehaviors: zod.array(zod.string()).optional(),
+              crisisProtocol: zod.string().nullish(),
+              parentTrainingGoals: zod.array(zod.string()).optional(),
+              supervisorRequirements: zod.string().nullish(),
+            })
+            .nullish()
+            .describe(
+              "Structured assessment overview imported from the PDF (summary, diagnosis, recommendations, medical history, crisis protocol, etc.).\n",
+            ),
         })
         .nullish(),
     }),
@@ -419,6 +452,35 @@ export const CreateClientBody = zod.object({
     .nullish()
     .describe(
       'ISO `yyyy-MM-dd` date the client\'s authorization expires. Optional; null\/missing means \"no expiration on file.\"\n',
+    ),
+  assessmentSummary: zod
+    .object({
+      assessor: zod.string().nullish(),
+      assessmentDate: zod
+        .string()
+        .nullish()
+        .describe("ISO `yyyy-MM-dd` assessment or report date when known."),
+      authorizedHours: zod
+        .string()
+        .nullish()
+        .describe("Authorized weekly service hours block from the assessment."),
+      summary: zod
+        .string()
+        .nullish()
+        .describe("Narrative clinical summary paragraph."),
+      diagnoses: zod.array(zod.string()).optional(),
+      recommendations: zod.array(zod.string()).optional(),
+      medicalHistory: zod.string().nullish(),
+      behaviorProfiles: zod.array(zod.string()).optional(),
+      reinforcementPreferences: zod.array(zod.string()).optional(),
+      precursorBehaviors: zod.array(zod.string()).optional(),
+      crisisProtocol: zod.string().nullish(),
+      parentTrainingGoals: zod.array(zod.string()).optional(),
+      supervisorRequirements: zod.string().nullish(),
+    })
+    .nullish()
+    .describe(
+      "Clinical overview sections from the client assessment PDF (summary page \/ intake). Imported on client onboarding; editable on the client profile.\n",
     ),
 });
 
@@ -517,6 +579,39 @@ export const CreateClientResponse = zod.object({
           .nullish()
           .describe(
             'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
+          ),
+        assessmentSummary: zod
+          .object({
+            assessor: zod.string().nullish(),
+            assessmentDate: zod
+              .string()
+              .nullish()
+              .describe(
+                "ISO `yyyy-MM-dd` assessment or report date when known.",
+              ),
+            authorizedHours: zod
+              .string()
+              .nullish()
+              .describe(
+                "Authorized weekly service hours block from the assessment.",
+              ),
+            summary: zod
+              .string()
+              .nullish()
+              .describe("Narrative clinical summary paragraph."),
+            diagnoses: zod.array(zod.string()).optional(),
+            recommendations: zod.array(zod.string()).optional(),
+            medicalHistory: zod.string().nullish(),
+            behaviorProfiles: zod.array(zod.string()).optional(),
+            reinforcementPreferences: zod.array(zod.string()).optional(),
+            precursorBehaviors: zod.array(zod.string()).optional(),
+            crisisProtocol: zod.string().nullish(),
+            parentTrainingGoals: zod.array(zod.string()).optional(),
+            supervisorRequirements: zod.string().nullish(),
+          })
+          .nullish()
+          .describe(
+            "Structured assessment overview imported from the PDF (summary, diagnosis, recommendations, medical history, crisis protocol, etc.).\n",
           ),
       })
       .nullish(),
@@ -627,6 +722,39 @@ export const GetClientResponse = zod.object({
           .describe(
             'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
           ),
+        assessmentSummary: zod
+          .object({
+            assessor: zod.string().nullish(),
+            assessmentDate: zod
+              .string()
+              .nullish()
+              .describe(
+                "ISO `yyyy-MM-dd` assessment or report date when known.",
+              ),
+            authorizedHours: zod
+              .string()
+              .nullish()
+              .describe(
+                "Authorized weekly service hours block from the assessment.",
+              ),
+            summary: zod
+              .string()
+              .nullish()
+              .describe("Narrative clinical summary paragraph."),
+            diagnoses: zod.array(zod.string()).optional(),
+            recommendations: zod.array(zod.string()).optional(),
+            medicalHistory: zod.string().nullish(),
+            behaviorProfiles: zod.array(zod.string()).optional(),
+            reinforcementPreferences: zod.array(zod.string()).optional(),
+            precursorBehaviors: zod.array(zod.string()).optional(),
+            crisisProtocol: zod.string().nullish(),
+            parentTrainingGoals: zod.array(zod.string()).optional(),
+            supervisorRequirements: zod.string().nullish(),
+          })
+          .nullish()
+          .describe(
+            "Structured assessment overview imported from the PDF (summary, diagnosis, recommendations, medical history, crisis protocol, etc.).\n",
+          ),
       })
       .nullish(),
   }),
@@ -712,6 +840,33 @@ export const UpdateClientBody = zod.object({
     .describe(
       "ISO `yyyy-MM-dd` date the client's authorization expires. Send null to clear the stored value; omit to leave it unchanged.\n",
     ),
+  assessmentSummary: zod
+    .object({
+      assessor: zod.string().nullish(),
+      assessmentDate: zod
+        .string()
+        .nullish()
+        .describe("ISO `yyyy-MM-dd` assessment or report date when known."),
+      authorizedHours: zod
+        .string()
+        .nullish()
+        .describe("Authorized weekly service hours block from the assessment."),
+      summary: zod
+        .string()
+        .nullish()
+        .describe("Narrative clinical summary paragraph."),
+      diagnoses: zod.array(zod.string()).optional(),
+      recommendations: zod.array(zod.string()).optional(),
+      medicalHistory: zod.string().nullish(),
+      behaviorProfiles: zod.array(zod.string()).optional(),
+      reinforcementPreferences: zod.array(zod.string()).optional(),
+      precursorBehaviors: zod.array(zod.string()).optional(),
+      crisisProtocol: zod.string().nullish(),
+      parentTrainingGoals: zod.array(zod.string()).optional(),
+      supervisorRequirements: zod.string().nullish(),
+    })
+    .nullish()
+    .describe("Send null to clear the stored assessment summary."),
   clearAssessment: zod
     .boolean()
     .optional()
@@ -815,6 +970,39 @@ export const UpdateClientResponse = zod.object({
           .nullish()
           .describe(
             'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
+          ),
+        assessmentSummary: zod
+          .object({
+            assessor: zod.string().nullish(),
+            assessmentDate: zod
+              .string()
+              .nullish()
+              .describe(
+                "ISO `yyyy-MM-dd` assessment or report date when known.",
+              ),
+            authorizedHours: zod
+              .string()
+              .nullish()
+              .describe(
+                "Authorized weekly service hours block from the assessment.",
+              ),
+            summary: zod
+              .string()
+              .nullish()
+              .describe("Narrative clinical summary paragraph."),
+            diagnoses: zod.array(zod.string()).optional(),
+            recommendations: zod.array(zod.string()).optional(),
+            medicalHistory: zod.string().nullish(),
+            behaviorProfiles: zod.array(zod.string()).optional(),
+            reinforcementPreferences: zod.array(zod.string()).optional(),
+            precursorBehaviors: zod.array(zod.string()).optional(),
+            crisisProtocol: zod.string().nullish(),
+            parentTrainingGoals: zod.array(zod.string()).optional(),
+            supervisorRequirements: zod.string().nullish(),
+          })
+          .nullish()
+          .describe(
+            "Structured assessment overview imported from the PDF (summary, diagnosis, recommendations, medical history, crisis protocol, etc.).\n",
           ),
       })
       .nullish(),
@@ -950,6 +1138,39 @@ export const UploadClientAssessmentDocumentResponse = zod.object({
           .describe(
             'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
           ),
+        assessmentSummary: zod
+          .object({
+            assessor: zod.string().nullish(),
+            assessmentDate: zod
+              .string()
+              .nullish()
+              .describe(
+                "ISO `yyyy-MM-dd` assessment or report date when known.",
+              ),
+            authorizedHours: zod
+              .string()
+              .nullish()
+              .describe(
+                "Authorized weekly service hours block from the assessment.",
+              ),
+            summary: zod
+              .string()
+              .nullish()
+              .describe("Narrative clinical summary paragraph."),
+            diagnoses: zod.array(zod.string()).optional(),
+            recommendations: zod.array(zod.string()).optional(),
+            medicalHistory: zod.string().nullish(),
+            behaviorProfiles: zod.array(zod.string()).optional(),
+            reinforcementPreferences: zod.array(zod.string()).optional(),
+            precursorBehaviors: zod.array(zod.string()).optional(),
+            crisisProtocol: zod.string().nullish(),
+            parentTrainingGoals: zod.array(zod.string()).optional(),
+            supervisorRequirements: zod.string().nullish(),
+          })
+          .nullish()
+          .describe(
+            "Structured assessment overview imported from the PDF (summary, diagnosis, recommendations, medical history, crisis protocol, etc.).\n",
+          ),
       })
       .nullish(),
   }),
@@ -1074,6 +1295,39 @@ export const GenerateClientAvatarResponse = zod.object({
             .describe(
               'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
             ),
+          assessmentSummary: zod
+            .object({
+              assessor: zod.string().nullish(),
+              assessmentDate: zod
+                .string()
+                .nullish()
+                .describe(
+                  "ISO `yyyy-MM-dd` assessment or report date when known.",
+                ),
+              authorizedHours: zod
+                .string()
+                .nullish()
+                .describe(
+                  "Authorized weekly service hours block from the assessment.",
+                ),
+              summary: zod
+                .string()
+                .nullish()
+                .describe("Narrative clinical summary paragraph."),
+              diagnoses: zod.array(zod.string()).optional(),
+              recommendations: zod.array(zod.string()).optional(),
+              medicalHistory: zod.string().nullish(),
+              behaviorProfiles: zod.array(zod.string()).optional(),
+              reinforcementPreferences: zod.array(zod.string()).optional(),
+              precursorBehaviors: zod.array(zod.string()).optional(),
+              crisisProtocol: zod.string().nullish(),
+              parentTrainingGoals: zod.array(zod.string()).optional(),
+              supervisorRequirements: zod.string().nullish(),
+            })
+            .nullish()
+            .describe(
+              "Structured assessment overview imported from the PDF (summary, diagnosis, recommendations, medical history, crisis protocol, etc.).\n",
+            ),
         })
         .nullish(),
     }),
@@ -1184,6 +1438,39 @@ export const DeleteClientAvatarResponse = zod.object({
           .nullish()
           .describe(
             'ISO `yyyy-MM-dd` date the client\'s authorization (assessment \/ treatment plan) expires. Surfaced in red on the clients list and detail header so the RBT knows when the assessment lapses. Null\/missing means \"no expiration on file\" (UI hides the badge).\n',
+          ),
+        assessmentSummary: zod
+          .object({
+            assessor: zod.string().nullish(),
+            assessmentDate: zod
+              .string()
+              .nullish()
+              .describe(
+                "ISO `yyyy-MM-dd` assessment or report date when known.",
+              ),
+            authorizedHours: zod
+              .string()
+              .nullish()
+              .describe(
+                "Authorized weekly service hours block from the assessment.",
+              ),
+            summary: zod
+              .string()
+              .nullish()
+              .describe("Narrative clinical summary paragraph."),
+            diagnoses: zod.array(zod.string()).optional(),
+            recommendations: zod.array(zod.string()).optional(),
+            medicalHistory: zod.string().nullish(),
+            behaviorProfiles: zod.array(zod.string()).optional(),
+            reinforcementPreferences: zod.array(zod.string()).optional(),
+            precursorBehaviors: zod.array(zod.string()).optional(),
+            crisisProtocol: zod.string().nullish(),
+            parentTrainingGoals: zod.array(zod.string()).optional(),
+            supervisorRequirements: zod.string().nullish(),
+          })
+          .nullish()
+          .describe(
+            "Structured assessment overview imported from the PDF (summary, diagnosis, recommendations, medical history, crisis protocol, etc.).\n",
           ),
       })
       .nullish(),

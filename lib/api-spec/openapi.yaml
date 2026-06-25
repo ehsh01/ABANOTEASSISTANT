@@ -1728,6 +1728,12 @@ components:
             ISO `yyyy-MM-dd` date the client's authorization (assessment / treatment plan) expires. Surfaced in red
             on the clients list and detail header so the RBT knows when the assessment lapses. Null/missing means
             "no expiration on file" (UI hides the badge).
+        assessmentSummary:
+          $ref: "#/components/schemas/ClientAssessmentSummary"
+          nullable: true
+          description: >
+            Structured assessment overview imported from the PDF (summary, diagnosis, recommendations, medical history,
+            crisis protocol, etc.).
       required:
         - firstName
         - lastName
@@ -1738,6 +1744,61 @@ components:
         - replacementPrograms
         - skillAcquisitionPrograms
         - interventions
+
+    ClientAssessmentSummary:
+      type: object
+      description: >
+        Clinical overview sections from the client assessment PDF (summary page / intake). Imported on client
+        onboarding; editable on the client profile.
+      properties:
+        assessor:
+          type: string
+          nullable: true
+        assessmentDate:
+          type: string
+          nullable: true
+          description: ISO `yyyy-MM-dd` assessment or report date when known.
+        authorizedHours:
+          type: string
+          nullable: true
+          description: Authorized weekly service hours block from the assessment.
+        summary:
+          type: string
+          nullable: true
+          description: Narrative clinical summary paragraph.
+        diagnoses:
+          type: array
+          items:
+            type: string
+        recommendations:
+          type: array
+          items:
+            type: string
+        medicalHistory:
+          type: string
+          nullable: true
+        behaviorProfiles:
+          type: array
+          items:
+            type: string
+        reinforcementPreferences:
+          type: array
+          items:
+            type: string
+        precursorBehaviors:
+          type: array
+          items:
+            type: string
+        crisisProtocol:
+          type: string
+          nullable: true
+        parentTrainingGoals:
+          type: array
+          items:
+            type: string
+        supervisorRequirements:
+          type: string
+          nullable: true
 
     AssessmentStructured:
       type: object
@@ -1913,6 +1974,9 @@ components:
           description: >
             ISO `yyyy-MM-dd` date the client's authorization expires. Optional; null/missing means
             "no expiration on file."
+        assessmentSummary:
+          $ref: "#/components/schemas/ClientAssessmentSummary"
+          nullable: true
       required:
         - firstName
         - lastName
@@ -1977,6 +2041,10 @@ components:
           description: >
             ISO `yyyy-MM-dd` date the client's authorization expires. Send null to clear the stored value;
             omit to leave it unchanged.
+        assessmentSummary:
+          $ref: "#/components/schemas/ClientAssessmentSummary"
+          nullable: true
+          description: Send null to clear the stored assessment summary.
         clearAssessment:
           type: boolean
           description: >

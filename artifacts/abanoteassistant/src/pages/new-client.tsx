@@ -57,6 +57,15 @@ import {
   CommandItem,
   CommandList,
 } from "@/components/ui/command";
+import {
+  AssessmentSummaryFields,
+  assessmentSummaryFormFromExtract,
+  assessmentSummaryFormFromProfile,
+  assessmentSummaryHasContent,
+  assessmentSummaryToApiPayload,
+  emptyAssessmentSummaryForm,
+  type AssessmentSummaryFormState,
+} from "@/components/assessment-summary-fields";
 
 // ── Step 1 data ─────────────────────────────────────────────────────────────
 interface Step1Data {
@@ -82,7 +91,7 @@ interface Step3Data {
 }
 
 /** URL `?section=` when editing a client from the clients list dropdown */
-const EDIT_SECTIONS = ["personal", "assessment", "behaviors", "programs", "interventions"] as const;
+const EDIT_SECTIONS = ["personal", "assessment", "summary", "behaviors", "programs", "interventions"] as const;
 export type EditSection = (typeof EDIT_SECTIONS)[number];
 
 function isEditSection(s: string | null): s is EditSection {
@@ -92,6 +101,7 @@ function isEditSection(s: string | null): s is EditSection {
 const SECTION_EDIT_LABELS: Record<EditSection, string> = {
   personal: "Edit name & gender",
   assessment: "Assessment PDF",
+  summary: "Assessment summary",
   behaviors: "Edit behaviors",
   programs: "Edit programs",
   interventions: "Edit interventions",
@@ -100,6 +110,7 @@ const SECTION_EDIT_LABELS: Record<EditSection, string> = {
 const SECTION_EDIT_SUBTITLES: Record<EditSection, string> = {
   personal: "Update name, date of birth, and gender.",
   assessment: "Replace or remove the FBA/BIP PDF stored for this client.",
+  summary: "Review diagnosis, recommendations, medical history, and other overview sections from the assessment.",
   behaviors: "Update documented maladaptive behaviors.",
   programs: "Update replacement programs, skill acquisition programs, and goals.",
   interventions: "Update intervention strategies.",
@@ -1135,7 +1146,7 @@ function Step3SingleSection({
   onPersistBehaviors,
   flushApprovalsRef,
 }: {
-  section: Exclude<EditSection, "personal" | "assessment">;
+  section: Exclude<EditSection, "personal" | "assessment" | "summary">;
   data: Step3Data;
   onChange: (d: Step3Data) => void;
   clientId?: number;
@@ -1373,6 +1384,9 @@ function NewClientForm({
   // Authorization / treatment-plan expiration date (ISO yyyy-MM-dd). Pulled from the assessment when present;
   // sent on create + update so the clients list / detail header can show the red expiration badge.
   const [authorizationExpiresOn, setAuthorizationExpiresOn] = useState<string | null>(null);
+  const [assessmentSummaryForm, setAssessmentSummaryForm] = useState<AssessmentSummaryFormState>(
+    emptyAssessmentSummaryForm(),
+  );
 
   const extractMutation = useExtractAssessmentFromPdf();
   const [extractError, setExtractError] = useState<string | null>(null);
@@ -1542,6 +1556,9 @@ function NewClientForm({
       // Only auto-fill when nothing has been entered yet; never overwrite an explicitly-set value.
       setAuthorizationExpiresOn((prev) => prev ?? e.assessmentAuthorizationExpiresOn ?? null);
     }
+    if (e.assessmentSummary) {
+      setAssessmentSummaryForm(assessmentSummaryFormFromExtract(e.assessmentSummary));
+    }
   }
 
   async function handleClearStoredAssessment() {
@@ -1561,6 +1578,7 @@ function NewClientForm({
       await queryClient.invalidateQueries({ queryKey: ["/api/clients", numericId] });
       setStep2({ file: null });
       setAuthorizationExpiresOn(null);
+      setAssessmentSummaryForm(emptyAssessmentSummaryForm());
       setExtractError(null);
       setExtractSuccess(null);
     } catch (e) {
@@ -1593,6 +1611,7 @@ function NewClientForm({
           : null,
         e.interventions.length ? `${e.interventions.length} interventions` : null,
         e.assessmentAuthorizationExpiresOn ? "authorization expiration date" : null,
+        e.assessmentSummary ? "assessment summary" : null,
       ].filter(Boolean);
       const warn = res.data.warnings.length ? ` Note: ${res.data.warnings.join(" ")}` : "";
       setExtractSuccess(
@@ -1661,6 +1680,7 @@ function NewClientForm({
       interventions: [...(p?.interventions ?? [])],
     });
     setAuthorizationExpiresOn(p?.assessmentAuthorizationExpiresOn ?? null);
+    setAssessmentSummaryForm(assessmentSummaryFormFromProfile(p?.assessmentSummary));
     // Preserve step parameter from URL if provided, otherwise default to 1
     const urlStep = searchParams.get("step");
     if (!urlStep) {
@@ -1737,6 +1757,12 @@ function NewClientForm({
           replacementPrograms: step3.replacementPrograms,
           skillAcquisitionPrograms: step3.skillAcquisitionPrograms,
         };
+      } else if (editSection === "summary") {
+        payload = {
+          assessmentSummary: assessmentSummaryHasContent(assessmentSummaryForm)
+            ? assessmentSummaryToApiPayload(assessmentSummaryForm)
+            : null,
+        };
       } else if (editSection === "assessment") {
         if (!step2.file) {
           setSaveError("Choose a PDF file to upload.");
@@ -1812,6 +1838,9 @@ function NewClientForm({
           skillAcquisitionPrograms: step3.skillAcquisitionPrograms,
           interventions: step3.interventions,
           assessmentAuthorizationExpiresOn: authorizationExpiresOn,
+          assessmentSummary: assessmentSummaryHasContent(assessmentSummaryForm)
+            ? assessmentSummaryToApiPayload(assessmentSummaryForm)
+            : null,
         };
         if (step2.file) {
           payload.hasAssessment = true;
@@ -1857,6 +1886,9 @@ function NewClientForm({
           skillAcquisitionPrograms: step3.skillAcquisitionPrograms,
           interventions: step3.interventions,
           assessmentAuthorizationExpiresOn: authorizationExpiresOn,
+          assessmentSummary: assessmentSummaryHasContent(assessmentSummaryForm)
+            ? assessmentSummaryToApiPayload(assessmentSummaryForm)
+            : null,
         });
         if (step2.file) {
           await uploadClientAssessmentDocument(created.data.id, { file: step2.file });
@@ -1943,7 +1975,16 @@ function NewClientForm({
                   onAuthorizationExpiresOnChange={setAuthorizationExpiresOn}
                 />
               )}
-              {editSection !== "personal" && editSection !== "assessment" && (
+              {editSection === "summary" && (
+                <AssessmentSummaryFields
+                  value={assessmentSummaryForm}
+                  onChange={setAssessmentSummaryForm}
+                  compact
+                />
+              )}
+              {editSection !== "personal" &&
+                editSection !== "assessment" &&
+                editSection !== "summary" && (
                 <div className="space-y-5">
                   <p className="text-[#877870] text-sm leading-relaxed">
                     These details are used when generating session notes.
@@ -2100,19 +2141,27 @@ function NewClientForm({
               />
             )}
             {step === 2 && (
-              <Step2
-                data={step2}
-                onChange={setStep2}
-                priorAssessmentFileName={priorAssessmentFileName}
-                extracting={extractMutation.isPending}
-                extractError={extractError}
-                extractSuccess={extractSuccess}
-                onExtractFromPdf={handleExtractFromPdf}
-                onClearStoredAssessment={isEdit ? handleClearStoredAssessment : undefined}
-                clearingStoredAssessment={clearingStoredAssessment}
-                authorizationExpiresOn={authorizationExpiresOn}
-                onAuthorizationExpiresOnChange={setAuthorizationExpiresOn}
-              />
+              <div className="space-y-6">
+                <Step2
+                  data={step2}
+                  onChange={setStep2}
+                  priorAssessmentFileName={priorAssessmentFileName}
+                  extracting={extractMutation.isPending}
+                  extractError={extractError}
+                  extractSuccess={extractSuccess}
+                  onExtractFromPdf={handleExtractFromPdf}
+                  onClearStoredAssessment={isEdit ? handleClearStoredAssessment : undefined}
+                  clearingStoredAssessment={clearingStoredAssessment}
+                  authorizationExpiresOn={authorizationExpiresOn}
+                  onAuthorizationExpiresOnChange={setAuthorizationExpiresOn}
+                />
+                {(extractSuccess || assessmentSummaryHasContent(assessmentSummaryForm)) && (
+                  <AssessmentSummaryFields
+                    value={assessmentSummaryForm}
+                    onChange={setAssessmentSummaryForm}
+                  />
+                )}
+              </div>
             )}
             {step === 3 && (
               <Step3

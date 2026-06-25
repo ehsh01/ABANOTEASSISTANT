@@ -1,6 +1,8 @@
 import { customFetch } from "./custom-fetch";
 
 /** Fields inferred from assessment PDF text (server + OpenAI). */
+import type { ClientAssessmentSummary } from "./generated/api.schemas";
+
 export type AssessmentExtractedFields = {
   firstName?: string;
   lastName?: string;
@@ -17,6 +19,7 @@ export type AssessmentExtractedFields = {
   interventions: string[];
   /** ISO `yyyy-MM-dd` authorization / treatment plan expiration date when stated on the assessment. */
   assessmentAuthorizationExpiresOn?: string;
+  assessmentSummary?: ClientAssessmentSummary;
   confidenceNotes?: string;
 };
 

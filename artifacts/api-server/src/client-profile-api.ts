@@ -1,11 +1,13 @@
 import type {
   AssessmentStructuredRow,
   Client,
+  ClientAssessmentSummaryRow,
   ClientProfileRow,
   MaladaptiveBehaviorProfileEntry,
 } from "@workspace/db/schema";
 import { expandMaladaptiveTargetsFromProfile } from "./client-profile-maladaptive";
 import { buildAvatarUrl } from "./avatar-generation";
+import { sanitizeClientAssessmentSummary } from "./client-assessment-summary";
 
 type AssessmentStatus = "uploaded" | "processing" | "ready" | "missing";
 
@@ -26,6 +28,8 @@ export type ClientProfilePublic = {
   assessmentStructured?: AssessmentStructuredRow | null;
   /** ISO `yyyy-MM-dd` date the client's authorization expires (null when not on file). */
   assessmentAuthorizationExpiresOn?: string | null;
+  /** Structured assessment overview from the PDF when present. */
+  assessmentSummary?: ClientAssessmentSummaryRow | null;
 };
 
 export function sanitizeClientProfileForApi(profile: ClientProfileRow): ClientProfilePublic {
@@ -43,6 +47,7 @@ export function sanitizeClientProfileForApi(profile: ClientProfileRow): ClientPr
     assessmentFileName: profile.assessmentFileName ?? null,
     assessmentStructured: profile.assessmentStructured ?? null,
     assessmentAuthorizationExpiresOn: profile.assessmentAuthorizationExpiresOn ?? null,
+    assessmentSummary: profile.assessmentSummary ?? null,
   };
 }
 

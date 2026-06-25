@@ -42,6 +42,29 @@ export type MaladaptiveBehaviorProfileEntry = {
   topography: string | null;
 };
 
+/**
+ * Clinical overview imported from the assessment PDF (summary page / intake sections).
+ * Stored on the client profile JSON; surfaced in the client detail UI.
+ */
+export type ClientAssessmentSummaryRow = {
+  assessor?: string | null;
+  /** ISO `yyyy-MM-dd` when known. */
+  assessmentDate?: string | null;
+  /** Free-text authorized service hours block from the assessment. */
+  authorizedHours?: string | null;
+  /** Narrative clinical summary paragraph. */
+  summary?: string | null;
+  diagnoses: string[];
+  recommendations: string[];
+  medicalHistory?: string | null;
+  behaviorProfiles: string[];
+  reinforcementPreferences: string[];
+  precursorBehaviors: string[];
+  crisisProtocol?: string | null;
+  parentTrainingGoals: string[];
+  supervisorRequirements?: string | null;
+};
+
 /** Extended client fields stored in Postgres (UI wizard + edit). */
 export type ClientProfileRow = {
   firstName: string;
@@ -78,6 +101,11 @@ export type ClientProfileRow = {
    * Optional; null/missing means "no expiration on file" (UI hides the badge).
    */
   assessmentAuthorizationExpiresOn?: string | null;
+  /**
+   * Structured assessment overview (diagnosis, recommendations, medical history, crisis plan, etc.)
+   * imported from the PDF on client onboarding.
+   */
+  assessmentSummary?: ClientAssessmentSummaryRow | null;
 };
 
 export const clientsTable = abanote.table("clients", {

@@ -42,6 +42,7 @@ import {
   parseAssessmentStructured,
   validateAssessmentStructured,
 } from "../assessment-structured";
+import { sanitizeClientAssessmentSummary } from "../client-assessment-summary";
 import { computeClinicalRecommendation } from "../recommendation-engine";
 import { z } from "zod";
 
@@ -463,6 +464,10 @@ router.post("/clients", async (req, res) => {
         body.assessmentAuthorizationExpiresOn === undefined
           ? null
           : sanitizeAuthorizationExpiresIsoOrNull(body.assessmentAuthorizationExpiresOn),
+      assessmentSummary:
+        body.assessmentSummary === undefined
+          ? null
+          : sanitizeClientAssessmentSummary(body.assessmentSummary),
     };
     if (body.assessmentStructured != null) {
       const parsed = parseAssessmentStructured(body.assessmentStructured);
@@ -1226,6 +1231,14 @@ router.patch("/clients/:clientId", async (req, res) => {
     );
   }
 
+  let assessmentSummaryNext: ClientProfileRow["assessmentSummary"] = base.assessmentSummary ?? null;
+  if (clearingAssessment) {
+    assessmentSummaryNext = null;
+  } else if (body.assessmentSummary !== undefined) {
+    assessmentSummaryNext =
+      body.assessmentSummary === null ? null : sanitizeClientAssessmentSummary(body.assessmentSummary);
+  }
+
   const nextProfile: ClientProfileRow = {
     ...base,
     firstName: body.firstName?.trim() ?? base.firstName,
@@ -1240,6 +1253,7 @@ router.patch("/clients/:clientId", async (req, res) => {
     assessmentFileName,
     assessmentStructured: assessmentStructuredNext,
     assessmentAuthorizationExpiresOn: assessmentAuthorizationExpiresOnNext,
+    assessmentSummary: assessmentSummaryNext,
   };
 
   if (clearingAssessment) {

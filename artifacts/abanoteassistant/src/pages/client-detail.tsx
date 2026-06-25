@@ -27,6 +27,7 @@ import {
 } from "@/hooks/use-aba-api";
 import { sessionTimeRangeFromHours, formatSessionDate, formatAuthorizationExpiresOn } from "@/lib/utils";
 import { ClientAvatar } from "@/components/client-avatar";
+import { AssessmentSummaryReadOnly } from "@/components/assessment-summary-fields";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClient, useClientPrograms, useNotesList } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
@@ -342,6 +343,15 @@ export default function ClientDetail() {
                   Assessment PDF
                 </button>
               </Link>
+              <Link href={`/clients/edit/${client.id}?section=summary`}>
+                <button
+                  type="button"
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#877870] hover:border-[#C27A8A] hover:text-[#C27A8A] transition-all w-full justify-center"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  Assessment summary
+                </button>
+              </Link>
               <button
                 type="button"
                 onClick={handleDeleteClient}
@@ -377,6 +387,12 @@ export default function ClientDetail() {
               </div>
             </div>
           )}
+
+          {p?.assessmentSummary ? (
+            <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
+              <AssessmentSummaryReadOnly summary={p.assessmentSummary} />
+            </div>
+          ) : null}
 
           <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
