@@ -26,7 +26,7 @@ export default defineConfig({
     runtimeErrorOverlay(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.svg", "apple-touch-icon.png", "pwa-192x192.png", "pwa-512x512.png"],
+      includeAssets: ["favicon.png", "apple-touch-icon.png", "pwa-192x192.png", "pwa-512x512.png", "images/aba-note-assistant-logo.png"],
       manifest: {
         name: "ABA Note Assistant",
         short_name: "ABANote",

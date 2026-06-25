@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/auth-store";
 import { useLanguageStore } from "@/store/language-store";
 import { useT } from "@/hooks/use-translation";
 import { cn } from "@/lib/utils";
+import { AppLogo } from "@/components/app-logo";
 
 function getInitials(email: string) {
   const parts = email.split("@")[0].split(/[._-]/);
@@ -80,27 +81,10 @@ export function AppSidebar() {
       >
         {/* Logo + Logout */}
         <div
-          className="flex items-center justify-between px-5 py-5"
+          className="flex items-center justify-between px-4 py-4 gap-2"
           style={{ borderBottom: "1px solid rgba(255,255,255,0.2)" }}
         >
-          <div className="flex flex-col gap-1">
-            <Link href="/">
-              <span
-                className="font-extrabold tracking-widest uppercase cursor-pointer"
-                style={{ fontSize: 10, color: "#fff", letterSpacing: "0.12em" }}
-              >
-                ABANOTEASSISTANT
-              </span>
-            </Link>
-            <div
-              style={{
-                width: 36,
-                height: 2,
-                background: "linear-gradient(90deg, rgba(255,255,255,0.7), transparent)",
-                borderRadius: 2,
-              }}
-            />
-          </div>
+          <AppLogo href="/" size="sidebar" />
           <button
             type="button"
             onClick={handleLogout}

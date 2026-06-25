@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/auth-store";
 import { navigateToAppRoot } from "@/lib/navigate-app-root";
 import { useToast } from "@/hooks/use-toast";
 import { ArrowRight, Lock, Zap, Shield, Users, Mail, Eye, EyeOff } from "lucide-react";
+import { AppLogo } from "@/components/app-logo";
 
 export default function LoginPage() {
   const token = useAuthStore((s) => s.token);
@@ -76,11 +77,8 @@ export default function LoginPage() {
 
         <div className="relative z-10 flex flex-col h-full">
           {/* Logo */}
-          <div className="flex items-center gap-3 mb-16">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#FF6B6B] to-[#C084FC] flex items-center justify-center shadow-lg">
-              <Zap size={20} className="text-white" fill="white" />
-            </div>
-            <span className="text-xl font-bold text-white tracking-wide">ABA Note Assistant</span>
+          <div className="mb-16">
+            <AppLogo href={null} size="lg" />
           </div>
 
           {/* Headline */}
@@ -137,6 +135,10 @@ export default function LoginPage() {
           className="w-full max-w-md bg-white rounded-3xl p-8 sm:p-10"
           style={{ boxShadow: "0 20px 40px rgba(192, 132, 252, 0.2)" }}
         >
+          <div className="flex justify-center mb-6 md:hidden">
+            <AppLogo href={null} size="md" />
+          </div>
+
           {/* Lock icon */}
           <div className="flex justify-center mb-8">
             <div className="w-16 h-16 rounded-full bg-[#FDF4FF] flex items-center justify-center">

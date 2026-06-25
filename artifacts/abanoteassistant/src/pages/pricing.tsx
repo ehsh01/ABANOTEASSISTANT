@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useLocation, Link } from "wouter";
-import { Check, Sparkles, ArrowLeft, AlertTriangle } from "lucide-react";
+import { Check, ArrowLeft, AlertTriangle } from "lucide-react";
+import { AppLogo } from "@/components/app-logo";
 import { useAuthStore } from "@/store/auth-store";
 import { useT } from "@/hooks/use-translation";
 import { useToast } from "@/hooks/use-toast";
@@ -77,20 +78,7 @@ export default function PricingPage() {
       {/* Nav */}
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="relative w-9 h-9 flex items-center justify-center">
-              <div
-                className="absolute inset-0 rounded-lg shadow-[0_4px_10px_rgba(194,122,138,0.25)]"
-                style={{
-                  background: "linear-gradient(135deg, #e6b3c0 0%, #C27A8A 100%)",
-                }}
-              />
-              <Sparkles className="w-4 h-4 text-white relative z-10" />
-            </div>
-            <span className="font-extrabold text-base tracking-widest text-[#2D2523] uppercase">
-              ABANOTEASSISTANT
-            </span>
-          </div>
+          <AppLogo href="/" size="sm" />
           <button
             type="button"
             onClick={() => setLocation(token ? "/" : "/login")}

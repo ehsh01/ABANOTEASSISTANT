@@ -10,7 +10,8 @@ import {
 import { useAuthStore } from "@/store/auth-store";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { Sparkles, Building2, Users, ShieldCheck, ChevronRight, LogOut, LayoutDashboard } from "lucide-react";
+import { AppLogo } from "@/components/app-logo";
+import { Building2, Users, ShieldCheck, ChevronRight, LogOut, LayoutDashboard } from "lucide-react";
 
 export default function AdminPage() {
   const token = useAuthStore((s) => s.token);
@@ -63,15 +64,7 @@ export default function AdminPage() {
       <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-md border-b border-[#F0E4E1]/60 px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="relative w-9 h-9 flex items-center justify-center">
-              <div
-                className="absolute inset-0 rounded-lg shadow-[0_4px_10px_rgba(194,122,138,0.25)]"
-                style={{ background: "linear-gradient(135deg, #e6b3c0 0%, #C27A8A 100%)" }}
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-white/20 to-transparent rounded-lg" />
-              <Sparkles className="w-4 h-4 text-white relative z-10 pop-icon-white" />
-            </div>
-            <span className="font-extrabold text-base tracking-widest text-[#2D2523] uppercase pop-text">ABANOTEASSISTANT</span>
+            <AppLogo href="/" size="sm" />
             <span className="ml-2 px-2.5 py-0.5 rounded-full bg-[#FCEEF1] border border-[#F0E4E1] text-[#C27A8A] text-xs font-bold tracking-wide uppercase">Super Admin</span>
           </div>
 
