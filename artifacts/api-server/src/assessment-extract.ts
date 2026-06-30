@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import { DEFAULT_OPENAI_NOTE_MODEL } from "./openai-notes";
 import { sanitizeClientAssessmentSummary, assessmentSummaryForExtractPayload } from "./client-assessment-summary";
+import { sanitizeTextForJsonStorage } from "./sanitize-text-for-json";
 
 const ExtractedTopographySchema = z.object({
   name: z.string(),
@@ -77,7 +78,7 @@ export const MAX_ASSESSMENT_TEXT_STORAGE_CHARS = MAX_PDF_CHARS;
 export const MAX_ASSESSMENT_TEXT_NOTE_CONTEXT_CHARS = 28_000;
 
 export function truncateAssessmentTextForStorage(text: string): { text: string; truncated: boolean } {
-  const t = text.trim();
+  const t = sanitizeTextForJsonStorage(text).trim();
   if (t.length <= MAX_ASSESSMENT_TEXT_STORAGE_CHARS) return { text: t, truncated: false };
   return { text: t.slice(0, MAX_ASSESSMENT_TEXT_STORAGE_CHARS), truncated: true };
 }

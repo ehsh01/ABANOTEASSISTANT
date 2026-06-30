@@ -9,6 +9,18 @@ import {
   truncateAssessmentTextForStorage,
 } from "../assessment-extract";
 import { clientRowToApiData } from "../client-profile-api";
+import { sanitizeTextForJsonStorage } from "../sanitize-text-for-json";
+
+function extractDeepestDriverMessage(err: unknown): string {
+  let best = err instanceof Error ? err.message : String(err);
+  const cur = err as { cause?: unknown };
+  let c: unknown = cur?.cause;
+  while (c) {
+    if (c instanceof Error && c.message.trim()) best = c.message;
+    c = typeof c === "object" && c !== null && "cause" in c ? (c as { cause?: unknown }).cause : undefined;
+  }
+  return best;
+}
 
 const router: IRouter = Router();
 
@@ -104,7 +116,7 @@ router.post(
 
     const nextProfile: ClientProfileRow = {
       ...base,
-      assessmentFileName: file.originalname || base.assessmentFileName,
+      assessmentFileName: sanitizeTextForJsonStorage(file.originalname || base.assessmentFileName || "").trim() || base.assessmentFileName,
     };
     if (snapshot.length > 0) {
       nextProfile.assessmentTextSnapshot = snapshot;
@@ -112,16 +124,28 @@ router.post(
       delete nextProfile.assessmentTextSnapshot;
     }
 
-    const [updated] = await db
-      .update(clientsTable)
-      .set({
-        hasAssessment: true,
-        assessmentStatus: "ready",
-        profile: nextProfile,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(clientsTable.id, params.data.clientId), eq(clientsTable.companyId, companyId)))
-      .returning();
+    let updated;
+    try {
+      [updated] = await db
+        .update(clientsTable)
+        .set({
+          hasAssessment: true,
+          assessmentStatus: "ready",
+          profile: nextProfile,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(clientsTable.id, params.data.clientId), eq(clientsTable.companyId, companyId)))
+        .returning();
+    } catch (err) {
+      console.error(`[POST /clients/${params.data.clientId}/assessment/document] update failed`, err);
+      const detail = extractDeepestDriverMessage(err);
+      res.status(500).json({
+        success: false,
+        error: "Failed to store assessment document on client profile",
+        messages: [detail.length > 400 ? `${detail.slice(0, 400)}…` : detail],
+      });
+      return;
+    }
 
     if (!updated) {
       res.status(500).json({ success: false, error: "Failed to update client", messages: [] });

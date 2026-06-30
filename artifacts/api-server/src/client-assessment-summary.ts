@@ -1,4 +1,5 @@
 import type { ClientAssessmentSummaryRow } from "@workspace/db/schema";
+import { sanitizeTextForJsonStorage } from "./sanitize-text-for-json";
 
 /** Partial summary from API requests, PDF extract, or legacy profile rows. */
 export type ClientAssessmentSummaryInput = {
@@ -18,7 +19,7 @@ export type ClientAssessmentSummaryInput = {
 };
 
 function trimOrNull(s: string | null | undefined): string | null {
-  const t = (s ?? "").trim();
+  const t = sanitizeTextForJsonStorage(s ?? "").trim();
   return t.length > 0 ? t : null;
 }
 
@@ -26,7 +27,7 @@ function dedupeTrimmedStrings(arr: string[] | null | undefined): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const raw of arr ?? []) {
-    const t = raw.trim();
+    const t = sanitizeTextForJsonStorage(raw).trim();
     if (!t) continue;
     const key = t.toLowerCase();
     if (seen.has(key)) continue;
