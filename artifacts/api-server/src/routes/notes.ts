@@ -41,6 +41,7 @@ import {
   tryConsumeDraftSlot,
 } from "../draft-quota";
 import { maladaptiveBehaviorTargetsForNoteCatalog } from "../client-profile-maladaptive";
+import { maladaptiveBehaviorFunctionsForHourLabels } from "../clinical-behavior-function";
 import {
   approximateAgeYearsAtSession,
   canonicalMaladaptiveBehaviorLabel,
@@ -56,6 +57,7 @@ import {
   validateCaregiverMentionRule,
   validateClinicalBodyCompliance,
   collapseHourlyNoteNarrativeToSegments,
+  maladaptiveBehaviorLabelsEquivalent,
   type NoteComplianceContext,
   type TherapistTrialSummaryForHourEntry,
 } from "../note-validation";
@@ -838,6 +840,12 @@ router.post("/notes/generate", async (req, res) => {
     authorizedProgramNames: replacementProgramsCatalogForNote,
   });
 
+  const maladaptiveBehaviorFunctionsForHour = maladaptiveBehaviorFunctionsForHourLabels(
+    maladaptiveBehaviorForNarrative,
+    maladaptiveBehaviorTargetsForNote,
+    maladaptiveBehaviorLabelsEquivalent,
+  );
+
   const oaCtx: NoteGenerationContext = {
     /** Deliberately not the profile name — session notes must not contain personal names. */
     clientName: "the client",
@@ -867,6 +875,7 @@ router.post("/notes/generate", async (req, res) => {
     languageMaladaptiveEpisodeForHour: narrativeCollapsed.languageMaladaptiveEpisodeForHour,
     therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
     behaviorReplacementCandidatesForHour,
+    maladaptiveBehaviorFunctionsForHour,
   };
 
   let clinicalBody: string;

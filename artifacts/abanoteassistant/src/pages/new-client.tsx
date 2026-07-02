@@ -47,7 +47,10 @@ import {
   type Client as ApiClient,
   type PutBehaviorApprovedProgramInput,
   type UpdateClientRequest,
+  type ClinicalFunction,
+  type MaladaptiveBehaviorProfileEntry,
 } from "@workspace/api-client-react";
+import { formatClinicalFunctionsDisplay } from "@/lib/clinical-behavior-function-display";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   Command,
@@ -85,9 +88,28 @@ interface Step3Data {
   maladaptiveBehaviors: string[];
   /** Maps behavior name → optional topography / operational definition text. */
   maladaptiveBehaviorTargets: Record<string, string>;
+  /** Maps behavior name → FBA functions from assessment (`undefined` = never imported for this label). */
+  maladaptiveBehaviorFunctions: Record<string, ClinicalFunction[] | null | undefined>;
   replacementPrograms: string[];
   skillAcquisitionPrograms: string[];
   interventions: string[];
+}
+
+function maladaptiveBehaviorTargetsPayload(
+  behaviors: string[],
+  targets: Record<string, string>,
+  functions: Record<string, ClinicalFunction[] | null | undefined>,
+): MaladaptiveBehaviorProfileEntry[] {
+  return behaviors.map((name) => {
+    const entry: MaladaptiveBehaviorProfileEntry = {
+      name,
+      topography: targets[name]?.trim() || null,
+    };
+    if (Object.prototype.hasOwnProperty.call(functions, name)) {
+      entry.functions = functions[name] ?? null;
+    }
+    return entry;
+  });
 }
 
 /** URL `?section=` when editing a client from the clients list dropdown */
@@ -267,6 +289,7 @@ const BEHAVIOR_MATCH_TYPE_VALUES = Object.values(BehaviorProgramMatchType) as No
 function BehaviorSection({
   items,
   targets,
+  functions,
   onAdd,
   onRemove,
   onTopographyChange,
@@ -276,6 +299,7 @@ function BehaviorSection({
 }: {
   items: string[];
   targets: Record<string, string>;
+  functions: Record<string, ClinicalFunction[] | null | undefined>;
   onAdd: (val: string) => void;
   onRemove: (i: number) => void;
   onTopographyChange: (name: string, val: string) => void;
@@ -457,7 +481,10 @@ function BehaviorSection({
           return (
             <div key={`${name}-${i}`} className="rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-[#2D2523] flex-1">{name}</span>
+                <div className="flex-1 min-w-0 space-y-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[#877870]">Behavior</p>
+                  <span className="text-sm font-semibold text-[#2D2523] block">{name}</span>
+                </div>
                 <button
                   type="button"
                   onClick={() => onRemove(i)}
@@ -466,6 +493,14 @@ function BehaviorSection({
                 >
                   <X className="w-4 h-4" />
                 </button>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#877870]">Function</p>
+                <p className="text-xs text-[#2D2523] leading-relaxed">
+                  {formatClinicalFunctionsDisplay(
+                    Object.prototype.hasOwnProperty.call(functions, name) ? functions[name] : undefined,
+                  )}
+                </p>
               </div>
               <textarea
                 value={targets[name] ?? ""}
@@ -1073,11 +1108,14 @@ function Step3({
   function removeBehavior(i: number) {
     const name = data.maladaptiveBehaviors[i];
     const next = { ...data.maladaptiveBehaviorTargets };
+    const nextFunctions = { ...data.maladaptiveBehaviorFunctions };
     delete next[name];
+    delete nextFunctions[name];
     onChange({
       ...data,
       maladaptiveBehaviors: data.maladaptiveBehaviors.filter((_, idx) => idx !== i),
       maladaptiveBehaviorTargets: next,
+      maladaptiveBehaviorFunctions: nextFunctions,
     });
   }
   function setTopography(name: string, val: string) {
@@ -1093,6 +1131,7 @@ function Step3({
       <BehaviorSection
         items={data.maladaptiveBehaviors}
         targets={data.maladaptiveBehaviorTargets}
+        functions={data.maladaptiveBehaviorFunctions}
         onAdd={addBehavior}
         onRemove={removeBehavior}
         onTopographyChange={setTopography}
@@ -1165,11 +1204,14 @@ function Step3SingleSection({
   function removeBehavior(i: number) {
     const name = data.maladaptiveBehaviors[i];
     const next = { ...data.maladaptiveBehaviorTargets };
+    const nextFunctions = { ...data.maladaptiveBehaviorFunctions };
     delete next[name];
+    delete nextFunctions[name];
     onChange({
       ...data,
       maladaptiveBehaviors: data.maladaptiveBehaviors.filter((_, idx) => idx !== i),
       maladaptiveBehaviorTargets: next,
+      maladaptiveBehaviorFunctions: nextFunctions,
     });
   }
   function setTopography(name: string, val: string) {
@@ -1181,6 +1223,7 @@ function Step3SingleSection({
       <BehaviorSection
         items={data.maladaptiveBehaviors}
         targets={data.maladaptiveBehaviorTargets}
+        functions={data.maladaptiveBehaviorFunctions}
         onAdd={addBehavior}
         onRemove={removeBehavior}
         onTopographyChange={setTopography}
@@ -1376,6 +1419,7 @@ function NewClientForm({
   const [step3, setStep3] = useState<Step3Data>({
     maladaptiveBehaviors: [],
     maladaptiveBehaviorTargets: {},
+    maladaptiveBehaviorFunctions: {},
     replacementPrograms: [],
     skillAcquisitionPrograms: [],
     interventions: [],
@@ -1502,10 +1546,11 @@ function NewClientForm({
     if (!isEdit || !Number.isFinite(numericId) || numericId <= 0) return;
     await updateClient(numericId, {
       maladaptiveBehaviors: step3.maladaptiveBehaviors,
-      maladaptiveBehaviorTargets: step3.maladaptiveBehaviors.map((name) => ({
-        name,
-        topography: step3.maladaptiveBehaviorTargets[name]?.trim() || null,
-      })),
+      maladaptiveBehaviorTargets: maladaptiveBehaviorTargetsPayload(
+        step3.maladaptiveBehaviors,
+        step3.maladaptiveBehaviorTargets,
+        step3.maladaptiveBehaviorFunctions,
+      ),
     });
   }, [isEdit, numericId, step3]);
 
@@ -1531,19 +1576,27 @@ function NewClientForm({
       // behavior the user has not typed one for, using the assessment's operational definitions when present.
       const lowerByName = new Map(nextBehaviors.map((n) => [n.toLowerCase(), n] as const));
       const nextTargets: Record<string, string> = { ...s.maladaptiveBehaviorTargets };
+      const nextFunctions: Record<string, ClinicalFunction[] | null | undefined> = {
+        ...s.maladaptiveBehaviorFunctions,
+      };
       for (const t of e.maladaptiveBehaviorTopographies ?? []) {
         const desc = (t.topography ?? "").trim();
-        if (!desc) continue;
         const aligned = lowerByName.get((t.name ?? "").trim().toLowerCase()) ?? null;
         if (!aligned) continue;
-        const existing = (nextTargets[aligned] ?? "").trim();
-        if (!existing) {
-          nextTargets[aligned] = desc;
+        if (desc) {
+          const existing = (nextTargets[aligned] ?? "").trim();
+          if (!existing) {
+            nextTargets[aligned] = desc;
+          }
+        }
+        if (t.functions !== undefined) {
+          nextFunctions[aligned] = t.functions;
         }
       }
       return {
         maladaptiveBehaviors: nextBehaviors,
         maladaptiveBehaviorTargets: nextTargets,
+        maladaptiveBehaviorFunctions: nextFunctions,
         replacementPrograms: appendDedupedTags(s.replacementPrograms, e.replacementPrograms),
         skillAcquisitionPrograms:
           (e.skillAcquisitionPrograms ?? []).length > 0
@@ -1599,12 +1652,16 @@ function NewClientForm({
       const topographyCount = (e.maladaptiveBehaviorTopographies ?? []).filter(
         (t) => (t.topography ?? "").trim().length > 0,
       ).length;
+      const functionCount = (e.maladaptiveBehaviorTopographies ?? []).filter(
+        (t) => t.functions !== undefined,
+      ).length;
       const counts = [
         e.firstName || e.lastName ? "name" : null,
         e.dateOfBirth ? "DOB" : null,
         e.gender ? "gender" : null,
         e.maladaptiveBehaviors.length ? `${e.maladaptiveBehaviors.length} behaviors` : null,
         topographyCount ? `${topographyCount} topographies` : null,
+        functionCount ? `${functionCount} behavior functions` : null,
         e.replacementPrograms.length ? `${e.replacementPrograms.length} replacement programs` : null,
         (e.skillAcquisitionPrograms ?? []).length
           ? `${e.skillAcquisitionPrograms!.length} skill acquisition programs`
@@ -1674,6 +1731,11 @@ function NewClientForm({
       maladaptiveBehaviors: [...(p?.maladaptiveBehaviors ?? [])],
       maladaptiveBehaviorTargets: Object.fromEntries(
         (p?.maladaptiveBehaviorTargets ?? []).map((e) => [e.name, e.topography ?? ""])
+      ),
+      maladaptiveBehaviorFunctions: Object.fromEntries(
+        (p?.maladaptiveBehaviorTargets ?? [])
+          .filter((e) => e.functions !== undefined)
+          .map((e) => [e.name, e.functions ?? null]),
       ),
       replacementPrograms: [...(p?.replacementPrograms ?? [])],
       skillAcquisitionPrograms: [...(p?.skillAcquisitionPrograms ?? [])],
@@ -1747,10 +1809,11 @@ function NewClientForm({
       } else if (editSection === "behaviors") {
         payload = {
           maladaptiveBehaviors: step3.maladaptiveBehaviors,
-          maladaptiveBehaviorTargets: step3.maladaptiveBehaviors.map((name) => ({
-            name,
-            topography: step3.maladaptiveBehaviorTargets[name]?.trim() || null,
-          })),
+          maladaptiveBehaviorTargets: maladaptiveBehaviorTargetsPayload(
+            step3.maladaptiveBehaviors,
+            step3.maladaptiveBehaviorTargets,
+            step3.maladaptiveBehaviorFunctions,
+          ),
         };
       } else if (editSection === "programs") {
         payload = {
@@ -1830,10 +1893,11 @@ function NewClientForm({
           dateOfBirth: step1.dateOfBirth,
           gender: step1.gender,
           maladaptiveBehaviors: step3.maladaptiveBehaviors,
-          maladaptiveBehaviorTargets: step3.maladaptiveBehaviors.map((name) => ({
-            name,
-            topography: step3.maladaptiveBehaviorTargets[name]?.trim() || null,
-          })),
+          maladaptiveBehaviorTargets: maladaptiveBehaviorTargetsPayload(
+            step3.maladaptiveBehaviors,
+            step3.maladaptiveBehaviorTargets,
+            step3.maladaptiveBehaviorFunctions,
+          ),
           replacementPrograms: step3.replacementPrograms,
           skillAcquisitionPrograms: step3.skillAcquisitionPrograms,
           interventions: step3.interventions,
@@ -1878,10 +1942,11 @@ function NewClientForm({
           assessmentStatus: step2.file ? "uploaded" : "missing",
           assessmentFileName: step2.file?.name ?? null,
           maladaptiveBehaviors: step3.maladaptiveBehaviors,
-          maladaptiveBehaviorTargets: step3.maladaptiveBehaviors.map((name) => ({
-            name,
-            topography: step3.maladaptiveBehaviorTargets[name]?.trim() || null,
-          })),
+          maladaptiveBehaviorTargets: maladaptiveBehaviorTargetsPayload(
+            step3.maladaptiveBehaviors,
+            step3.maladaptiveBehaviorTargets,
+            step3.maladaptiveBehaviorFunctions,
+          ),
           replacementPrograms: step3.replacementPrograms,
           skillAcquisitionPrograms: step3.skillAcquisitionPrograms,
           interventions: step3.interventions,
@@ -1980,6 +2045,11 @@ function NewClientForm({
                   value={assessmentSummaryForm}
                   onChange={setAssessmentSummaryForm}
                   compact
+                  maladaptiveBehaviorTargets={maladaptiveBehaviorTargetsPayload(
+                    step3.maladaptiveBehaviors,
+                    step3.maladaptiveBehaviorTargets,
+                    step3.maladaptiveBehaviorFunctions,
+                  )}
                 />
               )}
               {editSection !== "personal" &&
@@ -2159,6 +2229,11 @@ function NewClientForm({
                   <AssessmentSummaryFields
                     value={assessmentSummaryForm}
                     onChange={setAssessmentSummaryForm}
+                    maladaptiveBehaviorTargets={maladaptiveBehaviorTargetsPayload(
+                      step3.maladaptiveBehaviors,
+                      step3.maladaptiveBehaviorTargets,
+                      step3.maladaptiveBehaviorFunctions,
+                    )}
                   />
                 )}
               </div>

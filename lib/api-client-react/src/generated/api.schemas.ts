@@ -216,13 +216,29 @@ export interface LoginResponse {
 }
 
 /**
- * Client-profile maladaptive target. `name` is the exact BIP/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).
+ * FBA behavior function (Attention, Escape, Tangible, Sensory/Automatic).
+ */
+export type ClinicalFunction =
+  (typeof ClinicalFunction)[keyof typeof ClinicalFunction];
+
+export const ClinicalFunction = {
+  escape: "escape",
+  attention: "attention",
+  tangible: "tangible",
+  automatic: "automatic",
+} as const;
+
+/**
+ * Client-profile maladaptive target. `name` is the exact BIP/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner); `functions` are FBA functions imported from the client's assessment when stated (do not infer).
 
  */
 export interface MaladaptiveBehaviorProfileEntry {
   name: string;
   /** Operational definition; may be null when not entered. */
   topography: string | null;
+  /** FBA functions for this behavior from the assessment (Preference Assessment / Hypothesized function). Null or empty means not specified in the assessment.
+   */
+  functions?: ClinicalFunction[] | null;
 }
 
 export type AssessmentStructuredReplacementProgramFunctionsItem =

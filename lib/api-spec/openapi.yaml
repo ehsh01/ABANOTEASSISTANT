@@ -1658,11 +1658,17 @@ components:
         - success
         - data
 
+    ClinicalFunction:
+      type: string
+      enum: [escape, attention, tangible, automatic]
+      description: FBA behavior function (Attention, Escape, Tangible, Sensory/Automatic).
+
     MaladaptiveBehaviorProfileEntry:
       type: object
       description: >
         Client-profile maladaptive target. `name` is the exact BIP/catalog label; `topography` is optional
-        RBT-authored operational text (what the behavior looks like for this learner).
+        RBT-authored operational text (what the behavior looks like for this learner); `functions` are FBA
+        functions imported from the client's assessment when stated (do not infer).
       properties:
         name:
           type: string
@@ -1670,6 +1676,14 @@ components:
           type: string
           nullable: true
           description: Operational definition; may be null when not entered.
+        functions:
+          type: array
+          nullable: true
+          items:
+            $ref: "#/components/schemas/ClinicalFunction"
+          description: >
+            FBA functions for this behavior from the assessment (Preference Assessment / Hypothesized function).
+            Null or empty means not specified in the assessment.
       required:
         - name
         - topography

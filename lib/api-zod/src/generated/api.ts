@@ -283,9 +283,21 @@ export const ListClientsResponse = zod.object({
                     .describe(
                       "Operational definition; may be null when not entered.",
                     ),
+                  functions: zod
+                    .array(
+                      zod
+                        .enum(["escape", "attention", "tangible", "automatic"])
+                        .describe(
+                          "FBA behavior function (Attention, Escape, Tangible, Sensory\/Automatic).",
+                        ),
+                    )
+                    .nullish()
+                    .describe(
+                      "FBA functions for this behavior from the assessment (Preference Assessment \/ Hypothesized function). Null or empty means not specified in the assessment.\n",
+                    ),
                 })
                 .describe(
-                  "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+                  "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner); `functions` are FBA functions imported from the client's assessment when stated (do not infer).\n",
                 ),
             )
             .describe(
@@ -402,9 +414,21 @@ export const CreateClientBody = zod.object({
             .string()
             .nullable()
             .describe("Operational definition; may be null when not entered."),
+          functions: zod
+            .array(
+              zod
+                .enum(["escape", "attention", "tangible", "automatic"])
+                .describe(
+                  "FBA behavior function (Attention, Escape, Tangible, Sensory\/Automatic).",
+                ),
+            )
+            .nullish()
+            .describe(
+              "FBA functions for this behavior from the assessment (Preference Assessment \/ Hypothesized function). Null or empty means not specified in the assessment.\n",
+            ),
         })
         .describe(
-          "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+          "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner); `functions` are FBA functions imported from the client's assessment when stated (do not infer).\n",
         ),
     )
     .optional()
@@ -523,9 +547,21 @@ export const CreateClientResponse = zod.object({
                   .describe(
                     "Operational definition; may be null when not entered.",
                   ),
+                functions: zod
+                  .array(
+                    zod
+                      .enum(["escape", "attention", "tangible", "automatic"])
+                      .describe(
+                        "FBA behavior function (Attention, Escape, Tangible, Sensory\/Automatic).",
+                      ),
+                  )
+                  .nullish()
+                  .describe(
+                    "FBA functions for this behavior from the assessment (Preference Assessment \/ Hypothesized function). Null or empty means not specified in the assessment.\n",
+                  ),
               })
               .describe(
-                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner); `functions` are FBA functions imported from the client's assessment when stated (do not infer).\n",
               ),
           )
           .describe(
@@ -665,9 +701,21 @@ export const GetClientResponse = zod.object({
                   .describe(
                     "Operational definition; may be null when not entered.",
                   ),
+                functions: zod
+                  .array(
+                    zod
+                      .enum(["escape", "attention", "tangible", "automatic"])
+                      .describe(
+                        "FBA behavior function (Attention, Escape, Tangible, Sensory\/Automatic).",
+                      ),
+                  )
+                  .nullish()
+                  .describe(
+                    "FBA functions for this behavior from the assessment (Preference Assessment \/ Hypothesized function). Null or empty means not specified in the assessment.\n",
+                  ),
               })
               .describe(
-                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner); `functions` are FBA functions imported from the client's assessment when stated (do not infer).\n",
               ),
           )
           .describe(
@@ -789,9 +837,21 @@ export const UpdateClientBody = zod.object({
             .string()
             .nullable()
             .describe("Operational definition; may be null when not entered."),
+          functions: zod
+            .array(
+              zod
+                .enum(["escape", "attention", "tangible", "automatic"])
+                .describe(
+                  "FBA behavior function (Attention, Escape, Tangible, Sensory\/Automatic).",
+                ),
+            )
+            .nullish()
+            .describe(
+              "FBA functions for this behavior from the assessment (Preference Assessment \/ Hypothesized function). Null or empty means not specified in the assessment.\n",
+            ),
         })
         .describe(
-          "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+          "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner); `functions` are FBA functions imported from the client's assessment when stated (do not infer).\n",
         ),
     )
     .optional()
@@ -914,9 +974,21 @@ export const UpdateClientResponse = zod.object({
                   .describe(
                     "Operational definition; may be null when not entered.",
                   ),
+                functions: zod
+                  .array(
+                    zod
+                      .enum(["escape", "attention", "tangible", "automatic"])
+                      .describe(
+                        "FBA behavior function (Attention, Escape, Tangible, Sensory\/Automatic).",
+                      ),
+                  )
+                  .nullish()
+                  .describe(
+                    "FBA functions for this behavior from the assessment (Preference Assessment \/ Hypothesized function). Null or empty means not specified in the assessment.\n",
+                  ),
               })
               .describe(
-                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner); `functions` are FBA functions imported from the client's assessment when stated (do not infer).\n",
               ),
           )
           .describe(
@@ -1081,9 +1153,21 @@ export const UploadClientAssessmentDocumentResponse = zod.object({
                   .describe(
                     "Operational definition; may be null when not entered.",
                   ),
+                functions: zod
+                  .array(
+                    zod
+                      .enum(["escape", "attention", "tangible", "automatic"])
+                      .describe(
+                        "FBA behavior function (Attention, Escape, Tangible, Sensory\/Automatic).",
+                      ),
+                  )
+                  .nullish()
+                  .describe(
+                    "FBA functions for this behavior from the assessment (Preference Assessment \/ Hypothesized function). Null or empty means not specified in the assessment.\n",
+                  ),
               })
               .describe(
-                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner); `functions` are FBA functions imported from the client's assessment when stated (do not infer).\n",
               ),
           )
           .describe(
@@ -1238,9 +1322,21 @@ export const GenerateClientAvatarResponse = zod.object({
                     .describe(
                       "Operational definition; may be null when not entered.",
                     ),
+                  functions: zod
+                    .array(
+                      zod
+                        .enum(["escape", "attention", "tangible", "automatic"])
+                        .describe(
+                          "FBA behavior function (Attention, Escape, Tangible, Sensory\/Automatic).",
+                        ),
+                    )
+                    .nullish()
+                    .describe(
+                      "FBA functions for this behavior from the assessment (Preference Assessment \/ Hypothesized function). Null or empty means not specified in the assessment.\n",
+                    ),
                 })
                 .describe(
-                  "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+                  "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner); `functions` are FBA functions imported from the client's assessment when stated (do not infer).\n",
                 ),
             )
             .describe(
@@ -1382,9 +1478,21 @@ export const DeleteClientAvatarResponse = zod.object({
                   .describe(
                     "Operational definition; may be null when not entered.",
                   ),
+                functions: zod
+                  .array(
+                    zod
+                      .enum(["escape", "attention", "tangible", "automatic"])
+                      .describe(
+                        "FBA behavior function (Attention, Escape, Tangible, Sensory\/Automatic).",
+                      ),
+                  )
+                  .nullish()
+                  .describe(
+                    "FBA functions for this behavior from the assessment (Preference Assessment \/ Hypothesized function). Null or empty means not specified in the assessment.\n",
+                  ),
               })
               .describe(
-                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner).\n",
+                "Client-profile maladaptive target. `name` is the exact BIP\/catalog label; `topography` is optional RBT-authored operational text (what the behavior looks like for this learner); `functions` are FBA functions imported from the client's assessment when stated (do not infer).\n",
               ),
           )
           .describe(

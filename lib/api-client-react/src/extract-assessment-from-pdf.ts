@@ -1,7 +1,7 @@
 import { customFetch } from "./custom-fetch";
 
 /** Fields inferred from assessment PDF text (server + OpenAI). */
-import type { ClientAssessmentSummary } from "./generated/api.schemas";
+import type { ClientAssessmentSummary, ClinicalFunction } from "./generated/api.schemas";
 
 export type AssessmentExtractedFields = {
   firstName?: string;
@@ -13,7 +13,12 @@ export type AssessmentExtractedFields = {
    * Per-behavior operational definition / topography copied from the assessment when present. `name` matches
    * an entry in `maladaptiveBehaviors` (server aligns case-insensitively); `topography` is the short description.
    */
-  maladaptiveBehaviorTopographies?: { name: string; topography: string }[];
+  maladaptiveBehaviorTopographies?: {
+    name: string;
+    topography: string;
+    /** FBA functions when stated in the assessment; omit when not documented. */
+    functions?: ClinicalFunction[];
+  }[];
   replacementPrograms: string[];
   skillAcquisitionPrograms: string[];
   interventions: string[];

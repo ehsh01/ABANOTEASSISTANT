@@ -4,6 +4,7 @@
  * Opening/closing locked prose is still assembled server-side in note-assembly.ts.
  */
 
+import type { ClinicalFunction, MaladaptiveBehaviorProfileEntry } from "@workspace/db/schema";
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import {
@@ -17,7 +18,6 @@ import {
   type NoteComplianceContext,
 } from "./note-validation";
 import type { TherapySetting } from "@workspace/therapy-settings";
-import type { MaladaptiveBehaviorProfileEntry } from "@workspace/db/schema";
 
 /** Chat Completions model id for note clinical body when OPENAI_MODEL is unset. */
 export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-5.3-chat-latest";
@@ -101,6 +101,11 @@ export type NoteGenerationContext = {
    */
   acquisitionOnlySegmentForHour: boolean[];
   /**
+   * Per narrative segment \`s\`: documented FBA functions for \`maladaptiveBehaviorForHour[s]\` from the client profile
+   * (null = not specified in assessment; non-empty = use for intervention selection).
+   */
+  maladaptiveBehaviorFunctionsForHour: (ClinicalFunction[] | null)[];
+  /**
    * Per narrative segment \`s\`: BIP-aligned replacement program names for \`maladaptiveBehaviorForHour[s]\`
    * (from assessment \`behavior_to_replacements_map\` when present). Empty when acquisition-only or no behavior.
    */
@@ -127,6 +132,12 @@ PROFILE MALADAPTIVE TOPOGRAPHIES (JSON \`maladaptiveBehaviorTargets\` — when e
 - For segment \`s\`, when \`maladaptiveBehaviorForHour[s]\` equals an entry's \`name\` and that entry's \`topography\` is non-empty after trim: treat that \`topography\` as **authoritative client-specific guidance** for what counts as that behavior and what observable actions/vocalizations/durations fit this target—**in addition to** \`clientAssessmentTextExcerpt\` when the excerpt is non-empty. Prefer consistency across sources; do **not** invent observable forms that are outside both the excerpt (when present) and the non-empty topography for that label.
 - When the excerpt is **empty** but \`topography\` is non-empty for the assigned label, use that topography (not generic filler) to shape observable episode detail while still citing the behavior using the **exact JSON catalog string**.
 - **Never copy personal names, initials, or nicknames from \`topography\` into your output.** The clinical body must refer to the learner only as **the client** (plus pronouns from JSON gender), even if the stored topography text names the individual.
+
+BEHAVIOR FUNCTION (JSON \`maladaptiveBehaviorTargets.functions\` and \`maladaptiveBehaviorFunctionsForHour\` — mandatory when present):
+- Each \`maladaptiveBehaviorTargets\` entry may include \`functions\`: an array of tokens \`attention\`, \`escape\`, \`tangible\`, and/or \`automatic\` imported from this client's assessment (Preference Assessment / Hypothesized function). These are the **documented maintaining functions** — **never** invent, guess, or add function labels not in that array.
+- JSON \`maladaptiveBehaviorFunctionsForHour[s]\` mirrors the functions for \`maladaptiveBehaviorForHour[s]\` on segment \`s\` (\`null\` = not specified in assessment; non-empty array = documented functions for that client).
+- When \`maladaptiveBehaviorFunctionsForHour[s]\` is a **non-empty** array and \`acquisitionOnlySegmentForHour[s]\` is false: the catalog intervention naming sentence(s) for that segment must document intervention(s) from JSON \`interventions\` that are clinically appropriate for **that documented function** (e.g. escape-maintained → Escape Extinction / Demand Fading when listed; attention-maintained → DRA / attention-based consequences when listed; tangible-maintained → tangible/access procedures when listed; automatic/sensory → sensory-appropriate interventions when listed). Prefer interventions mapped to that function in the assessment when the excerpt supports the match.
+- When \`maladaptiveBehaviorFunctionsForHour[s]\` is \`null\` or an **empty** array: do **not** add function-based framing or infer maintaining function; follow existing intervention rules without attributing escape, attention, tangible, or sensory/automatic function.
 
 NARRATIVE SEGMENTS (billing hours vs. ABC paragraph count — mandatory):
 - JSON \`sessionHours\` is the **billable duration** for the visit (integer clock hours the RBT documented).

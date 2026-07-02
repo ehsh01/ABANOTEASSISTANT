@@ -40,6 +40,11 @@ export type MaladaptiveBehaviorProfileEntry = {
   name: string;
   /** Operational definition / topography for this exact catalog name; may be null when unset. */
   topography: string | null;
+  /**
+   * FBA functions for this behavior imported from the client's assessment (Preference Assessment / Hypothesized function).
+   * `null` or empty array means not specified in the assessment — do not infer.
+   */
+  functions?: ClinicalFunction[] | null;
 };
 
 /**

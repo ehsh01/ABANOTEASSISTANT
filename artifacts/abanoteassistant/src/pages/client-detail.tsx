@@ -28,6 +28,7 @@ import {
 import { sessionTimeRangeFromHours, formatSessionDate, formatAuthorizationExpiresOn } from "@/lib/utils";
 import { ClientAvatar } from "@/components/client-avatar";
 import { AssessmentSummaryReadOnly } from "@/components/assessment-summary-fields";
+import { formatClinicalFunctionsDisplay } from "@/lib/clinical-behavior-function-display";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClient, useClientPrograms, useNotesList } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
@@ -200,6 +201,9 @@ export default function ClientDetail() {
   const targets = p?.maladaptiveBehaviorTargets ?? [];
   const behaviorTopographyMap = Object.fromEntries(
     targets.map((e) => [e.name, (e.topography ?? "").trim()])
+  );
+  const behaviorFunctionMap = Object.fromEntries(
+    targets.map((e) => [e.name, e.functions])
   );
   const replacements = p?.replacementPrograms ?? [];
   const skillAcquisitionPrograms = p?.skillAcquisitionPrograms ?? [];
@@ -390,7 +394,10 @@ export default function ClientDetail() {
 
           {p?.assessmentSummary ? (
             <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
-              <AssessmentSummaryReadOnly summary={p.assessmentSummary} />
+              <AssessmentSummaryReadOnly
+                summary={p.assessmentSummary}
+                maladaptiveBehaviorTargets={targets}
+              />
             </div>
           ) : null}
 
@@ -512,31 +519,47 @@ export default function ClientDetail() {
                 ) : (
                   <div className="space-y-2">
                     {behaviors.map((behavior, idx) => {
+                      const target = targets.find(
+                        (t) =>
+                          t.name === behavior ||
+                          t.name.trim().toLowerCase() === behavior.trim().toLowerCase(),
+                      );
                       const topo =
                         behaviorTopographyMap[behavior]?.trim() ||
-                        targets[idx]?.topography?.trim() ||
+                        target?.topography?.trim() ||
                         "";
+                      const hasFunction = target?.functions !== undefined;
                       return (
                         <div
                           key={`${behavior}-${idx}`}
-                          className="rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] px-4 py-3"
+                          className="rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] px-4 py-3 space-y-2"
                         >
-                          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                            <span className="text-sm font-semibold text-[#2D2523]">{behavior}</span>
-                            {topo ? (
-                              <>
-                                <span className="text-[#877870] text-xs shrink-0" aria-hidden>
-                                  ·
-                                </span>
-                                <span className="text-xs text-[#877870] leading-relaxed min-w-0 flex-1">
-                                  <span className="font-medium text-[#877870]/90 not-italic">Topography: </span>
-                                  {topo}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-xs text-[#877870]/50 italic">No topography entered</span>
-                            )}
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#877870]">
+                              Behavior
+                            </p>
+                            <p className="text-sm font-semibold text-[#2D2523]">{behavior}</p>
                           </div>
+                          <div>
+                            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#877870]">
+                              Function
+                            </p>
+                            <p className="text-xs text-[#2D2523] leading-relaxed">
+                              {hasFunction
+                                ? formatClinicalFunctionsDisplay(behaviorFunctionMap[behavior])
+                                : formatClinicalFunctionsDisplay(undefined)}
+                            </p>
+                          </div>
+                          {topo ? (
+                            <div>
+                              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#877870]">
+                                Topography
+                              </p>
+                              <p className="text-xs text-[#877870] leading-relaxed">{topo}</p>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-[#877870]/50 italic">No topography entered</p>
+                          )}
                         </div>
                       );
                     })}

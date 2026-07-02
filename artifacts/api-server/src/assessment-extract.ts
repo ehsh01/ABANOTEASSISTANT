@@ -9,10 +9,21 @@ import { z } from "zod";
 import { DEFAULT_OPENAI_NOTE_MODEL } from "./openai-notes";
 import { sanitizeClientAssessmentSummary, assessmentSummaryForExtractPayload } from "./client-assessment-summary";
 import { sanitizeTextForJsonStorage } from "./sanitize-text-for-json";
+import {
+  extractBehaviorFunctionsFromBipText,
+  extractBehaviorFunctionsFromPreferenceAssessment,
+  resolveBehaviorFunctionsForName,
+  sanitizeClinicalFunctionsInput,
+} from "./clinical-behavior-function";
+import type { ClinicalFunction } from "@workspace/db/schema";
+
+const ClinicalFunctionExtractEnum = z.enum(["escape", "attention", "tangible", "automatic"]);
 
 const ExtractedTopographySchema = z.object({
   name: z.string(),
   topography: z.string().nullable().optional(),
+  /** FBA function(s) when stated in Preference Assessment or Hypothesized function — omit when not in document. */
+  functions: z.array(ClinicalFunctionExtractEnum).optional(),
 });
 
 const AssessmentSummaryExtractSchema = z.object({
@@ -130,7 +141,8 @@ Rules:
 - Use ONLY information explicitly present in the document. Do not invent diagnoses, behaviors, or programs.
 - Copy behavior and program names closely from the document when possible (short phrases, not long paragraphs).
 - maladaptiveBehaviors: target behaviors, problem behaviors, or behavior definitions listed in the plan.
-- maladaptiveBehaviorTopographies: for EVERY behavior name in \`maladaptiveBehaviors\`, copy the short operational definition / observable description from the document when one is present. BIP/FBA documents commonly label this paragraph "Description", "Operational Definition", or "Topography" inside each behavior's section, often followed by "Onset" and "Offset". When you find such a paragraph for a behavior, include it. Use the SAME exact \`name\` string as the matching entry in \`maladaptiveBehaviors\` and put the description in \`topography\`. Keep it concise (one to three sentences). Do not invent definitions when the document does not give one (omit that name's topography in that case). Use a JSON array of \`{ "name": "<behavior>", "topography": "<short description>" }\` objects. Do not skip behaviors that have a clear definition — emit one entry per behavior whenever the document supplies one.
+- maladaptiveBehaviorTopographies: for EVERY behavior name in \`maladaptiveBehaviors\`, copy the short operational definition / observable description from the document when one is present. BIP/FBA documents commonly label this paragraph "Description", "Operational Definition", or "Topography" inside each behavior's section, often followed by "Onset" and "Offset". When you find such a paragraph for a behavior, include it. Use the SAME exact \`name\` string as the matching entry in \`maladaptiveBehaviors\` and put the description in \`topography\`. Keep it concise (one to three sentences). Do not invent definitions when the document does not give one (omit that name's topography in that case). Use a JSON array of \`{ "name": "<behavior>", "topography": "<short description>", "functions": ["escape"|"attention"|"tangible"|"automatic"] }\` objects. Do not skip behaviors that have a clear definition — emit one entry per behavior whenever the document supplies one.
+- maladaptiveBehaviorTopographies.functions: when the document states why a behavior occurs, copy **only** what is explicitly listed. Look under **Preference Assessment**, **Functional Assessment**, **Hypothesized function**, **Maintaining function**, or behavior-specific function lines (e.g. "Physical Aggression → Tangible, Escape"). Map document wording to these exact JSON tokens only: **attention** (Attention / attention-seeking), **escape** (Escape), **tangible** (Tangible), **automatic** (Sensory, Automatic, Sensory/Automatic, automatic reinforcement). Multiple functions are allowed when the document lists more than one. Use \`[]\` only when the document names the behavior in a function section but lists no recognizable function. **Omit** the \`functions\` key entirely when the document does not address function for that behavior. **Never guess** a function.
 - replacementPrograms: replacement skills, target behaviors to increase, BIP goals, or teaching programs (names only). Do **not** put skill-acquisition-only programs here when the document has a separate **Skill Acquisition Programs** section — use \`skillAcquisitionPrograms\` for those instead.
 - skillAcquisitionPrograms: under a section explicitly titled **Skill Acquisition Programs**, include **only** the short skill name from each \`Goal # N: …\` line — the text **after** \`Goal # N:\` on that same line. Example: \`Goal # 2: Sharing: Allows Others to Manipulate/Touch Toys\` → \`Sharing: Allows Others to Manipulate/Touch Toys\`. Do **not** include BL/LTO/STO objectives, procedures, barriers, narrative paragraphs, addresses, page numbers, or any text that is not the goal-title fragment on a \`Goal #\` line. If the document has no **Skill Acquisition Programs** section, return [].
 - interventions: strategies, antecedent modifications, consequence procedures, prompts, token systems, DRA/DRI/DRA, redirection, etc.
@@ -234,17 +246,32 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
   // Keep one topography per (case-insensitive) behavior name; align names back to the deduped list when possible.
   const behaviorByLower = new Map(dedupedBehaviors.map((n) => [n.toLowerCase(), n] as const));
   const seenTopographyNames = new Set<string>();
-  const topographies: { name: string; topography: string }[] = [];
+  const topographies: { name: string; topography: string; functions?: ClinicalFunction[] }[] = [];
+  const functionsByBehaviorLower = new Map<string, ClinicalFunction[] | null>();
+
   for (const t of extracted.maladaptiveBehaviorTopographies) {
     const rawName = (t.name ?? "").trim();
     const desc = (t.topography ?? "").trim();
-    if (!rawName || !desc) continue;
     const aligned = behaviorByLower.get(rawName.toLowerCase()) ?? rawName;
     const key = aligned.toLowerCase();
+    if (t.functions !== undefined) {
+      const fns = sanitizeClinicalFunctionsInput(t.functions) ?? [];
+      functionsByBehaviorLower.set(key, fns);
+    }
+    if (!rawName || !desc) continue;
     if (seenTopographyNames.has(key)) continue;
     seenTopographyNames.add(key);
-    topographies.push({ name: aligned, topography: desc });
+    const row: { name: string; topography: string; functions?: ClinicalFunction[] } = {
+      name: aligned,
+      topography: desc,
+    };
+    if (functionsByBehaviorLower.has(key)) {
+      row.functions = functionsByBehaviorLower.get(key) ?? [];
+    }
+    topographies.push(row);
   }
+
+  const preferenceFunctionMap = extractBehaviorFunctionsFromPreferenceAssessment(rawText);
 
   // Deterministic fallback: large BIPs (e.g. 100+ pages) routinely cause the LLM to drop entries from
   // `maladaptiveBehaviorTopographies` even when each behavior section spells out a clear "Description:".
@@ -258,7 +285,52 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
     const found = extractTopographyFromBipText(rawText, behaviorName);
     if (found) {
       seenTopographyNames.add(key);
-      topographies.push({ name: behaviorName, topography: found });
+      const row: { name: string; topography: string; functions?: ClinicalFunction[] } = {
+        name: behaviorName,
+        topography: found,
+      };
+      if (functionsByBehaviorLower.has(key)) {
+        row.functions = functionsByBehaviorLower.get(key) ?? [];
+      }
+      topographies.push(row);
+    }
+  }
+
+  // Resolve behavior functions: Preference Assessment first, then per-behavior Hypothesized function in BIP.
+  for (const behaviorName of dedupedBehaviors) {
+    const key = behaviorName.toLowerCase();
+    if (functionsByBehaviorLower.has(key)) continue;
+    const resolved = resolveBehaviorFunctionsForName(
+      behaviorName,
+      preferenceFunctionMap,
+      rawText,
+    );
+    if (resolved === null) continue;
+    functionsByBehaviorLower.set(key, resolved);
+  }
+
+  // Ensure every imported behavior has a topography row when we only have function data.
+  for (const behaviorName of dedupedBehaviors) {
+    const key = behaviorName.toLowerCase();
+    if (!functionsByBehaviorLower.has(key)) continue;
+    const existing = topographies.find((t) => t.name.toLowerCase() === key);
+    if (existing) {
+      existing.functions = functionsByBehaviorLower.get(key) ?? [];
+      continue;
+    }
+    topographies.push({
+      name: behaviorName,
+      topography: extractTopographyFromBipText(rawText, behaviorName) ?? "",
+      functions: functionsByBehaviorLower.get(key) ?? [],
+    });
+  }
+
+  // Attach functions to rows that already exist without them.
+  for (const row of topographies) {
+    const key = row.name.toLowerCase();
+    if (row.functions !== undefined) continue;
+    if (functionsByBehaviorLower.has(key)) {
+      row.functions = functionsByBehaviorLower.get(key) ?? [];
     }
   }
 

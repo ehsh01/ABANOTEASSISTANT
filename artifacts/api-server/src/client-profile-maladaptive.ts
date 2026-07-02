@@ -1,11 +1,13 @@
 import type {
   ClientProfileRow,
+  ClinicalFunction,
   MaladaptiveBehaviorProfileEntry,
 } from "@workspace/db/schema";
 import {
   canonicalMaladaptiveBehaviorLabel,
   maladaptiveBehaviorLabelsEquivalent,
 } from "./note-validation";
+import { sanitizeClinicalFunctionsInput } from "./clinical-behavior-function";
 
 const MAX_TOPOGRAPHY_CHARS = 16_000;
 
@@ -44,7 +46,12 @@ export function sanitizeMaladaptiveBehaviorTargetsInput(
     const topoRaw = (item as { topography?: unknown }).topography;
     const topography =
       topoRaw === null || topoRaw === undefined ? null : clampTopography(String(topoRaw));
-    out.push({ name, topography });
+    const functions = sanitizeClinicalFunctionsInput((item as { functions?: unknown }).functions);
+    out.push({
+      name,
+      topography,
+      ...(functions !== undefined ? { functions } : {}),
+    });
   }
   return out;
 }
@@ -56,6 +63,8 @@ export function orderTargetsToBehaviors(
 ): MaladaptiveBehaviorProfileEntry[] {
   const map = new Map<string, string | null>();
   const mapByLower = new Map<string, string | null>();
+  const fnMap = new Map<string, ClinicalFunction[] | null>();
+  const fnMapByLower = new Map<string, ClinicalFunction[] | null>();
   for (const t of patchTargets) {
     const k = t.name.trim();
     if (!k) continue;
@@ -63,12 +72,22 @@ export function orderTargetsToBehaviors(
     if (!map.has(k)) map.set(k, v);
     const kl = k.toLowerCase();
     if (!mapByLower.has(kl)) mapByLower.set(kl, v);
+    if (t.functions !== undefined) {
+      if (!fnMap.has(k)) fnMap.set(k, t.functions ?? null);
+      if (!fnMapByLower.has(kl)) fnMapByLower.set(kl, t.functions ?? null);
+    }
   }
   return behaviors.map((name) => {
     const t = name.trim();
+    const tl = t.toLowerCase();
+    const functions =
+      fnMap.get(t) ??
+      fnMapByLower.get(tl) ??
+      (fnMap.size > 0 || fnMapByLower.size > 0 ? null : undefined);
     return {
       name: t,
-      topography: map.get(t) ?? mapByLower.get(t.toLowerCase()) ?? null,
+      topography: map.get(t) ?? mapByLower.get(tl) ?? null,
+      ...(functions !== undefined ? { functions } : {}),
     };
   });
 }
@@ -104,7 +123,7 @@ export function expandMaladaptiveTargetsFromProfile(
   if (coerced.length > 0) {
     return orderTargetsToBehaviors(behaviors, coerced);
   }
-  return behaviors.map((name) => ({ name: name.trim(), topography: null }));
+  return behaviors.map((name) => ({ name: name.trim(), topography: null, functions: null }));
 }
 
 /**
@@ -156,7 +175,11 @@ export function maladaptiveBehaviorTargetsForNoteCatalog(
     for (const t of expandMaladaptiveTargetsFromProfile(profile)) {
       const key = canonicalMaladaptiveBehaviorLabel(t.name);
       if (!byCanonical.has(key)) {
-        byCanonical.set(key, { name: key, topography: t.topography ?? null });
+        byCanonical.set(key, {
+          name: key,
+          topography: t.topography ?? null,
+          functions: t.functions ?? null,
+        });
       }
     }
   }
@@ -165,6 +188,6 @@ export function maladaptiveBehaviorTargetsForNoteCatalog(
     const hit =
       byCanonical.get(canonical) ??
       [...byCanonical.values()].find((t) => maladaptiveBehaviorLabelsEquivalent(t.name, name));
-    return { name: canonical, topography: hit?.topography ?? null };
+    return { name: canonical, topography: hit?.topography ?? null, functions: hit?.functions ?? null };
   });
 }

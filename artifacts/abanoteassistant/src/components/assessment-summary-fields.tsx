@@ -1,6 +1,7 @@
 import { BookOpen, ClipboardList, Plus, X } from "lucide-react";
 import { useState } from "react";
-import type { ClientAssessmentSummary } from "@workspace/api-client-react";
+import type { ClientAssessmentSummary, MaladaptiveBehaviorProfileEntry } from "@workspace/api-client-react";
+import { formatClinicalFunctionsDisplay } from "@/lib/clinical-behavior-function-display";
 
 export type AssessmentSummaryFormState = {
   assessor: string;
@@ -198,15 +199,54 @@ function SummaryTextArea({
   );
 }
 
+function MaladaptiveBehaviorFunctionsBlock({
+  behaviors,
+  compact,
+}: {
+  behaviors: MaladaptiveBehaviorProfileEntry[];
+  compact?: boolean;
+}) {
+  if (behaviors.length === 0) return null;
+  return (
+    <div className="space-y-3">
+      <h3 className="text-xs font-semibold uppercase tracking-widest text-[#877870]">
+        Maladaptive behavior functions
+      </h3>
+      <p className="text-xs text-[#877870] leading-relaxed">
+        {compact
+          ? "Imported from the assessment Preference Assessment / Hypothesized function sections."
+          : "Maintaining functions imported from the assessment for each maladaptive behavior."}
+      </p>
+      <ul className="space-y-3">
+        {behaviors.map((entry) => (
+          <li
+            key={entry.name}
+            className="rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] px-4 py-3 space-y-1"
+          >
+            <p className="text-sm font-semibold text-[#2D2523]">{entry.name}</p>
+            <p className="text-xs text-[#877870]">
+              <span className="font-medium text-[#877870]/90">Function: </span>
+              {formatClinicalFunctionsDisplay(entry.functions)}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function AssessmentSummaryFields({
   value,
   onChange,
   compact,
+  maladaptiveBehaviorTargets,
 }: {
   value: AssessmentSummaryFormState;
   onChange: (next: AssessmentSummaryFormState) => void;
   /** When true, hide the section intro (edit section mode). */
   compact?: boolean;
+  /** Per-behavior FBA functions from the imported assessment (read-only display). */
+  maladaptiveBehaviorTargets?: MaladaptiveBehaviorProfileEntry[];
 }) {
   const patch = (partial: Partial<AssessmentSummaryFormState>) => onChange({ ...value, ...partial });
 
@@ -329,11 +369,21 @@ export function AssessmentSummaryFields({
         onChange={(supervisorRequirements) => patch({ supervisorRequirements })}
         rows={4}
       />
+
+      {maladaptiveBehaviorTargets && maladaptiveBehaviorTargets.length > 0 ? (
+        <MaladaptiveBehaviorFunctionsBlock behaviors={maladaptiveBehaviorTargets} compact={compact} />
+      ) : null}
     </div>
   );
 }
 
-export function AssessmentSummaryReadOnly({ summary }: { summary: ClientAssessmentSummary }) {
+export function AssessmentSummaryReadOnly({
+  summary,
+  maladaptiveBehaviorTargets,
+}: {
+  summary: ClientAssessmentSummary;
+  maladaptiveBehaviorTargets?: MaladaptiveBehaviorProfileEntry[];
+}) {
   const list = (title: string, items?: string[]) =>
     items && items.length > 0 ? (
       <div className="space-y-2">
@@ -389,6 +439,9 @@ export function AssessmentSummaryReadOnly({ summary }: { summary: ClientAssessme
       {prose("Crisis protocol", summary.crisisProtocol)}
       {list("Parent training goals", summary.parentTrainingGoals)}
       {prose("Supervisor requirements", summary.supervisorRequirements)}
+      {maladaptiveBehaviorTargets && maladaptiveBehaviorTargets.length > 0 ? (
+        <MaladaptiveBehaviorFunctionsBlock behaviors={maladaptiveBehaviorTargets} />
+      ) : null}
     </div>
   );
 }
