@@ -110,6 +110,8 @@ export type NoteGenerationContext = {
    * (from assessment \`behavior_to_replacements_map\` when present). Empty when acquisition-only or no behavior.
    */
   behaviorReplacementCandidatesForHour: string[][];
+  /** BIP behavior → replacement map from structured assessment (compliance validation). */
+  behaviorToReplacementsMap?: Record<string, string[]> | undefined;
 };
 
 const SYSTEM_PROMPT = `You write ABA session note clinical narratives for RBT documentation.
@@ -136,7 +138,7 @@ PROFILE MALADAPTIVE TOPOGRAPHIES (JSON \`maladaptiveBehaviorTargets\` — when e
 BEHAVIOR FUNCTION (JSON \`maladaptiveBehaviorTargets.functions\` and \`maladaptiveBehaviorFunctionsForHour\` — mandatory when present):
 - Each \`maladaptiveBehaviorTargets\` entry may include \`functions\`: an array of tokens \`attention\`, \`escape\`, \`tangible\`, and/or \`automatic\` imported from this client's assessment (Preference Assessment / Hypothesized function). These are the **documented maintaining functions** — **never** invent, guess, or add function labels not in that array.
 - JSON \`maladaptiveBehaviorFunctionsForHour[s]\` mirrors the functions for \`maladaptiveBehaviorForHour[s]\` on segment \`s\` (\`null\` = not specified in assessment; non-empty array = documented functions for that client).
-- When \`maladaptiveBehaviorFunctionsForHour[s]\` is a **non-empty** array and \`acquisitionOnlySegmentForHour[s]\` is false: the catalog intervention naming sentence(s) for that segment must document intervention(s) from JSON \`interventions\` that are clinically appropriate for **that documented function** (e.g. escape-maintained → Escape Extinction / Demand Fading when listed; attention-maintained → DRA / attention-based consequences when listed; tangible-maintained → tangible/access procedures when listed; automatic/sensory → sensory-appropriate interventions when listed). Prefer interventions mapped to that function in the assessment when the excerpt supports the match.
+- When \`maladaptiveBehaviorFunctionsForHour[s]\` is a **non-empty** array and \`acquisitionOnlySegmentForHour[s]\` is false: the catalog intervention naming sentence(s) for that segment must document intervention(s) from JSON \`interventions\` that are clinically appropriate for **that documented function** (e.g. escape-maintained → Escape Extinction / Demand Fading when listed; attention-maintained → DRA / attention-based consequences when listed; tangible-maintained → tangible/access procedures when listed; automatic/sensory → sensory-appropriate interventions when listed). Prefer interventions mapped to that function in the assessment when the excerpt supports the match. The assigned \`replacementProgramForHour[s]\` and teaching prose must also match that function per **REPLACEMENT PROGRAM — FUNCTION MATCH** (never use safety leave-area programs for aggression/SIB/property destruction; never use tangible programs for escape behaviors).
 - When \`maladaptiveBehaviorFunctionsForHour[s]\` is \`null\` or an **empty** array: do **not** add function-based framing or infer maintaining function; follow existing intervention rules without attributing escape, attention, tangible, or sensory/automatic function.
 
 NARRATIVE SEGMENTS (billing hours vs. ABC paragraph count — mandatory):
@@ -275,14 +277,21 @@ REINFORCEMENT CONTINGENCY (mandatory for maladaptive behavior segments):
 - **Right:** … withheld access to the musical toy during elopement and blocked movement toward the hallway. Following this intervention, when the client stopped at the doorway and maintained proximity within arm's reach, the RBT delivered brief praise.
 - **Wrong:** … delivered verbal praise and brief access to the musical toy when the client moved back toward the activity area and oriented to the RBT.
 
-REPLACEMENT PROGRAM — FUNCTION MATCH (guidance):
-- The server already assigns \`replacementProgramForHour[s]\` from each client's authorized replacement list and rotates by ~90-minute slots—**use that exact string verbatim**. Treat the assigned program as authoritative; do **not** override it.
-- JSON \`behaviorReplacementCandidatesForHour[s]\` lists BIP-aligned replacement programs for \`maladaptiveBehaviorForHour[s]\` when the assessment maps behaviors to programs. The server assigns one of these when possible; your prose should **fit the assigned program's function** naturally.
-- Typical function-aligned defaults the assignment respects (so the prose you generate fits the function naturally):
-  - **Verbal Aggression**, **Inappropriate Language** → Functional Communication Training (FCT), Request help, Accepting No, Following Non-preferred instructions—not transition-wait programs unless that is the assigned \`replacementProgramForHour[s]\`.
-  - **Tantrum**, **Property Destruction**, **Self-Injurious Behavior (SIB)**, **Physical Aggression** → Delays of Reinforcers, Accept alternatives when being redirected to more appropriate behavior, Following Non-preferred instructions, Functional Communication Training (FCT), Request help—not proximity/elopement safety programs such as Walk within close distance of adult unless the assessment explicitly maps that program to the behavior.
-  - **Off-Task / Inattention**, **Off-Task Behavior**, **Inattention** → On task Behavior, time on task, eye contact, attending/engagement programs, Following Non-preferred instructions—not safety stop/wait compliance programs such as Respond to safety instructions unless that exact string is the assigned \`replacementProgramForHour[s]\`.
-  - **Wandering Away**, **Climbing**, **Elopement**, **Bolting**, **Running Away** → Functional Communication Training (FCT), Accepting No, Compliance with visual schedule, Following Non-preferred instructions, Walk within close distance of adult (safety skills)—not generic on-task engagement unless that is the assigned string.
+REPLACEMENT PROGRAM — FUNCTION MATCH (mandatory when assessment documents function):
+- The server assigns \`replacementProgramForHour[s]\` from each client's authorized BIP replacement list—**use that exact string verbatim**. Treat the assigned program as authoritative; do **not** override it.
+- JSON \`maladaptiveBehaviorFunctionsForHour[s]\` lists documented FBA functions (escape, tangible, attention, automatic) for \`maladaptiveBehaviorForHour[s]\`. When **non-empty**, replacement teaching prose must align with that function—not topography convenience.
+- JSON \`behaviorReplacementCandidatesForHour[s]\` lists BIP-aligned, function-filtered candidates for that segment; the server assigns from these when possible.
+- **Function priority** when multiple functions are documented: escape → tangible → attention.
+- **Escape-maintained** (task refusal, aggression/SIB during demands/transitions): Request for Break, Follow Instructions, Compliance Training, Remaining seated completing task, Time on task, Schedule of activities, Following Non-preferred instructions, On task Behavior.
+- **Tangible-maintained** (aggression/grabbing/destruction for item access): Request for Tangible, Accept "No" as response, Sharing and take turns with others, Accepting alternatives and making choices.
+- **Attention-maintained** (SIB/aggression for reaction or social response): Express and accept opinion/agreement/disagreement, Sharing and take turns, Accepting alternatives and making choices, Functional Communication Training (FCT).
+- **Safety navigation only** — Request permission to leave the unsupervised area: **only** for elopement, wandering, bolting, running away, climbing. **Never** for physical aggression, property destruction, SIB, or task refusal.
+- When \`maladaptiveBehaviorFunctionsForHour[s]\` is \`null\` or **empty**: do not infer function; follow topography heuristics below without attributing escape/tangible/attention unless the assessment documents it.
+- Topography heuristics when function is not specified (server assignment also uses these):
+  - **Verbal Aggression**, **Inappropriate Language** → FCT, Request help, Accepting No, Following Non-preferred instructions—not transition-wait unless assigned.
+  - **Tantrum**, **Property Destruction**, **Self-Injurious Behavior (SIB)**, **Physical Aggression** → Delays of Reinforcers, Accept alternatives, Following Non-preferred instructions, FCT, Request help—not proximity/elopement safety unless BIP maps them.
+  - **Off-Task / Inattention** → On task Behavior, time on task, eye contact, attending—not safety stop/wait unless assigned.
+  - **Wandering Away**, **Climbing**, **Elopement**, **Bolting**, **Running Away** → FCT, Accepting No, compliance with visual schedule, Walk within close distance of adult when on BIP—not generic on-task unless assigned.
 - Skill-acquisition programs (**Pre-requisite Skills**, **Manding Skills**, **Echoic Skills**, **Improve eye contact**, **Attract others' attention**, **Imitate other actions**, **Response to her name** / **Respond to Own Name**, **Request access to item activity PECS or pointing after being prompted once**, **Transition Compatible with ABLLS-R Code N4**) are **never** replacements for a maladaptive behavior—those segments arrive with \`acquisitionOnlySegmentForHour[s]\` set to **true** and must follow **SKILL-ACQUISITION-ONLY SEGMENTS** (no maladaptive label, no "manifested [behavior]" framing, observable teaching only).
 
 NO INVENTED REPLACEMENT PROGRAM LABELS (mandatory):
@@ -381,6 +390,8 @@ function toComplianceCtx(ctx: NoteGenerationContext): NoteComplianceContext {
     clientAgeYears: ctx.clientAgeYears,
     presentPeople: ctx.presentPeople,
     acquisitionOnlySegmentForHour: ctx.acquisitionOnlySegmentForHour,
+    maladaptiveBehaviorFunctionsForHour: ctx.maladaptiveBehaviorFunctionsForHour,
+    behaviorToReplacementsMap: ctx.behaviorToReplacementsMap,
   };
 }
 

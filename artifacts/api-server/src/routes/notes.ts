@@ -666,6 +666,11 @@ router.post("/notes/generate", async (req, res) => {
     canonicalMaladaptiveBehaviorLabel,
   );
   const activityAntecedentForHour = abcResolved.activityAntecedentForHour;
+  const maladaptiveBehaviorFunctionsHourly = maladaptiveBehaviorFunctionsForHourLabels(
+    maladaptiveBehaviorForHour,
+    maladaptiveBehaviorTargetsForNote,
+    maladaptiveBehaviorLabelsEquivalent,
+  );
 
   const linkedIdsUnique = [...new Set(allowedProgramRows.map((r) => r.id))].sort((a, b) => a - b);
   const idToNameForPrograms = allowedIdToName.size > 0 ? allowedIdToName : nameById;
@@ -714,6 +719,7 @@ router.post("/notes/generate", async (req, res) => {
     selectedIdSet,
     behaviorToReplacementsMap,
     authorizedProgramNames: replacementProgramsCatalogForNote,
+    maladaptiveBehaviorFunctionsForHour: maladaptiveBehaviorFunctionsHourly,
   });
 
   const therapistTrialSummaryHourly = buildTherapistTrialSummaryForReplacementHour({
@@ -836,19 +842,20 @@ router.post("/notes/generate", async (req, res) => {
   }
   warnings.push(...behaviorRebalanceSwaps);
 
+  const maladaptiveBehaviorFunctionsForHour = maladaptiveBehaviorFunctionsForHourLabels(
+    maladaptiveBehaviorForNarrative,
+    maladaptiveBehaviorTargetsForNote,
+    maladaptiveBehaviorLabelsEquivalent,
+  );
+
   const behaviorReplacementCandidatesForHour = buildBehaviorReplacementCandidatesForNarrativeSegments({
     narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
     maladaptiveBehaviorForHour: maladaptiveBehaviorForNarrative,
     acquisitionOnlySegmentForHour,
     behaviorToReplacementsMap,
     authorizedProgramNames: replacementProgramsCatalogForNote,
+    maladaptiveBehaviorFunctionsForHour,
   });
-
-  const maladaptiveBehaviorFunctionsForHour = maladaptiveBehaviorFunctionsForHourLabels(
-    maladaptiveBehaviorForNarrative,
-    maladaptiveBehaviorTargetsForNote,
-    maladaptiveBehaviorLabelsEquivalent,
-  );
 
   const oaCtx: NoteGenerationContext = {
     /** Deliberately not the profile name — session notes must not contain personal names. */
@@ -880,6 +887,7 @@ router.post("/notes/generate", async (req, res) => {
     therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
     behaviorReplacementCandidatesForHour,
     maladaptiveBehaviorFunctionsForHour,
+    behaviorToReplacementsMap,
   };
 
   let clinicalBody: string;
@@ -902,7 +910,11 @@ router.post("/notes/generate", async (req, res) => {
     return;
   }
 
-  for (const issue of validateClinicalBodyCompliance(clinicalBody, complianceCtxBase)) {
+  for (const issue of validateClinicalBodyCompliance(clinicalBody, {
+    ...complianceCtxBase,
+    maladaptiveBehaviorFunctionsForHour,
+    behaviorToReplacementsMap,
+  })) {
     warnings.push(`Clinical body compliance check: ${issue}`);
   }
 

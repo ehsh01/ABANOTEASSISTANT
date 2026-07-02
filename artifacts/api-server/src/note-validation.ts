@@ -1,7 +1,11 @@
-/**
- * Post-generation compliance checks for session note clinical bodies and full notes.
- * Complements prompt rules in openai-notes.ts; does not replace clinical judgment by the RBT.
- */
+import {
+  functionBasedReplacementPredicates,
+  isElopementSafetyNavigationBehavior,
+  isFunctionMisfitReplacement,
+  isSafetyLeaveAreaReplacementProgram,
+  primaryFunctionForReplacementSelection,
+  replacementProgramMatchesFunctionCategory,
+} from "./behavior-function-replacement-mapping";
 
 export type NoteComplianceContext = {
   /** Billable session duration from the wizard (integer hours). */
@@ -43,6 +47,10 @@ export type NoteComplianceContext = {
    * do not cite a maladaptive catalog label; `maladaptiveBehaviorForHour[i]` is cleared for validators/prompts.
    */
   acquisitionOnlySegmentForHour?: boolean[] | undefined;
+  /** Per narrative segment: documented FBA functions for `maladaptiveBehaviorForHour[s]` (from assessment). */
+  maladaptiveBehaviorFunctionsForHour?: (import("@workspace/db/schema").ClinicalFunction[] | null)[] | undefined;
+  /** BIP behavior → replacement program map from structured assessment (for function-match validation). */
+  behaviorToReplacementsMap?: Record<string, string[]> | undefined;
   /** BIP intervention names (exact strings) — used for intervention catalog validation */
   interventions: string[];
   /**
@@ -969,20 +977,42 @@ export function behaviorReplacementCandidatesForMaladaptiveBehavior(
   behaviorName: string,
   behaviorToReplacementsMap: Record<string, string[]>,
   authorizedProgramNames: string[],
+  behaviorFunctions?: import("@workspace/db/schema").ClinicalFunction[] | null,
 ): string[] {
   const authorized = [...new Set(authorizedProgramNames.map((s) => s.trim()).filter((s) => s.length > 0))];
+  const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
   const mapped = mappedReplacementsForBehaviorKey(behaviorName, behaviorToReplacementsMap);
-  const mappedViable = mapped.filter(
-    (p) => authorized.includes(p) && !isHardMisfitReplacementForMaladaptiveBehavior(behaviorName, p),
+  let mappedViable = mapped.filter(
+    (p) =>
+      authorized.includes(p) &&
+      !isHardMisfitReplacementForMaladaptiveBehavior(behaviorName, p, behaviorFunctions),
   );
-  if (mappedViable.length > 0) {
+  if (primary) {
+    const functionMatched = mappedViable.filter((p) =>
+      replacementProgramMatchesFunctionCategory(p, primary),
+    );
+    if (functionMatched.length > 0) {
+      return functionMatched;
+    }
+    mappedViable = [];
+  } else if (mappedViable.length > 0) {
     return mappedViable;
   }
-  const preds = preferencePredicatesForBehaviorPattern(behaviorName);
+  const preds: ((n: string) => boolean)[] = [];
+  if (primary) {
+    preds.push(...functionBasedReplacementPredicates(primary));
+  }
+  preds.push(...preferencePredicatesForBehaviorPattern(behaviorName));
   const ordered: string[] = [];
   for (const pred of preds) {
     for (const p of authorized) {
-      if (pred(p) && !ordered.includes(p)) ordered.push(p);
+      if (
+        pred(p) &&
+        !isHardMisfitReplacementForMaladaptiveBehavior(behaviorName, p, behaviorFunctions) &&
+        !ordered.includes(p)
+      ) {
+        ordered.push(p);
+      }
     }
   }
   return ordered;
@@ -991,10 +1021,18 @@ export function behaviorReplacementCandidatesForMaladaptiveBehavior(
 /**
  * Definitive function mismatches that override an incorrect BIP behavior→replacement map.
  */
-function isHardMisfitReplacementForMaladaptiveBehavior(behaviorName: string, replacementProgramName: string): boolean {
+function isHardMisfitReplacementForMaladaptiveBehavior(
+  behaviorName: string,
+  replacementProgramName: string,
+  behaviorFunctions?: import("@workspace/db/schema").ClinicalFunction[] | null,
+): boolean {
   const behavior = behaviorName.trim();
   const program = replacementProgramName.trim();
   if (!behavior || !program) return false;
+
+  if (isFunctionMisfitReplacement(behavior, program, behaviorFunctions)) {
+    return true;
+  }
 
   if (isOffTaskInattentionMaladaptiveBehavior(behavior) && isSafetyStopWaitReplacementProgramName(program)) {
     return true;
@@ -1002,6 +1040,12 @@ function isHardMisfitReplacementForMaladaptiveBehavior(behaviorName: string, rep
   if (
     isOffTaskInattentionMaladaptiveBehavior(behavior) &&
     /walk within close|close distance|safety skills?/i.test(program)
+  ) {
+    return true;
+  }
+  if (
+    isSafetyLeaveAreaReplacementProgram(program) &&
+    !isElopementSafetyNavigationBehavior(behavior)
   ) {
     return true;
   }
@@ -1015,19 +1059,37 @@ export function isMisfitReplacementForMaladaptiveBehavior(
   behaviorName: string,
   replacementProgramName: string,
   behaviorToReplacementsMap: Record<string, string[]>,
+  behaviorFunctions?: import("@workspace/db/schema").ClinicalFunction[] | null,
 ): boolean {
   const behavior = behaviorName.trim();
   const program = replacementProgramName.trim();
   if (!behavior || !program) return false;
 
-  if (isHardMisfitReplacementForMaladaptiveBehavior(behavior, program)) {
+  if (isHardMisfitReplacementForMaladaptiveBehavior(behavior, program, behaviorFunctions)) {
     return true;
   }
 
   const mapped = mappedReplacementsForBehaviorKey(behavior, behaviorToReplacementsMap);
-  const mappedViable = mapped.filter((p) => !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p));
+  let mappedViable = mapped.filter(
+    (p) => !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p, behaviorFunctions),
+  );
+  const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
+  if (primary) {
+    mappedViable = mappedViable.filter((p) => replacementProgramMatchesFunctionCategory(p, primary));
+  }
   if (mappedViable.length > 0) {
     return !mappedViable.includes(program);
+  }
+
+  if (primary && !replacementProgramMatchesFunctionCategory(program, primary)) {
+    const hasFunctionMatch = Object.values(behaviorToReplacementsMap)
+      .flat()
+      .some((p) => replacementProgramMatchesFunctionCategory(p, primary));
+    if (!hasFunctionMatch) {
+      // No BIP map guidance — still flag if authorized list has function-aligned options and this isn't one
+      return isFunctionMisfitReplacement(behavior, program, behaviorFunctions);
+    }
+    return true;
   }
 
   const b = behavior.toLowerCase();
@@ -1062,6 +1124,7 @@ export function buildBehaviorReplacementCandidatesForNarrativeSegments(params: {
   acquisitionOnlySegmentForHour: boolean[];
   behaviorToReplacementsMap: Record<string, string[]>;
   authorizedProgramNames: string[];
+  maladaptiveBehaviorFunctionsForHour?: (import("@workspace/db/schema").ClinicalFunction[] | null)[] | undefined;
 }): string[][] {
   const result: string[][] = [];
   for (let s = 0; s < params.narrativeSegmentCount; s++) {
@@ -1079,6 +1142,7 @@ export function buildBehaviorReplacementCandidatesForNarrativeSegments(params: {
         b,
         params.behaviorToReplacementsMap,
         params.authorizedProgramNames,
+        params.maladaptiveBehaviorFunctionsForHour?.[s],
       ),
     );
   }
@@ -1104,6 +1168,7 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
   selectedIdSet: Set<number>;
   behaviorToReplacementsMap: Record<string, string[]>;
   authorizedProgramNames: string[];
+  maladaptiveBehaviorFunctionsForHour?: (import("@workspace/db/schema").ClinicalFunction[] | null)[] | undefined;
 }): string[] {
   const {
     sessionHours: H,
@@ -1117,6 +1182,7 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
     selectedIdSet,
     behaviorToReplacementsMap,
     authorizedProgramNames,
+    maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
   } = params;
 
   const swapped: string[] = [];
@@ -1127,8 +1193,14 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
     const currentName = names[h]?.trim() ?? "";
     if (!currentName) continue;
     if (typeof explicit[h] === "number") continue;
+    const hourFunctions = behaviorFunctions?.[h];
     if (
-      !isMisfitReplacementForMaladaptiveBehavior(behavior, currentName, behaviorToReplacementsMap)
+      !isMisfitReplacementForMaladaptiveBehavior(
+        behavior,
+        currentName,
+        behaviorToReplacementsMap,
+        hourFunctions,
+      )
     ) {
       continue;
     }
@@ -1137,19 +1209,22 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
       behavior,
       behaviorToReplacementsMap,
       authorizedProgramNames,
+      hourFunctions,
     );
 
     const poolCandidates = poolIds.filter((id) => {
       const n = idToName.get(id)?.trim();
       if (!n || n === currentName) return false;
-      if (isMisfitReplacementForMaladaptiveBehavior(behavior, n, behaviorToReplacementsMap)) {
+      if (isMisfitReplacementForMaladaptiveBehavior(behavior, n, behaviorToReplacementsMap, hourFunctions)) {
         return false;
       }
       if (candidates.length === 0) return true;
       if (candidates.includes(n)) return true;
       // When the BIP map only lists hard mismatches, allow heuristic-aligned pool programs.
       const mapped = mappedReplacementsForBehaviorKey(behavior, behaviorToReplacementsMap);
-      const mappedViable = mapped.filter((p) => !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p));
+      const mappedViable = mapped.filter(
+        (p) => !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p, hourFunctions),
+      );
       return mappedViable.length === 0;
     });
     if (poolCandidates.length === 0) continue;
@@ -1866,10 +1941,24 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     }
     const assignedBeh = assignedPerHour[i]?.trim() ?? "";
     const acquisitionOnly = acquisitionFlags[i] === true;
+    const behaviorToReplacementsMap = ctx.behaviorToReplacementsMap ?? {};
+    const segmentFunctions = ctx.maladaptiveBehaviorFunctionsForHour?.[i];
     if (!acquisitionOnly && assignedBeh && assignedRp) {
-      if (isMisfitReplacementForMaladaptiveBehavior(assignedBeh, assignedRp, {})) {
+      if (
+        isMisfitReplacementForMaladaptiveBehavior(
+          assignedBeh,
+          assignedRp,
+          behaviorToReplacementsMap,
+          segmentFunctions,
+        )
+      ) {
+        const primary = primaryFunctionForReplacementSelection(segmentFunctions);
+        const functionHint =
+          primary != null
+            ? ` Documented function: ${primary}. Use only BIP-approved replacement programs that match that function (escape → break/compliance/on-task; tangible → request tangible/accept no/sharing; attention → social communication/sharing; safety leave-area programs only for elopement/wandering).`
+            : " Use a BIP-aligned replacement program for that behavior's topography—not safety stop/wait or leave-area programs unless the behavior is elopement/wandering.";
         issues.push(
-          `Replacement program function: paragraph ${i + 1} pairs "${assignedBeh}" with "${assignedRp}". Use a BIP-aligned on-task or attention skill for off-task/inattention (for example On task Behavior, time on task, eye contact, or attending programs)—not safety stop/wait compliance programs. The server rebalances auto-assignment when possible; align antecedent and teaching prose to the assigned program's function.`,
+          `Replacement program function: paragraph ${i + 1} pairs "${assignedBeh}" with "${assignedRp}".${functionHint} The server rebalances auto-assignment when possible; align antecedent and teaching prose to the assigned program's function.`,
         );
       }
     }
