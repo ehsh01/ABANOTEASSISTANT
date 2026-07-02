@@ -51,6 +51,7 @@ import {
   rebalanceTaskRefusalReplacementProgramsHourly,
   rebalanceBehaviorMappedReplacementProgramsHourly,
   buildBehaviorReplacementCandidatesForNarrativeSegments,
+  buildInterventionCandidatesForNarrativeSegments,
   isSundaySessionDate,
   replacementProgramPoolForAutoAssignment,
   replacementProgramSlotCount,
@@ -856,6 +857,14 @@ router.post("/notes/generate", async (req, res) => {
     maladaptiveBehaviorFunctionsForHour,
   });
 
+  const interventionCandidatesForHour = buildInterventionCandidatesForNarrativeSegments({
+    narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
+    maladaptiveBehaviorForHour: maladaptiveBehaviorForNarrative,
+    acquisitionOnlySegmentForHour,
+    authorizedInterventions: interventionsForNote,
+    maladaptiveBehaviorFunctionsForHour,
+  });
+
   const oaCtx: NoteGenerationContext = {
     /** Deliberately not the profile name — session notes must not contain personal names. */
     clientName: "the client",
@@ -885,6 +894,7 @@ router.post("/notes/generate", async (req, res) => {
     languageMaladaptiveEpisodeForHour: narrativeCollapsed.languageMaladaptiveEpisodeForHour,
     therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
     behaviorReplacementCandidatesForHour,
+    interventionCandidatesForHour,
     maladaptiveBehaviorFunctionsForHour,
     behaviorToReplacementsMap,
   };

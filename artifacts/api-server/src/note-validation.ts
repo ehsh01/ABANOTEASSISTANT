@@ -1,4 +1,9 @@
 import {
+  functionInterventionMismatchHint,
+  isFunctionMisfitIntervention,
+  preferredInterventionCandidatesForBehaviorFunction,
+} from "./behavior-function-intervention-mapping";
+import {
   functionBasedReplacementPredicates,
   isElopementSafetyNavigationBehavior,
   isFunctionMisfitReplacement,
@@ -1150,6 +1155,37 @@ export function buildBehaviorReplacementCandidatesForNarrativeSegments(params: {
 }
 
 /**
+ * Per narrative segment: function-aligned intervention names for the assigned maladaptive behavior.
+ */
+export function buildInterventionCandidatesForNarrativeSegments(params: {
+  narrativeSegmentCount: number;
+  maladaptiveBehaviorForHour: string[];
+  acquisitionOnlySegmentForHour: boolean[];
+  authorizedInterventions: string[];
+  maladaptiveBehaviorFunctionsForHour?: (import("@workspace/db/schema").ClinicalFunction[] | null)[] | undefined;
+}): string[][] {
+  const result: string[][] = [];
+  for (let s = 0; s < params.narrativeSegmentCount; s++) {
+    if (params.acquisitionOnlySegmentForHour[s]) {
+      result.push([]);
+      continue;
+    }
+    const b = params.maladaptiveBehaviorForHour[s]?.trim() ?? "";
+    if (!b) {
+      result.push([]);
+      continue;
+    }
+    result.push(
+      preferredInterventionCandidatesForBehaviorFunction(
+        params.authorizedInterventions,
+        params.maladaptiveBehaviorFunctionsForHour?.[s],
+      ),
+    );
+  }
+  return result;
+}
+
+/**
  * Auto-assignment sometimes pairs a maladaptive behavior with a function-mismatched replacement program
  * (e.g. Verbal Aggression + Wait during Transitions, Elopement + On task Behavior). When the hour's
  * replacement was not explicitly pinned in ABC hints, swap to a BIP-mapped candidate from the pool.
@@ -2190,12 +2226,27 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     if (isSibMaladaptiveBehavior(assignedBehavior)) {
       const consequenceTail = interventionTailAfterManifestedBehavior(p);
       const firstNamed = firstInterventionMentionInText(consequenceTail, interventionList);
+      const segmentFunctions = ctx.maladaptiveBehaviorFunctionsForHour?.[i];
+      const primaryFunction = primaryFunctionForReplacementSelection(segmentFunctions);
+      const attentionInterventions =
+        primaryFunction === "attention"
+          ? preferredInterventionCandidatesForBehaviorFunction(interventionList, segmentFunctions)
+          : [];
       if (responseBlockLabel) {
         if (firstNamed !== responseBlockLabel) {
           issues.push(
             `SIB response blocking: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" but must name "${responseBlockLabel}" as the **first** catalog intervention after the manifested-behavior line—before DRA, DRI, Premack principle, Redirection, Environmental Manipulation, or any other approved intervention. Use "To address this behavior, the RBT implemented ${responseBlockLabel}." then describe blocking/protection in **Following this intervention,** and only then name any additional approved catalog intervention or replacement program.`,
           );
         }
+      } else if (
+        primaryFunction === "attention" &&
+        attentionInterventions.length > 0 &&
+        firstNamed &&
+        isFunctionMisfitIntervention(firstNamed, segmentFunctions, interventionList)
+      ) {
+        issues.push(
+          `SIB function match: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" with documented attention function but names "${firstNamed}" as the catalog intervention. ${functionInterventionMismatchHint("attention", attentionInterventions)} Do not use Environmental Manipulation alone for attention-maintained SIB when attention-matched interventions are on the approved list.`,
+        );
       } else if (
         sibEnvironmentalManipulationLabel &&
         firstNamed &&
@@ -2216,6 +2267,27 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       ) {
         issues.push(
           `SIB intervention coherence: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" with Redirection even though "${sibFunctionInterventionLabel}" is on the client's approved intervention list. Use "${sibFunctionInterventionLabel}" only after response blocking is documented (Response Block/Response Blocking when listed, otherwise Environmental Manipulation when listed). Redirection alone does not address SIB safety.`,
+        );
+      }
+    }
+    if (!acquisitionOnly && assignedBehavior) {
+      const segmentFunctions = ctx.maladaptiveBehaviorFunctionsForHour?.[i];
+      const consequenceTail = interventionTailAfterManifestedBehavior(p);
+      const firstNamedIntervention = firstInterventionMentionInText(consequenceTail, interventionList);
+      const primaryFunction = primaryFunctionForReplacementSelection(segmentFunctions);
+      if (
+        firstNamedIntervention &&
+        primaryFunction &&
+        primaryFunction !== "automatic" &&
+        !isSibMaladaptiveBehavior(assignedBehavior) &&
+        isFunctionMisfitIntervention(firstNamedIntervention, segmentFunctions, interventionList)
+      ) {
+        const candidates = preferredInterventionCandidatesForBehaviorFunction(
+          interventionList,
+          segmentFunctions,
+        );
+        issues.push(
+          `Intervention function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${firstNamedIntervention}". ${functionInterventionMismatchHint(primaryFunction, candidates)} Use one exact catalog intervention from JSON \`interventionCandidatesForHour[${i}]\` when that array is non-empty.`,
         );
       }
     }
