@@ -116,6 +116,26 @@ export function orderedAttentionFunctionInterventions(interventions: string[]): 
   return [...draDri, ...rest];
 }
 
+function escapeInterventionRank(name: string): number {
+  const n = name.trim().toLowerCase();
+  if (/escape extinction/.test(n)) return 0;
+  if (/demand fading/.test(n)) return 1;
+  if (/escape independent/.test(n)) return 2;
+  if (/premack/.test(n)) return 3;
+  if (isDraOrDriInterventionLabel(name)) return 4;
+  if (/high-?probability|behavioral momentum/.test(n)) return 5;
+  return 10;
+}
+
+function tangibleInterventionRank(name: string): number {
+  const n = name.trim().toLowerCase();
+  if (isDraOrDriInterventionLabel(name)) return 0;
+  if (/premack/.test(n)) return 1;
+  if (/token economy/.test(n)) return 2;
+  if (/tangible.*extinction|extinction.*tangible/.test(n)) return 3;
+  return 10;
+}
+
 export function preferredInterventionCandidatesForBehaviorFunction(
   interventions: string[],
   behaviorFunctions: ClinicalFunction[] | null | undefined,
@@ -125,16 +145,18 @@ export function preferredInterventionCandidatesForBehaviorFunction(
   if (!primary) return [];
   if (primary === "attention") {
     const ordered = orderedAttentionFunctionInterventions(interventions);
-    const behavior = maladaptiveBehavior?.trim() ?? "";
-    if (isSibMaladaptiveBehaviorLabel(behavior)) {
-      const draDri = ordered.filter(isDraOrDriInterventionLabel);
-      if (draDri.length > 0) {
-        return draDri;
-      }
-    }
+    const draDri = ordered.filter(isDraOrDriInterventionLabel);
+    if (draDri.length > 0) return draDri;
     return ordered;
   }
-  return functionMatchedInterventionsFromList(interventions, primary);
+  const matched = functionMatchedInterventionsFromList(interventions, primary);
+  if (primary === "escape") {
+    return [...matched].sort((a, b) => escapeInterventionRank(a) - escapeInterventionRank(b));
+  }
+  if (primary === "tangible") {
+    return [...matched].sort((a, b) => tangibleInterventionRank(a) - tangibleInterventionRank(b));
+  }
+  return matched;
 }
 
 /**
@@ -202,9 +224,9 @@ export function functionInterventionMismatchHint(
     case "attention":
       return `Documented function: attention. Environmental Manipulation alone does not target an attention-maintained contingency. For attention-maintained SIB with Response Block first, use **DRA or DRI** as the second catalog intervention when listed (for example "${sample}")—Attention independent response delivery alone does not satisfy the BIP intervention chain when DRA/DRI are available. Pair with an attention-aligned replacement program when listed.`;
     case "escape":
-      return `Documented function: escape. Prefer a demand/escape intervention from JSON interventions (for example "${sample}") rather than a generic or tangible-only strategy.`;
+      return `Documented function: escape. Prefer a demand/escape intervention from JSON interventions (for example "${sample}") with re-presentation of the task and structured follow-through in Following this intervention. Pair with a compliance/task-engagement replacement from behaviorReplacementCandidatesForHour[s].`;
     case "tangible":
-      return `Documented function: tangible. Prefer a tangible/access intervention from JSON interventions (for example "${sample}").`;
+      return `Documented function: tangible. Prefer a tangible/access intervention from JSON interventions (for example "${sample}") with withheld access during the maladaptive response. Pair with a requesting/acceptance replacement from behaviorReplacementCandidatesForHour[s].`;
     default:
       return `Documented function: ${primaryFunction}. Use an intervention from JSON interventions that matches that function (for example "${sample}").`;
   }

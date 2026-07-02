@@ -1515,6 +1515,19 @@ function interventionTailAfterManifestedBehavior(paragraph: string): string {
   return dot >= 0 ? after.slice(dot + 1) : after;
 }
 
+/** True when the manifested-behavior sentence names the catalog label without observable topography detail. */
+function manifestedBehaviorLacksObservableTopography(paragraph: string): boolean {
+  const m = /\bthe client manifested\b/i.exec(paragraph);
+  if (!m || m.index === undefined) return false;
+  const after = paragraph.slice(m.index);
+  const dot = after.indexOf(".");
+  const sentence = dot >= 0 ? after.slice(0, dot + 1) : after.slice(0, 280);
+  if (/\sby\s/i.test(sentence)) return false;
+  return !/\b(?:said|turned|pushed|pulled|hit|kicked|grabbed|struck|scratched|ran|left|moved|screamed|cried|threw|leaned|shook|swatted|headbutt|bit|spat|eloped|bolted|wandered)\b/i.test(
+    sentence,
+  );
+}
+
 function findDraOrDriInterventionLabel(interventions: string[]): string | null {
   const names = interventions.map((s) => s.trim()).filter((s) => s.length > 0);
   return (
@@ -2105,6 +2118,12 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       );
       break;
     }
+    if (!acquisitionOnly && assigned && /\bthe client manifested\b/i.test(p) && manifestedBehaviorLacksObservableTopography(p)) {
+      issues.push(
+        `Behavior topography: paragraph ${i + 1} must describe observable actions in the manifested-behavior sentence (e.g. "manifested ${assigned} by …" with specific body movements, vocalizations, or contact)—not the catalog label alone. Use maladaptiveBehaviorTopographyForHour[${i}] when provided.`,
+      );
+      break;
+    }
     if (!acquisitionOnly && assigned) {
       const abbrev = findMaladaptiveBehaviorAbbreviationIssue(p, assigned, behaviorCatalog);
       if (abbrev) {
@@ -2403,6 +2422,23 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
           issues.push(
             `Safety chain function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${responseBlockLabel}" only. ${functionInterventionAfterSafetyChainHint(primaryFunction, candidates)}`,
           );
+        } else if (primaryFunction === "attention" && candidates.some(isDraOrDriInterventionLabel)) {
+          const consequenceAfterBlock = interventionTailAfterManifestedBehavior(p);
+          const blockIdx = consequenceAfterBlock.indexOf(responseBlockLabel!);
+          const afterBlock =
+            blockIdx >= 0
+              ? consequenceAfterBlock.slice(blockIdx + responseBlockLabel!.length)
+              : consequenceAfterBlock;
+          const secondNamed = firstInterventionMentionInText(afterBlock, interventionList);
+          if (
+            secondNamed &&
+            isInsufficientAttentionInterventionAfterSibSafetyChain(secondNamed, interventionList)
+          ) {
+            const draDri = candidates.filter(isDraOrDriInterventionLabel);
+            issues.push(
+              `Attention function safety chain: paragraph ${i + 1} names "${secondNamed}" after Response Block, but DRA/DRI are on the approved list for attention-maintained "${assignedBehavior}". Use "${draDri[0] ?? "DRA/DRI"}" as the second catalog intervention naming sentence.`,
+            );
+          }
         }
       }
     }

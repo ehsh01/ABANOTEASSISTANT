@@ -67,6 +67,8 @@ export function replacementProgramMatchesFunctionCategory(
     case "attention":
       return (
         /express.*opinion|agreement.*disagreement|accept.*opinion/.test(p) ||
+        /appropriate social skills/.test(p) ||
+        /functional communication.*attention|request attention|communication to request attention/.test(p) ||
         /sharing.*take turns|take turns.*shar/.test(p) ||
         /accepting\s+alternatives/.test(p) ||
         /making\s+choices/.test(p) ||
