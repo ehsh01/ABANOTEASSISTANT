@@ -4,6 +4,11 @@ import {
   preferredInterventionCandidatesForBehaviorFunction,
 } from "./behavior-function-intervention-mapping";
 import {
+  elopementEpisodeLacksObservableTopography,
+  isElopementFamilyBehaviorLabel,
+  paragraphReflectsStoredTopography,
+} from "./maladaptive-behavior-topography";
+import {
   functionBasedReplacementPredicates,
   isElopementSafetyNavigationBehavior,
   isFunctionMisfitReplacement,
@@ -54,6 +59,8 @@ export type NoteComplianceContext = {
   acquisitionOnlySegmentForHour?: boolean[] | undefined;
   /** Per narrative segment: documented FBA functions for `maladaptiveBehaviorForHour[s]` (from assessment). */
   maladaptiveBehaviorFunctionsForHour?: (import("@workspace/db/schema").ClinicalFunction[] | null)[] | undefined;
+  /** Per narrative segment: stored BIP/profile operational topography for the assigned behavior, when set. */
+  maladaptiveBehaviorTopographyForHour?: (string | null)[] | undefined;
   /** BIP behavior → replacement program map from structured assessment (for function-match validation). */
   behaviorToReplacementsMap?: Record<string, string[]> | undefined;
   /** BIP intervention names (exact strings) — used for safety-priority response-blocking ordering */
@@ -2097,6 +2104,27 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         `Tantrum topography: paragraph ${i + 1} mentions tantrum/meltdown without enough observable detail; describe what the client did (sounds, movements, materials) consistent with the assessment behavior definitions.`,
       );
       break;
+    }
+    if (!acquisitionOnly && assigned) {
+      const storedTopography = ctx.maladaptiveBehaviorTopographyForHour?.[i]?.trim() ?? "";
+      if (
+        isElopementFamilyBehaviorLabel(assigned) &&
+        elopementEpisodeLacksObservableTopography(p, assigned)
+      ) {
+        issues.push(
+          `Elopement topography: paragraph ${i + 1} must describe observable leaving/boundary topography in the manifested-behavior sentence (e.g. ran toward exit/hallway, left the activity area without permission, moved beyond arm's reach)—not the catalog label alone. Use the client's stored BIP topography when provided in JSON maladaptiveBehaviorTopographyForHour[${i}].`,
+        );
+        break;
+      }
+      if (
+        storedTopography.length > 0 &&
+        !paragraphReflectsStoredTopography(p, storedTopography)
+      ) {
+        issues.push(
+          `Behavior topography: paragraph ${i + 1} addresses "${assigned}" but does not reflect the client's stored operational definition (${storedTopography.slice(0, 120)}${storedTopography.length > 120 ? "…" : ""}). Include observable actions from that BIP/profile topography in the manifested-behavior sentence so each ABC matches the same definition used in prior notes for this behavior.`,
+        );
+        break;
+      }
     }
   }
 

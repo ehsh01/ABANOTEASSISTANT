@@ -189,3 +189,17 @@ export function maladaptiveBehaviorFunctionsForHourLabels(
     return hit.functions;
   });
 }
+
+export function maladaptiveBehaviorTopographyForHourLabels(
+  maladaptiveBehaviorForHour: string[],
+  targets: { name: string; topography?: string | null }[],
+  labelsEquivalent: (a: string, b: string) => boolean,
+): (string | null)[] {
+  return maladaptiveBehaviorForHour.map((behaviorLabel) => {
+    const b = behaviorLabel.trim();
+    if (!b) return null;
+    const hit = targets.find((t) => labelsEquivalent(t.name, b));
+    const topo = hit?.topography?.trim();
+    return topo && topo.length > 0 ? topo : null;
+  });
+}

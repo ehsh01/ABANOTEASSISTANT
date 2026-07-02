@@ -41,7 +41,7 @@ import {
   tryConsumeDraftSlot,
 } from "../draft-quota";
 import { maladaptiveBehaviorTargetsForNoteCatalog } from "../client-profile-maladaptive";
-import { maladaptiveBehaviorFunctionsForHourLabels } from "../clinical-behavior-function";
+import { maladaptiveBehaviorFunctionsForHourLabels, maladaptiveBehaviorTopographyForHourLabels } from "../clinical-behavior-function";
 import {
   approximateAgeYearsAtSession,
   canonicalMaladaptiveBehaviorLabel,
@@ -848,6 +848,12 @@ router.post("/notes/generate", async (req, res) => {
     maladaptiveBehaviorLabelsEquivalent,
   );
 
+  const maladaptiveBehaviorTopographyForHour = maladaptiveBehaviorTopographyForHourLabels(
+    maladaptiveBehaviorForNarrative,
+    maladaptiveBehaviorTargetsForNote,
+    maladaptiveBehaviorLabelsEquivalent,
+  );
+
   const behaviorReplacementCandidatesForHour = buildBehaviorReplacementCandidatesForNarrativeSegments({
     narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
     maladaptiveBehaviorForHour: maladaptiveBehaviorForNarrative,
@@ -896,6 +902,7 @@ router.post("/notes/generate", async (req, res) => {
     behaviorReplacementCandidatesForHour,
     interventionCandidatesForHour,
     maladaptiveBehaviorFunctionsForHour,
+    maladaptiveBehaviorTopographyForHour,
     behaviorToReplacementsMap,
   };
 
@@ -922,6 +929,7 @@ router.post("/notes/generate", async (req, res) => {
   for (const issue of validateClinicalBodyCompliance(clinicalBody, {
     ...complianceCtxBase,
     maladaptiveBehaviorFunctionsForHour,
+    maladaptiveBehaviorTopographyForHour,
     behaviorToReplacementsMap,
   })) {
     warnings.push(`Clinical body compliance check: ${issue}`);

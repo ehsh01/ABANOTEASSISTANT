@@ -106,6 +106,11 @@ export type NoteGenerationContext = {
    */
   maladaptiveBehaviorFunctionsForHour: (ClinicalFunction[] | null)[];
   /**
+   * Per narrative segment \`s\`: stored BIP/profile operational topography for \`maladaptiveBehaviorForHour[s]\` (\`null\` when unset).
+   * When non-null, the manifested-behavior sentence must use that same operational definition each session.
+   */
+  maladaptiveBehaviorTopographyForHour: (string | null)[];
+  /**
    * Per narrative segment \`s\`: BIP-aligned replacement program names for \`maladaptiveBehaviorForHour[s]\`
    * (from assessment \`behavior_to_replacements_map\` when present). Empty when acquisition-only or no behavior.
    */
@@ -144,6 +149,10 @@ BEHAVIOR FUNCTION (JSON \`maladaptiveBehaviorTargets.functions\` and \`maladapti
 - JSON \`maladaptiveBehaviorFunctionsForHour[s]\` mirrors the functions for \`maladaptiveBehaviorForHour[s]\` on segment \`s\` (\`null\` = not specified in assessment; non-empty array = documented functions for that client).
 - When \`maladaptiveBehaviorFunctionsForHour[s]\` is a **non-empty** array and \`acquisitionOnlySegmentForHour[s]\` is false: the catalog intervention naming sentence(s) for that segment must document intervention(s) from JSON \`interventions\` that are clinically appropriate for **that documented function** (e.g. escape-maintained → Escape Extinction / Demand Fading when listed; **attention-maintained → Attention independent response delivery, Time-Contingent Attention Delivery, Non-Contingent Reinforcement (NCR), or DRA when listed—never Environmental Manipulation alone**; tangible-maintained → tangible/access procedures when listed; automatic/sensory → Environmental Manipulation / sensory-appropriate interventions when listed). JSON \`interventionCandidatesForHour[s]\` lists pre-filtered function-aligned intervention names for that segment when non-empty—**prefer one of those exact strings** for the catalog naming sentence. Prefer interventions mapped to that function in the assessment when the excerpt supports the match. The assigned \`replacementProgramForHour[s]\` and teaching prose must also match that function per **REPLACEMENT PROGRAM — FUNCTION MATCH** (never use safety leave-area programs for aggression/SIB/property destruction; never use tangible programs for escape behaviors). Do **not** write meta commentary such as "The behavior was identified in the BIP as attention-maintained"—apply the documented function only through intervention and replacement selection, not narrative labels about the assessment.
 - When \`maladaptiveBehaviorFunctionsForHour[s]\` is \`null\` or an **empty** array: do **not** add function-based framing or infer maintaining function; follow existing intervention rules without attributing escape, attention, tangible, or sensory/automatic function.
+
+JSON \`maladaptiveBehaviorTopographyForHour\` (per-segment stored operational definitions):
+- Array length equals \`narrativeSegmentCount\`. When \`maladaptiveBehaviorTopographyForHour[s]\` is a **non-null** string, that text is the client's **fixed BIP/profile topography** for \`maladaptiveBehaviorForHour[s]\`. Every note must describe that behavior using **the same operational definition** reviewers expect from prior ABCs for this client—not a new generic description each session.
+- In the **manifested [behavior] by …** sentence, weave in observable details from that stored topography (and from \`clientAssessmentTextExcerpt\` when present). External reviewers flag notes when the antecedent and consequence are detailed but the **behavior line** does not match the documented topography.
 
 NARRATIVE SEGMENTS (billing hours vs. ABC paragraph count — mandatory):
 - JSON \`sessionHours\` is the **billable duration** for the visit (integer clock hours the RBT documented).
@@ -211,6 +220,12 @@ OFF-TASK / INATTENTION (catalog strings such as **Off-Task / Inattention**, **Of
 TANTRUMS AND OTHER BROAD LABELS (must use assessment-linked topography):
 - When the documented maladaptive behavior is broad (e.g. tantrum, meltdown, emotional dysregulation, crying episode) OR when the narrative would otherwise only say the client "had a tantrum" / "tantrumed," you MUST spell out observable actions in the same episode: what the client did with their body, voice, and materials (e.g. fell to the floor, kicked legs, screamed with tears, threw items, pushed materials away, hit self or surfaces)—aligned with how that behavior is described or implied across the maladaptiveBehaviors strings in JSON.
 - Never end the behavior description on the label alone (e.g. avoid "manifested Tantrum" with no preceding concrete actions). The RBT must be able to see the topography in your text.
+
+ELOPEMENT / WANDERING / BOLTING / RUNNING AWAY (mandatory observable topography in the behavior line):
+- When \`maladaptiveBehaviorForHour[s]\` is **Elopement**, **Wandering**, **Bolting**, **Running Away**, or similar leaving-boundary labels: the **manifested-behavior sentence** must include **observable leaving topography**—how the client moved, how far, toward what boundary/exit, and whether permission was absent—aligned with \`maladaptiveBehaviorTopographyForHour[s]\` when non-null and with the assessment excerpt when present.
+- **Do not** document only a thin generic line (e.g. "manifested Elopement") while the antecedent and consequence paragraphs are rich; reviewers compare this ABC to the **prior operational definition** for that behavior on this client's BIP.
+- **Example shape:** During this activity, the client manifested Elopement by [observable leaving actions from stored topography—e.g. running toward the hallway/exit, leaving the designated activity area without permission, moving beyond arm's reach toward the door].
+- Use the **exact catalog label** from JSON; put topography **after** "manifested [label] by" or in the same sentence with clear observable verbs.
 
 EXCESSIVE GROSS MOTOR AND INAPPROPRIATE LANGUAGE (concrete application of **EVERY MALADAPTIVE BEHAVIOR** above when excerpt is present):
 - When \`clientAssessmentTextExcerpt\` is **non-empty** and, for segment \`s\`, \`maladaptiveBehaviorForHour[s]\` indicates **excessive gross motor** or **gross motor** dysregulation (e.g. the catalog string contains "gross motor", case-insensitive): every observable action you describe for that episode must be a **clear instance of a form defined or exemplified** in the excerpt for that same target (e.g. fidgeting, squirming, out-of-seat movement during activities that require remaining seated, running or jumping during seated demands, jumping on or off furniture during seated/leisure contexts, climbing on furniture when sitting is expected, standing without permission, inability to remain seated or still per the excerpt's operational criteria, onset/offset if specified). Do **not** substitute other motor patterns that are **not** part of that definition (e.g. stereotypic hand flapping, pacing unrelated to a seated demand, or generic "high motor" unless the excerpt explicitly includes them under this label).
@@ -397,6 +412,7 @@ function toComplianceCtx(ctx: NoteGenerationContext): NoteComplianceContext {
     presentPeople: ctx.presentPeople,
     acquisitionOnlySegmentForHour: ctx.acquisitionOnlySegmentForHour,
     maladaptiveBehaviorFunctionsForHour: ctx.maladaptiveBehaviorFunctionsForHour,
+    maladaptiveBehaviorTopographyForHour: ctx.maladaptiveBehaviorTopographyForHour,
     behaviorToReplacementsMap: ctx.behaviorToReplacementsMap,
   };
 }
