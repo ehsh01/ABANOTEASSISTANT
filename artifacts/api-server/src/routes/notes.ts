@@ -58,7 +58,6 @@ import {
   validateClinicalBodyCompliance,
   collapseHourlyNoteNarrativeToSegments,
   maladaptiveBehaviorLabelsEquivalent,
-  filterInterventionsForNoteGeneration,
   type NoteComplianceContext,
   type TherapistTrialSummaryForHourEntry,
 } from "../note-validation";
@@ -732,11 +731,11 @@ router.post("/notes/generate", async (req, res) => {
     isLanguageMaladaptiveBehaviorLabel(b),
   );
 
-  let interventionsForNote = filterInterventionsForNoteGeneration(profile?.interventions ?? []);
+  let interventionsForNote = profile?.interventions ?? [];
   if (structuredForNote) {
     interventionsForNote = intersectCatalog(
       interventionsForNote,
-      filterInterventionsForNoteGeneration(structuredForNote.interventions),
+      structuredForNote.interventions,
     );
     if (interventionsForNote.length === 0) {
       res.status(422).json({
