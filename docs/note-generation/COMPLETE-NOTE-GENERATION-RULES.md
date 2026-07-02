@@ -80,7 +80,7 @@ Must include the server-assembled performance line after the closing paragraph. 
 
 ## 21. Mandatory closing paragraph (verbatim)
 
-"Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., 'Good job,' 'Wow,' and 'Good attention to detail'), preferred toys, music, bubbles, and sensory play activities contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned."
+"Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., 'Good job,' 'Wow,' and 'Good attention to detail') and access to individualized preferred items and activities identified in the client's reinforcement system, contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned."
 
 ## 22. End-of-note sequence (exact order)
 
