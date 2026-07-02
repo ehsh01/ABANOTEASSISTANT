@@ -1,6 +1,8 @@
 import {
+  functionInterventionAfterSafetyChainHint,
   functionInterventionMismatchHint,
   isFunctionMisfitIntervention,
+  isResponseBlockInterventionLabel,
   preferredInterventionCandidatesForBehaviorFunction,
 } from "./behavior-function-intervention-mapping";
 import {
@@ -999,15 +1001,15 @@ export function behaviorReplacementCandidatesForMaladaptiveBehavior(
       authorized.includes(p) &&
       !isHardMisfitReplacementForMaladaptiveBehavior(behaviorName, p, behaviorFunctions),
   );
-  if (primary) {
-    const functionMatched = mappedViable.filter((p) =>
-      replacementProgramMatchesFunctionCategory(p, primary),
-    );
-    if (functionMatched.length > 0) {
-      return functionMatched;
+  if (mappedViable.length > 0) {
+    if (primary) {
+      const functionMatched = mappedViable.filter((p) =>
+        replacementProgramMatchesFunctionCategory(p, primary),
+      );
+      if (functionMatched.length > 0) {
+        return functionMatched;
+      }
     }
-    mappedViable = [];
-  } else if (mappedViable.length > 0) {
     return mappedViable;
   }
   const preds: ((n: string) => boolean)[] = [];
@@ -1082,17 +1084,14 @@ export function isMisfitReplacementForMaladaptiveBehavior(
   }
 
   const mapped = mappedReplacementsForBehaviorKey(behavior, behaviorToReplacementsMap);
-  let mappedViable = mapped.filter(
+  const mappedNonHard = mapped.filter(
     (p) => !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p, behaviorFunctions),
   );
-  const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
-  if (primary) {
-    mappedViable = mappedViable.filter((p) => replacementProgramMatchesFunctionCategory(p, primary));
-  }
-  if (mappedViable.length > 0) {
-    return !mappedViable.includes(program);
+  if (mappedNonHard.length > 0) {
+    return !mappedNonHard.includes(program);
   }
 
+  const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
   if (primary && !replacementProgramMatchesFunctionCategory(program, primary)) {
     const hasFunctionMatch = Object.values(behaviorToReplacementsMap)
       .flat()
@@ -1383,13 +1382,8 @@ function isPhysicalAggressionCatalogLabel(behaviorName: string): boolean {
   return /\baggression\b/i.test(behaviorName.trim());
 }
 
-/** True when the intervention label is Response Block / Response Blocking. */
-export function isResponseBlockInterventionLabel(name: string): boolean {
-  const s = name.trim();
-  if (!s) return false;
-  if (/^response block(?:ing)?$/i.test(s)) return true;
-  return /\bresponse block(?:ing)?\b/i.test(s);
-}
+/** Re-export for callers that imported from note-validation. */
+export { isResponseBlockInterventionLabel } from "./behavior-function-intervention-mapping";
 
 /**
  * Assigned maladaptive labels where, if a response-blocking intervention is on the client's intervention list,
@@ -1586,6 +1580,28 @@ function firstInterventionMentionInText(text: string, interventionNames: string[
     }
   }
   return bestName;
+}
+
+/** True when a function-aligned catalog intervention is named after response blocking in the consequence chain. */
+function hasFunctionMatchedInterventionAfterResponseBlock(
+  paragraph: string,
+  interventionList: string[],
+  responseBlockLabel: string,
+  functionCandidates: string[],
+): boolean {
+  if (functionCandidates.length === 0) return true;
+  const tail = interventionTailAfterManifestedBehavior(paragraph);
+  const blockIdx = tail.indexOf(responseBlockLabel);
+  if (blockIdx === -1) return false;
+  const afterBlock = tail.slice(blockIdx + responseBlockLabel.length);
+  const names = [...new Set(functionCandidates.map((s) => s.trim()).filter((s) => s.length > 0))].sort(
+    (a, b) => b.length - a.length,
+  );
+  for (const name of names) {
+    const re = new RegExp(`(?:implemented|applied)\\s+${escapeRegExp(name)}\\s*\\.`, "i");
+    if (re.test(afterBlock)) return true;
+  }
+  return false;
 }
 
 /** Catalog label with trailing parenthetical acronym, e.g. "... Behavior (DRI)". */
@@ -2030,7 +2046,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         const primary = primaryFunctionForReplacementSelection(segmentFunctions);
         const functionHint =
           primary != null
-            ? ` Documented function: ${primary}. Use only BIP-approved replacement programs that match that function (escape → break/compliance/on-task; tangible → request tangible/accept no/sharing; attention → social communication/sharing; safety leave-area programs only for elopement/wandering).`
+            ? ` Documented function: ${primary}. Use only replacement programs mapped to "${assignedBeh}" in the BIP (see JSON \`behaviorReplacementCandidatesForHour[${i}]\`)—not generic function-category programs unless they appear in that candidate list.`
             : " Use a BIP-aligned replacement program for that behavior's topography—not safety stop/wait or leave-area programs unless the behavior is elopement/wandering.";
         issues.push(
           `Replacement program function: paragraph ${i + 1} pairs "${assignedBeh}" with "${assignedRp}".${functionHint} The server rebalances auto-assignment when possible; align antecedent and teaching prose to the assigned program's function.`,
@@ -2303,11 +2319,17 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const consequenceTail = interventionTailAfterManifestedBehavior(p);
       const firstNamedIntervention = firstInterventionMentionInText(consequenceTail, interventionList);
       const primaryFunction = primaryFunctionForReplacementSelection(segmentFunctions);
+      const safetyChainBehavior =
+        Boolean(responseBlockLabel) &&
+        assignedBehaviorAllowsResponseBlockSafetyChain(assignedBehavior);
+      const responseBlockIsFirst =
+        safetyChainBehavior && firstNamedIntervention === responseBlockLabel;
       if (
         firstNamedIntervention &&
         primaryFunction &&
         primaryFunction !== "automatic" &&
         !isSibMaladaptiveBehavior(assignedBehavior) &&
+        !responseBlockIsFirst &&
         isFunctionMisfitIntervention(firstNamedIntervention, segmentFunctions, interventionList)
       ) {
         const candidates = preferredInterventionCandidatesForBehaviorFunction(
@@ -2318,14 +2340,48 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
           `Intervention function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${firstNamedIntervention}". ${functionInterventionMismatchHint(primaryFunction, candidates)} Use one exact catalog intervention from JSON \`interventionCandidatesForHour[${i}]\` when that array is non-empty.`,
         );
       }
+      if (
+        responseBlockIsFirst &&
+        primaryFunction &&
+        primaryFunction !== "automatic"
+      ) {
+        const candidates = preferredInterventionCandidatesForBehaviorFunction(
+          interventionList,
+          segmentFunctions,
+        );
+        if (
+          candidates.length > 0 &&
+          !hasFunctionMatchedInterventionAfterResponseBlock(
+            p,
+            interventionList,
+            responseBlockLabel!,
+            candidates,
+          )
+        ) {
+          issues.push(
+            `Safety chain function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${responseBlockLabel}" only. ${functionInterventionAfterSafetyChainHint(primaryFunction, candidates)}`,
+          );
+        }
+      }
     }
     if (
       demandEscapeInterventionLabel &&
       /physical\s+aggression/i.test(assignedBehavior) &&
       paragraphSuggestsDemandEscapePhysicalAggression(p)
     ) {
-      const firstNamed = firstInterventionMentionInText(p, interventionList);
-      if (firstNamed && firstNamed !== demandEscapeInterventionLabel) {
+      const consequenceTail = interventionTailAfterManifestedBehavior(p);
+      const firstNamed = firstInterventionMentionInText(consequenceTail, interventionList);
+      if (responseBlockLabel && firstNamed === responseBlockLabel) {
+        if (
+          !hasFunctionMatchedInterventionAfterResponseBlock(p, interventionList, responseBlockLabel, [
+            demandEscapeInterventionLabel,
+          ])
+        ) {
+          issues.push(
+            `Physical Aggression intervention coherence: paragraph ${i + 1} describes physical aggression during a demand or guided task with Response Block/Response Blocking first. Also name "${demandEscapeInterventionLabel}" in a **second** catalog intervention naming sentence after blocking is described, then describe DRA/prompting/reinforcement only as plain follow-up detail if clinically appropriate and approved.`,
+          );
+        }
+      } else if (firstNamed && firstNamed !== demandEscapeInterventionLabel) {
         issues.push(
           `Physical Aggression intervention coherence: paragraph ${i + 1} describes physical aggression during a demand or guided task and the approved intervention list includes "${demandEscapeInterventionLabel}". Use "${demandEscapeInterventionLabel}" as the exact catalog intervention naming sentence for this demand-escape episode, then describe DRA/prompting/reinforcement only as plain follow-up detail if clinically appropriate and approved.`,
         );

@@ -1,6 +1,14 @@
 import type { ClinicalFunction } from "@workspace/db/schema";
 import { primaryFunctionForReplacementSelection } from "./behavior-function-replacement-mapping";
 
+/** True when the intervention label is Response Block / Response Blocking. */
+export function isResponseBlockInterventionLabel(name: string): boolean {
+  const s = name.trim();
+  if (!s) return false;
+  if (/^response block(?:ing)?$/i.test(s)) return true;
+  return /\bresponse block(?:ing)?\b/i.test(s);
+}
+
 export function isEnvironmentalManipulationInterventionLabel(name: string): boolean {
   return /^environmental manipulation$/i.test(name.trim());
 }
@@ -27,6 +35,7 @@ export function interventionMatchesFunctionCategory(
     case "escape":
       return (
         /escape extinction/.test(n) ||
+        /escape independent/.test(n) ||
         /demand fading/.test(n) ||
         /escape\s+extinction|demand\s+fading/.test(n) ||
         /differential reinforcement of alternative|\(dra\)|\bdra\b/.test(n) ||
@@ -83,6 +92,10 @@ export function isFunctionMisfitIntervention(
   const intervention = interventionName.trim();
   if (!intervention) return false;
 
+  if (isResponseBlockInterventionLabel(intervention)) {
+    return false;
+  }
+
   const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
   if (!primary || primary === "automatic") return false;
 
@@ -98,6 +111,15 @@ export function isFunctionMisfitIntervention(
   }
 
   return !matched.includes(intervention);
+}
+
+/** Hint when response blocking is documented but no function-aligned intervention follows. */
+export function functionInterventionAfterSafetyChainHint(
+  primaryFunction: ClinicalFunction,
+  candidates: string[],
+): string {
+  const sample = candidates.slice(0, 3).join('", "');
+  return `Response Block/Response Blocking addresses safety/topography only. When documented function is ${primaryFunction}, also name a **second** catalog intervention from JSON \`interventionCandidatesForHour[s]\` (for example "${sample}") in its own naming sentence after blocking is described—never Response Block alone.`;
 }
 
 /** Human-readable hint for validation / repair prompts. */
