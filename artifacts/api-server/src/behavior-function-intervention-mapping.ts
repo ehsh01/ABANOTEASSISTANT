@@ -71,13 +71,83 @@ export function functionMatchedInterventionsFromList(
   );
 }
 
+export function isDraInterventionLabel(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return (
+    /differential reinforcement of alternative/.test(n) ||
+    /\(dra\)/.test(n) ||
+    /^dra$/.test(n)
+  );
+}
+
+export function isDriInterventionLabel(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  return (
+    /differential reinforcement of incompatible/.test(n) ||
+    /\(dri\)/.test(n) ||
+    /^dri$/.test(n)
+  );
+}
+
+export function isDraOrDriInterventionLabel(name: string): boolean {
+  return isDraInterventionLabel(name) || isDriInterventionLabel(name);
+}
+
+export function isAttentionIndependentResponseDeliveryLabel(name: string): boolean {
+  return /attention independent/.test(name.trim().toLowerCase());
+}
+
+export function isSibMaladaptiveBehaviorLabel(behaviorName: string): boolean {
+  const t = behaviorName.trim();
+  if (!t) return false;
+  return (
+    /self[- ]?injurious\s+behavior/i.test(t) ||
+    /\bSIB\b/i.test(t) ||
+    t.toLowerCase() === "sib"
+  );
+}
+
+/** DRA/DRI first when listed; passive attention schedules follow. */
+export function orderedAttentionFunctionInterventions(interventions: string[]): string[] {
+  const matched = functionMatchedInterventionsFromList(interventions, "attention");
+  const draDri = matched.filter(isDraOrDriInterventionLabel);
+  if (draDri.length === 0) return matched;
+  const rest = matched.filter((name) => !draDri.includes(name));
+  return [...draDri, ...rest];
+}
+
 export function preferredInterventionCandidatesForBehaviorFunction(
   interventions: string[],
   behaviorFunctions: ClinicalFunction[] | null | undefined,
+  maladaptiveBehavior?: string | null | undefined,
 ): string[] {
   const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
   if (!primary) return [];
+  if (primary === "attention") {
+    const ordered = orderedAttentionFunctionInterventions(interventions);
+    const behavior = maladaptiveBehavior?.trim() ?? "";
+    if (isSibMaladaptiveBehaviorLabel(behavior)) {
+      const draDri = ordered.filter(isDraOrDriInterventionLabel);
+      if (draDri.length > 0) {
+        return draDri;
+      }
+    }
+    return ordered;
+  }
   return functionMatchedInterventionsFromList(interventions, primary);
+}
+
+/**
+ * After Response Block on attention-maintained SIB, Attention independent response delivery alone
+ * is insufficient when DRA/DRI are on the approved list.
+ */
+export function isInsufficientAttentionInterventionAfterSibSafetyChain(
+  secondInterventionName: string,
+  authorizedInterventions: string[],
+): boolean {
+  const second = secondInterventionName.trim();
+  if (!second || !isAttentionIndependentResponseDeliveryLabel(second)) return false;
+  return orderedAttentionFunctionInterventions(authorizedInterventions).some(isDraOrDriInterventionLabel);
 }
 
 /**
@@ -130,7 +200,7 @@ export function functionInterventionMismatchHint(
   const sample = candidates.slice(0, 3).join('", "');
   switch (primaryFunction) {
     case "attention":
-      return `Documented function: attention. Environmental Manipulation alone does not target an attention-maintained contingency. Use a function-matched intervention from JSON interventions (for example "${sample}") and pair with an attention-aligned replacement program when listed.`;
+      return `Documented function: attention. Environmental Manipulation alone does not target an attention-maintained contingency. For attention-maintained SIB with Response Block first, use **DRA or DRI** as the second catalog intervention when listed (for example "${sample}")—Attention independent response delivery alone does not satisfy the BIP intervention chain when DRA/DRI are available. Pair with an attention-aligned replacement program when listed.`;
     case "escape":
       return `Documented function: escape. Prefer a demand/escape intervention from JSON interventions (for example "${sample}") rather than a generic or tangible-only strategy.`;
     case "tangible":

@@ -1,7 +1,9 @@
 import {
   functionInterventionAfterSafetyChainHint,
   functionInterventionMismatchHint,
+  isDraOrDriInterventionLabel,
   isFunctionMisfitIntervention,
+  isInsufficientAttentionInterventionAfterSibSafetyChain,
   isResponseBlockInterventionLabel,
   preferredInterventionCandidatesForBehaviorFunction,
 } from "./behavior-function-intervention-mapping";
@@ -1185,6 +1187,7 @@ export function buildInterventionCandidatesForNarrativeSegments(params: {
       preferredInterventionCandidatesForBehaviorFunction(
         params.authorizedInterventions,
         params.maladaptiveBehaviorFunctionsForHour?.[s],
+        b,
       ),
     );
   }
@@ -2274,13 +2277,50 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const primaryFunction = primaryFunctionForReplacementSelection(segmentFunctions);
       const attentionInterventions =
         primaryFunction === "attention"
-          ? preferredInterventionCandidatesForBehaviorFunction(interventionList, segmentFunctions)
+          ? preferredInterventionCandidatesForBehaviorFunction(
+              interventionList,
+              segmentFunctions,
+              assignedBehavior,
+            )
           : [];
       if (responseBlockLabel) {
         if (firstNamed !== responseBlockLabel) {
           issues.push(
             `SIB response blocking: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" but must name "${responseBlockLabel}" as the **first** catalog intervention after the manifested-behavior line—before DRA, DRI, Premack principle, Redirection, Environmental Manipulation, or any other approved intervention. Use "To address this behavior, the RBT implemented ${responseBlockLabel}." then describe blocking/protection in **Following this intervention,** and only then name any additional approved catalog intervention or replacement program.`,
           );
+        } else if (
+          primaryFunction === "attention" &&
+          attentionInterventions.some(isDraOrDriInterventionLabel)
+        ) {
+          const draDriCandidates = attentionInterventions.filter(isDraOrDriInterventionLabel);
+          if (
+            !hasFunctionMatchedInterventionAfterResponseBlock(
+              p,
+              interventionList,
+              responseBlockLabel,
+              draDriCandidates,
+            )
+          ) {
+            issues.push(
+              `SIB attention function: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" with documented attention function and Response Block first. Name "${draDriCandidates[0]}" (or another listed DRA/DRI label) as the **second** catalog intervention naming sentence after blocking is described—Attention independent response delivery alone does not target the attention-maintained contingency when DRA/DRI are on the approved list.`,
+            );
+          } else {
+            const consequenceAfterBlock = interventionTailAfterManifestedBehavior(p);
+            const blockIdx = consequenceAfterBlock.indexOf(responseBlockLabel);
+            const afterBlock =
+              blockIdx >= 0
+                ? consequenceAfterBlock.slice(blockIdx + responseBlockLabel.length)
+                : consequenceAfterBlock;
+            const secondNamed = firstInterventionMentionInText(afterBlock, interventionList);
+            if (
+              secondNamed &&
+              isInsufficientAttentionInterventionAfterSibSafetyChain(secondNamed, interventionList)
+            ) {
+              issues.push(
+                `SIB attention function: paragraph ${i + 1} names "${secondNamed}" after Response Block, but DRA/DRI are on the approved intervention list for attention-maintained SIB. Use "${draDriCandidates[0]}" as the second catalog intervention naming sentence to reinforce an alternative/incompatible behavior.`,
+              );
+            }
+          }
         }
       } else if (
         primaryFunction === "attention" &&
@@ -2335,6 +2375,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         const candidates = preferredInterventionCandidatesForBehaviorFunction(
           interventionList,
           segmentFunctions,
+          assignedBehavior,
         );
         issues.push(
           `Intervention function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${firstNamedIntervention}". ${functionInterventionMismatchHint(primaryFunction, candidates)} Use one exact catalog intervention from JSON \`interventionCandidatesForHour[${i}]\` when that array is non-empty.`,
@@ -2348,6 +2389,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         const candidates = preferredInterventionCandidatesForBehaviorFunction(
           interventionList,
           segmentFunctions,
+          assignedBehavior,
         );
         if (
           candidates.length > 0 &&
