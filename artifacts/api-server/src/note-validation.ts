@@ -1305,6 +1305,112 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
 }
 
 /**
+ * When the same replacement program is auto-assigned to hours with **different** maladaptive behaviors
+ * and **different** documented functions, swap to a distinct BIP-aligned candidate when available.
+ */
+export function rebalanceDistinctReplacementProgramsByFunction(params: {
+  sessionHours: number;
+  maladaptiveBehaviorForHour: string[];
+  names: string[];
+  rbtActionsOnlyOutcomeForHour: boolean[];
+  programIdForHour: (number | null)[];
+  explicitProgramIdByHour: (number | null | undefined)[];
+  poolIds: number[];
+  idToName: Map<number, string>;
+  selectedIdSet: Set<number>;
+  behaviorToReplacementsMap: Record<string, string[]>;
+  authorizedProgramNames: string[];
+  maladaptiveBehaviorFunctionsForHour?: (import("@workspace/db/schema").ClinicalFunction[] | null)[] | undefined;
+}): string[] {
+  const {
+    sessionHours: H,
+    maladaptiveBehaviorForHour: beh,
+    names,
+    rbtActionsOnlyOutcomeForHour: rbt,
+    programIdForHour: pids,
+    explicitProgramIdByHour: explicit,
+    poolIds,
+    idToName,
+    selectedIdSet,
+    behaviorToReplacementsMap,
+    authorizedProgramNames,
+    maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
+  } = params;
+
+  const swapped: string[] = [];
+
+  for (let h = 0; h < H; h++) {
+    if (typeof explicit[h] === "number") continue;
+    const behavior = beh[h]?.trim() ?? "";
+    const currentName = names[h]?.trim() ?? "";
+    if (!behavior || !currentName) continue;
+    const hourFunctions = behaviorFunctions?.[h];
+    const primary = primaryFunctionForReplacementSelection(hourFunctions);
+    if (!primary) continue;
+
+    let conflict = false;
+    for (let j = 0; j < H; j++) {
+      if (j === h) continue;
+      const otherName = names[j]?.trim() ?? "";
+      if (otherName !== currentName) continue;
+      const otherBehavior = beh[j]?.trim() ?? "";
+      if (!otherBehavior || otherBehavior === behavior) continue;
+      const otherPrimary = primaryFunctionForReplacementSelection(behaviorFunctions?.[j]);
+      if (otherPrimary && otherPrimary !== primary) {
+        conflict = true;
+        break;
+      }
+    }
+    if (!conflict) continue;
+
+    const candidates = behaviorReplacementCandidatesForMaladaptiveBehavior(
+      behavior,
+      behaviorToReplacementsMap,
+      authorizedProgramNames,
+      hourFunctions,
+    ).filter((n) => n !== currentName);
+
+    const usedNames = new Set(
+      names.map((n, idx) => (idx === h ? "" : n.trim())).filter((n) => n.length > 0),
+    );
+
+    const poolCandidates = poolIds.filter((id) => {
+      const n = idToName.get(id)?.trim();
+      if (!n || n === currentName || usedNames.has(n)) return false;
+      if (isMisfitReplacementForMaladaptiveBehavior(behavior, n, behaviorToReplacementsMap, hourFunctions)) {
+        return false;
+      }
+      if (candidates.length === 0) return true;
+      return candidates.includes(n);
+    });
+    if (poolCandidates.length === 0) continue;
+
+    let pick: number | undefined;
+    for (const prefName of candidates) {
+      if (usedNames.has(prefName)) continue;
+      const found = poolCandidates.find((id) => idToName.get(id) === prefName);
+      if (found !== undefined) {
+        pick = found;
+        break;
+      }
+    }
+    if (pick === undefined) {
+      pick = poolCandidates[0];
+    }
+
+    const newName = idToName.get(pick)!;
+    names[h] = newName;
+    pids[h] = pick;
+    rbt[h] = !selectedIdSet.has(pick);
+    swapped.push(
+      `Hour ${h + 1} (${behavior}): replacement program rebalanced from "${currentName}" to "${newName}" so unrelated behaviors/functions do not share the same replacement program.`,
+    );
+  }
+
+  return swapped;
+}
+
+/**
  * Auto-assignment sometimes pairs **Task Refusal** with **Indicate … All Done …**, which external
  * reviewers often flag when the episode is noncompliance with a **new instructional demand** (not
  * clearly "end this activity"). When that hour's replacement was **not** explicitly pinned in ABC
@@ -1526,6 +1632,17 @@ function manifestedBehaviorLacksObservableTopography(paragraph: string): boolean
   return !/\b(?:said|turned|pushed|pulled|hit|kicked|grabbed|struck|scratched|ran|left|moved|screamed|cried|threw|leaned|shook|swatted|headbutt|bit|spat|eloped|bolted|wandered)\b/i.test(
     sentence,
   );
+}
+
+function paragraphDocumentsInterventionFromList(paragraph: string, labels: string[]): boolean {
+  const names = [...new Set(labels.map((s) => s.trim()).filter((s) => s.length > 0))].sort(
+    (a, b) => b.length - a.length,
+  );
+  for (const name of names) {
+    const re = new RegExp(`(?:implemented|applied)\\s+${escapeRegExp(name)}\\s*\\.`, "i");
+    if (re.test(paragraph)) return true;
+  }
+  return false;
 }
 
 function findDraOrDriInterventionLabel(interventions: string[]): string | null {
@@ -2071,6 +2188,25 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     }
   }
 
+  for (let i = 0; i < replacementPerHour.length; i++) {
+    for (let j = i + 1; j < replacementPerHour.length; j++) {
+      const rpI = replacementPerHour[i]?.trim() ?? "";
+      const rpJ = replacementPerHour[j]?.trim() ?? "";
+      if (!rpI || rpI !== rpJ) continue;
+      if (acquisitionFlags[i] || acquisitionFlags[j]) continue;
+      const behI = assignedPerHour[i]?.trim() ?? "";
+      const behJ = assignedPerHour[j]?.trim() ?? "";
+      if (!behI || !behJ || behI === behJ) continue;
+      const fnI = primaryFunctionForReplacementSelection(ctx.maladaptiveBehaviorFunctionsForHour?.[i]);
+      const fnJ = primaryFunctionForReplacementSelection(ctx.maladaptiveBehaviorFunctionsForHour?.[j]);
+      if (fnI && fnJ && fnI !== fnJ) {
+        issues.push(
+          `Replacement program logic: paragraphs ${i + 1} (${behI}, ${fnI}) and ${j + 1} (${behJ}, ${fnJ}) share the same replacement program "${rpI}" but document different behavior functions. Use function-matched replacements from behaviorReplacementCandidatesForHour for each segment.`,
+        );
+      }
+    }
+  }
+
   const activityLockedPerHour = ctx.activityAntecedentForHour ?? [];
 
   for (let i = 0; i < paragraphs.length; i++) {
@@ -2420,7 +2556,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
           )
         ) {
           issues.push(
-            `Safety chain function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${responseBlockLabel}" only. ${functionInterventionAfterSafetyChainHint(primaryFunction, candidates)}`,
+            `Safety chain function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${responseBlockLabel}" only. Response Block is safety/support only—not primary treatment. ${functionInterventionAfterSafetyChainHint(primaryFunction, candidates)}`,
           );
         } else if (primaryFunction === "attention" && candidates.some(isDraOrDriInterventionLabel)) {
           const consequenceAfterBlock = interventionTailAfterManifestedBehavior(p);
@@ -2439,6 +2575,18 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
               `Attention function safety chain: paragraph ${i + 1} names "${secondNamed}" after Response Block, but DRA/DRI are on the approved list for attention-maintained "${assignedBehavior}". Use "${draDri[0] ?? "DRA/DRI"}" as the second catalog intervention naming sentence.`,
             );
           }
+        }
+      } else if (
+        primaryFunction === "attention" &&
+        !responseBlockIsFirst &&
+        interventionList.some(isDraOrDriInterventionLabel) &&
+        /\bthe client manifested\b/i.test(p)
+      ) {
+        const draDriLabels = interventionList.filter(isDraOrDriInterventionLabel);
+        if (!paragraphDocumentsInterventionFromList(p, draDriLabels)) {
+          issues.push(
+            `Mandatory DRA: paragraph ${i + 1} documents attention-maintained "${assignedBehavior}" but does not name DRA/DRI from JSON interventions. Include ${draDriLabels[0] ?? "DRA/DRI"} as the catalog intervention naming sentence when listed.`,
+          );
         }
       }
     }

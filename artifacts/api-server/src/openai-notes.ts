@@ -19,6 +19,7 @@ import {
 } from "./note-validation";
 import type { TherapySetting } from "@workspace/therapy-settings";
 import {
+  CORE_CORRECTION_QUALITY_CHECKLIST_PROMPT,
   FUNCTION_BASED_ABC_CORRECTION_PROMPT,
   FUNCTION_BASED_CORRECTION_REVISION_HINTS,
 } from "./behavior-function-correction";
@@ -155,6 +156,8 @@ BEHAVIOR FUNCTION (JSON \`maladaptiveBehaviorTargets.functions\` and \`maladapti
 - When \`maladaptiveBehaviorFunctionsForHour[s]\` is \`null\` or an **empty** array: do **not** add function-based framing or infer maintaining function; follow existing intervention rules without attributing escape, attention, tangible, or sensory/automatic function.
 
 ${FUNCTION_BASED_ABC_CORRECTION_PROMPT}
+
+${CORE_CORRECTION_QUALITY_CHECKLIST_PROMPT}
 
 JSON \`maladaptiveBehaviorTopographyForHour\` (per-segment stored operational definitions):
 - Array length equals \`narrativeSegmentCount\`. When \`maladaptiveBehaviorTopographyForHour[s]\` is a **non-null** string, that text is the client's **fixed BIP/profile topography** for \`maladaptiveBehaviorForHour[s]\`. Every note must describe that behavior using **the same operational definition** reviewers expect from prior ABCs for this client—not a new generic description each session.

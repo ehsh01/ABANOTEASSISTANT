@@ -50,6 +50,7 @@ import {
   replacementProgramAssignmentsForSessionHours,
   rebalanceTaskRefusalReplacementProgramsHourly,
   rebalanceBehaviorMappedReplacementProgramsHourly,
+  rebalanceDistinctReplacementProgramsByFunction,
   buildBehaviorReplacementCandidatesForNarrativeSegments,
   buildInterventionCandidatesForNarrativeSegments,
   isSundaySessionDate,
@@ -722,6 +723,21 @@ router.post("/notes/generate", async (req, res) => {
     maladaptiveBehaviorFunctionsForHour: maladaptiveBehaviorFunctionsHourly,
   });
 
+  const distinctReplacementSwaps = rebalanceDistinctReplacementProgramsByFunction({
+    sessionHours: body.sessionHours,
+    maladaptiveBehaviorForHour,
+    names: replacementProgramForHour,
+    rbtActionsOnlyOutcomeForHour,
+    programIdForHour,
+    explicitProgramIdByHour,
+    poolIds,
+    idToName: idToNameForPrograms,
+    selectedIdSet,
+    behaviorToReplacementsMap,
+    authorizedProgramNames: replacementProgramsCatalogForNote,
+    maladaptiveBehaviorFunctionsForHour: maladaptiveBehaviorFunctionsHourly,
+  });
+
   const therapistTrialSummaryHourly = buildTherapistTrialSummaryForReplacementHour({
     sessionHours: body.sessionHours,
     programIdForHour,
@@ -840,7 +856,7 @@ router.post("/notes/generate", async (req, res) => {
       "Sunday sessions require documented parental consent. Verify that a signed consent form authorizing Sunday sessions is on file for this client — otherwise the agency is in breach of the authorization requirements.",
     );
   }
-  warnings.push(...behaviorRebalanceSwaps);
+  warnings.push(...behaviorRebalanceSwaps, ...distinctReplacementSwaps);
 
   const maladaptiveBehaviorFunctionsForHour = maladaptiveBehaviorFunctionsForHourLabels(
     maladaptiveBehaviorForNarrative,

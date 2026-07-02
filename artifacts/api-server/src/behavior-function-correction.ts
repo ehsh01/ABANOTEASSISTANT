@@ -1,11 +1,51 @@
-/** Prompt section: function-based ABC correction (topography + intervention + replacement alignment). */
-export const FUNCTION_BASED_ABC_CORRECTION_PROMPT = `FUNCTION-BASED ABC CORRECTION (mandatory when maladaptiveBehaviorFunctionsForHour[s] is non-empty):
-- **Primary objective:** Each maladaptive segment must have (A) a concrete antecedent with materials/RBT actions, (B) an observable topography in the manifested-behavior line (never the catalog label alone), (C) catalog intervention(s) that match the **documented function**, and (D) replacement-program teaching that matches the same function via the assigned verbatim replacementProgramForHour[s].
-- **Attention-maintained:** Name **DRA or DRI** when listed (required as the function intervention after Response Block on safety-priority segments). In **Following this intervention,** document withholding attention during the maladaptive topography and delivering reinforcement only after appropriate engagement, communication, or hands-down/compatible behavior. Pair with a **social/communication** replacement from behaviorReplacementCandidatesForHour[s] (FCT, Functional communication to request attention, Appropriate social skills, sharing/turn-taking when BIP-mapped)—teach that skill observably in the replacement-program sentence.
-- **Escape-maintained:** Use demand/escape interventions from interventionCandidatesForHour[s] (Escape Extinction, Demand Fading, Escape independent response delivery, Premack principle, or DRA when listed). In **Following this intervention,** document re-presentation of the task, prompting, and structured follow-through. Pair with compliance/task-engagement replacements (Request for Break, Follow Instructions, Remaining seated completing the task, Following Non-preferred instructions, On task Behavior—only when BIP-mapped). Reinforce task completion or appropriate responding after withholding escape.
-- **Tangible-maintained:** Use access/contingency interventions from interventionCandidatesForHour[s] (DRA, Premack principle, token economy, tangible extinction when listed). In **Following this intervention,** document withheld preferred access during the maladaptive response and delivery only after appropriate requesting, waiting, or compatible behavior. Pair with tangible-function replacements (Request for Tangible, Accept "No", sharing/turn-taking, Accepting alternatives—only when BIP-mapped).
-- **ABC consistency:** Antecedent demand/access/social context must match why the behavior occurred; consequence must describe withholding during topography then reinforcement tied to the replacement skill—not vague return or praise during the maladaptive episode.
-- **Quality check before output:** (1) topography is specific and observable, (2) every named intervention matches documented function (Response Block is safety-only—never the sole function intervention when candidates exist), (3) replacement teaching aligns with function and BIP map, (4) tone stays objective, measurable, and audit-ready.`;
+import type { ClinicalFunction } from "@workspace/db/schema";
+import { primaryFunctionForReplacementSelection } from "./behavior-function-replacement-mapping";
 
-/** Extra revision-mode reminders when compliance repair runs. */
-export const FUNCTION_BASED_CORRECTION_REVISION_HINTS = `Apply **FUNCTION-BASED ABC CORRECTION** from the base prompt: rewrite mismatched interventions to match maladaptiveBehaviorFunctionsForHour[s]; use interventionCandidatesForHour[s] and behaviorReplacementCandidatesForHour[s]; for attention-maintained SIB/aggression with Response Block first, second intervention must be DRA/DRI when listed (not Attention independent response delivery alone); strengthen thin manifested-behavior lines with observable "manifested [label] by …" topography from maladaptiveBehaviorTopographyForHour[s] when set; align replacement-program "by …" teaching to the assigned program's function.`;
+/** Binding core correction rules — checked on every maladaptive ABC segment at generation time. */
+export const CORE_CORRECTION_RULES_PROMPT = `CORE CORRECTION RULES (every maladaptive behavior segment — mandatory):
+1. **Clear topography:** Describe what the client physically or verbally did in observable, measurable terms. The manifested-behavior line must never be the catalog label alone—use "manifested [exact label] by …" with specific actions/vocalizations from maladaptiveBehaviorTopographyForHour[s] and the assessment excerpt when available.
+2. **Function-based alignment:** Use JSON maladaptiveBehaviorFunctionsForHour[s] as the documented function when non-empty (attention, escape, tangible, automatic). When function is documented, **every** catalog intervention and the replacement-program teaching must logically match that function. Do **not** invent function labels in prose; apply function only through intervention and replacement selection.
+3. **Intervention consistency:** Response Block/Response Blocking is **safety/support only**—never the sole or primary function treatment. When Response Block is named first on a safety-priority segment, a **second** function-based catalog intervention from interventionCandidatesForHour[s] is **required** when that array is non-empty. Describe blocking in **Following this intervention,** as protective action only.
+4. **Mandatory DRA integration:** When maladaptiveBehaviorFunctionsForHour[s] includes **attention** (SIB, verbal aggression, attention-seeking topographies) and JSON interventions lists **DRA** or **DRI**, name that exact label as the function intervention (first when no Response Block; **second** naming sentence after Response Block when safety chain applies). Reinforce an alternative behavior that replaces the attention-maintained topography—not attention delivery alone when DRA/DRI are available.
+5. **Replacement program logic:** Use only the verbatim replacementProgramForHour[s] assigned for that segment. Teaching prose must match the **same function** as the maladaptive behavior. Do **not** write replacement teaching that fits a different function than documented. Prefer distinct BIP-mapped replacements per behavior when behaviorReplacementCandidatesForHour[s] lists different options—do not copy the same replacement teaching strategy across unrelated functions when the server assigned different programs.`;
+
+export const FUNCTION_BASED_MATCHING_GUIDE_PROMPT = `FUNCTION-BASED MATCHING GUIDE (when maladaptiveBehaviorFunctionsForHour[s] is non-empty):
+**ATTENTION-maintained** (e.g. SIB, verbal aggression, attention-seeking):
+- Must include: **DRA or DRI** when on JSON interventions (required function intervention).
+- **Following this intervention:** withhold attention/reaction during topography; reinforce appropriate social engagement, communication, or task engagement after compatible behavior.
+- Replacement: social/communication skill from behaviorReplacementCandidatesForHour[s] (FCT, Functional communication to request attention, Appropriate social skills, sharing/turn-taking when BIP-mapped).
+
+**ESCAPE-maintained** (e.g. task refusal, aggression during demands):
+- Must include: demand/escape intervention from interventionCandidatesForHour[s] (Escape Extinction, Demand Fading, Escape independent response delivery, Premack, DRA when listed).
+- **Following this intervention:** re-present task, prompting, structured follow-through; reinforce compliance or task completion.
+- Replacement: task/compliance skill from behaviorReplacementCandidatesForHour[s] (Request for Break, Follow Instructions, Remaining seated completing the task, Following Non-preferred instructions, On task Behavior—BIP-mapped only).
+
+**TANGIBLE-maintained** (e.g. aggression or SIB for item access):
+- Must include: access/contingency intervention from interventionCandidatesForHour[s] (DRA, Premack, token economy, tangible extinction when listed).
+- **Following this intervention:** withhold preferred access during topography; reinforce appropriate requesting, waiting, or tolerance.
+- Replacement: communication/choice skill from behaviorReplacementCandidatesForHour[s] (Request for Tangible, Accept "No", Accepting alternatives, making choices—BIP-mapped only).`;
+
+export const FUNCTION_BASED_ABC_CORRECTION_PROMPT = `${CORE_CORRECTION_RULES_PROMPT}
+
+${FUNCTION_BASED_MATCHING_GUIDE_PROMPT}
+
+- **ABC sequence:** Antecedent (materials, demand, access context) → observable client behavior/topography → consequence (safety if needed, then function intervention naming sentence(s), then **Following this intervention,** detail with withholding + reinforcement tied to replacement skill) → verbatim replacement-program sentence → quantified tail.
+- **Editing tone:** Objective, measurable, neutral—no vague wording, no internal states, no meta commentary about the BIP function.`;
+
+export const CORE_CORRECTION_QUALITY_CHECKLIST_PROMPT = `QUALITY CHECK BEFORE FINAL OUTPUT (verify every maladaptive segment):
+- Documented function identified from maladaptiveBehaviorFunctionsForHour[s] (or topography-only when empty).
+- Observable topography present in manifested-behavior line.
+- Each named intervention matches that function; Response Block is not the only function intervention when candidates exist.
+- DRA/DRI included when required for attention-maintained segments and listed on JSON interventions.
+- replacementProgramForHour[s] teaching aligns with the same function; not reused inappropriately across unrelated functions when different programs were assigned.
+- No conflicting treatment logic (withhold during topography, reinforce only after compatible behavior).
+- Professional ABA tone throughout.`;
+
+export const FUNCTION_BASED_CORRECTION_REVISION_HINTS = `Apply **CORE CORRECTION RULES** and **FUNCTION-BASED MATCHING GUIDE** from the base prompt: fix function/replacement mismatches; add DRA/DRI for attention-maintained segments when listed; keep Response Block as safety-only with a second function intervention; strengthen thin topography; align replacement teaching to assigned replacementProgramForHour[s] and documented function; run the **QUALITY CHECK BEFORE FINAL OUTPUT** mentally before returning text.`;
+
+/** Human-readable function label for validation messages. */
+export function primaryFunctionLabel(
+  functions: ClinicalFunction[] | null | undefined,
+): ClinicalFunction | null {
+  return primaryFunctionForReplacementSelection(functions);
+}
