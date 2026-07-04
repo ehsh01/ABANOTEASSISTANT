@@ -7,7 +7,10 @@ import {
   orderedAttentionFunctionInterventions,
   preferredInterventionCandidatesForBehaviorFunction,
 } from "./behavior-function-intervention-mapping";
+import { assignedBehaviorAllowsResponseBlockSafetyChain } from "./response-block-eligibility";
 import { primaryFunctionForReplacementSelection } from "./behavior-function-replacement-mapping";
+
+export { assignedBehaviorAllowsResponseBlockSafetyChain } from "./response-block-eligibility";
 
 /** Prose mention of any non-contingent reinforcement (NCR) variant. */
 const NCR_PRESENCE_RE =
@@ -33,21 +36,6 @@ export function findResponseBlockInterventionLabel(interventions: string[]): str
 }
 
 /** Assigned maladaptive labels that may use Response Block + function intervention safety chains. */
-export function assignedBehaviorAllowsResponseBlockSafetyChain(behaviorName: string): boolean {
-  const t = behaviorName.trim();
-  if (isSibMaladaptiveBehaviorLabel(t)) return true;
-  if (/\baggression\b/i.test(t)) return true;
-  const u = t.toLowerCase();
-  return (
-    /\bwandering\b/.test(u) ||
-    /\belope/.test(u) ||
-    /\bbaiting\b/.test(u) ||
-    /\bbolting\b/.test(u) ||
-    /\brunning\s+away\b/.test(u)
-  );
-}
-
-/** Text after the manifested-behavior sentence — where consequence interventions are documented. */
 export function interventionTailAfterManifestedBehavior(paragraph: string): string {
   const m = /\bthe client manifested\b/i.exec(paragraph);
   if (!m || m.index === undefined) return paragraph;

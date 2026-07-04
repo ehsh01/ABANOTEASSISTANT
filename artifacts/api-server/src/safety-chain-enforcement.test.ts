@@ -98,3 +98,19 @@ describe("attention NCR injection (attention-maintained SIB)", () => {
     expect(injected).toBe(withDra);
   });
 });
+
+describe("response block eligibility (Verbal Aggression)", () => {
+  const VERBAL_PARAGRAPH = `During table work, the RBT delivered an instruction to sort cards. During this activity, the client manifested Verbal Aggression by shouting insults at the RBT. To address this behavior, the RBT immediately implemented Response Blocking. Following this intervention, the RBT blocked further contact. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA).`;
+
+  test("does not inject a safety-chain second intervention for Verbal Aggression", () => {
+    const injected = injectMissingSafetyChainFunctionIntervention(VERBAL_PARAGRAPH, {
+      narrativeSegmentCount: 1,
+      maladaptiveBehaviorForHour: ["Verbal Aggression"],
+      acquisitionOnlySegmentForHour: [false],
+      interventions: INTERVENTIONS,
+      maladaptiveBehaviorFunctionsForHour: [["attention"]],
+      interventionCandidatesForHour: [["Differential Reinforcement of Alternative Behavior (DRA)"]],
+    });
+    expect(injected).toBe(VERBAL_PARAGRAPH);
+  });
+});

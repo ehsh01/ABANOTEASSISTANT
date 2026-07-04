@@ -185,3 +185,25 @@ describe("classifyComplianceIssues", () => {
     ).toBe(true);
   });
 });
+
+describe("response block eligibility (Verbal Aggression)", () => {
+  const VERBAL_PARAGRAPH = `During table work, the RBT delivered an instruction to sort cards. During this activity, the client manifested Verbal Aggression by shouting insults at the RBT. To address this behavior, the RBT immediately implemented Response Blocking. Following this intervention, the RBT maintained neutral attention. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA).`;
+
+  test("flags Response Block used for Verbal Aggression as critical", () => {
+    const issues = validateClinicalBodyCompliance(VERBAL_PARAGRAPH, {
+      sessionHours: 1,
+      narrativeSegmentCount: 1,
+      replacementProgramsInOrder: ["Functional Communication Training (FCT)"],
+      replacementProgramForHour: ["Functional Communication Training (FCT)"],
+      maladaptiveBehaviors: ["Verbal Aggression"],
+      maladaptiveBehaviorForHour: ["Verbal Aggression"],
+      maladaptiveBehaviorFunctionsForHour: [["attention"]],
+      interventions: INTERVENTIONS,
+      clientAgeYears: 8,
+      presentPeople: ["Mother"],
+    });
+    const { critical } = classifyComplianceIssues(issues);
+    expect(critical.some((i) => i.startsWith("Response Block prohibited:"))).toBe(true);
+    expect(isCriticalComplianceIssue("Response Block prohibited: paragraph 1 addresses Verbal Aggression")).toBe(true);
+  });
+});

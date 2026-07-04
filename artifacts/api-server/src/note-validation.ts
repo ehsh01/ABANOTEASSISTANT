@@ -17,6 +17,10 @@ import {
 } from "./behavior-function-intervention-mapping";
 import {
   assignedBehaviorAllowsResponseBlockSafetyChain,
+  isPhysicalAggressionBehaviorLabel,
+  isResponseBlockProhibitedBehavior,
+} from "./response-block-eligibility";
+import {
   findResponseBlockInterventionLabel,
   firstNamedInterventionInConsequenceTail,
   hasFunctionMatchedInterventionAfterResponseBlock,
@@ -482,9 +486,9 @@ function firstInterventionNameWithAttachedByClause(
 }
 
 
-/** Catalog label denotes physical aggression (person-directed); match is on the catalog string, not free text. */
+/** Catalog label denotes physical aggression (person-directed); excludes Verbal Aggression. */
 function isPhysicalAggressionCatalogLabel(behaviorName: string): boolean {
-  return /\baggression\b/i.test(behaviorName.trim());
+  return isPhysicalAggressionBehaviorLabel(behaviorName);
 }
 
 /** Re-export for callers that imported from note-validation. */
@@ -830,6 +834,7 @@ const CRITICAL_COMPLIANCE_ISSUE_PATTERNS: RegExp[] = [
   /^Attention function safety chain:/,
   /^Safety-priority behavior/,
   /^Physical Aggression intervention coherence:/,
+  /^Response Block prohibited:/,
   /^Mandatory DRA:/,
   /^Intervention function match:/,
   /^Therapist trial counts:/,
@@ -1211,7 +1216,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
 
     if (!safetyChainAllowed && implCount > 1) {
       issues.push(
-        `Interventions: paragraph ${i + 1} must document **one** catalog intervention for this ABC segment (one naming sentence: "… implemented [exact JSON label]." or "… applied [exact JSON label]." with a period immediately after the name, then separate sentences for detail). Pick the single best-matching entry from JSON interventions unless the segment is a safety-priority behavior with a response-blocking label on the client's list (Self-Injurious Behavior (SIB), physical aggression, wandering, elopement, baiting, bolting, running away)—then that response-blocking label must be first with additional interventions in separate naming sentences.`,
+        `Interventions: paragraph ${i + 1} must document **one** catalog intervention for this ABC segment (one naming sentence: "… implemented [exact JSON label]." or "… applied [exact JSON label]." with a period immediately after the name, then separate sentences for detail). Pick the single best-matching entry from JSON interventions unless the segment is a safety-priority behavior with a response-blocking label on the client's list (Self-Injurious Behavior (SIB), **Physical Aggression**, wandering, elopement, baiting, bolting, running away, Property Destruction when immediately preventing harm)—then that response-blocking label must be first with additional interventions in separate naming sentences. **Never** use Response Block for Verbal Aggression, Task Refusal, Inappropriate Language, screaming/yelling alone, or noncompliance without unsafe physical behavior.`,
       );
     }
     if (implCount === 0) {
@@ -1229,6 +1234,18 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const reinforcementIssue = maladaptiveReinforcementContingencyIssue(p, i);
       if (reinforcementIssue) {
         issues.push(reinforcementIssue);
+      }
+    }
+    if (
+      responseBlockLabel &&
+      assignedBehavior &&
+      isResponseBlockProhibitedBehavior(assignedBehavior)
+    ) {
+      const responseBlockLabels = interventionList.filter(isResponseBlockInterventionLabel);
+      if (paragraphDocumentsInterventionFromList(p, responseBlockLabels)) {
+        issues.push(
+          `Response Block prohibited: paragraph ${i + 1} addresses "${assignedBehavior}" but names "${responseBlockLabel}". Response Blocking is only for immediate safety-risk physical topographies (Physical Aggression, Self-Injurious Behavior (SIB), elopement/wandering/bolting, Property Destruction when immediately preventing harm)—use function-based interventions from interventionCandidatesForHour[s] instead.`,
+        );
       }
     }
     if (isSibMaladaptiveBehavior(assignedBehavior)) {
