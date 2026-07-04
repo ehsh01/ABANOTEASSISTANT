@@ -7,7 +7,8 @@ import { useGenerateSessionNote, useSaveSessionNote } from "@/hooks/use-aba-api"
 import { useT } from "@/hooks/use-translation";
 import { useToast } from "@/hooks/use-toast";
 import { translateNote } from "@/lib/translate-note";
-import { formatGenerateNoteFailure, toGenerateNoteRequest } from "@/lib/generate-note-payload";
+import { formatGenerateNoteFailure, isDraftQuotaMessage, toGenerateNoteRequest } from "@/lib/generate-note-payload";
+import { DraftQuotaRecoveryPanel } from "@/components/draft-quota-recovery";
 import { cn, formatSessionDate } from "@/lib/utils";
 
 export default function Result() {
@@ -330,6 +331,12 @@ export default function Result() {
             </button>
             {regenerateError && (
               <p className="text-xs text-destructive text-center leading-snug">{regenerateError}</p>
+            )}
+            {regenerateError != null && isDraftQuotaMessage(regenerateError) && (
+              <DraftQuotaRecoveryPanel
+                forceShow
+                onReadyToRetry={() => setRegenerateError(null)}
+              />
             )}
             <button
               type="button"

@@ -187,6 +187,16 @@ export const translations = {
       generatingBody:
         "Generation uses OpenAI and usually takes about 15–40 seconds. If something is wrong (missing API key, model error, or quota), you will see an error message instead of a note.",
       generateFailedTitle: "Could not generate note",
+      draftQuotaTitle: "Unsaved generation limit reached",
+      draftQuotaBody:
+        "You have {used} of {max} unsaved note generations without a save. Open a draft below to review and tap Save Draft or Save Final, or discard the counter to generate a new note.",
+      draftQuotaHint:
+        "Saving any draft (draft or final) clears this limit. Discard only resets the counter so you can generate again — your existing draft notes stay in My Notes.",
+      draftQuotaDiscard: "Discard & generate new note",
+      draftQuotaViewNotes: "View all notes",
+      draftQuotaReviewDraft: "Review & save",
+      draftQuotaNoDraftsListed: "No draft notes found in your list. Use Discard to reset the generation counter.",
+      draftQuotaAtCapHint: "Save or discard before generating another note.",
       therapySettingTitle: "Where did therapy take place?",
       therapySettingSubtitle: "Select the location that best describes this session.",
       therapySettingPlaceholder: "Select a location…",
@@ -497,6 +507,16 @@ export const translations = {
       generatingBody:
         "La generación usa OpenAI y suele tardar unos 15–40 segundos. Si hay un problema (clave faltante, error del modelo o cuota), verás un mensaje de error en lugar de una nota.",
       generateFailedTitle: "No se pudo generar la nota",
+      draftQuotaTitle: "Límite de borradores sin guardar",
+      draftQuotaBody:
+        "Tienes {used} de {max} generaciones sin guardar. Abre un borrador abajo para revisarlo y pulsa Guardar borrador o Guardar final, o descarta el contador para generar una nota nueva.",
+      draftQuotaHint:
+        "Guardar cualquier borrador (borrador o final) borra este límite. Descartar solo reinicia el contador — tus borradores siguen en Mis notas.",
+      draftQuotaDiscard: "Descartar y generar nota nueva",
+      draftQuotaViewNotes: "Ver todas las notas",
+      draftQuotaReviewDraft: "Revisar y guardar",
+      draftQuotaNoDraftsListed: "No hay borradores en la lista. Usa Descartar para reiniciar el contador.",
+      draftQuotaAtCapHint: "Guarda o descarta antes de generar otra nota.",
       therapySettingTitle: "¿Dónde se realizó la terapia?",
       therapySettingSubtitle: "Selecciona el lugar que mejor describa esta sesión.",
       therapySettingPlaceholder: "Selecciona un lugar…",

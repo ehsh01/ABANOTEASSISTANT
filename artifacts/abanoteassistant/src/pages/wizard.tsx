@@ -13,6 +13,8 @@ import type {
 import { useWizardStore, type WizardData } from "@/store/wizard-store";
 import {
   formatGenerateNoteFailure,
+  isDraftQuotaError,
+  isDraftQuotaMessage,
   MAX_PROGRAM_TRIALS,
   normalizeProgramTrialEntry,
   toGenerateNoteRequest,
@@ -23,11 +25,13 @@ import {
   useClientPrograms,
   useClientBehaviorProgramApprovals,
   useGenerateSessionNote,
+  useDraftQuota,
   useAbcActivityAntecedents,
   useClient,
   useBillingStatus,
 } from "@/hooks/use-aba-api";
 import { SuspendedInterceptor } from "@/components/suspended-interceptor";
+import { DraftQuotaRecoveryPanel } from "@/components/draft-quota-recovery";
 import { useT } from "@/hooks/use-translation";
 import { cn, formatSessionDate } from "@/lib/utils";
 import {
@@ -1610,12 +1614,20 @@ export default function Wizard() {
   const [, setLocation] = useLocation();
   const { step, setStep, data, setGeneratedNote, resetWizardForm } = useWizardStore();
   const generateMutation = useGenerateSessionNote();
+  const draftQuotaQuery = useDraftQuota();
   const t = useT();
   const [generateError, setGenerateError] = useState<string | null>(null);
   const billingStatus = useBillingStatus();
 
   const totalSteps = 10;
   const isGenerating = generateMutation.isPending;
+
+  const draftQuota = draftQuotaQuery.data?.data;
+  const draftQuotaAtCap =
+    draftQuota != null && draftQuota.used >= draftQuota.max;
+  const showDraftQuotaRecovery =
+    step === totalSteps &&
+    (draftQuotaAtCap || (generateError != null && isDraftQuotaMessage(generateError)));
 
   useEffect(() => {
     resetWizardForm();
@@ -1627,8 +1639,10 @@ export default function Wizard() {
   useEffect(() => {
     if (step !== totalSteps) {
       setGenerateError(null);
+      return;
     }
-  }, [step, totalSteps]);
+    void draftQuotaQuery.refetch();
+  }, [step, totalSteps, draftQuotaQuery.refetch]);
 
   const handleNext = () => {
     if (step < totalSteps) setStep(step + 1);
@@ -1655,6 +1669,9 @@ export default function Wizard() {
       },
       onError: (err) => {
         setGenerateError(formatGenerateNoteFailure(err));
+        if (isDraftQuotaError(err)) {
+          draftQuotaQuery.refetch();
+        }
       },
     });
   };
@@ -1783,9 +1800,24 @@ export default function Wizard() {
             <p className="text-destructive/90 leading-snug">{generateError}</p>
           </div>
         )}
+        {showDraftQuotaRecovery && (
+          <div className="max-w-4xl mx-auto mb-4">
+            <DraftQuotaRecoveryPanel
+              forceShow={generateError != null && isDraftQuotaMessage(generateError)}
+              onReadyToRetry={() => {
+                setGenerateError(null);
+                void draftQuotaQuery.refetch();
+              }}
+            />
+          </div>
+        )}
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="text-sm text-muted-foreground hidden sm:block">
-            {step === totalSteps ? "Ready to generate" : "Complete this step to proceed"}
+            {step === totalSteps
+              ? draftQuotaAtCap
+                ? t.wizard.draftQuotaAtCapHint
+                : "Ready to generate"
+              : "Complete this step to proceed"}
           </div>
           
           {step < totalSteps ? (
@@ -1801,8 +1833,8 @@ export default function Wizard() {
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={isGenerating}
-              className="w-full sm:w-auto flex items-center justify-center px-10 py-4 rounded-xl bg-gradient-to-r from-primary to-accent text-primary-foreground font-bold text-lg hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30 active:translate-y-0 transition-all"
+              disabled={isGenerating || draftQuotaAtCap}
+              className="w-full sm:w-auto flex items-center justify-center px-10 py-4 rounded-xl bg-gradient-to-r from-primary to-accent text-primary-foreground font-bold text-lg hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30 active:translate-y-0 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
             >
               <Wand2 className="w-5 h-5 mr-2 pop-icon-white" />
               Generate Note

@@ -24,6 +24,16 @@ export function formatGenerateNoteFailure(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+/** True when POST /notes/generate returned 429 unsaved-draft cap. */
+export function isDraftQuotaError(err: unknown): boolean {
+  if (err instanceof ApiError && err.status === 429) return true;
+  return isDraftQuotaMessage(formatGenerateNoteFailure(err));
+}
+
+export function isDraftQuotaMessage(message: string): boolean {
+  return /maximum of \d+ generated drafts/i.test(message);
+}
+
 export function normalizeProgramTrialEntry(
   entry: Partial<ProgramTrialDataEntry> & { effectiveTrials?: number[] },
 ): ProgramTrialDataEntry {

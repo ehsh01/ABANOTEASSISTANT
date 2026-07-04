@@ -44,7 +44,11 @@ import {
   listAbcBuilderActivityAntecedents,
   generateClientAvatar as generateClientAvatarRequest,
   deleteClientAvatar as deleteClientAvatarRequest,
+  getDraftQuota,
+  discardDrafts,
   type AssessmentExtractSuccessResponse,
+  type GetDraftQuotaResponse,
+  type DiscardDraftsResponse,
 } from "@workspace/api-client-react";
 import type { GenerateClientAvatarResponse } from "@workspace/api-client-react";
 import { useAuthStore } from "@/store/auth-store";
@@ -160,9 +164,34 @@ export function usePutClientBehaviorApprovedPrograms() {
 }
 
 export function useGenerateSessionNote() {
+  const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: GenerateNoteRequest): Promise<GenerateNoteResponse> =>
       generateNote(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notes/draft-quota"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
+    },
+  });
+}
+
+export function useDraftQuota() {
+  const token = useAuthStore((s) => s.token);
+  return useQuery({
+    queryKey: ["/api/notes/draft-quota", token],
+    queryFn: async (): Promise<GetDraftQuotaResponse> => getDraftQuota(),
+    enabled: !!token,
+    refetchOnWindowFocus: true,
+  });
+}
+
+export function useDiscardDrafts() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<DiscardDraftsResponse> => discardDrafts(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/notes/draft-quota"] });
+    },
   });
 }
 
@@ -197,6 +226,7 @@ export function useSaveSessionNote() {
     onSuccess: (_res, vars) => {
       queryClient.invalidateQueries({ queryKey: ["/api/notes"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notes", vars.noteId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/notes/draft-quota"] });
     },
   });
 }
