@@ -1,7 +1,9 @@
 import { describe, expect, test } from "vitest";
 import {
   hasFunctionMatchedInterventionAfterResponseBlock,
+  injectMissingAttentionNcrIntervention,
   injectMissingSafetyChainFunctionIntervention,
+  paragraphDocumentsNonContingentReinforcement,
   paragraphHasResponseBlockFirst,
 } from "./safety-chain-enforcement";
 
@@ -60,5 +62,39 @@ describe("safety-chain enforcement (Anthony SIB regression)", () => {
       /implemented Differential Reinforcement of Alternative Behavior \(DRA\)\./g,
     );
     expect(namingSentences?.length).toBe(1);
+  });
+});
+
+describe("attention NCR injection (attention-maintained SIB)", () => {
+  const NCR_PARAMS = {
+    narrativeSegmentCount: 1,
+    maladaptiveBehaviorForHour: ["Self-Injurious Behavior (SIB)"],
+    acquisitionOnlySegmentForHour: [false],
+    interventions: INTERVENTIONS,
+    maladaptiveBehaviorFunctionsForHour: [["attention"]] as ["attention"][],
+  };
+
+  test("appends NCR naming sentence when the attention chain omits it", () => {
+    const withDra = `${ANTHONY_SIB_PARAGRAPH} The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, attention was withheld during the maladaptive response.`;
+    expect(paragraphDocumentsNonContingentReinforcement(withDra)).toBe(false);
+    const injected = injectMissingAttentionNcrIntervention(withDra, NCR_PARAMS);
+    expect(injected).toMatch(/implemented Attention independent response delivery\./);
+    expect(paragraphDocumentsNonContingentReinforcement(injected)).toBe(true);
+  });
+
+  test("is a no-op when NCR is already documented", () => {
+    const withNcr = `${ANTHONY_SIB_PARAGRAPH} The RBT implemented Attention independent response delivery. Following this intervention, brief attention was delivered on a fixed time-based schedule independent of behavior.`;
+    const injected = injectMissingAttentionNcrIntervention(withNcr, NCR_PARAMS);
+    const namingSentences = injected.match(/implemented Attention independent response delivery\./g);
+    expect(namingSentences?.length).toBe(1);
+  });
+
+  test("is a no-op when NCR is not on the approved intervention list", () => {
+    const withDra = `${ANTHONY_SIB_PARAGRAPH} The RBT implemented Differential Reinforcement of Alternative Behavior (DRA).`;
+    const injected = injectMissingAttentionNcrIntervention(withDra, {
+      ...NCR_PARAMS,
+      interventions: ["Response Blocking", "Differential Reinforcement of Alternative Behavior (DRA)", "Compliance Training"],
+    });
+    expect(injected).toBe(withDra);
   });
 });

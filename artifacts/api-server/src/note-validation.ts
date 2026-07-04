@@ -6,6 +6,7 @@
  * "./note-validation" keep working unchanged.
  */
 import {
+  findNonContingentReinforcementInterventionLabel,
   functionInterventionAfterSafetyChainHint,
   functionInterventionMismatchHint,
   isDraOrDriInterventionLabel,
@@ -20,6 +21,7 @@ import {
   firstNamedInterventionInConsequenceTail,
   hasFunctionMatchedInterventionAfterResponseBlock,
   interventionTailAfterManifestedBehavior,
+  paragraphDocumentsNonContingentReinforcement,
   paragraphHasResponseBlockFirst,
   selectSecondSafetyChainIntervention,
 } from "./safety-chain-enforcement";
@@ -1453,6 +1455,18 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
             }) ?? fallback[0];
           issues.push(
             `Safety chain function match: paragraph ${i + 1} documents "${responseBlockLabel}" only for "${assignedBehavior}". Response Block is safety/support only. Name "${sample}" as a **second** catalog intervention naming sentence after blocking is described.`,
+          );
+        }
+      }
+      if (
+        isSibMaladaptiveBehavior(assignedBehavior) &&
+        primaryFunction === "attention" &&
+        /\bthe client manifested\b/i.test(p)
+      ) {
+        const ncrLabel = findNonContingentReinforcementInterventionLabel(interventionList);
+        if (ncrLabel && !paragraphDocumentsNonContingentReinforcement(p)) {
+          issues.push(
+            `Attention NCR: paragraph ${i + 1} documents attention-maintained "${assignedBehavior}" but does not name "${ncrLabel}" (non-contingent reinforcement / attention independent response delivery). NCR is the BIP-mapped intervention that targets the attention contingency maintaining SIB; Response Block manages topography and DRA reinforces an alternative behavior, but neither reduces the reinforcing value of attention on its own. Add "${ncrLabel}" as a catalog intervention naming sentence alongside the rest of the chain when it is on the approved list—confirm the strategy with the BCBA.`,
           );
         }
       }

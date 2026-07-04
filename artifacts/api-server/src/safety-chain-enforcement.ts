@@ -1,5 +1,6 @@
 import type { ClinicalFunction } from "@workspace/db/schema";
 import {
+  findNonContingentReinforcementInterventionLabel,
   isDraOrDriInterventionLabel,
   isResponseBlockInterventionLabel,
   isSibMaladaptiveBehaviorLabel,
@@ -7,6 +8,15 @@ import {
   preferredInterventionCandidatesForBehaviorFunction,
 } from "./behavior-function-intervention-mapping";
 import { primaryFunctionForReplacementSelection } from "./behavior-function-replacement-mapping";
+
+/** Prose mention of any non-contingent reinforcement (NCR) variant. */
+const NCR_PRESENCE_RE =
+  /attention independent response delivery|attention independent|non-?contingent reinforcement|\bNCR\b|time-?contingent attention/i;
+
+/** True when the paragraph already documents a non-contingent reinforcement (NCR) intervention. */
+export function paragraphDocumentsNonContingentReinforcement(paragraph: string): boolean {
+  return NCR_PRESENCE_RE.test(paragraph);
+}
 
 function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -260,4 +270,62 @@ export function injectMissingSafetyChainFunctionIntervention(
 
 function nonRbFallback(interventions: string[]): string[] {
   return interventions.filter((s) => s.trim().length > 0 && !isResponseBlockInterventionLabel(s));
+}
+
+/**
+ * Deterministically append a non-contingent reinforcement (NCR) naming sentence to an
+ * attention-maintained SIB paragraph that already documents its chain but omits NCR.
+ *
+ * NCR (Attention Independent Response Delivery) is the BIP-mapped intervention that targets the
+ * attention *contingency* maintaining SIB. Response Block manages topography and DRA reinforces an
+ * alternative behavior, but neither reduces the reinforcing value of attention on its own. When NCR
+ * is on the client's approved intervention list it must appear alongside the rest of the chain to
+ * pass function-completeness / audit review. This runs after the DRA safety-chain injection so the
+ * ordering stays Response Block → DRA → NCR → replacement program.
+ */
+export function injectMissingAttentionNcrIntervention(
+  clinicalBody: string,
+  params: {
+    narrativeSegmentCount: number;
+    maladaptiveBehaviorForHour: string[];
+    acquisitionOnlySegmentForHour?: boolean[] | undefined;
+    interventions: string[];
+    maladaptiveBehaviorFunctionsForHour?: (ClinicalFunction[] | null)[] | undefined;
+  },
+): string {
+  const ncrLabel = findNonContingentReinforcementInterventionLabel(params.interventions);
+  if (!ncrLabel) return clinicalBody;
+
+  const paragraphs = clinicalBody.split(/\n\s*\n/).filter((p) => p.trim().length > 0);
+  const segCount = params.narrativeSegmentCount;
+  const acquisition = params.acquisitionOnlySegmentForHour ?? [];
+
+  for (let i = 0; i < Math.min(paragraphs.length, segCount); i++) {
+    if (acquisition[i] === true) continue;
+    const assignedBehavior = params.maladaptiveBehaviorForHour[i]?.trim() ?? "";
+    if (!assignedBehavior || !isSibMaladaptiveBehaviorLabel(assignedBehavior)) continue;
+
+    const segmentFunctions = params.maladaptiveBehaviorFunctionsForHour?.[i];
+    if (primaryFunctionForReplacementSelection(segmentFunctions) !== "attention") continue;
+
+    let p = paragraphs[i]!;
+    if (!/\bthe client manifested\b/i.test(p)) continue;
+    if (paragraphDocumentsNonContingentReinforcement(p)) continue;
+
+    const naming = `The RBT implemented ${ncrLabel}.`;
+    const detail =
+      "Following this intervention, the RBT delivered brief attention on a fixed time-based schedule independent of the client's behavior, reducing the reinforcing value of attention for the maladaptive response.";
+    const insertBlock = ` ${naming} ${detail}`;
+
+    const replacementRe = /(\s*)(Additionally,\s*)?the RBT implemented the replacement program\b/i;
+    const replacementMatch = replacementRe.exec(p);
+    if (replacementMatch && replacementMatch.index !== undefined) {
+      p = p.slice(0, replacementMatch.index) + insertBlock + p.slice(replacementMatch.index);
+    } else {
+      p = p.trimEnd() + insertBlock;
+    }
+    paragraphs[i] = p;
+  }
+
+  return paragraphs.join("\n\n");
 }

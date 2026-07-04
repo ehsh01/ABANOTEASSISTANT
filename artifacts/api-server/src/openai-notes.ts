@@ -23,7 +23,10 @@ import {
   FUNCTION_BASED_ABC_CORRECTION_PROMPT,
   FUNCTION_BASED_CORRECTION_REVISION_HINTS,
 } from "./behavior-function-correction";
-import { injectMissingSafetyChainFunctionIntervention } from "./safety-chain-enforcement";
+import {
+  injectMissingAttentionNcrIntervention,
+  injectMissingSafetyChainFunctionIntervention,
+} from "./safety-chain-enforcement";
 
 /** Chat Completions model id for note clinical body when OPENAI_MODEL is unset. */
 export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-5.3-chat-latest";
@@ -446,7 +449,7 @@ export function isOpenAINoteGenerationConfigured(): boolean {
  * Version tag for the note-generation prompt/pipeline, written to `note_generation_audit`.
  * Bump when the system prompt, normalization pipeline, or enforcement rules change materially.
  */
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-04.1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-04.2";
 
 export type GenerateClinicalBodyResult = {
   body: string;
@@ -558,7 +561,7 @@ function normalizeClinicalBodyPipeline(
 }
 
 function applySafetyChainEnforcement(body: string, ctx: NoteGenerationContext): string {
-  return injectMissingSafetyChainFunctionIntervention(body, {
+  let out = injectMissingSafetyChainFunctionIntervention(body, {
     narrativeSegmentCount: ctx.narrativeSegmentCount,
     maladaptiveBehaviorForHour: ctx.maladaptiveBehaviorForHour,
     acquisitionOnlySegmentForHour: ctx.acquisitionOnlySegmentForHour,
@@ -566,6 +569,14 @@ function applySafetyChainEnforcement(body: string, ctx: NoteGenerationContext): 
     maladaptiveBehaviorFunctionsForHour: ctx.maladaptiveBehaviorFunctionsForHour,
     interventionCandidatesForHour: ctx.interventionCandidatesForHour,
   });
+  out = injectMissingAttentionNcrIntervention(out, {
+    narrativeSegmentCount: ctx.narrativeSegmentCount,
+    maladaptiveBehaviorForHour: ctx.maladaptiveBehaviorForHour,
+    acquisitionOnlySegmentForHour: ctx.acquisitionOnlySegmentForHour,
+    interventions: ctx.interventions ?? [],
+    maladaptiveBehaviorFunctionsForHour: ctx.maladaptiveBehaviorFunctionsForHour,
+  });
+  return out;
 }
 
 export async function generateClinicalBodyOpenAI(

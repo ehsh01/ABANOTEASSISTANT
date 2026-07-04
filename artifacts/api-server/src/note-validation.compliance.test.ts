@@ -5,7 +5,10 @@ import {
   validateClinicalBodyCompliance,
   type NoteComplianceContext,
 } from "./note-validation";
-import { injectMissingSafetyChainFunctionIntervention } from "./safety-chain-enforcement";
+import {
+  injectMissingAttentionNcrIntervention,
+  injectMissingSafetyChainFunctionIntervention,
+} from "./safety-chain-enforcement";
 
 const SIB = "Self-Injurious Behavior (SIB)";
 const DRA = "Differential Reinforcement of Alternative Behavior (DRA)";
@@ -79,6 +82,39 @@ describe("subjective wording", () => {
   test("observable topography alone is not flagged as subjective", () => {
     const issues = validateClinicalBodyCompliance(ANTHONY_SIB_PARAGRAPH, sibCtx());
     expect(issues.some((i) => i.startsWith("Subjective wording:"))).toBe(false);
+  });
+
+  test("missing NCR for attention-maintained SIB raises a (non-blocking) Attention NCR warning", () => {
+    // RB + DRA present but no NCR, even though NCR is on the approved list.
+    const withDra = `${ANTHONY_SIB_PARAGRAPH} The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, attention was withheld during the maladaptive response and brief praise was delivered when the client displayed compatible behavior.`;
+    const issues = validateClinicalBodyCompliance(withDra, sibCtx());
+    const ncrIssues = issues.filter((i) => i.startsWith("Attention NCR:"));
+    expect(ncrIssues.length).toBe(1);
+    // Chain completeness is a warning, not a hard 422 block.
+    expect(isCriticalComplianceIssue(ncrIssues[0]!)).toBe(false);
+  });
+
+  test("deterministic NCR injection resolves the Attention NCR warning", () => {
+    const withDra = `${ANTHONY_SIB_PARAGRAPH} The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, attention was withheld during the maladaptive response and brief praise was delivered when the client displayed compatible behavior.`;
+    const injected = injectMissingAttentionNcrIntervention(withDra, {
+      narrativeSegmentCount: 1,
+      maladaptiveBehaviorForHour: [SIB],
+      acquisitionOnlySegmentForHour: [false],
+      interventions: INTERVENTIONS,
+      maladaptiveBehaviorFunctionsForHour: [["attention"]],
+    });
+    expect(injected).toMatch(/implemented Attention independent response delivery\./);
+    const issues = validateClinicalBodyCompliance(injected, sibCtx());
+    expect(issues.some((i) => i.startsWith("Attention NCR:"))).toBe(false);
+  });
+
+  test("no Attention NCR warning when NCR is absent from the approved intervention list", () => {
+    const withDra = `${ANTHONY_SIB_PARAGRAPH} The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, attention was withheld during the maladaptive response and brief praise was delivered when the client displayed compatible behavior.`;
+    const issues = validateClinicalBodyCompliance(
+      withDra,
+      sibCtx({ interventions: ["Response Blocking", DRA, "Compliance Training"] }),
+    );
+    expect(issues.some((i) => i.startsWith("Attention NCR:"))).toBe(false);
   });
 });
 

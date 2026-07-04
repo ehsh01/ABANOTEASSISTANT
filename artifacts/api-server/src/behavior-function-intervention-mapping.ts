@@ -97,6 +97,35 @@ export function isAttentionIndependentResponseDeliveryLabel(name: string): boole
   return /attention independent/.test(name.trim().toLowerCase());
 }
 
+/**
+ * Non-contingent reinforcement family: Attention Independent Response Delivery / NCR /
+ * time-contingent attention — the BIP-mapped attention-extinction intervention that delivers
+ * attention on a behavior-independent schedule to reduce the reinforcing value of the function.
+ */
+export function isNonContingentReinforcementInterventionLabel(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  if (!n) return false;
+  return (
+    /attention independent response delivery/.test(n) ||
+    /attention independent/.test(n) ||
+    /non-?contingent reinforcement/.test(n) ||
+    /\bncr\b/.test(n) ||
+    /time-?contingent attention/.test(n)
+  );
+}
+
+/** Exact catalog string from the client's list when it is a non-contingent reinforcement (NCR) label. */
+export function findNonContingentReinforcementInterventionLabel(
+  interventions: string[],
+): string | null {
+  for (const raw of interventions) {
+    const s = raw.trim();
+    if (s.length === 0) continue;
+    if (isNonContingentReinforcementInterventionLabel(s)) return s;
+  }
+  return null;
+}
+
 export function isSibMaladaptiveBehaviorLabel(behaviorName: string): boolean {
   const t = behaviorName.trim();
   if (!t) return false;
