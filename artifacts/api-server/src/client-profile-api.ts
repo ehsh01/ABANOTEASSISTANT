@@ -8,6 +8,7 @@ import type {
 import { expandMaladaptiveTargetsFromProfile } from "./client-profile-maladaptive";
 import { buildAvatarUrl } from "./avatar-generation";
 import { sanitizeClientAssessmentSummary } from "./client-assessment-summary";
+import { buildNoteReadinessReport } from "./note-readiness";
 
 type AssessmentStatus = "uploaded" | "processing" | "ready" | "missing";
 
@@ -68,5 +69,6 @@ export function clientRowToApiData(c: Client) {
     avatarUrl,
     avatarUpdatedAt,
     profile: profile ? sanitizeClientProfileForApi(profile) : null,
+    noteReadiness: profile ? buildNoteReadinessReport(profile) : null,
   };
 }

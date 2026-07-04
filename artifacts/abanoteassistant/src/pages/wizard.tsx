@@ -410,6 +410,9 @@ function Step1Client() {
   if (isLoading) return <div className="py-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-primary pop-icon" /></div>;
 
   const apiClients = clientsRes?.data || [];
+  const selectedClient = apiClients.find((c) => c.id === wizardData.clientId);
+  const readiness = selectedClient?.noteReadiness;
+  const readinessMessages = readiness && !readiness.ready ? readiness.messages : [];
 
   return (
     <div className="space-y-6">
@@ -424,6 +427,32 @@ function Step1Client() {
           selectedId={wizardData.clientId}
           onSelect={(id) => updateData({ clientId: id })}
         />
+      )}
+
+      {/* Data-readiness warning for the selected client (server-computed) */}
+      {selectedClient && readinessMessages.length > 0 && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-700 p-4">
+          <div className="flex items-center gap-2 mb-1.5">
+            <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">
+              This client's BIP data is incomplete — notes will be less accurate.
+            </p>
+          </div>
+          <ul className="space-y-1 mb-2">
+            {readinessMessages.map((m, i) => (
+              <li key={i} className="text-xs leading-snug text-amber-800 dark:text-amber-200 flex gap-1.5">
+                <span className="shrink-0 select-none">•</span>
+                <span>{m}</span>
+              </li>
+            ))}
+          </ul>
+          <button
+            onClick={() => setLocation(`/clients/edit/${selectedClient.id}`)}
+            className="text-xs font-semibold text-amber-800 dark:text-amber-300 underline underline-offset-2 hover:text-amber-900"
+          >
+            Complete client profile →
+          </button>
+        </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

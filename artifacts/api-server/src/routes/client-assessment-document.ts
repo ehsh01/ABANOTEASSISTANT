@@ -5,9 +5,14 @@ import { GetClientParams, GetClientResponse } from "@workspace/api-zod";
 import { db } from "@workspace/db";
 import { clientsTable, type ClientProfileRow } from "@workspace/db/schema";
 import {
+  extractBehaviorMapsFromBipText,
   extractTextFromPdfBuffer,
   truncateAssessmentTextForStorage,
 } from "../assessment-extract";
+import {
+  getAssessmentStructuredFromProfile,
+  mergeAutoExtractedBehaviorMapsIntoStructured,
+} from "../assessment-structured";
 import { clientRowToApiData } from "../client-profile-api";
 import { sanitizeTextForJsonStorage } from "../sanitize-text-for-json";
 
@@ -122,6 +127,38 @@ router.post(
       nextProfile.assessmentTextSnapshot = snapshot;
     } else {
       delete nextProfile.assessmentTextSnapshot;
+    }
+
+    // Auto-extract behavior→replacement and behavior→intervention maps from the BIP text and
+    // persist them into assessmentStructured. Curated map entries are never overwritten; a new
+    // structured row is only created when at least one map entry was found in the document.
+    if (rawText.trim().length > 0) {
+      const profilePrograms = [
+        ...(nextProfile.replacementPrograms ?? []),
+        ...(nextProfile.skillAcquisitionPrograms ?? []),
+      ];
+      const maps = extractBehaviorMapsFromBipText(
+        rawText,
+        nextProfile.maladaptiveBehaviors ?? [],
+        profilePrograms,
+        nextProfile.interventions ?? [],
+      );
+      const merged = mergeAutoExtractedBehaviorMapsIntoStructured({
+        existing: getAssessmentStructuredFromProfile(nextProfile),
+        profileBehaviors: nextProfile.maladaptiveBehaviors ?? [],
+        profileReplacementPrograms: profilePrograms,
+        profileInterventions: nextProfile.interventions ?? [],
+        behaviorToReplacements: maps.behaviorToReplacements,
+        behaviorToInterventions: maps.behaviorToInterventions,
+      });
+      if (merged) {
+        nextProfile.assessmentStructured = merged;
+        console.log(
+          `[clients/${params.data.clientId}/assessment/document] assessmentStructured maps: ` +
+            `${Object.keys(merged.behavior_to_replacements_map).length} behavior→replacement, ` +
+            `${Object.keys(merged.behavior_to_interventions_map).length} behavior→intervention`,
+        );
+      }
     }
 
     let updated;

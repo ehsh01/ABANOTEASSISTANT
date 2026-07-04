@@ -125,6 +125,8 @@ export const translations = {
       sourceTemplateBody:
         "This label applies only to older notes generated before the API required OpenAI. New generations always use OpenAI; if generation fails, the API returns an error instead of a template.",
       serverNotices: "Server notices",
+      needsReviewTitle: "Needs review",
+      needsReviewBody: "The server flagged the item(s) below during generation. Review and edit the note before saving as final.",
     },
     // ── Note detail page ──
     noteDetail: {
@@ -432,6 +434,8 @@ export const translations = {
       sourceTemplateBody:
         "Solo aplica a notas antiguas generadas antes de que la API exigiera OpenAI. Las nuevas generaciones siempre usan OpenAI; si falla, la API devuelve un error en lugar de una plantilla.",
       serverNotices: "Avisos del servidor",
+      needsReviewTitle: "Necesita revisión",
+      needsReviewBody: "El servidor marcó los siguientes puntos durante la generación. Revise y edite la nota antes de guardarla como final.",
     },
     // ── Note detail page ──
     noteDetail: {

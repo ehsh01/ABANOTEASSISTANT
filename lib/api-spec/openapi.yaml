@@ -2100,12 +2100,57 @@ components:
         profile:
           $ref: "#/components/schemas/ClientProfile"
           nullable: true
+        noteReadiness:
+          $ref: "#/components/schemas/NoteReadiness"
+          nullable: true
+          description: >
+            Per-client data-completeness report for note generation. Server-computed from the stored
+            profile; null only for clients without a profile. Surfaced in the wizard so the RBT knows
+            when notes will be less accurate because BIP data is incomplete.
       required:
         - id
         - companyId
         - name
         - hasAssessment
         - assessmentStatus
+
+    NoteReadiness:
+      type: object
+      description: >
+        Data gaps that degrade note-generation accuracy for this client. `ready` is true only when no
+        gaps were found. Each array lists the affected maladaptive behavior labels.
+      properties:
+        ready:
+          type: boolean
+        behaviorsMissingFunctions:
+          type: array
+          items:
+            type: string
+        behaviorsMissingTopography:
+          type: array
+          items:
+            type: string
+        behaviorsMissingReplacementMap:
+          type: array
+          items:
+            type: string
+        assessmentTextMissing:
+          type: boolean
+        assessmentTextTruncatedForPrompt:
+          type: boolean
+        messages:
+          type: array
+          items:
+            type: string
+          description: Human-readable summaries of every gap, ready to render in the wizard.
+      required:
+        - ready
+        - behaviorsMissingFunctions
+        - behaviorsMissingTopography
+        - behaviorsMissingReplacementMap
+        - assessmentTextMissing
+        - assessmentTextTruncatedForPrompt
+        - messages
 
     ClientListResponse:
       type: object

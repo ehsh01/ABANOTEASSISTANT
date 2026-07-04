@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Copy, Save, Edit3, RotateCcw, CheckCircle2, ChevronLeft, Calendar, Clock, User, Languages, Loader2, FilePlus } from "lucide-react";
+import { Copy, Save, Edit3, RotateCcw, CheckCircle2, ChevronLeft, Calendar, Clock, User, Languages, Loader2, FilePlus, AlertTriangle } from "lucide-react";
 import { useWizardStore } from "@/store/wizard-store";
 import { useGenerateSessionNote, useSaveSessionNote } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
@@ -12,7 +12,7 @@ import { cn, formatSessionDate } from "@/lib/utils";
 
 export default function Result() {
   const [, setLocation] = useLocation();
-  const { generatedNote, reset, data, setGeneratedNote } = useWizardStore();
+  const { generatedNote, generateWarnings, reset, data, setGeneratedNote } = useWizardStore();
   const saveMutation = useSaveSessionNote();
   const generateMutation = useGenerateSessionNote();
   const t = useT();
@@ -245,6 +245,27 @@ export default function Result() {
           transition={{ delay: 0.1 }}
           className="w-full lg:w-80 shrink-0 space-y-6"
         >
+          {/* Needs-review panel: warnings returned by POST /notes/generate */}
+          {generateWarnings && generateWarnings.length > 0 && (
+            <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-700 rounded-2xl shadow-sm p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                <h3 className="font-display font-bold text-sm text-amber-800 dark:text-amber-300">
+                  {t.result.needsReviewTitle} ({generateWarnings.length})
+                </h3>
+              </div>
+              <p className="text-xs text-amber-700 dark:text-amber-400 mb-3">{t.result.needsReviewBody}</p>
+              <ul className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {generateWarnings.map((w, idx) => (
+                  <li key={idx} className="text-xs leading-snug text-amber-900 dark:text-amber-200 flex gap-1.5">
+                    <span className="shrink-0 select-none">•</span>
+                    <span>{w}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {/* Metadata Card */}
           <div className="hidden lg:block bg-card rounded-2xl border border-border shadow-sm p-6 space-y-4">
             <h3 className="font-display font-bold text-lg border-b border-border/50 pb-2">{t.result.sessionDetails}</h3>

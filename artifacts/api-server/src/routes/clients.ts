@@ -1260,6 +1260,39 @@ router.patch("/clients/:clientId", async (req, res) => {
     delete nextProfile.assessmentTextSnapshot;
   }
 
+  // Keep structured-assessment allow-lists in sync with profile edits: when the caller updates the
+  // profile lists but does not explicitly send assessmentStructured, union any new labels into the
+  // allow-lists so newly added behaviors/programs/interventions are not rejected at note generation.
+  // Curated map entries and existing allow-list items are never removed here.
+  if (
+    nextProfile.assessmentStructured &&
+    body.assessmentStructured === undefined &&
+    !clearingAssessment
+  ) {
+    const s = nextProfile.assessmentStructured;
+    const unionInto = (allow: string[], additions: string[]): string[] => {
+      const seen = new Set(allow);
+      const out = [...allow];
+      for (const raw of additions) {
+        const v = raw.trim();
+        if (v && !seen.has(v)) {
+          seen.add(v);
+          out.push(v);
+        }
+      }
+      return out;
+    };
+    nextProfile.assessmentStructured = {
+      ...s,
+      behaviors: unionInto(s.behaviors, nextProfile.maladaptiveBehaviors ?? []),
+      replacement_programs: unionInto(s.replacement_programs, [
+        ...(nextProfile.replacementPrograms ?? []),
+        ...(nextProfile.skillAcquisitionPrograms ?? []),
+      ]),
+      interventions: unionInto(s.interventions, nextProfile.interventions ?? []),
+    };
+  }
+
   const name =
     `${nextProfile.firstName} ${nextProfile.lastName}`.trim() || existing.name;
 

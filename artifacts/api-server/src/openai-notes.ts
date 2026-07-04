@@ -442,10 +442,20 @@ export function isOpenAINoteGenerationConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
+/**
+ * Version tag for the note-generation prompt/pipeline, written to `note_generation_audit`.
+ * Bump when the system prompt, normalization pipeline, or enforcement rules change materially.
+ */
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-04.1";
+
 export type GenerateClinicalBodyResult = {
   body: string;
   /** Non-fatal compliance notes (includes auto-revision status). */
   warnings: string[];
+  /** Repair passes consumed (0 = first draft passed automated checks). */
+  repairAttempts: number;
+  /** Validator issues remaining after the repair loop (empty when fully compliant). */
+  finalIssues: string[];
 };
 
 /**
@@ -607,7 +617,7 @@ export async function generateClinicalBodyOpenAI(
     );
   }
 
-  return { body, warnings };
+  return { body, warnings, repairAttempts, finalIssues: issues };
 }
 
 export function openaiNoteGenerationLabel(): string {

@@ -137,3 +137,106 @@ export function intersectCatalog(catalog: string[], allowed: string[]): string[]
   const allow = new Set(allowed);
   return catalog.filter((x) => allow.has(x));
 }
+
+function alignMapToCatalogs(
+  map: Record<string, string[]>,
+  keyCatalog: string[],
+  valueCatalog: string[],
+): Record<string, string[]> {
+  const keyByLower = new Map(keyCatalog.map((k) => [k.trim().toLowerCase(), k.trim()] as const));
+  const valueByLower = new Map(valueCatalog.map((v) => [v.trim().toLowerCase(), v.trim()] as const));
+  const out: Record<string, string[]> = {};
+  for (const [rawKey, rawVals] of Object.entries(map)) {
+    const key = keyByLower.get(rawKey.trim().toLowerCase());
+    if (!key) continue;
+    const vals = [
+      ...new Set(
+        (rawVals ?? [])
+          .map((v) => valueByLower.get(String(v).trim().toLowerCase()) ?? "")
+          .filter(Boolean),
+      ),
+    ];
+    if (vals.length > 0) out[key] = vals;
+  }
+  return out;
+}
+
+/**
+ * Merge auto-extracted behavior→replacement and behavior→intervention maps into a client's
+ * structured assessment.
+ *
+ * - When `existing` is present (hand-curated or previously auto-built): allow-lists are kept as-is
+ *   and only **missing** map keys are added, with values aligned to the existing allow-lists.
+ *   Curated entries are never overwritten.
+ * - When `existing` is null: a new row is built with allow-lists mirroring the profile lists
+ *   (so note-generation intersections are identity) — but only when at least one map entry was
+ *   extracted; otherwise null is returned and the profile stays in non-structured mode.
+ *
+ * The result always passes `validateAssessmentStructured`.
+ */
+export function mergeAutoExtractedBehaviorMapsIntoStructured(params: {
+  existing: AssessmentStructuredRow | null;
+  profileBehaviors: string[];
+  profileReplacementPrograms: string[];
+  profileInterventions: string[];
+  behaviorToReplacements: Record<string, string[]>;
+  behaviorToInterventions: Record<string, string[]>;
+}): AssessmentStructuredRow | null {
+  const {
+    existing,
+    profileBehaviors,
+    profileReplacementPrograms,
+    profileInterventions,
+    behaviorToReplacements,
+    behaviorToInterventions,
+  } = params;
+
+  if (existing) {
+    const alignedRepl = alignMapToCatalogs(
+      behaviorToReplacements,
+      existing.behaviors,
+      existing.replacement_programs,
+    );
+    const alignedIntv = alignMapToCatalogs(
+      behaviorToInterventions,
+      existing.behaviors,
+      existing.interventions,
+    );
+    let changed = false;
+    const nextReplMap = { ...existing.behavior_to_replacements_map };
+    for (const [k, vals] of Object.entries(alignedRepl)) {
+      if (nextReplMap[k] && nextReplMap[k].length > 0) continue;
+      nextReplMap[k] = vals;
+      changed = true;
+    }
+    const nextIntvMap = { ...existing.behavior_to_interventions_map };
+    for (const [k, vals] of Object.entries(alignedIntv)) {
+      if (nextIntvMap[k] && nextIntvMap[k].length > 0) continue;
+      nextIntvMap[k] = vals;
+      changed = true;
+    }
+    if (!changed) return existing;
+    return {
+      ...existing,
+      behavior_to_replacements_map: nextReplMap,
+      behavior_to_interventions_map: nextIntvMap,
+    };
+  }
+
+  const behaviors = [...new Set(profileBehaviors.map((s) => s.trim()).filter(Boolean))];
+  const programs = [...new Set(profileReplacementPrograms.map((s) => s.trim()).filter(Boolean))];
+  const interventions = [...new Set(profileInterventions.map((s) => s.trim()).filter(Boolean))];
+
+  const replMap = alignMapToCatalogs(behaviorToReplacements, behaviors, programs);
+  const intvMap = alignMapToCatalogs(behaviorToInterventions, behaviors, interventions);
+  if (Object.keys(replMap).length === 0 && Object.keys(intvMap).length === 0) {
+    return null;
+  }
+  return {
+    behaviors,
+    replacement_programs: programs,
+    interventions,
+    behavior_to_replacements_map: replMap,
+    behavior_to_interventions_map: intvMap,
+  };
+}

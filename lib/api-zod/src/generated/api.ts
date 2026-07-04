@@ -387,6 +387,24 @@ export const ListClientsResponse = zod.object({
             ),
         })
         .nullish(),
+      noteReadiness: zod
+        .object({
+          ready: zod.boolean(),
+          behaviorsMissingFunctions: zod.array(zod.string()),
+          behaviorsMissingTopography: zod.array(zod.string()),
+          behaviorsMissingReplacementMap: zod.array(zod.string()),
+          assessmentTextMissing: zod.boolean(),
+          assessmentTextTruncatedForPrompt: zod.boolean(),
+          messages: zod
+            .array(zod.string())
+            .describe(
+              "Human-readable summaries of every gap, ready to render in the wizard.",
+            ),
+        })
+        .nullish()
+        .describe(
+          "Per-client data-completeness report for note generation. Server-computed from the stored profile; null only for clients without a profile. Surfaced in the wizard so the RBT knows when notes will be less accurate because BIP data is incomplete.\n",
+        ),
     }),
   ),
   error: zod.string().nullish(),
@@ -651,6 +669,24 @@ export const CreateClientResponse = zod.object({
           ),
       })
       .nullish(),
+    noteReadiness: zod
+      .object({
+        ready: zod.boolean(),
+        behaviorsMissingFunctions: zod.array(zod.string()),
+        behaviorsMissingTopography: zod.array(zod.string()),
+        behaviorsMissingReplacementMap: zod.array(zod.string()),
+        assessmentTextMissing: zod.boolean(),
+        assessmentTextTruncatedForPrompt: zod.boolean(),
+        messages: zod
+          .array(zod.string())
+          .describe(
+            "Human-readable summaries of every gap, ready to render in the wizard.",
+          ),
+      })
+      .nullish()
+      .describe(
+        "Per-client data-completeness report for note generation. Server-computed from the stored profile; null only for clients without a profile. Surfaced in the wizard so the RBT knows when notes will be less accurate because BIP data is incomplete.\n",
+      ),
   }),
   error: zod.string().nullish(),
 });
@@ -805,6 +841,24 @@ export const GetClientResponse = zod.object({
           ),
       })
       .nullish(),
+    noteReadiness: zod
+      .object({
+        ready: zod.boolean(),
+        behaviorsMissingFunctions: zod.array(zod.string()),
+        behaviorsMissingTopography: zod.array(zod.string()),
+        behaviorsMissingReplacementMap: zod.array(zod.string()),
+        assessmentTextMissing: zod.boolean(),
+        assessmentTextTruncatedForPrompt: zod.boolean(),
+        messages: zod
+          .array(zod.string())
+          .describe(
+            "Human-readable summaries of every gap, ready to render in the wizard.",
+          ),
+      })
+      .nullish()
+      .describe(
+        "Per-client data-completeness report for note generation. Server-computed from the stored profile; null only for clients without a profile. Surfaced in the wizard so the RBT knows when notes will be less accurate because BIP data is incomplete.\n",
+      ),
   }),
   error: zod.string().nullish(),
 });
@@ -1078,6 +1132,24 @@ export const UpdateClientResponse = zod.object({
           ),
       })
       .nullish(),
+    noteReadiness: zod
+      .object({
+        ready: zod.boolean(),
+        behaviorsMissingFunctions: zod.array(zod.string()),
+        behaviorsMissingTopography: zod.array(zod.string()),
+        behaviorsMissingReplacementMap: zod.array(zod.string()),
+        assessmentTextMissing: zod.boolean(),
+        assessmentTextTruncatedForPrompt: zod.boolean(),
+        messages: zod
+          .array(zod.string())
+          .describe(
+            "Human-readable summaries of every gap, ready to render in the wizard.",
+          ),
+      })
+      .nullish()
+      .describe(
+        "Per-client data-completeness report for note generation. Server-computed from the stored profile; null only for clients without a profile. Surfaced in the wizard so the RBT knows when notes will be less accurate because BIP data is incomplete.\n",
+      ),
   }),
   error: zod.string().nullish(),
 });
@@ -1257,6 +1329,24 @@ export const UploadClientAssessmentDocumentResponse = zod.object({
           ),
       })
       .nullish(),
+    noteReadiness: zod
+      .object({
+        ready: zod.boolean(),
+        behaviorsMissingFunctions: zod.array(zod.string()),
+        behaviorsMissingTopography: zod.array(zod.string()),
+        behaviorsMissingReplacementMap: zod.array(zod.string()),
+        assessmentTextMissing: zod.boolean(),
+        assessmentTextTruncatedForPrompt: zod.boolean(),
+        messages: zod
+          .array(zod.string())
+          .describe(
+            "Human-readable summaries of every gap, ready to render in the wizard.",
+          ),
+      })
+      .nullish()
+      .describe(
+        "Per-client data-completeness report for note generation. Server-computed from the stored profile; null only for clients without a profile. Surfaced in the wizard so the RBT knows when notes will be less accurate because BIP data is incomplete.\n",
+      ),
   }),
   error: zod.string().nullish(),
 });
@@ -1426,6 +1516,24 @@ export const GenerateClientAvatarResponse = zod.object({
             ),
         })
         .nullish(),
+      noteReadiness: zod
+        .object({
+          ready: zod.boolean(),
+          behaviorsMissingFunctions: zod.array(zod.string()),
+          behaviorsMissingTopography: zod.array(zod.string()),
+          behaviorsMissingReplacementMap: zod.array(zod.string()),
+          assessmentTextMissing: zod.boolean(),
+          assessmentTextTruncatedForPrompt: zod.boolean(),
+          messages: zod
+            .array(zod.string())
+            .describe(
+              "Human-readable summaries of every gap, ready to render in the wizard.",
+            ),
+        })
+        .nullish()
+        .describe(
+          "Per-client data-completeness report for note generation. Server-computed from the stored profile; null only for clients without a profile. Surfaced in the wizard so the RBT knows when notes will be less accurate because BIP data is incomplete.\n",
+        ),
     }),
   }),
   error: zod.string().nullish(),
@@ -1582,6 +1690,24 @@ export const DeleteClientAvatarResponse = zod.object({
           ),
       })
       .nullish(),
+    noteReadiness: zod
+      .object({
+        ready: zod.boolean(),
+        behaviorsMissingFunctions: zod.array(zod.string()),
+        behaviorsMissingTopography: zod.array(zod.string()),
+        behaviorsMissingReplacementMap: zod.array(zod.string()),
+        assessmentTextMissing: zod.boolean(),
+        assessmentTextTruncatedForPrompt: zod.boolean(),
+        messages: zod
+          .array(zod.string())
+          .describe(
+            "Human-readable summaries of every gap, ready to render in the wizard.",
+          ),
+      })
+      .nullish()
+      .describe(
+        "Per-client data-completeness report for note generation. Server-computed from the stored profile; null only for clients without a profile. Surfaced in the wizard so the RBT knows when notes will be less accurate because BIP data is incomplete.\n",
+      ),
   }),
   error: zod.string().nullish(),
 });

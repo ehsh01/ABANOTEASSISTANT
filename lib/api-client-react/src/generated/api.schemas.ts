@@ -459,6 +459,21 @@ export const ClientAssessmentStatus = {
   missing: "missing",
 } as const;
 
+/**
+ * Data gaps that degrade note-generation accuracy for this client. `ready` is true only when no gaps were found. Each array lists the affected maladaptive behavior labels.
+
+ */
+export interface NoteReadiness {
+  ready: boolean;
+  behaviorsMissingFunctions: string[];
+  behaviorsMissingTopography: string[];
+  behaviorsMissingReplacementMap: string[];
+  assessmentTextMissing: boolean;
+  assessmentTextTruncatedForPrompt: boolean;
+  /** Human-readable summaries of every gap, ready to render in the wizard. */
+  messages: string[];
+}
+
 export interface Client {
   id: number;
   companyId: number;
@@ -473,6 +488,9 @@ export interface Client {
    */
   avatarUpdatedAt?: string | null;
   profile?: ClientProfile | null;
+  /** Per-client data-completeness report for note generation. Server-computed from the stored profile; null only for clients without a profile. Surfaced in the wizard so the RBT knows when notes will be less accurate because BIP data is incomplete.
+   */
+  noteReadiness?: NoteReadiness | null;
 }
 
 export interface ClientListResponse {

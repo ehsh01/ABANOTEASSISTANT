@@ -6,4 +6,5 @@ export * from "./client-programs";
 export * from "./client-behavior-program-approvals";
 export * from "./notes";
 export * from "./note-usage-ledger";
+export * from "./note-generation-audit";
 export * from "./processed-stripe-events";

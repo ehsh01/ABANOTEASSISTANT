@@ -22,6 +22,10 @@ export type AssessmentExtractedFields = {
   replacementPrograms: string[];
   skillAcquisitionPrograms: string[];
   interventions: string[];
+  /** Behavior → replacement-program names the BIP ties to that behavior (canonical labels). */
+  behaviorReplacementMap?: Record<string, string[]>;
+  /** Behavior → intervention names the BIP recommends for that behavior (canonical labels). */
+  behaviorInterventionMap?: Record<string, string[]>;
   /** ISO `yyyy-MM-dd` authorization / treatment plan expiration date when stated on the assessment. */
   assessmentAuthorizationExpiresOn?: string;
   assessmentSummary?: ClientAssessmentSummary;

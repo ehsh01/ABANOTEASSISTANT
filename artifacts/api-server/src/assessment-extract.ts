@@ -60,6 +60,17 @@ const ExtractedSchema = z.object({
   skillAcquisitionPrograms: z.array(z.string()).default([]),
   interventions: z.array(z.string()).default([]),
   /**
+   * Behavior → replacement-program names the BIP lists for that specific behavior. Keys must match
+   * `maladaptiveBehaviors` entries; values must match `replacementPrograms` entries. Omit when the
+   * document does not tie programs to specific behaviors.
+   */
+  behaviorReplacementMap: z.record(z.string(), z.array(z.string())).optional(),
+  /**
+   * Behavior → intervention names the BIP recommends for that specific behavior. Keys must match
+   * `maladaptiveBehaviors`; values must match `interventions`. Omit when not documented per behavior.
+   */
+  behaviorInterventionMap: z.record(z.string(), z.array(z.string())).optional(),
+  /**
    * Authorization / treatment-plan expiration date pulled from the assessment (e.g. "Authorization Period",
    * "Auth Expires", "Plan ends", "Expiration Date"). Output as **ISO `yyyy-MM-dd`** when possible; `MM/dd/yyyy`
    * is also accepted. Omit when the document does not state an expiration date.
@@ -94,10 +105,137 @@ export function truncateAssessmentTextForStorage(text: string): { text: string; 
   return { text: t.slice(0, MAX_ASSESSMENT_TEXT_STORAGE_CHARS), truncated: true };
 }
 
+/**
+ * Section headings whose content is most valuable to note generation: behavior definitions,
+ * functions, replacement programs, interventions, and reinforcement data.
+ */
+const EXCERPT_HIGH_PRIORITY_HEADINGS: RegExp[] = [
+  /^\s*(?:maladaptive|target|problem)\s+behaviors?\b/i,
+  /^\s*behavior\s+(?:profiles?|definitions?|reduction)\b/i,
+  /^\s*behavior\s+intervention\s+plan\b/i,
+  /^\s*functional\s+(?:behavior\s+)?assessment\b/i,
+  /^\s*preference\s+assessment\b/i,
+  /^\s*hypothesized\s+functions?\b/i,
+  /^\s*replacement\s+(?:skills?|programs?)\b/i,
+  /^\s*skill\s+acquisition\s+programs?\b/i,
+  /^\s*(?:recommended\s+)?interventions?(?:\/teaching\s+methodologies)?\b/i,
+  /^\s*intervention\s+strategies\b/i,
+  /^\s*reinforcement\s+preferences?\b/i,
+  /^\s*precursor\s+behaviors?\b/i,
+  /^\s*crisis\s+protocol\b/i,
+];
+
+/** Boilerplate sections that add no clinical value to note generation (dropped first). */
+const EXCERPT_LOW_PRIORITY_HEADINGS: RegExp[] = [
+  /^\s*signatures?\b/i,
+  /^\s*consent\b/i,
+  /^\s*insurance\b/i,
+  /^\s*billing\b/i,
+  /^\s*(?:provider|therapist|caregiver)\s+information\b/i,
+  /^\s*demographics?\b/i,
+  /^\s*appendix\b/i,
+  /^\s*references?\b/i,
+  /^\s*fee\s+schedule\b/i,
+];
+
+/** Body markers that make a section clinically valuable even without a recognized heading. */
+const EXCERPT_HIGH_VALUE_BODY_MARKERS: RegExp[] = [
+  /\bDescription\s*:/i,
+  /\bOperational\s+Definition\b/i,
+  /\bTopography\b/i,
+  /\bHypothesized\s+function\b/i,
+  /\bReplacement\s+(?:Skills?|Programs?)\b/i,
+  /\bGoal\s*#\s*\d+\s*:/i,
+];
+
+type ExcerptSection = { index: number; text: string; priority: 0 | 1 | 2 };
+
+function splitIntoExcerptSections(text: string): ExcerptSection[] {
+  const lines = text.split("\n");
+  const allHeadings = [...EXCERPT_HIGH_PRIORITY_HEADINGS, ...EXCERPT_LOW_PRIORITY_HEADINGS];
+  const sections: { headingLine: string | null; lines: string[] }[] = [
+    { headingLine: null, lines: [] },
+  ];
+  for (const line of lines) {
+    const isHeading = line.trim().length > 0 && line.trim().length <= 80 && allHeadings.some((re) => re.test(line));
+    if (isHeading) {
+      sections.push({ headingLine: line, lines: [line] });
+    } else {
+      sections[sections.length - 1]!.lines.push(line);
+    }
+  }
+
+  return sections
+    .map((s, index): ExcerptSection => {
+      const body = s.lines.join("\n").trim();
+      let priority: 0 | 1 | 2 = 1;
+      if (s.headingLine !== null && EXCERPT_LOW_PRIORITY_HEADINGS.some((re) => re.test(s.headingLine!))) {
+        priority = 0;
+      }
+      if (
+        (s.headingLine !== null && EXCERPT_HIGH_PRIORITY_HEADINGS.some((re) => re.test(s.headingLine!))) ||
+        EXCERPT_HIGH_VALUE_BODY_MARKERS.some((re) => re.test(body))
+      ) {
+        priority = 2;
+      }
+      return { index, text: body, priority };
+    })
+    .filter((s) => s.text.length > 0);
+}
+
+/**
+ * Build the assessment excerpt injected into the note-generation prompt.
+ *
+ * Under the budget the full text passes through unchanged. Over the budget, instead of naively
+ * keeping the first N characters (which loses late behavior/replacement sections in long BIPs),
+ * sections are selected by clinical priority — behavior definitions, functions, Preference
+ * Assessment, replacement programs, interventions first; boilerplate (signatures, insurance,
+ * consent) last — and reassembled in original document order.
+ */
 export function truncateAssessmentTextForNoteContext(text: string): { text: string; truncated: boolean } {
   const t = text.trim();
   if (t.length <= MAX_ASSESSMENT_TEXT_NOTE_CONTEXT_CHARS) return { text: t, truncated: false };
-  return { text: t.slice(0, MAX_ASSESSMENT_TEXT_NOTE_CONTEXT_CHARS), truncated: true };
+
+  const budget = MAX_ASSESSMENT_TEXT_NOTE_CONTEXT_CHARS;
+  const sections = splitIntoExcerptSections(t);
+  if (sections.length <= 1) {
+    return { text: t.slice(0, budget), truncated: true };
+  }
+
+  const separatorCost = 2; // "\n\n" between assembled sections
+  const selected: ExcerptSection[] = [];
+  let used = 0;
+
+  // Fair-share cap so one oversized high-priority section (e.g. behavior definitions glued to a
+  // long narrative) cannot starve later high-priority sections of the budget.
+  const highPriorityCount = sections.filter((s) => s.priority === 2).length;
+  const highPriorityCap =
+    highPriorityCount > 0 ? Math.max(4000, Math.floor(budget / highPriorityCount)) : budget;
+
+  for (const priority of [2, 1, 0] as const) {
+    for (const s of sections) {
+      if (s.priority !== priority) continue;
+      const remaining = budget - used - (selected.length > 0 ? separatorCost : 0);
+      if (remaining < 500) break;
+      const cap = priority === 2 ? Math.min(highPriorityCap, remaining) : remaining;
+      if (s.text.length <= cap) {
+        selected.push(s);
+        used += s.text.length + (selected.length > 1 ? separatorCost : 0);
+      } else if (priority === 2) {
+        selected.push({ ...s, text: s.text.slice(0, cap) });
+        used += cap + (selected.length > 1 ? separatorCost : 0);
+      }
+      // Lower-priority sections are all-or-nothing; skip when they do not fit.
+    }
+    if (budget - used < 500) break;
+  }
+
+  if (selected.length === 0) {
+    return { text: t.slice(0, budget), truncated: true };
+  }
+
+  selected.sort((a, b) => a.index - b.index);
+  return { text: selected.map((s) => s.text).join("\n\n"), truncated: true };
 }
 
 function resolveExtractModel(): string {
@@ -146,6 +284,8 @@ Rules:
 - replacementPrograms: replacement skills, target behaviors to increase, BIP goals, or teaching programs (names only). Do **not** put skill-acquisition-only programs here when the document has a separate **Skill Acquisition Programs** section — use \`skillAcquisitionPrograms\` for those instead.
 - skillAcquisitionPrograms: under a section explicitly titled **Skill Acquisition Programs**, include **only** the short skill name from each \`Goal # N: …\` line — the text **after** \`Goal # N:\` on that same line. Example: \`Goal # 2: Sharing: Allows Others to Manipulate/Touch Toys\` → \`Sharing: Allows Others to Manipulate/Touch Toys\`. Do **not** include BL/LTO/STO objectives, procedures, barriers, narrative paragraphs, addresses, page numbers, or any text that is not the goal-title fragment on a \`Goal #\` line. If the document has no **Skill Acquisition Programs** section, return [].
 - interventions: strategies, antecedent modifications, consequence procedures, prompts, token systems, DRA/DRI/DRA, redirection, etc.
+- behaviorReplacementMap: when each behavior's BIP section lists its own replacement skills/programs (e.g. under "Replacement Skills" or "Replacement Programs" inside that behavior's section), emit a JSON object mapping each behavior name (EXACT string from \`maladaptiveBehaviors\`) to an array of program names (EXACT strings from \`replacementPrograms\`). Only include pairings explicitly documented for that behavior. Omit the key entirely when the document does not tie programs to specific behaviors.
+- behaviorInterventionMap: same idea for interventions — map each behavior name (exact) to the intervention names (exact strings from \`interventions\`) that the BIP recommends for that specific behavior (e.g. under "Recommended Interventions" in that behavior's section). Omit when not documented per behavior.
 - dateOfBirth: output as MM/dd/yyyy if you can determine it; otherwise yyyy-MM-dd; omit if not in the text.
 - gender: must be exactly one of "Male", "Female", "Non-binary", "Prefer not to say" if clearly stated; otherwise omit.
 - firstName / lastName: client name if clearly labeled (not assessor names).
@@ -341,14 +481,42 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
 
   const assessmentSummary = sanitizeClientAssessmentSummary(extracted.assessmentSummary ?? null);
 
+  const dedupedReplacements = [
+    ...new Set(extracted.replacementPrograms.map((s) => s.trim()).filter(Boolean)),
+  ];
+  const dedupedInterventions = [
+    ...new Set(extracted.interventions.map((s) => s.trim()).filter(Boolean)),
+  ];
+
+  // Behavior→program / behavior→intervention maps: prefer explicit LLM output (aligned to canonical
+  // labels), then fill missing behaviors from the deterministic per-behavior BIP section parse.
+  const deterministicMaps = extractBehaviorMapsFromBipText(
+    rawText,
+    dedupedBehaviors,
+    dedupedReplacements,
+    dedupedInterventions,
+  );
+  const behaviorReplacementMap = mergeBehaviorMaps(
+    sanitizeBehaviorMap(extracted.behaviorReplacementMap, dedupedBehaviors, dedupedReplacements),
+    deterministicMaps.behaviorToReplacements,
+  );
+  const behaviorInterventionMap = mergeBehaviorMaps(
+    sanitizeBehaviorMap(extracted.behaviorInterventionMap, dedupedBehaviors, dedupedInterventions),
+    deterministicMaps.behaviorToInterventions,
+  );
+
   return {
     extracted: {
       ...extracted,
       maladaptiveBehaviors: dedupedBehaviors,
       maladaptiveBehaviorTopographies: topographies,
-      replacementPrograms: [...new Set(extracted.replacementPrograms.map((s) => s.trim()).filter(Boolean))],
+      replacementPrograms: dedupedReplacements,
       skillAcquisitionPrograms,
-      interventions: [...new Set(extracted.interventions.map((s) => s.trim()).filter(Boolean))],
+      interventions: dedupedInterventions,
+      behaviorReplacementMap:
+        Object.keys(behaviorReplacementMap).length > 0 ? behaviorReplacementMap : undefined,
+      behaviorInterventionMap:
+        Object.keys(behaviorInterventionMap).length > 0 ? behaviorInterventionMap : undefined,
       assessmentAuthorizationExpiresOn: normalizeIsoDateOrUndef(extracted.assessmentAuthorizationExpiresOn),
       assessmentSummary: assessmentSummary
         ? assessmentSummaryForExtractPayload(assessmentSummary)
@@ -358,6 +526,45 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
     pdfPageCount,
     pdfCharCount: text.length,
   };
+}
+
+/**
+ * Align an LLM-emitted behavior map to canonical catalog labels (case-insensitive) and drop
+ * keys/values that do not resolve to a catalog entry, so persisted maps always pass
+ * `validateAssessmentStructured`.
+ */
+function sanitizeBehaviorMap(
+  raw: Record<string, string[]> | undefined,
+  keyCatalog: string[],
+  valueCatalog: string[],
+): Record<string, string[]> {
+  if (!raw) return {};
+  const keyByLower = new Map(keyCatalog.map((k) => [k.toLowerCase(), k] as const));
+  const valueByLower = new Map(valueCatalog.map((v) => [v.toLowerCase(), v] as const));
+  const out: Record<string, string[]> = {};
+  for (const [k, vals] of Object.entries(raw)) {
+    const key = keyByLower.get(k.trim().toLowerCase());
+    if (!key || !Array.isArray(vals)) continue;
+    const aligned = dedupePreserveOrderTrimmed(
+      vals
+        .map((v) => valueByLower.get(String(v).trim().toLowerCase()) ?? "")
+        .filter(Boolean),
+    );
+    if (aligned.length > 0) out[key] = aligned;
+  }
+  return out;
+}
+
+/** Primary map wins per behavior key; fallback fills behaviors the primary map is missing. */
+function mergeBehaviorMaps(
+  primary: Record<string, string[]>,
+  fallback: Record<string, string[]>,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = { ...primary };
+  for (const [k, vals] of Object.entries(fallback)) {
+    if (!(k in out)) out[k] = vals;
+  }
+  return out;
 }
 
 /**
@@ -487,6 +694,133 @@ export function extractTopographyFromBipText(rawText: string, behaviorName: stri
     if (cleaned.length >= 30) return cleaned;
   }
   return null;
+}
+
+/**
+ * Sub-headings that begin the replacement-program list inside one behavior's BIP section.
+ */
+const BIP_REPLACEMENT_LIST_HEADINGS = ["Replacement Skills", "Replacement Programs", "Replacement Skill", "Replacement Program"];
+
+/**
+ * Sub-headings that begin the intervention list inside one behavior's BIP section.
+ */
+const BIP_INTERVENTION_LIST_HEADINGS = [
+  "Recommended Interventions",
+  "Interventions/Teaching methodologies",
+  "Intervention Strategies",
+  "Interventions",
+];
+
+/** Cap on how far past a behavior heading we scan for that behavior's section content. */
+const BIP_BEHAVIOR_SECTION_MAX_CHARS = 12_000;
+
+/**
+ * Slice the portion of the BIP text belonging to one behavior: from its heading line until the
+ * next different behavior heading (or the section cap). Returns null when the behavior heading
+ * is not found as a line-start heading.
+ */
+function extractBehaviorSectionFromBipText(
+  rawText: string,
+  behaviorName: string,
+  allBehaviorNames: string[],
+): string | null {
+  const text = rawText ?? "";
+  const heading = normalizeBehaviorHeading(behaviorName);
+  if (!text || !heading) return null;
+
+  const headingPattern = new RegExp(
+    String.raw`(?:^|\n)\s*${escapeForRegex(heading)}\s*(?:\r?\n|\s*$)`,
+    "gi",
+  );
+  const otherHeadings = allBehaviorNames
+    .map(normalizeBehaviorHeading)
+    .filter((h) => h && h.toLowerCase() !== heading.toLowerCase());
+
+  const match = headingPattern.exec(text);
+  if (!match) return null;
+  const start = match.index + match[0].length;
+  let window = text.slice(start, start + BIP_BEHAVIOR_SECTION_MAX_CHARS);
+
+  if (otherHeadings.length > 0) {
+    const stopRe = new RegExp(
+      String.raw`(?:^|\n)\s*(?:${otherHeadings.map(escapeForRegex).join("|")})\s*(?:\r?\n|$)`,
+      "i",
+    );
+    const stop = stopRe.exec(window);
+    if (stop) window = window.slice(0, stop.index);
+  }
+  return window;
+}
+
+/**
+ * Capture the text of a named sub-block (e.g. "Replacement Skills") within one behavior section,
+ * stopping at the next standard BIP sub-heading.
+ */
+function extractSubBlockFromBehaviorSection(section: string, blockHeadings: string[]): string | null {
+  const headAlt = blockHeadings.map(escapeForRegex).join("|");
+  const stopAlt = [...BIP_DESCRIPTION_STOP_HEADINGS, ...BIP_REPLACEMENT_LIST_HEADINGS, ...BIP_INTERVENTION_LIST_HEADINGS, "Description"]
+    .map(escapeForRegex)
+    .join("|");
+  const re = new RegExp(
+    String.raw`(?:^|\n)\s*(?:${headAlt})\s*[:.]?\s*\n?([\s\S]*?)(?=\n\s*(?:${stopAlt})\s*[:.\n]|$)`,
+    "i",
+  );
+  const m = re.exec(section);
+  const captured = m?.[1]?.trim() ?? "";
+  return captured.length > 0 ? captured : null;
+}
+
+/** Case-insensitive containment match of catalog labels within a text block; returns canonical labels. */
+function matchCatalogItemsInText(block: string, catalog: string[]): string[] {
+  const lower = block.toLowerCase();
+  const out: string[] = [];
+  for (const item of catalog) {
+    const needle = item.trim().toLowerCase();
+    if (!needle) continue;
+    if (lower.includes(needle)) out.push(item.trim());
+  }
+  return dedupePreserveOrderTrimmed(out);
+}
+
+export type ExtractedBehaviorMaps = {
+  behaviorToReplacements: Record<string, string[]>;
+  behaviorToInterventions: Record<string, string[]>;
+};
+
+/**
+ * Deterministically build behavior→replacement-program and behavior→intervention maps from raw BIP
+ * text. Only emits entries whose behavior appears as a section heading and whose values match the
+ * provided catalog lists exactly (canonical strings), so results always pass
+ * `validateAssessmentStructured`. Behaviors without a parseable section are simply omitted.
+ */
+export function extractBehaviorMapsFromBipText(
+  rawText: string,
+  behaviors: string[],
+  replacementPrograms: string[],
+  interventions: string[],
+): ExtractedBehaviorMaps {
+  const behaviorToReplacements: Record<string, string[]> = {};
+  const behaviorToInterventions: Record<string, string[]> = {};
+  const behaviorList = dedupePreserveOrderTrimmed(behaviors);
+
+  for (const behavior of behaviorList) {
+    const section = extractBehaviorSectionFromBipText(rawText, behavior, behaviorList);
+    if (!section) continue;
+
+    const replacementBlock = extractSubBlockFromBehaviorSection(section, BIP_REPLACEMENT_LIST_HEADINGS);
+    if (replacementBlock) {
+      const matched = matchCatalogItemsInText(replacementBlock, replacementPrograms);
+      if (matched.length > 0) behaviorToReplacements[behavior] = matched;
+    }
+
+    const interventionBlock = extractSubBlockFromBehaviorSection(section, BIP_INTERVENTION_LIST_HEADINGS);
+    if (interventionBlock) {
+      const matched = matchCatalogItemsInText(interventionBlock, interventions);
+      if (matched.length > 0) behaviorToInterventions[behavior] = matched;
+    }
+  }
+
+  return { behaviorToReplacements, behaviorToInterventions };
 }
 
 /** Section headings that terminate the Skill Acquisition Programs block. */
