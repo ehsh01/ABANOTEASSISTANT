@@ -41,6 +41,8 @@ import {
   rebalanceTaskRefusalReplacementProgramsHourly,
   rebalanceBehaviorMappedReplacementProgramsHourly,
   rebalanceDistinctReplacementProgramsByFunction,
+  ensureReplacementProgramAlignmentForSegments,
+  replacementProgramSlotHours,
   buildBehaviorReplacementCandidatesForNarrativeSegments,
   buildInterventionCandidatesForNarrativeSegments,
   isSundaySessionDate,
@@ -54,6 +56,7 @@ import {
   type NoteComplianceContext,
   type TherapistTrialSummaryForHourEntry,
 } from "./note-validation";
+import { repairClinicalBodyReplacementProgramAssignments } from "./replacement-program-repair";
 import {
   buildLockedOpening,
   buildNextSessionSentence,
@@ -503,6 +506,49 @@ export async function generateSessionNoteForClient(params: {
     acquisitionOnlySegmentForHour[i] ? false : v,
   );
 
+  const maladaptiveBehaviorFunctionsForHour = maladaptiveBehaviorFunctionsForHourLabels(
+    maladaptiveBehaviorForNarrative,
+    maladaptiveBehaviorTargetsForNote,
+    maladaptiveBehaviorLabelsEquivalent,
+  );
+
+  const fullCatalogPoolIds =
+    linkedIdsUnique.length > 0 ? linkedIdsUnique : poolIds;
+  const segmentCount = narrativeCollapsed.narrativeSegmentCount;
+  const segmentReplacementNames = [...narrativeCollapsed.replacementProgramForHour];
+  const segmentRbtFlags = [...narrativeCollapsed.rbtActionsOnlyOutcomeForHour];
+  const segmentProgramIds: (number | null)[] = Array.from({ length: segmentCount }, (_, s) => {
+    for (const h of replacementProgramSlotHours(body.sessionHours, s)) {
+      if (programIdForHour[h] !== null) return programIdForHour[h];
+    }
+    return null;
+  });
+  const segmentExplicitProgramIds = Array.from({ length: segmentCount }, (_, s) => {
+    for (const h of replacementProgramSlotHours(body.sessionHours, s)) {
+      const pid = explicitProgramIdByHour[h];
+      if (typeof pid === "number") return pid;
+    }
+    return undefined;
+  });
+  const segmentAlignmentSwaps = ensureReplacementProgramAlignmentForSegments({
+    segmentCount,
+    maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
+    names: segmentReplacementNames,
+    rbtActionsOnlyOutcomeForHour: segmentRbtFlags,
+    programIdForHour: segmentProgramIds,
+    explicitProgramIdByHour: segmentExplicitProgramIds,
+    rebalancePoolIds: fullCatalogPoolIds,
+    idToName: idToNameForPrograms,
+    selectedIdSet,
+    behaviorToReplacementsMap,
+    authorizedProgramNames: replacementProgramsCatalogForNote,
+    maladaptiveBehaviorFunctionsForHour,
+    overrideExplicitOnHardMisfit: true,
+    slotLabel: "Segment",
+  });
+  narrativeCollapsed.replacementProgramForHour = segmentReplacementNames;
+  narrativeCollapsed.rbtActionsOnlyOutcomeForHour = segmentRbtFlags;
+
   const complianceCtxBase: NoteComplianceContext = {
     sessionHours: body.sessionHours,
     therapySetting: body.therapySetting,
@@ -573,13 +619,7 @@ export async function generateSessionNoteForClient(params: {
       "Sunday sessions require documented parental consent. Verify that a signed consent form authorizing Sunday sessions is on file for this client — otherwise the agency is in breach of the authorization requirements.",
     );
   }
-  warnings.push(...behaviorRebalanceSwaps, ...distinctReplacementSwaps);
-
-  const maladaptiveBehaviorFunctionsForHour = maladaptiveBehaviorFunctionsForHourLabels(
-    maladaptiveBehaviorForNarrative,
-    maladaptiveBehaviorTargetsForNote,
-    maladaptiveBehaviorLabelsEquivalent,
-  );
+  warnings.push(...behaviorRebalanceSwaps, ...distinctReplacementSwaps, ...segmentAlignmentSwaps);
 
   const maladaptiveBehaviorTopographyForHour = maladaptiveBehaviorTopographyForHourLabels(
     maladaptiveBehaviorForNarrative,
@@ -678,14 +718,74 @@ export async function generateSessionNoteForClient(params: {
     };
   }
 
-  const complianceIssues = validateClinicalBodyCompliance(clinicalBody, {
+  let finalClinicalBody = clinicalBody;
+  const buildComplianceContext = (): NoteComplianceContext => ({
     ...complianceCtxBase,
+    replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
+    rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
     maladaptiveBehaviorFunctionsForHour,
     maladaptiveBehaviorTopographyForHour,
     behaviorToReplacementsMap,
   });
-  const { critical: criticalComplianceIssues, stylistic: stylisticComplianceIssues } =
+
+  let complianceIssues = validateClinicalBodyCompliance(finalClinicalBody, buildComplianceContext());
+  const replacementProgramIssue = (issue: string): boolean =>
+    /^Replacement program function:/.test(issue) || /^Replacement program logic:/.test(issue);
+
+  if (complianceIssues.some(replacementProgramIssue)) {
+    const assignmentsBeforeRepair = [...narrativeCollapsed.replacementProgramForHour];
+    const repairNames = [...narrativeCollapsed.replacementProgramForHour];
+    const repairRbt = [...narrativeCollapsed.rbtActionsOnlyOutcomeForHour];
+    const repairPids = [...segmentProgramIds];
+    const repairSwaps = ensureReplacementProgramAlignmentForSegments({
+      segmentCount,
+      maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
+      names: repairNames,
+      rbtActionsOnlyOutcomeForHour: repairRbt,
+      programIdForHour: repairPids,
+      explicitProgramIdByHour: segmentExplicitProgramIds,
+      rebalancePoolIds: fullCatalogPoolIds,
+      idToName: idToNameForPrograms,
+      selectedIdSet,
+      behaviorToReplacementsMap,
+      authorizedProgramNames: replacementProgramsCatalogForNote,
+      maladaptiveBehaviorFunctionsForHour,
+      overrideExplicitOnHardMisfit: true,
+      slotLabel: "Segment",
+    });
+    const assignmentsChanged = repairNames.some(
+      (name, idx) => name !== assignmentsBeforeRepair[idx],
+    );
+    if (assignmentsChanged || repairSwaps.length > 0) {
+      finalClinicalBody = repairClinicalBodyReplacementProgramAssignments(
+        finalClinicalBody,
+        assignmentsBeforeRepair,
+        repairNames,
+      );
+      narrativeCollapsed.replacementProgramForHour = repairNames;
+      narrativeCollapsed.rbtActionsOnlyOutcomeForHour = repairRbt;
+      warnings.push(...repairSwaps);
+      complianceIssues = validateClinicalBodyCompliance(finalClinicalBody, {
+        ...buildComplianceContext(),
+        replacementProgramForHour: repairNames,
+        rbtActionsOnlyOutcomeForHour: repairRbt,
+      });
+    }
+  }
+
+  let { critical: criticalComplianceIssues, stylistic: stylisticComplianceIssues } =
     classifyComplianceIssues(complianceIssues);
+
+  const unresolvedReplacementIssues = criticalComplianceIssues.filter(replacementProgramIssue);
+  if (unresolvedReplacementIssues.length > 0) {
+    for (const issue of unresolvedReplacementIssues) {
+      warnings.push(`Clinical body compliance check: ${issue} (note saved; review replacement program assignments on the client BIP).`);
+    }
+    criticalComplianceIssues = criticalComplianceIssues.filter(
+      (issue) => !replacementProgramIssue(issue),
+    );
+  }
+
   for (const issue of stylisticComplianceIssues) {
     warnings.push(`Clinical body compliance check: ${issue}`);
   }
@@ -714,7 +814,7 @@ export async function generateSessionNoteForClient(params: {
     body.presentPeople,
     body.hasEnvironmentalChanges,
     body.therapySetting,
-    clinicalBody,
+    finalClinicalBody,
     body.nextSessionDate,
     profile?.firstName,
     narrativeCollapsed.narrativeSegmentCount,

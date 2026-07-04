@@ -595,7 +595,7 @@ export function behaviorReplacementCandidatesForMaladaptiveBehavior(
 /**
  * Definitive function mismatches that override an incorrect BIP behavior→replacement map.
  */
-function isHardMisfitReplacementForMaladaptiveBehavior(
+export function isHardMisfitReplacementForMaladaptiveBehavior(
   behaviorName: string,
   replacementProgramName: string,
   behaviorFunctions?: import("@workspace/db/schema").ClinicalFunction[] | null,
@@ -783,6 +783,9 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
   behaviorToReplacementsMap: Record<string, string[]>;
   authorizedProgramNames: string[];
   maladaptiveBehaviorFunctionsForHour?: (import("@workspace/db/schema").ClinicalFunction[] | null)[] | undefined;
+  /** When true, swap even explicit ABC pins if the current program is a hard function mismatch. */
+  overrideExplicitOnHardMisfit?: boolean;
+  slotLabel?: string;
 }): string[] {
   const {
     sessionHours: H,
@@ -797,6 +800,8 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
     behaviorToReplacementsMap,
     authorizedProgramNames,
     maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
+    overrideExplicitOnHardMisfit = false,
+    slotLabel = "Hour",
   } = params;
 
   const swapped: string[] = [];
@@ -806,8 +811,13 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
     if (!behavior) continue;
     const currentName = names[h]?.trim() ?? "";
     if (!currentName) continue;
-    if (typeof explicit[h] === "number") continue;
     const hourFunctions = behaviorFunctions?.[h];
+    if (typeof explicit[h] === "number") {
+      const hardMisfit =
+        overrideExplicitOnHardMisfit &&
+        isHardMisfitReplacementForMaladaptiveBehavior(behavior, currentName, hourFunctions);
+      if (!hardMisfit) continue;
+    }
     if (
       !isMisfitReplacementForMaladaptiveBehavior(
         behavior,
@@ -866,7 +876,7 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
     pids[h] = pick;
     rbt[h] = !selectedIdSet.has(pick);
     swapped.push(
-      `Hour ${h + 1} (${behavior}): replacement program rebalanced from "${currentName}" to "${newName}" for BIP function alignment.`,
+      `${slotLabel} ${h + 1} (${behavior}): replacement program rebalanced from "${currentName}" to "${newName}" for BIP function alignment.`,
     );
   }
 
@@ -890,6 +900,8 @@ export function rebalanceDistinctReplacementProgramsByFunction(params: {
   behaviorToReplacementsMap: Record<string, string[]>;
   authorizedProgramNames: string[];
   maladaptiveBehaviorFunctionsForHour?: (import("@workspace/db/schema").ClinicalFunction[] | null)[] | undefined;
+  overrideExplicitOnHardMisfit?: boolean;
+  slotLabel?: string;
 }): string[] {
   const {
     sessionHours: H,
@@ -904,16 +916,23 @@ export function rebalanceDistinctReplacementProgramsByFunction(params: {
     behaviorToReplacementsMap,
     authorizedProgramNames,
     maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
+    overrideExplicitOnHardMisfit = false,
+    slotLabel = "Hour",
   } = params;
 
   const swapped: string[] = [];
 
   for (let h = 0; h < H; h++) {
-    if (typeof explicit[h] === "number") continue;
     const behavior = beh[h]?.trim() ?? "";
     const currentName = names[h]?.trim() ?? "";
     if (!behavior || !currentName) continue;
     const hourFunctions = behaviorFunctions?.[h];
+    if (typeof explicit[h] === "number") {
+      const hardMisfit =
+        overrideExplicitOnHardMisfit &&
+        isHardMisfitReplacementForMaladaptiveBehavior(behavior, currentName, hourFunctions);
+      if (!hardMisfit) continue;
+    }
     const primary = primaryFunctionForReplacementSelection(hourFunctions);
     if (!primary) continue;
 
@@ -972,7 +991,172 @@ export function rebalanceDistinctReplacementProgramsByFunction(params: {
     pids[h] = pick;
     rbt[h] = !selectedIdSet.has(pick);
     swapped.push(
-      `Hour ${h + 1} (${behavior}): replacement program rebalanced from "${currentName}" to "${newName}" so unrelated behaviors/functions do not share the same replacement program.`,
+      `${slotLabel} ${h + 1} (${behavior}): replacement program rebalanced from "${currentName}" to "${newName}" so unrelated behaviors/functions do not share the same replacement program.`,
+    );
+  }
+
+  return swapped;
+}
+
+/** Best BIP/function-aligned replacement program name for a behavior when auto-assignment misfires. */
+export function pickBestReplacementProgramForBehavior(
+  behavior: string,
+  behaviorToReplacementsMap: Record<string, string[]>,
+  authorizedProgramNames: string[],
+  behaviorFunctions?: import("@workspace/db/schema").ClinicalFunction[] | null,
+  excludeNames?: ReadonlySet<string>,
+): string | null {
+  const candidates = behaviorReplacementCandidatesForMaladaptiveBehavior(
+    behavior,
+    behaviorToReplacementsMap,
+    authorizedProgramNames,
+    behaviorFunctions,
+  );
+  for (const c of candidates) {
+    if (!excludeNames?.has(c)) return c;
+  }
+  const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
+  if (primary) {
+    for (const p of authorizedProgramNames) {
+      if (excludeNames?.has(p)) continue;
+      if (
+        replacementProgramMatchesFunctionCategory(p, primary) &&
+        !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p, behaviorFunctions)
+      ) {
+        return p;
+      }
+    }
+  }
+  for (const p of authorizedProgramNames) {
+    if (excludeNames?.has(p)) continue;
+    if (!isHardMisfitReplacementForMaladaptiveBehavior(behavior, p, behaviorFunctions)) {
+      return p;
+    }
+  }
+  return null;
+}
+
+function resolveReplacementProgramIdByName(
+  name: string,
+  idToName: Map<number, string>,
+): number | null {
+  const trimmed = name.trim();
+  for (const [id, n] of idToName) {
+    if (n.trim() === trimmed) return id;
+  }
+  return null;
+}
+
+/**
+ * Rebalance replacement programs per narrative segment using the **full client catalog** pool,
+ * override explicit ABC pins when they are hard function mismatches, and apply a final fallback
+ * picker so assignments always align before note generation.
+ */
+export function ensureReplacementProgramAlignmentForSegments(params: {
+  segmentCount: number;
+  maladaptiveBehaviorForHour: string[];
+  names: string[];
+  rbtActionsOnlyOutcomeForHour: boolean[];
+  programIdForHour: (number | null)[];
+  explicitProgramIdByHour: (number | null | undefined)[];
+  rebalancePoolIds: number[];
+  idToName: Map<number, string>;
+  selectedIdSet: Set<number>;
+  behaviorToReplacementsMap: Record<string, string[]>;
+  authorizedProgramNames: string[];
+  maladaptiveBehaviorFunctionsForHour?: (import("@workspace/db/schema").ClinicalFunction[] | null)[] | undefined;
+  overrideExplicitOnHardMisfit?: boolean;
+  slotLabel?: string;
+}): string[] {
+  const {
+    segmentCount: S,
+    maladaptiveBehaviorForHour: beh,
+    names,
+    rbtActionsOnlyOutcomeForHour: rbt,
+    programIdForHour: pids,
+    explicitProgramIdByHour: explicit,
+    rebalancePoolIds,
+    idToName,
+    selectedIdSet,
+    behaviorToReplacementsMap,
+    authorizedProgramNames,
+    maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
+    overrideExplicitOnHardMisfit = true,
+    slotLabel = "Segment",
+  } = params;
+
+  const swapped: string[] = [];
+  swapped.push(
+    ...rebalanceBehaviorMappedReplacementProgramsHourly({
+      sessionHours: S,
+      maladaptiveBehaviorForHour: beh,
+      names,
+      rbtActionsOnlyOutcomeForHour: rbt,
+      programIdForHour: pids,
+      explicitProgramIdByHour: explicit,
+      poolIds: rebalancePoolIds,
+      idToName,
+      selectedIdSet,
+      behaviorToReplacementsMap,
+      authorizedProgramNames,
+      maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
+      overrideExplicitOnHardMisfit,
+      slotLabel,
+    }),
+  );
+  swapped.push(
+    ...rebalanceDistinctReplacementProgramsByFunction({
+      sessionHours: S,
+      maladaptiveBehaviorForHour: beh,
+      names,
+      rbtActionsOnlyOutcomeForHour: rbt,
+      programIdForHour: pids,
+      explicitProgramIdByHour: explicit,
+      poolIds: rebalancePoolIds,
+      idToName,
+      selectedIdSet,
+      behaviorToReplacementsMap,
+      authorizedProgramNames,
+      maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
+      overrideExplicitOnHardMisfit,
+      slotLabel,
+    }),
+  );
+
+  for (let s = 0; s < S; s++) {
+    const behavior = beh[s]?.trim() ?? "";
+    const currentName = names[s]?.trim() ?? "";
+    if (!behavior || !currentName) continue;
+    const hourFunctions = behaviorFunctions?.[s];
+    if (
+      !isMisfitReplacementForMaladaptiveBehavior(
+        behavior,
+        currentName,
+        behaviorToReplacementsMap,
+        hourFunctions,
+      )
+    ) {
+      continue;
+    }
+    const usedNames = new Set(
+      names.map((n, idx) => (idx === s ? "" : n.trim())).filter((n) => n.length > 0),
+    );
+    const fallback = pickBestReplacementProgramForBehavior(
+      behavior,
+      behaviorToReplacementsMap,
+      authorizedProgramNames,
+      hourFunctions,
+      usedNames,
+    );
+    if (!fallback || fallback === currentName) continue;
+    const pid = resolveReplacementProgramIdByName(fallback, idToName);
+    names[s] = fallback;
+    if (pid !== null) {
+      pids[s] = pid;
+      rbt[s] = !selectedIdSet.has(pid);
+    }
+    swapped.push(
+      `${slotLabel} ${s + 1} (${behavior}): replacement program auto-corrected from "${currentName}" to "${fallback}" for BIP function alignment.`,
     );
   }
 

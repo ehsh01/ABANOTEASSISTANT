@@ -832,8 +832,6 @@ const CRITICAL_COMPLIANCE_ISSUE_PATTERNS: RegExp[] = [
   /^Physical Aggression intervention coherence:/,
   /^Mandatory DRA:/,
   /^Intervention function match:/,
-  /^Replacement program function:/,
-  /^Replacement program logic:/,
   /^Therapist trial counts:/,
   /Unauthorized replacement program/i,
   /unauthorized intervention name/i,
