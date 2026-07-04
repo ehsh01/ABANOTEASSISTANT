@@ -247,7 +247,7 @@ function resolveExtractModel(): string {
 }
 
 /**
- * GPT-5.x chat models (e.g. `gpt-5.3-chat-latest`) reject custom `temperature` and `max_tokens`; only
+ * GPT-5.x chat models (e.g. `gpt-5.5`) reject custom `temperature` and `max_tokens`; only
  * the default temperature (1) is accepted, and `max_completion_tokens` replaces `max_tokens`. Mirrors
  * `isGpt5FamilyNoteModel` in `openai-notes.ts`.
  */

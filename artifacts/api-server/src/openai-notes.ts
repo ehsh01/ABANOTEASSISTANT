@@ -1,6 +1,6 @@
 /**
  * OpenAI-powered clinical body for session notes.
- * Default model is GPT 5.3 (`gpt-5.3-chat-latest`). Override with OPENAI_MODEL if OpenAI publishes a different id.
+ * Default model is GPT 5.5 (`gpt-5.5`). Override with OPENAI_MODEL if OpenAI publishes a different id.
  * Opening/closing locked prose is still assembled server-side in note-assembly.ts.
  */
 
@@ -29,7 +29,7 @@ import {
 } from "./safety-chain-enforcement";
 
 /** Chat Completions model id for note clinical body when OPENAI_MODEL is unset. */
-export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-5.3-chat-latest";
+export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-5.5";
 
 export type NoteGenerationContext = {
   /**
@@ -434,7 +434,7 @@ function toComplianceCtx(ctx: NoteGenerationContext): NoteComplianceContext {
   };
 }
 
-/** Resolved model: OPENAI_MODEL env, else GPT 5.3 default. */
+/** Resolved model: OPENAI_MODEL env, else GPT 5.5 default. */
 export function resolvedOpenAIModel(): string {
   return process.env.OPENAI_MODEL?.trim() || DEFAULT_OPENAI_NOTE_MODEL;
 }
@@ -464,7 +464,7 @@ export type GenerateClinicalBodyResult = {
 };
 
 /**
- * GPT-5.x chat models (e.g. gpt-5.3-chat-latest) reject:
+ * GPT-5.x chat models (e.g. gpt-5.5) reject:
  * - `max_tokens` (use `max_completion_tokens`)
  * - custom `temperature` (only default 1 is allowed — omit the parameter)
  */
