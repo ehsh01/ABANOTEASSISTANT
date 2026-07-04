@@ -8,6 +8,15 @@ import {
   preferredInterventionCandidatesForBehaviorFunction,
 } from "./behavior-function-intervention-mapping";
 import {
+  assignedBehaviorAllowsResponseBlockSafetyChain,
+  findResponseBlockInterventionLabel,
+  firstNamedInterventionInConsequenceTail,
+  hasFunctionMatchedInterventionAfterResponseBlock,
+  interventionTailAfterManifestedBehavior,
+  paragraphHasResponseBlockFirst,
+  selectSecondSafetyChainIntervention,
+} from "./safety-chain-enforcement";
+import {
   elopementEpisodeLacksObservableTopography,
   isElopementFamilyBehaviorLabel,
   paragraphReflectsStoredTopography,
@@ -1085,7 +1094,19 @@ export function isMisfitReplacementForMaladaptiveBehavior(
     return true;
   }
 
+  const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
   const mapped = mappedReplacementsForBehaviorKey(behavior, behaviorToReplacementsMap);
+  if (primary && primary !== "automatic") {
+    const functionAlignedMapped = mapped.filter(
+      (p) =>
+        replacementProgramMatchesFunctionCategory(p, primary) &&
+        !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p, behaviorFunctions),
+    );
+    if (functionAlignedMapped.length > 0) {
+      return !functionAlignedMapped.includes(program);
+    }
+  }
+
   const mappedNonHard = mapped.filter(
     (p) => !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p, behaviorFunctions),
   );
@@ -1093,7 +1114,6 @@ export function isMisfitReplacementForMaladaptiveBehavior(
     return !mappedNonHard.includes(program);
   }
 
-  const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
   if (primary && !replacementProgramMatchesFunctionCategory(program, primary)) {
     const hasFunctionMatch = Object.values(behaviorToReplacementsMap)
       .flat()
@@ -1495,33 +1515,8 @@ function isPhysicalAggressionCatalogLabel(behaviorName: string): boolean {
 export { isResponseBlockInterventionLabel } from "./behavior-function-intervention-mapping";
 
 /**
- * Assigned maladaptive labels where, if a response-blocking intervention is on the client's intervention list,
- * the narrative may document that label first and then **additional** separate intervention sentences (safety chain).
+ * Assigned maladaptive labels where response-blocking may precede function interventions — see safety-chain-enforcement.ts.
  */
-function assignedBehaviorAllowsResponseBlockSafetyChain(behaviorName: string): boolean {
-  const t = behaviorName.trim();
-  if (maladaptiveBehaviorLabelsEquivalent(t, MALADAPTIVE_BEHAVIOR_SIB_CANONICAL)) return true;
-  if (/\bSIB\b/i.test(t) || /self[- ]?injurious\s+behavior/i.test(t)) return true;
-  if (isPhysicalAggressionCatalogLabel(t)) return true;
-  const u = t.toLowerCase();
-  return (
-    /\bwandering\b/.test(u) ||
-    /\belope/.test(u) ||
-    /\bbaiting\b/.test(u) ||
-    /\bbolting\b/.test(u) ||
-    /\brunning\s+away\b/.test(u)
-  );
-}
-
-/** Exact intervention string from the client's list when it is a response-blocking safety label. */
-function findResponseBlockInterventionLabel(interventions: string[]): string | null {
-  for (const raw of interventions) {
-    const s = raw.trim();
-    if (s.length === 0) continue;
-    if (isResponseBlockInterventionLabel(s)) return s;
-  }
-  return null;
-}
 
 /**
  * Count distinct catalog interventions documented with **implemented** / **applied** + exact catalog name,
@@ -1612,15 +1607,6 @@ function isSibMaladaptiveBehavior(behaviorName: string): boolean {
   return /\bSIB\b/i.test(t) || /self[- ]?injurious\s+behavior/i.test(t);
 }
 
-/** Text after the manifested-behavior sentence — where consequence interventions are documented. */
-function interventionTailAfterManifestedBehavior(paragraph: string): string {
-  const m = /\bthe client manifested\b/i.exec(paragraph);
-  if (!m || m.index === undefined) return paragraph;
-  const after = paragraph.slice(m.index);
-  const dot = after.indexOf(".");
-  return dot >= 0 ? after.slice(dot + 1) : after;
-}
-
 /** True when the manifested-behavior sentence names the catalog label without observable topography detail. */
 function manifestedBehaviorLacksObservableTopography(paragraph: string): boolean {
   const m = /\bthe client manifested\b/i.exec(paragraph);
@@ -1698,43 +1684,9 @@ function paragraphSuggestsDemandEscapePhysicalAggression(paragraph: string): boo
   );
 }
 
-/** Smallest index in `text` among catalog intervention names that appear; longest names first to reduce substring ambiguity. */
+/** First catalog intervention naming sentence in consequence text (case-insensitive). */
 function firstInterventionMentionInText(text: string, interventionNames: string[]): string | null {
-  const names = [...new Set(interventionNames.map((s) => s.trim()).filter((s) => s.length > 0))].sort(
-    (a, b) => b.length - a.length,
-  );
-  let bestIdx = Infinity;
-  let bestName: string | null = null;
-  for (const n of names) {
-    const idx = text.indexOf(n);
-    if (idx !== -1 && idx < bestIdx) {
-      bestIdx = idx;
-      bestName = n;
-    }
-  }
-  return bestName;
-}
-
-/** True when a function-aligned catalog intervention is named after response blocking in the consequence chain. */
-function hasFunctionMatchedInterventionAfterResponseBlock(
-  paragraph: string,
-  interventionList: string[],
-  responseBlockLabel: string,
-  functionCandidates: string[],
-): boolean {
-  if (functionCandidates.length === 0) return true;
-  const tail = interventionTailAfterManifestedBehavior(paragraph);
-  const blockIdx = tail.indexOf(responseBlockLabel);
-  if (blockIdx === -1) return false;
-  const afterBlock = tail.slice(blockIdx + responseBlockLabel.length);
-  const names = [...new Set(functionCandidates.map((s) => s.trim()).filter((s) => s.length > 0))].sort(
-    (a, b) => b.length - a.length,
-  );
-  for (const name of names) {
-    const re = new RegExp(`(?:implemented|applied)\\s+${escapeRegExp(name)}\\s*\\.`, "i");
-    if (re.test(afterBlock)) return true;
-  }
-  return false;
+  return firstNamedInterventionInConsequenceTail(text, interventionNames);
 }
 
 /** Catalog label with trailing parenthetical acronym, e.g. "... Behavior (DRI)". */
@@ -2439,36 +2391,70 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
             )
           : [];
       if (responseBlockLabel) {
-        if (firstNamed !== responseBlockLabel) {
-          issues.push(
-            `SIB response blocking: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" but must name "${responseBlockLabel}" as the **first** catalog intervention after the manifested-behavior line—before DRA, DRI, Premack principle, Redirection, Environmental Manipulation, or any other approved intervention. Use "To address this behavior, the RBT implemented ${responseBlockLabel}." then describe blocking/protection in **Following this intervention,** and only then name any additional approved catalog intervention or replacement program.`,
-          );
-        } else if (
-          primaryFunction === "attention" &&
-          attentionInterventions.some(isDraOrDriInterventionLabel)
-        ) {
-          const draDriCandidates = attentionInterventions.filter(isDraOrDriInterventionLabel);
-          if (
-            !hasFunctionMatchedInterventionAfterResponseBlock(
-              p,
-              interventionList,
-              responseBlockLabel,
-              draDriCandidates,
-            )
-          ) {
+        const responseBlockFirst = paragraphHasResponseBlockFirst(p, responseBlockLabel, interventionList);
+        if (!responseBlockFirst) {
+          if (firstNamed && isResponseBlockInterventionLabel(firstNamed)) {
             issues.push(
-              `SIB attention function: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" with documented attention function and Response Block first. Name "${draDriCandidates[0]}" (or another listed DRA/DRI label) as the **second** catalog intervention naming sentence after blocking is described—Attention independent response delivery alone does not target the attention-maintained contingency when DRA/DRI are on the approved list.`,
+              `SIB response blocking: paragraph ${i + 1} must use exact catalog spelling "${responseBlockLabel}" in the intervention naming sentence (for example "The RBT implemented ${responseBlockLabel}.").`,
             );
           } else {
-            const consequenceAfterBlock = interventionTailAfterManifestedBehavior(p);
-            const blockIdx = consequenceAfterBlock.indexOf(responseBlockLabel);
-            const afterBlock =
-              blockIdx >= 0
-                ? consequenceAfterBlock.slice(blockIdx + responseBlockLabel.length)
-                : consequenceAfterBlock;
+            issues.push(
+              `SIB response blocking: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" but must name "${responseBlockLabel}" as the **first** catalog intervention after the manifested-behavior line—before DRA, DRI, Premack principle, Redirection, Environmental Manipulation, or any other approved intervention. Use "To address this behavior, the RBT implemented ${responseBlockLabel}." then describe blocking/protection in **Following this intervention,** and only then name any additional approved catalog intervention or replacement program.`,
+            );
+          }
+        } else {
+          const draDriCandidates = attentionInterventions.filter(isDraOrDriInterventionLabel);
+          const functionCandidates =
+            primaryFunction === "attention" && draDriCandidates.length > 0
+              ? draDriCandidates
+              : attentionInterventions.length > 0
+                ? attentionInterventions
+                : preferredInterventionCandidatesForBehaviorFunction(
+                    interventionList,
+                    segmentFunctions,
+                    assignedBehavior,
+                  ).filter((s) => !isResponseBlockInterventionLabel(s));
+          const checkCandidates =
+            functionCandidates.length > 0
+              ? functionCandidates
+              : interventionList.filter((s) => !isResponseBlockInterventionLabel(s.trim()));
+          if (
+            checkCandidates.length > 0 &&
+            !hasFunctionMatchedInterventionAfterResponseBlock(p, responseBlockLabel, checkCandidates)
+          ) {
+            const sample =
+              selectSecondSafetyChainIntervention({
+                assignedBehavior,
+                interventions: interventionList,
+                behaviorFunctions: segmentFunctions,
+              }) ?? checkCandidates[0];
+            if (
+              primaryFunction === "attention" &&
+              draDriCandidates.length > 0
+            ) {
+              issues.push(
+                `SIB attention function: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" with documented attention function and Response Block first. Name "${draDriCandidates[0]}" (or another listed DRA/DRI label) as the **second** catalog intervention naming sentence after blocking is described—Attention independent response delivery alone does not target the attention-maintained contingency when DRA/DRI are on the approved list.`,
+              );
+            } else {
+              issues.push(
+                `Safety chain function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${responseBlockLabel}" only. Response Block is safety/support only—not primary treatment. Name "${sample}" as the **second** catalog intervention naming sentence after blocking is described.`,
+              );
+            }
+          } else {
+            const tail = interventionTailAfterManifestedBehavior(p);
+            const blockRe = new RegExp(
+              `(?:implemented|applied)\\s+${escapeRegExp(responseBlockLabel)}\\s*\\.`,
+              "i",
+            );
+            const blockMatch = blockRe.exec(tail);
+            const afterBlock = blockMatch
+              ? tail.slice(blockMatch.index + blockMatch[0].length)
+              : tail;
             const secondNamed = firstInterventionMentionInText(afterBlock, interventionList);
             if (
               secondNamed &&
+              primaryFunction === "attention" &&
+              draDriCandidates.length > 0 &&
               isInsufficientAttentionInterventionAfterSibSafetyChain(secondNamed, interventionList)
             ) {
               issues.push(
@@ -2518,7 +2504,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         Boolean(responseBlockLabel) &&
         assignedBehaviorAllowsResponseBlockSafetyChain(assignedBehavior);
       const responseBlockIsFirst =
-        safetyChainBehavior && firstNamedIntervention === responseBlockLabel;
+        safetyChainBehavior &&
+        Boolean(responseBlockLabel) &&
+        paragraphHasResponseBlockFirst(p, responseBlockLabel!, interventionList);
       if (
         firstNamedIntervention &&
         primaryFunction &&
@@ -2545,18 +2533,23 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
           interventionList,
           segmentFunctions,
           assignedBehavior,
-        );
+        ).filter((s) => !isResponseBlockInterventionLabel(s));
+        const checkCandidates =
+          candidates.length > 0
+            ? candidates
+            : interventionList.filter((s) => !isResponseBlockInterventionLabel(s.trim()));
         if (
-          candidates.length > 0 &&
-          !hasFunctionMatchedInterventionAfterResponseBlock(
-            p,
-            interventionList,
-            responseBlockLabel!,
-            candidates,
-          )
+          checkCandidates.length > 0 &&
+          !hasFunctionMatchedInterventionAfterResponseBlock(p, responseBlockLabel!, checkCandidates)
         ) {
+          const sample =
+            selectSecondSafetyChainIntervention({
+              assignedBehavior,
+              interventions: interventionList,
+              behaviorFunctions: segmentFunctions,
+            }) ?? checkCandidates[0];
           issues.push(
-            `Safety chain function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${responseBlockLabel}" only. Response Block is safety/support only—not primary treatment. ${functionInterventionAfterSafetyChainHint(primaryFunction, candidates)}`,
+            `Safety chain function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${responseBlockLabel}" only. Response Block is safety/support only—not primary treatment. ${functionInterventionAfterSafetyChainHint(primaryFunction, checkCandidates)} Name "${sample}" as the **second** catalog intervention naming sentence after blocking is described.`,
           );
         } else if (primaryFunction === "attention" && candidates.some(isDraOrDriInterventionLabel)) {
           const consequenceAfterBlock = interventionTailAfterManifestedBehavior(p);
@@ -2588,6 +2581,26 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
             `Mandatory DRA: paragraph ${i + 1} documents attention-maintained "${assignedBehavior}" but does not name DRA/DRI from JSON interventions. Include ${draDriLabels[0] ?? "DRA/DRI"} as the catalog intervention naming sentence when listed.`,
           );
         }
+      } else if (
+        responseBlockIsFirst &&
+        implCount === 1 &&
+        safetyChainBehavior
+      ) {
+        const fallback = interventionList.filter((s) => !isResponseBlockInterventionLabel(s.trim()));
+        if (
+          fallback.length > 0 &&
+          !hasFunctionMatchedInterventionAfterResponseBlock(p, responseBlockLabel!, fallback)
+        ) {
+          const sample =
+            selectSecondSafetyChainIntervention({
+              assignedBehavior,
+              interventions: interventionList,
+              behaviorFunctions: segmentFunctions,
+            }) ?? fallback[0];
+          issues.push(
+            `Safety chain function match: paragraph ${i + 1} documents "${responseBlockLabel}" only for "${assignedBehavior}". Response Block is safety/support only. Name "${sample}" as a **second** catalog intervention naming sentence after blocking is described.`,
+          );
+        }
       }
     }
     if (
@@ -2597,9 +2610,15 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     ) {
       const consequenceTail = interventionTailAfterManifestedBehavior(p);
       const firstNamed = firstInterventionMentionInText(consequenceTail, interventionList);
-      if (responseBlockLabel && firstNamed === responseBlockLabel) {
+      if (responseBlockLabel && firstNamed && isResponseBlockInterventionLabel(firstNamed)) {
         if (
-          !hasFunctionMatchedInterventionAfterResponseBlock(p, interventionList, responseBlockLabel, [
+          !paragraphHasResponseBlockFirst(p, responseBlockLabel, interventionList)
+        ) {
+          issues.push(
+            `Physical Aggression intervention coherence: paragraph ${i + 1} must use exact catalog spelling "${responseBlockLabel}" when Response Block is the first intervention.`,
+          );
+        } else if (
+          !hasFunctionMatchedInterventionAfterResponseBlock(p, responseBlockLabel, [
             demandEscapeInterventionLabel,
           ])
         ) {
@@ -2629,8 +2648,11 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         continue;
       }
       const consequenceTail = interventionTailAfterManifestedBehavior(p);
-      const firstNamed = firstInterventionMentionInText(consequenceTail, interventionList);
-      if (firstNamed !== responseBlockLabel) {
+      if (
+        responseBlockLabel &&
+        !paragraphHasResponseBlockFirst(p, responseBlockLabel, interventionList) &&
+        firstInterventionMentionInText(consequenceTail, interventionList)
+      ) {
         issues.push(
           `Safety-priority behavior (${assignedBehavior}): paragraph ${i + 1} must name "${responseBlockLabel}" as the first catalog intervention after the manifested-behavior line (before other listed interventions such as environmental manipulation), in its own naming sentence ending with a period after the exact label—for example "To address this behavior, the RBT implemented ${responseBlockLabel}."`,
         );

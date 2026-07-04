@@ -190,6 +190,25 @@ export function maladaptiveBehaviorFunctionsForHourLabels(
   });
 }
 
+/**
+ * Fill missing `functions` on profile targets from Preference Assessment / BIP text
+ * when the RBT profile row has topography or name but no function array yet.
+ */
+export function enrichMaladaptiveTargetsWithAssessmentFunctions<
+  T extends { name: string; topography?: string | null; functions?: ClinicalFunction[] | null },
+>(targets: T[], rawAssessmentText: string | null | undefined): T[] {
+  const text = rawAssessmentText?.trim() ?? "";
+  if (!text) return targets;
+
+  const preferenceMap = extractBehaviorFunctionsFromPreferenceAssessment(text);
+  return targets.map((t) => {
+    if (t.functions && t.functions.length > 0) return t;
+    const resolved = resolveBehaviorFunctionsForName(t.name, preferenceMap, text);
+    if (resolved === null || resolved.length === 0) return t;
+    return { ...t, functions: resolved };
+  });
+}
+
 export function maladaptiveBehaviorTopographyForHourLabels(
   maladaptiveBehaviorForHour: string[],
   targets: { name: string; topography?: string | null }[],

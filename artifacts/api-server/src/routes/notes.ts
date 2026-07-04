@@ -41,7 +41,7 @@ import {
   tryConsumeDraftSlot,
 } from "../draft-quota";
 import { maladaptiveBehaviorTargetsForNoteCatalog } from "../client-profile-maladaptive";
-import { maladaptiveBehaviorFunctionsForHourLabels, maladaptiveBehaviorTopographyForHourLabels } from "../clinical-behavior-function";
+import { maladaptiveBehaviorFunctionsForHourLabels, maladaptiveBehaviorTopographyForHourLabels, enrichMaladaptiveTargetsWithAssessmentFunctions } from "../clinical-behavior-function";
 import {
   approximateAgeYearsAtSession,
   canonicalMaladaptiveBehaviorLabel,
@@ -637,9 +637,9 @@ router.post("/notes/generate", async (req, res) => {
       return;
     }
   }
-  const maladaptiveBehaviorTargetsForNote = maladaptiveBehaviorTargetsForNoteCatalog(
-    behaviorCatalog,
-    profile ?? undefined,
+  const maladaptiveBehaviorTargetsForNote = enrichMaladaptiveTargetsWithAssessmentFunctions(
+    maladaptiveBehaviorTargetsForNoteCatalog(behaviorCatalog, profile ?? undefined),
+    rawAssessmentSnapshot,
   );
   const behaviorRotationSeed = randomUUID();
   const baseMaladaptiveForHour = maladaptiveBehaviorsForSessionHours(

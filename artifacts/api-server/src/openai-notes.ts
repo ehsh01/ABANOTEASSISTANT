@@ -23,6 +23,7 @@ import {
   FUNCTION_BASED_ABC_CORRECTION_PROMPT,
   FUNCTION_BASED_CORRECTION_REVISION_HINTS,
 } from "./behavior-function-correction";
+import { injectMissingSafetyChainFunctionIntervention } from "./safety-chain-enforcement";
 
 /** Chat Completions model id for note clinical body when OPENAI_MODEL is unset. */
 export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-5.3-chat-latest";
@@ -515,7 +516,7 @@ Output ONLY the corrected clinical body.`;
 
   const repairSystem = `${SYSTEM_PROMPT}
 
-REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON, with any non-empty \`clientAssessmentTextExcerpt\`, and with **PROFILE MALADAPTIVE TOPOGRAPHIES** when \`maladaptiveBehaviorTargets\` includes non-empty \`topography\` for the segment's assigned behavior name; strengthen **ANTECEDENT SPECIFICITY**—ensure each paragraph's **first one to two sentences** include concrete materials, RBT actions, and/or in-room spatial detail (not only a vague room label); apply **NATURAL RBT PROSE**—vary sentence rhythm and openings where possible without breaking **STRUCTURE**; strip **AI-essay** filler words and meta-framing per **NATURAL RBT PROSE**; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; **remove any elapsed clock-time phrasing for client actions** (seconds, minutes, hours, or approximate ranges such as *20–30 seconds*) per **OBJECTIVE, MEASURABLE DATA**—replace with trials, opportunities, prompts, or percentages as appropriate; ${FUNCTION_BASED_CORRECTION_REVISION_HINTS}; **when \`acquisitionOnlySegmentForHour[s]\` is true for paragraph s, remove any maladaptive catalog label from that paragraph and follow SKILL-ACQUISITION-ONLY SEGMENTS**; **split any sentence that joins two JSON catalog interventions with "and", a comma, or similar (no compound labels)**; **by default keep only one catalog intervention naming sentence per paragraph** (one **The RBT implemented [exact label].** / **… applied [exact label].** ending with a period right after the name)—**remove extra intervention naming sentences** unless the segment is safety-priority with Response Block in JSON (then Response Block first, then optional additional **separate** naming sentences); **when \`maladaptiveBehaviorFunctionsForHour[s]\` includes attention and the paragraph used Environmental Manipulation for SIB or other attention-maintained behavior, rewrite the catalog intervention naming sentence to use an entry from \`interventionCandidatesForHour[s]\` when non-empty (e.g. Attention independent response delivery, NCR, DRA)—Environmental Manipulation alone does not target attention**; **remove meta lines such as "The behavior was identified in the BIP as attention-maintained"**; **rewrite any legacy \`implemented … [label] by …\` / \`applied … by …\` so the catalog name stands alone in its sentence ending with a period, with explanation in following sentences**; **ensure every intervention naming sentence follows INTERVENTION EXACT MATCH: exact JSON label, no quotes, JSON-identical casing, period immediately after the name**; **where applicable, add or preserve objective, measurable detail per OBJECTIVE, MEASURABLE DATA in the base prompt** (without fabricating false precision; respect **RBT-ACTIONS-ONLY** limits on valenced performance metrics); **each paragraph must end with the mandatory quantified replacement-program tail per REPLACEMENT PROGRAM — QUANTIFIED PERFORMANCE** (client performance metrics when \`rbtActionsOnlyOutcomeForHour[s]\` is false; neutral process counts when true—**no** clock-time durations); **when \`therapistTrialSummaryForReplacementHour[s]\` is non-null, rewrite trial wording to the percentage rollup (P% = round((N/M)×100) per THERAPIST-ENTERED TRIAL COUNTS—remove any "N out of M trials were/was successful" phrasing; tie P% to discrete trials / criterion / "of the time" so it cannot be read as clock hours; do not use "trials were conducted" plus per-trial success lists**; **each paragraph index s must use replacementProgramForHour[s] verbatim (full string, including every parenthesis) in the replacement-program quote and must not name any other entry from replacementProgramsInOrder in that paragraph**; **when rbtActionsOnlyOutcomeForHour[s] is false, paragraph s may include normal observable progress or difficulty on that session-target program**; **when rbtActionsOnlyOutcomeForHour[s] is true, paragraph s must not state valenced client outcomes for that segment's replacement program—RBT implementation only per RBT-ACTIONS-ONLY SEGMENTS**; exactly one maladaptive behavior catalog label per paragraph **except when acquisitionOnlySegmentForHour[s] is true (zero maladaptive labels)**; **when acquisitionOnlySegmentForHour[s] is false, each paragraph s must use maladaptiveBehaviorForHour[s] verbatim** for the manifested behavior; **when the excerpt is non-empty and a maladaptive label is used, each paragraph's maladaptive topography must match the excerpt's operational definition for maladaptiveBehaviorForHour[s]** (see **EVERY MALADAPTIVE BEHAVIOR** in the base system prompt); **when activityAntecedentForHour[s] is a non-null string, paragraph s must contain that exact substring verbatim**; **when languageMaladaptiveEpisodeForHour[s] is true, paragraph s must include brief quoted or reported client utterance topography** per LANGUAGE / VERBAL MALADAPTIVE EPISODES, scoped to the assessment definition when the excerpt is non-empty; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech except where languageMaladaptiveEpisodeForHour[s] is true for that paragraph; when \`maladaptiveBehaviorForHour[s]\` is safety-priority per **SAFETY-PRIORITY BEHAVIORS** and JSON interventions include Response Block, Response Block must be the **first intervention sentence** after the manifested behavior; **when \`maladaptiveBehaviorForHour[s]\` is exactly Task Refusal and JSON interventions include Premack principle or DRA, prefer Premack or DRA over DRO for instructional noncompliance episodes** (see **TASK REFUSAL** in the base prompt); **when replacementProgramForHour[s] is an Indicate … All Done … string, align antecedent to an activity-ending or transition-off context or keep observable fit without function labels**; **fix REINFORCEMENT CONTINGENCY violations**—withhold reinforcement during maladaptive topography, tie praise/access to compatible replacement or safety behavior (not vague return after elopement); **remove compound DRA/DRO catalog labels**; **for Off-Task / Inattention segments, align replacement-program teaching to on-task/attention skills—not safety stop/wait unless that exact program is assigned**; **remove all backslash characters before quotation marks** (write plain "Stop" not \\"Stop\\"); **never output personal names**—refer only as **the client** (plus appropriate pronouns).`;
+REVISION MODE: You are correcting an existing draft. Preserve observable content aligned with the JSON, with any non-empty \`clientAssessmentTextExcerpt\`, and with **PROFILE MALADAPTIVE TOPOGRAPHIES** when \`maladaptiveBehaviorTargets\` includes non-empty \`topography\` for the segment's assigned behavior name; strengthen **ANTECEDENT SPECIFICITY**—ensure each paragraph's **first one to two sentences** include concrete materials, RBT actions, and/or in-room spatial detail (not only a vague room label); apply **NATURAL RBT PROSE**—vary sentence rhythm and openings where possible without breaking **STRUCTURE**; strip **AI-essay** filler words and meta-framing per **NATURAL RBT PROSE**; remove all interpretation and mental-state language; enforce caregiver exclusion from this body; **remove any elapsed clock-time phrasing for client actions** (seconds, minutes, hours, or approximate ranges such as *20–30 seconds*) per **OBJECTIVE, MEASURABLE DATA**—replace with trials, opportunities, prompts, or percentages as appropriate; ${FUNCTION_BASED_CORRECTION_REVISION_HINTS}; **when \`acquisitionOnlySegmentForHour[s]\` is true for paragraph s, remove any maladaptive catalog label from that paragraph and follow SKILL-ACQUISITION-ONLY SEGMENTS**; **split any sentence that joins two JSON catalog interventions with "and", a comma, or similar (no compound labels)**; **for safety-priority segments with Response Block in JSON, Response Block must be first and you MUST add a second separate catalog intervention naming sentence from \`interventionCandidatesForHour[s]\` or JSON \`interventions\` that matches the documented function—Response Block alone is never sufficient**; **when \`maladaptiveBehaviorFunctionsForHour[s]\` includes attention and the paragraph used Environmental Manipulation for SIB or other attention-maintained behavior, rewrite the catalog intervention naming sentence to use an entry from \`interventionCandidatesForHour[s]\` when non-empty (e.g. Attention independent response delivery, NCR, DRA)—Environmental Manipulation alone does not target attention**; **remove meta lines such as "The behavior was identified in the BIP as attention-maintained"**; **rewrite any legacy \`implemented … [label] by …\` / \`applied … by …\` so the catalog name stands alone in its sentence ending with a period, with explanation in following sentences**; **ensure every intervention naming sentence follows INTERVENTION EXACT MATCH: exact JSON label, no quotes, JSON-identical casing, period immediately after the name**; **where applicable, add or preserve objective, measurable detail per OBJECTIVE, MEASURABLE DATA in the base prompt** (without fabricating false precision; respect **RBT-ACTIONS-ONLY** limits on valenced performance metrics); **each paragraph must end with the mandatory quantified replacement-program tail per REPLACEMENT PROGRAM — QUANTIFIED PERFORMANCE** (client performance metrics when \`rbtActionsOnlyOutcomeForHour[s]\` is false; neutral process counts when true—**no** clock-time durations); **when \`therapistTrialSummaryForReplacementHour[s]\` is non-null, rewrite trial wording to the percentage rollup (P% = round((N/M)×100) per THERAPIST-ENTERED TRIAL COUNTS—remove any "N out of M trials were/was successful" phrasing; tie P% to discrete trials / criterion / "of the time" so it cannot be read as clock hours; do not use "trials were conducted" plus per-trial success lists**; **each paragraph index s must use replacementProgramForHour[s] verbatim (full string, including every parenthesis) in the replacement-program quote and must not name any other entry from replacementProgramsInOrder in that paragraph**; **when rbtActionsOnlyOutcomeForHour[s] is false, paragraph s may include normal observable progress or difficulty on that session-target program**; **when rbtActionsOnlyOutcomeForHour[s] is true, paragraph s must not state valenced client outcomes for that segment's replacement program—RBT implementation only per RBT-ACTIONS-ONLY SEGMENTS**; exactly one maladaptive behavior catalog label per paragraph **except when acquisitionOnlySegmentForHour[s] is true (zero maladaptive labels)**; **when acquisitionOnlySegmentForHour[s] is false, each paragraph s must use maladaptiveBehaviorForHour[s] verbatim** for the manifested behavior; **when the excerpt is non-empty and a maladaptive label is used, each paragraph's maladaptive topography must match the excerpt's operational definition for maladaptiveBehaviorForHour[s]** (see **EVERY MALADAPTIVE BEHAVIOR** in the base system prompt); **when activityAntecedentForHour[s] is a non-null string, paragraph s must contain that exact substring verbatim**; **when languageMaladaptiveEpisodeForHour[s] is true, paragraph s must include brief quoted or reported client utterance topography** per LANGUAGE / VERBAL MALADAPTIVE EPISODES, scoped to the assessment definition when the excerpt is non-empty; explicit initiators; age-appropriate tasks; for tantrum-type labels add assessment-aligned observable topography; for clientAgeYears 0–3 minimize attributed complex speech except where languageMaladaptiveEpisodeForHour[s] is true for that paragraph; when \`maladaptiveBehaviorForHour[s]\` is safety-priority per **SAFETY-PRIORITY BEHAVIORS** and JSON interventions include Response Block, Response Block must be the **first intervention sentence** after the manifested behavior; **when \`maladaptiveBehaviorForHour[s]\` is exactly Task Refusal and JSON interventions include Premack principle or DRA, prefer Premack or DRA over DRO for instructional noncompliance episodes** (see **TASK REFUSAL** in the base prompt); **when replacementProgramForHour[s] is an Indicate … All Done … string, align antecedent to an activity-ending or transition-off context or keep observable fit without function labels**; **fix REINFORCEMENT CONTINGENCY violations**—withhold reinforcement during maladaptive topography, tie praise/access to compatible replacement or safety behavior (not vague return after elopement); **remove compound DRA/DRO catalog labels**; **for Off-Task / Inattention segments, align replacement-program teaching to on-task/attention skills—not safety stop/wait unless that exact program is assigned**; **remove all backslash characters before quotation marks** (write plain "Stop" not \\"Stop\\"); **never output personal names**—refer only as **the client** (plus appropriate pronouns).`;
 
   return callOpenAI(
     [
@@ -527,8 +528,36 @@ REVISION MODE: You are correcting an existing draft. Preserve observable content
 }
 
 /**
- * Generate clinical body with one automatic repair pass if compliance checks fail.
+ * Generate clinical body with automatic repair passes if compliance checks fail.
  */
+const MAX_CLINICAL_BODY_REPAIR_ATTEMPTS = 3;
+
+function normalizeClinicalBodyPipeline(
+  body: string,
+  interventions: string[],
+  maladaptiveCatalog: string[],
+  authorizedPrograms: string[],
+): string {
+  let out = body;
+  out = normalizeClinicalBodyEscapedQuotes(out);
+  out = normalizeClinicalBodyInterventionLabels(out, interventions);
+  out = normalizeClinicalBodyInterventionDetailPhrases(out, interventions);
+  out = normalizeClinicalBodyMaladaptiveBehaviorLabels(out, maladaptiveCatalog);
+  out = normalizeClinicalBodyReplacementLikePhrases(out, authorizedPrograms);
+  return out;
+}
+
+function applySafetyChainEnforcement(body: string, ctx: NoteGenerationContext): string {
+  return injectMissingSafetyChainFunctionIntervention(body, {
+    narrativeSegmentCount: ctx.narrativeSegmentCount,
+    maladaptiveBehaviorForHour: ctx.maladaptiveBehaviorForHour,
+    acquisitionOnlySegmentForHour: ctx.acquisitionOnlySegmentForHour,
+    interventions: ctx.interventions ?? [],
+    maladaptiveBehaviorFunctionsForHour: ctx.maladaptiveBehaviorFunctionsForHour,
+    interventionCandidatesForHour: ctx.interventionCandidatesForHour,
+  });
+}
+
 export async function generateClinicalBodyOpenAI(
   ctx: NoteGenerationContext,
 ): Promise<GenerateClinicalBodyResult> {
@@ -537,42 +566,45 @@ export async function generateClinicalBodyOpenAI(
 
   const authorizedPrograms = ctx.replacementProgramsInOrder ?? [];
   const maladaptiveCatalog = ctx.maladaptiveBehaviors ?? [];
-  let body = await generateInitialBody(ctx);
   const interventions = ctx.interventions ?? [];
-  body = normalizeClinicalBodyEscapedQuotes(body);
-  body = normalizeClinicalBodyInterventionLabels(body, interventions);
-  body = normalizeClinicalBodyInterventionDetailPhrases(body, interventions);
-  body = normalizeClinicalBodyMaladaptiveBehaviorLabels(body, maladaptiveCatalog);
-  body = normalizeClinicalBodyReplacementLikePhrases(body, authorizedPrograms);
-  let issues = validateClinicalBodyCompliance(body, compliance);
 
-  if (issues.length > 0) {
+  let body = await generateInitialBody(ctx);
+  body = normalizeClinicalBodyPipeline(body, interventions, maladaptiveCatalog, authorizedPrograms);
+  body = applySafetyChainEnforcement(body, ctx);
+  body = normalizeClinicalBodyInterventionLabels(body, interventions);
+
+  let issues = validateClinicalBodyCompliance(body, compliance);
+  let repairAttempts = 0;
+
+  while (issues.length > 0 && repairAttempts < MAX_CLINICAL_BODY_REPAIR_ATTEMPTS) {
+    repairAttempts += 1;
     warnings.push(
-      `Clinical narrative pre-check flagged: ${issues.join(" | ")}. Attempting one automatic revision.`,
+      `Clinical narrative pre-check flagged: ${issues.join(" | ")}. Attempting automatic revision (${repairAttempts}/${MAX_CLINICAL_BODY_REPAIR_ATTEMPTS}).`,
     );
     try {
       const revised = await generateRepairBody(ctx, body, issues);
-      if (revised.trim().length > 0) {
-        body = revised;
-        body = normalizeClinicalBodyEscapedQuotes(body);
-        body = normalizeClinicalBodyInterventionLabels(body, interventions);
-        body = normalizeClinicalBodyInterventionDetailPhrases(body, interventions);
-        body = normalizeClinicalBodyMaladaptiveBehaviorLabels(body, maladaptiveCatalog);
-        body = normalizeClinicalBodyReplacementLikePhrases(body, authorizedPrograms);
-        issues = validateClinicalBodyCompliance(body, compliance);
-        if (issues.length === 0) {
-          warnings.push("Automatic revision satisfied automated compliance checks.");
-        } else {
-          warnings.push(
-            `After automatic revision, remaining automated checks: ${issues.join(" | ")}. Please review and edit the note before finalizing.`,
-          );
-        }
+      if (revised.trim().length === 0) break;
+      body = revised;
+      body = normalizeClinicalBodyPipeline(body, interventions, maladaptiveCatalog, authorizedPrograms);
+      body = applySafetyChainEnforcement(body, ctx);
+      body = normalizeClinicalBodyInterventionLabels(body, interventions);
+      issues = validateClinicalBodyCompliance(body, compliance);
+      if (issues.length === 0) {
+        warnings.push("Automatic revision satisfied automated compliance checks.");
+        break;
       }
     } catch (e) {
       warnings.push(
         `Automatic revision failed (${e instanceof Error ? e.message : String(e)}); using prior draft. Please review manually.`,
       );
+      break;
     }
+  }
+
+  if (issues.length > 0) {
+    warnings.push(
+      `After automatic revision, remaining automated checks: ${issues.join(" | ")}. Please review and edit the note before finalizing.`,
+    );
   }
 
   return { body, warnings };
