@@ -1,13 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -29,10 +22,9 @@ import {
   Loader2,
   Users,
   Pencil,
-  Trash2,
 } from "lucide-react";
 import type { Client } from "@workspace/api-client-react";
-import { useClients, useDeleteClient } from "@/hooks/use-aba-api";
+import { useClients } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
 import { formatAuthorizationExpiresOn } from "@/lib/utils";
 import { ClientAvatar } from "@/components/client-avatar";
@@ -77,24 +69,6 @@ function ClientCard({ client }: { client: Client }) {
   const [, setLocation] = useLocation();
   const t = useT();
   const d = displayNames(client);
-  const deleteClientMutation = useDeleteClient();
-  const fullName = `${d.firstName} ${d.lastName}`.trim() || client.name;
-
-  function handleDeleteClient() {
-    if (deleteClientMutation.isPending) return;
-    const confirmed = window.confirm(
-      `Delete client "${fullName}"?\n\nThis permanently removes the client, their session notes, program links, and behavior approvals. This cannot be undone.`,
-    );
-    if (!confirmed) return;
-    deleteClientMutation.mutate(client.id, {
-      onError: (err) => {
-        window.alert(
-          err instanceof Error ? `Could not delete client: ${err.message}` : "Could not delete client.",
-        );
-      },
-    });
-  }
-
   const STATUS_CONFIG = {
     ready: { label: t.clients.assessmentReady, icon: CheckCircle2, bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
     uploaded: { label: t.clients.assessmentUploaded, icon: FileText, bg: "bg-blue-50", text: "text-blue-700", border: "border-blue-200" },
@@ -162,73 +136,8 @@ function ClientCard({ client }: { client: Client }) {
             })()}
           </div>
         </div>
-        <div
-          className="flex items-center gap-1 shrink-0"
-          onClick={(e) => e.stopPropagation()}
-          onKeyDown={(e) => e.stopPropagation()}
-        >
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button
-                type="button"
-                className="p-2.5 rounded-xl border border-[#F0E4E1] text-[#877870] hover:text-[#C27A8A] hover:border-[#C27A8A]/40 hover:bg-[#FDFAF7] transition-colors cursor-pointer"
-                title="Edit client"
-                aria-label={`Edit ${d.firstName} ${d.lastName}`}
-              >
-                <Pencil className="w-4 h-4 pop-icon" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="min-w-[14rem] rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] p-1.5 shadow-lg shadow-[#C27A8A]/10"
-            >
-              <DropdownMenuItem
-                asChild
-                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-[#2D2523] focus:bg-[#F0E4E1] focus:text-[#C27A8A] data-[highlighted]:bg-[#F0E4E1] data-[highlighted]:text-[#C27A8A]"
-              >
-                <Link href={`/clients/edit/${client.id}?section=personal`}>Edit name & gender</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                asChild
-                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-[#2D2523] focus:bg-[#F0E4E1] focus:text-[#C27A8A] data-[highlighted]:bg-[#F0E4E1] data-[highlighted]:text-[#C27A8A]"
-              >
-                <Link href={`/clients/edit/${client.id}?section=assessment`}>Replace or remove assessment PDF</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                asChild
-                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-[#2D2523] focus:bg-[#F0E4E1] focus:text-[#C27A8A] data-[highlighted]:bg-[#F0E4E1] data-[highlighted]:text-[#C27A8A]"
-              >
-                <Link href={`/clients/edit/${client.id}?section=behaviors`}>Edit behaviors</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                asChild
-                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-[#2D2523] focus:bg-[#F0E4E1] focus:text-[#C27A8A] data-[highlighted]:bg-[#F0E4E1] data-[highlighted]:text-[#C27A8A]"
-              >
-                <Link href={`/clients/edit/${client.id}?section=programs`}>Edit programs</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                asChild
-                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-medium text-[#2D2523] focus:bg-[#F0E4E1] focus:text-[#C27A8A] data-[highlighted]:bg-[#F0E4E1] data-[highlighted]:text-[#C27A8A]"
-              >
-                <Link href={`/clients/edit/${client.id}?section=interventions`}>Edit interventions</Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator className="my-1 h-px bg-[#F0E4E1]" />
-              <DropdownMenuItem
-                disabled={deleteClientMutation.isPending}
-                onSelect={(e) => {
-                  e.preventDefault();
-                  handleDeleteClient();
-                }}
-                className="cursor-pointer rounded-lg px-3 py-2.5 text-sm font-semibold text-rose-700 focus:bg-rose-50 focus:text-rose-700 data-[highlighted]:bg-rose-50 data-[highlighted]:text-rose-700 flex items-center gap-2"
-              >
-                <Trash2 className="w-4 h-4" />
-                {deleteClientMutation.isPending ? "Deleting…" : "Delete client"}
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <div className="p-2 text-[#F0E4E1] group-hover:text-[#C27A8A] transition-colors" aria-hidden>
-            <ChevronRight className="w-5 h-5 pop-icon" />
-          </div>
+        <div className="p-2 text-[#F0E4E1] group-hover:text-[#C27A8A] transition-colors shrink-0" aria-hidden>
+          <ChevronRight className="w-5 h-5 pop-icon" />
         </div>
       </div>
 
