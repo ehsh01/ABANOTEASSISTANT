@@ -27,7 +27,7 @@ import {
 } from "@/hooks/use-aba-api";
 import { sessionTimeRangeFromHours, formatSessionDate, formatAuthorizationExpiresOn } from "@/lib/utils";
 import { ClientAvatar } from "@/components/client-avatar";
-import { AssessmentSummaryReadOnly } from "@/components/assessment-summary-fields";
+import { AssessmentSummaryReadOnly, assessmentSummaryFormFromProfile, assessmentSummaryHasContent } from "@/components/assessment-summary-fields";
 import { formatClinicalFunctionsDisplay } from "@/lib/clinical-behavior-function-display";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClient, useClientPrograms, useNotesList } from "@/hooks/use-aba-api";
@@ -208,6 +208,9 @@ export default function ClientDetail() {
   const replacements = p?.replacementPrograms ?? [];
   const skillAcquisitionPrograms = p?.skillAcquisitionPrograms ?? [];
   const interventions = p?.interventions ?? [];
+  const hasAssessmentSummary = assessmentSummaryHasContent(
+    assessmentSummaryFormFromProfile(p?.assessmentSummary),
+  );
 
   return (
     <div className="min-h-screen bg-[#FDE8EE] px-4 py-6 md:px-8 md:py-8">
@@ -392,15 +395,6 @@ export default function ClientDetail() {
             </div>
           )}
 
-          {p?.assessmentSummary ? (
-            <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
-              <AssessmentSummaryReadOnly
-                summary={p.assessmentSummary}
-                maladaptiveBehaviorTargets={targets}
-              />
-            </div>
-          ) : null}
-
           <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
             <h2 className="text-xs font-semibold uppercase tracking-widest text-[#877870] mb-4 flex items-center gap-1.5">
               <User className="w-3.5 h-3.5" /> {t.clientDetail.basicInfo}
@@ -415,11 +409,12 @@ export default function ClientDetail() {
 
           <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full grid-cols-4 mb-6">
+              <TabsList className="grid w-full h-auto grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 mb-6 gap-1">
                 <TabsTrigger value="sessionNotes" className="text-xs">Notes</TabsTrigger>
-                <TabsTrigger value="behaviors" className="text-xs">Maladaptive Behaviors</TabsTrigger>
-                <TabsTrigger value="programs" className="text-xs">Replacement Programs</TabsTrigger>
-                <TabsTrigger value="interventions" className="text-xs">Interventions</TabsTrigger>
+                <TabsTrigger value="behaviors" className="text-xs">{t.clientDetail.behaviors}</TabsTrigger>
+                <TabsTrigger value="programs" className="text-xs">{t.clientDetail.programs}</TabsTrigger>
+                <TabsTrigger value="interventions" className="text-xs">{t.clientDetail.interventions}</TabsTrigger>
+                <TabsTrigger value="assessmentSummary" className="text-xs">{t.clientDetail.assessmentSummaryTab}</TabsTrigger>
               </TabsList>
 
               <TabsContent value="sessionNotes">
@@ -716,6 +711,32 @@ export default function ClientDetail() {
                         {intervention}
                       </span>
                     ))}
+                  </div>
+                )}
+              </TabsContent>
+
+              <TabsContent value="assessmentSummary" className="space-y-3">
+                {hasAssessmentSummary && p?.assessmentSummary ? (
+                  <AssessmentSummaryReadOnly
+                    summary={p.assessmentSummary}
+                    maladaptiveBehaviorTargets={targets}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-12 text-center">
+                    <div className="w-12 h-12 rounded-2xl bg-[#FDFAF7] border border-[#F0E4E1] flex items-center justify-center mb-3">
+                      <BookOpen className="w-6 h-6 text-[#C27A8A]/50" />
+                    </div>
+                    <p className="text-sm font-semibold text-[#2D2523] mb-1">{t.clientDetail.noAssessmentSummary}</p>
+                    <p className="text-xs text-[#877870] mb-4 max-w-sm">{t.clientDetail.noAssessmentSummaryHint}</p>
+                    <Link href={`/clients/edit/${client.id}?section=summary`}>
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 bg-[#C27A8A] text-white px-4 py-2 rounded-lg font-semibold text-sm hover:bg-[#b06a79] transition-colors"
+                      >
+                        <Pencil className="w-4 h-4" />
+                        {t.clientDetail.editAssessmentSummary}
+                      </button>
+                    </Link>
                   </div>
                 )}
               </TabsContent>
