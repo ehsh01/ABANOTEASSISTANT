@@ -1,6 +1,7 @@
 import { useParams, Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useMemo, Fragment } from "react";
+import { useState, useMemo, Fragment, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   User,
@@ -28,6 +29,12 @@ import {
 import { sessionTimeRangeFromHours, formatSessionDate, formatAuthorizationExpiresOn } from "@/lib/utils";
 import { ClientAvatar } from "@/components/client-avatar";
 import { AssessmentSummaryReadOnly, assessmentSummaryFormFromProfile, assessmentSummaryHasContent } from "@/components/assessment-summary-fields";
+import {
+  ClientDetailClinicalTabEditor,
+  TabInlineEditToolbar,
+  clinicalProfileDraftFromClient,
+  type ClinicalTabSection,
+} from "@/components/client-detail-clinical-tab-edit";
 import { formatClinicalFunctionsDisplay } from "@/lib/clinical-behavior-function-display";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClient, useClientPrograms, useNotesList } from "@/hooks/use-aba-api";
@@ -117,7 +124,27 @@ export default function ClientDetail() {
   const deleteClientMutation = useDeleteClient();
   const generateAvatarMutation = useGenerateClientAvatar();
   const t = useT();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("sessionNotes");
+  const [editingTab, setEditingTab] = useState<ClinicalTabSection | null>(null);
+
+  const handleTabChange = useCallback(
+    (value: string) => {
+      setEditingTab(null);
+      setActiveTab(value);
+    },
+    [],
+  );
+
+  const handleClinicalTabSaved = useCallback(async () => {
+    if (!id) return;
+    await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
+    await queryClient.invalidateQueries({ queryKey: ["/api/clients", id] });
+    await queryClient.invalidateQueries({ queryKey: ["/api/clients", id, "programs"] });
+    await queryClient.invalidateQueries({ queryKey: ["/api/clients", id, "replacement-programs"] });
+    await queryClient.invalidateQueries({ queryKey: ["/api/clients", id, "behavior-program-approvals"] });
+    setEditingTab(null);
+  }, [id, queryClient]);
 
   // Program edit state
   const [editingProgramId, setEditingProgramId] = useState<number | null>(null);
@@ -408,7 +435,7 @@ export default function ClientDetail() {
           </div>
 
           <div className="bg-white rounded-2xl border border-[#E8D8D3] shadow-[0_4px_20px_-4px_rgba(44,37,35,0.12),0_1px_3px_rgba(44,37,35,0.06)] p-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
               <TabsList className="grid w-full h-auto grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 mb-6 gap-1">
                 <TabsTrigger value="sessionNotes" className="text-xs">Notes</TabsTrigger>
                 <TabsTrigger value="behaviors" className="text-xs">{t.clientDetail.behaviors}</TabsTrigger>
@@ -509,209 +536,286 @@ export default function ClientDetail() {
               </TabsContent>
 
               <TabsContent value="behaviors" className="space-y-3">
-                {behaviors.length === 0 ? (
-                  <p className="text-sm text-[#877870] italic">{t.clientDetail.noBehaviors}</p>
-                ) : (
-                  <div className="space-y-2">
-                    {behaviors.map((behavior, idx) => {
-                      const target = targets.find(
-                        (t) =>
-                          t.name === behavior ||
-                          t.name.trim().toLowerCase() === behavior.trim().toLowerCase(),
-                      );
-                      const topo =
-                        behaviorTopographyMap[behavior]?.trim() ||
-                        target?.topography?.trim() ||
-                        "";
-                      const hasFunction = target?.functions !== undefined;
-                      return (
-                        <div
-                          key={`${behavior}-${idx}`}
-                          className="rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] px-4 py-3 space-y-2"
-                        >
-                          <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#877870]">
-                              Behavior
-                            </p>
-                            <p className="text-sm font-semibold text-[#2D2523]">{behavior}</p>
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-semibold uppercase tracking-widest text-[#877870]">
-                              Function
-                            </p>
-                            <p className="text-xs text-[#2D2523] leading-relaxed">
-                              {hasFunction
-                                ? formatClinicalFunctionsDisplay(behaviorFunctionMap[behavior])
-                                : formatClinicalFunctionsDisplay(undefined)}
-                            </p>
-                          </div>
-                          {topo ? (
-                            <div>
-                              <p className="text-[10px] font-semibold uppercase tracking-widest text-[#877870]">
-                                Topography
-                              </p>
-                              <p className="text-xs text-[#877870] leading-relaxed">{topo}</p>
+                {id && p ? (
+                  <>
+                    <TabInlineEditToolbar
+                      isEditing={editingTab === "behaviors"}
+                      onEdit={() => setEditingTab("behaviors")}
+                      editLabel={t.clientDetail.editTab}
+                    />
+                    {editingTab === "behaviors" ? (
+                      <ClientDetailClinicalTabEditor
+                        section="behaviors"
+                        clientId={id}
+                        initialDraft={clinicalProfileDraftFromClient(p)}
+                        onCancel={() => setEditingTab(null)}
+                        onSaved={() => void handleClinicalTabSaved()}
+                        labels={{
+                          save: t.clientDetail.saveTab,
+                          saving: t.clientDetail.savingTab,
+                          cancel: t.clientDetail.cancelTab,
+                          saveFailed: t.clientDetail.saveTabFailed,
+                        }}
+                      />
+                    ) : behaviors.length === 0 ? (
+                      <p className="text-sm text-[#877870] italic">{t.clientDetail.noBehaviors}</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {behaviors.map((behavior, idx) => {
+                          const target = targets.find(
+                            (t) =>
+                              t.name === behavior ||
+                              t.name.trim().toLowerCase() === behavior.trim().toLowerCase(),
+                          );
+                          const topo =
+                            behaviorTopographyMap[behavior]?.trim() ||
+                            target?.topography?.trim() ||
+                            "";
+                          const hasFunction = target?.functions !== undefined;
+                          return (
+                            <div
+                              key={`${behavior}-${idx}`}
+                              className="rounded-xl border border-[#F0E4E1] bg-[#FDFAF7] px-4 py-3 space-y-2"
+                            >
+                              <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#877870]">
+                                  Behavior
+                                </p>
+                                <p className="text-sm font-semibold text-[#2D2523]">{behavior}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-semibold uppercase tracking-widest text-[#877870]">
+                                  Function
+                                </p>
+                                <p className="text-xs text-[#2D2523] leading-relaxed">
+                                  {hasFunction
+                                    ? formatClinicalFunctionsDisplay(behaviorFunctionMap[behavior])
+                                    : formatClinicalFunctionsDisplay(undefined)}
+                                </p>
+                              </div>
+                              {topo ? (
+                                <div>
+                                  <p className="text-[10px] font-semibold uppercase tracking-widest text-[#877870]">
+                                    Topography
+                                  </p>
+                                  <p className="text-xs text-[#877870] leading-relaxed">{topo}</p>
+                                </div>
+                              ) : (
+                                <p className="text-xs text-[#877870]/50 italic">No topography entered</p>
+                              )}
                             </div>
-                          ) : (
-                            <p className="text-xs text-[#877870]/50 italic">No topography entered</p>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-sm text-[#877870] italic">{t.clientDetail.noBehaviors}</p>
                 )}
               </TabsContent>
 
               <TabsContent value="programs" className="space-y-3">
-                {programsError && (
-                  <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
-                    <p className="font-semibold text-rose-800 mb-1">Could not load linked programs</p>
-                    <p className="text-rose-800/90">{formatProgramsFetchError(programsFetchError)}</p>
-                  </div>
-                )}
-                {programsLoading && (
-                  <p className="text-sm text-[#877870] flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin" /> Loading linked programs…
-                  </p>
-                )}
-                {!programsLoading && !programsError && programs.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-semibold uppercase tracking-widest text-[#877870]">
-                      Linked for session note wizard
-                    </p>
-                    <div className="space-y-2">
-                      {programs.map((program) =>
-                        editingProgramId === program.id ? (
-                          <div key={program.id} className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
-                            <div className="space-y-1">
-                              <label className="text-xs font-semibold text-[#877870] uppercase tracking-wide">Name</label>
-                              <input
-                                value={editName}
-                                onChange={(e) => setEditName(e.target.value)}
-                                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                              />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-semibold text-[#877870] uppercase tracking-wide">Type</label>
-                              <select
-                                value={editType}
-                                onChange={(e) => setEditType(e.target.value)}
-                                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                              >
-                                <option value={ProgramType.primary}>Primary</option>
-                                <option value={ProgramType.supplemental}>Supplemental</option>
-                              </select>
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-xs font-semibold text-[#877870] uppercase tracking-wide">Description <span className="font-normal normal-case">(optional)</span></label>
-                              <input
-                                value={editDescription}
-                                onChange={(e) => setEditDescription(e.target.value)}
-                                placeholder="e.g. Reduce task refusal"
-                                className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
-                              />
-                            </div>
-                            {updateProgramMutation.isError && (
-                              <p className="text-xs text-red-500">Save failed — please try again.</p>
-                            )}
-                            <div className="flex gap-2 pt-1">
-                              <button
-                                onClick={handleSaveEdit}
-                                disabled={!editName.trim() || updateProgramMutation.isPending}
-                                className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors"
-                              >
-                                {updateProgramMutation.isPending ? "Saving…" : "Save"}
-                              </button>
-                              <button
-                                onClick={handleCancelEdit}
-                                disabled={updateProgramMutation.isPending}
-                                className="flex-1 py-2 rounded-lg border border-border bg-white text-sm font-semibold text-[#877870] hover:bg-secondary/30 transition-colors"
-                              >
-                                Cancel
-                              </button>
-                            </div>
+                {id && p ? (
+                  <>
+                    <TabInlineEditToolbar
+                      isEditing={editingTab === "programs"}
+                      onEdit={() => setEditingTab("programs")}
+                      editLabel={t.clientDetail.editTab}
+                    />
+                    {editingTab === "programs" ? (
+                      <ClientDetailClinicalTabEditor
+                        section="programs"
+                        clientId={id}
+                        initialDraft={clinicalProfileDraftFromClient(p)}
+                        onCancel={() => setEditingTab(null)}
+                        onSaved={() => void handleClinicalTabSaved()}
+                        labels={{
+                          save: t.clientDetail.saveTab,
+                          saving: t.clientDetail.savingTab,
+                          cancel: t.clientDetail.cancelTab,
+                          saveFailed: t.clientDetail.saveTabFailed,
+                        }}
+                      />
+                    ) : (
+                      <>
+                        {programsError && (
+                          <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
+                            <p className="font-semibold text-rose-800 mb-1">Could not load linked programs</p>
+                            <p className="text-rose-800/90">{formatProgramsFetchError(programsFetchError)}</p>
                           </div>
-                        ) : (
-                          <div key={program.id} className="flex items-center justify-between rounded-xl border border-border bg-white px-4 py-3 gap-3">
-                            <div className="min-w-0">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <span className="text-sm font-semibold text-foreground">{program.name}</span>
-                                <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 capitalize">{program.type}</span>
-                              </div>
-                              {program.description && (
-                                <p className="text-xs text-[#877870] mt-0.5 truncate">{program.description}</p>
+                        )}
+                        {programsLoading && (
+                          <p className="text-sm text-[#877870] flex items-center gap-2">
+                            <Loader2 className="w-4 h-4 animate-spin" /> Loading linked programs…
+                          </p>
+                        )}
+                        {!programsLoading && !programsError && programs.length > 0 && (
+                          <div className="space-y-2">
+                            <p className="text-xs font-semibold uppercase tracking-widest text-[#877870]">
+                              Linked for session note wizard
+                            </p>
+                            <div className="space-y-2">
+                              {programs.map((program) =>
+                                editingProgramId === program.id ? (
+                                  <div key={program.id} className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
+                                    <div className="space-y-1">
+                                      <label className="text-xs font-semibold text-[#877870] uppercase tracking-wide">Name</label>
+                                      <input
+                                        value={editName}
+                                        onChange={(e) => setEditName(e.target.value)}
+                                        className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="text-xs font-semibold text-[#877870] uppercase tracking-wide">Type</label>
+                                      <select
+                                        value={editType}
+                                        onChange={(e) => setEditType(e.target.value)}
+                                        className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                      >
+                                        <option value={ProgramType.primary}>Primary</option>
+                                        <option value={ProgramType.supplemental}>Supplemental</option>
+                                      </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="text-xs font-semibold text-[#877870] uppercase tracking-wide">Description <span className="font-normal normal-case">(optional)</span></label>
+                                      <input
+                                        value={editDescription}
+                                        onChange={(e) => setEditDescription(e.target.value)}
+                                        placeholder="e.g. Reduce task refusal"
+                                        className="w-full rounded-lg border border-border bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                                      />
+                                    </div>
+                                    {updateProgramMutation.isError && (
+                                      <p className="text-xs text-red-500">Save failed — please try again.</p>
+                                    )}
+                                    <div className="flex gap-2 pt-1">
+                                      <button
+                                        onClick={handleSaveEdit}
+                                        disabled={!editName.trim() || updateProgramMutation.isPending}
+                                        className="flex-1 py-2 rounded-lg bg-primary text-white text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                                      >
+                                        {updateProgramMutation.isPending ? "Saving…" : "Save"}
+                                      </button>
+                                      <button
+                                        onClick={handleCancelEdit}
+                                        disabled={updateProgramMutation.isPending}
+                                        className="flex-1 py-2 rounded-lg border border-border bg-white text-sm font-semibold text-[#877870] hover:bg-secondary/30 transition-colors"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div key={program.id} className="flex items-center justify-between rounded-xl border border-border bg-white px-4 py-3 gap-3">
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-sm font-semibold text-foreground">{program.name}</span>
+                                        <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 capitalize">{program.type}</span>
+                                      </div>
+                                      {program.description && (
+                                        <p className="text-xs text-[#877870] mt-0.5 truncate">{program.description}</p>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-1 shrink-0">
+                                      <button
+                                        onClick={() => handleStartEdit(program)}
+                                        className="p-1.5 rounded-lg text-[#877870] hover:text-primary hover:bg-primary/10 transition-colors"
+                                        title="Edit program"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button
+                                        onClick={() => handleDeleteProgram(program.id)}
+                                        disabled={deleteProgramMutation.isPending}
+                                        className="p-1.5 rounded-lg text-[#877870] hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
+                                        title="Remove program"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                )
                               )}
                             </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                onClick={() => handleStartEdit(program)}
-                                className="p-1.5 rounded-lg text-[#877870] hover:text-primary hover:bg-primary/10 transition-colors"
-                                title="Edit program"
-                              >
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => handleDeleteProgram(program.id)}
-                                disabled={deleteProgramMutation.isPending}
-                                className="p-1.5 rounded-lg text-[#877870] hover:text-red-500 hover:bg-red-50 transition-colors disabled:opacity-40"
-                                title="Remove program"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
                           </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-[#877870]">On client profile</p>
-                  {replacements.length === 0 ? (
-                    <p className="text-sm text-[#877870] italic">{t.clientDetail.noPrograms}</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {replacements.map((program) => (
-                        <span
-                          key={program}
-                          className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-teal-50 text-teal-700 border-teal-200"
-                        >
-                          {program}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-2 pt-2">
-                  <p className="text-xs font-semibold uppercase tracking-widest text-[#877870]">Skill acquisition programs</p>
-                  {skillAcquisitionPrograms.length === 0 ? (
-                    <p className="text-sm text-[#877870] italic">No skill acquisition programs on file.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {skillAcquisitionPrograms.map((program) => (
-                        <span
-                          key={program}
-                          className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-sky-50 text-sky-700 border-sky-200"
-                        >
-                          {program}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                        )}
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-widest text-[#877870]">On client profile</p>
+                          {replacements.length === 0 ? (
+                            <p className="text-sm text-[#877870] italic">{t.clientDetail.noPrograms}</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {replacements.map((program) => (
+                                <span
+                                  key={program}
+                                  className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-teal-50 text-teal-700 border-teal-200"
+                                >
+                                  {program}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="space-y-2 pt-2">
+                          <p className="text-xs font-semibold uppercase tracking-widest text-[#877870]">Skill acquisition programs</p>
+                          {skillAcquisitionPrograms.length === 0 ? (
+                            <p className="text-sm text-[#877870] italic">No skill acquisition programs on file.</p>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {skillAcquisitionPrograms.map((program) => (
+                                <span
+                                  key={program}
+                                  className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-sky-50 text-sky-700 border-sky-200"
+                                >
+                                  {program}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </>
+                ) : null}
               </TabsContent>
 
               <TabsContent value="interventions" className="space-y-3">
-                {interventions.length === 0 ? (
-                  <p className="text-sm text-[#877870] italic">{t.clientDetail.noPrograms}</p>
+                {id && p ? (
+                  <>
+                    <TabInlineEditToolbar
+                      isEditing={editingTab === "interventions"}
+                      onEdit={() => setEditingTab("interventions")}
+                      editLabel={t.clientDetail.editTab}
+                    />
+                    {editingTab === "interventions" ? (
+                      <ClientDetailClinicalTabEditor
+                        section="interventions"
+                        clientId={id}
+                        initialDraft={clinicalProfileDraftFromClient(p)}
+                        onCancel={() => setEditingTab(null)}
+                        onSaved={() => void handleClinicalTabSaved()}
+                        labels={{
+                          save: t.clientDetail.saveTab,
+                          saving: t.clientDetail.savingTab,
+                          cancel: t.clientDetail.cancelTab,
+                          saveFailed: t.clientDetail.saveTabFailed,
+                        }}
+                      />
+                    ) : interventions.length === 0 ? (
+                      <p className="text-sm text-[#877870] italic">{t.clientDetail.noPrograms}</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {interventions.map((intervention) => (
+                          <span key={intervention} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-amber-50 text-amber-700 border-amber-200">
+                            {intervention}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {interventions.map((intervention) => (
-                      <span key={intervention} className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border bg-amber-50 text-amber-700 border-amber-200">
-                        {intervention}
-                      </span>
-                    ))}
-                  </div>
+                  <p className="text-sm text-[#877870] italic">{t.clientDetail.noPrograms}</p>
                 )}
               </TabsContent>
 
