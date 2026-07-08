@@ -16,12 +16,14 @@ describe("maladaptiveBehaviorsCatalogForRotation", () => {
     expect(result.catalog).toContain("Custom BIP Behavior");
   });
 
-  test("adds standard behaviors found verbatim in assessment text", () => {
+  test("does NOT add assessment-only behaviors to the catalog (app profile is authoritative)", () => {
     const result = maladaptiveBehaviorsCatalogForRotation(
       ["Task Refusal"],
       "The client engages in Task Refusal and Property Destruction during demands.",
     );
-    expect(result.catalog).toContain("Property Destruction");
+    // Property Destruction is in the PDF text but not on the profile → not used, only reported.
+    expect(result.catalog).not.toContain("Property Destruction");
+    expect(result.catalog).toEqual(["Task Refusal"]);
     expect(result.labelsAddedFromAssessmentText).toContain("Property Destruction");
   });
 

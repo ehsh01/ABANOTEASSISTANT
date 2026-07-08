@@ -69,6 +69,7 @@ import {
   getAssessmentStructuredFromProfile,
   intersectCatalog,
   validateAssessmentStructured,
+  withProfileListsUnioned,
 } from "./assessment-structured";
 import { resolveAbcHintsForNoteGeneration } from "./abc-hints";
 import { isLanguageMaladaptiveBehaviorLabel } from "./language-maladaptive-behavior";
@@ -242,7 +243,14 @@ export async function generateSessionNoteForClient(params: {
         )
       : linkedProgramRows;
 
-  const structuredForNote = getAssessmentStructuredFromProfile(profile);
+  // App profile is authoritative: union the profile's own lists into the structured allow-lists so
+  // the intersections below can never DROP a behavior/program/intervention the RBT added to the app
+  // (e.g. when the PDF-extracted allow-list is stale or narrower than the app). Assessment-only items
+  // are still never ADDED, because the catalogs are derived from the profile in the first place.
+  const structuredForNote = withProfileListsUnioned(
+    getAssessmentStructuredFromProfile(profile),
+    profile,
+  );
   if (structuredForNote) {
     const structIssues = validateAssessmentStructured(structuredForNote);
     if (structIssues.length > 0) {
@@ -590,7 +598,7 @@ export async function generateSessionNoteForClient(params: {
   }
   if (rotationResult.labelsAddedFromAssessmentText.length > 0) {
     warnings.push(
-      `Maladaptive behaviors found verbatim in the stored assessment but not on the client profile were included in this note's rotation: ${rotationResult.labelsAddedFromAssessmentText.join(", ")}. Consider adding them to the client profile for consistency.`,
+      `These maladaptive behaviors appear in the stored assessment but are not on the client profile, so they were NOT used in this note: ${rotationResult.labelsAddedFromAssessmentText.join(", ")}. Add them to the client profile if you want them included.`,
     );
   }
   if (rotationResult.labelsOmittedNotFoundInAssessment.length > 0) {

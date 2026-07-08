@@ -131,6 +131,48 @@ export function getAssessmentStructuredFromProfile(profile: ClientProfileRow | n
   return parseAssessmentStructured(profile.assessmentStructured);
 }
 
+/**
+ * Return a copy of `structured` whose allow-lists (behaviors, replacement_programs, interventions)
+ * are unioned with the client profile's own lists.
+ *
+ * The client **app profile is authoritative** for note generation: items the RBT added to the app
+ * must never be dropped by intersecting with a stale/PDF-extracted allow-list. Unioning the profile
+ * lists in makes every downstream `intersectCatalog(profileCatalog, structured.*)` a no-op for
+ * profile items (profile ⊆ allow-list), so app items are always usable — without ever ADDING
+ * assessment-only items (those simply never appear in the profile-derived catalogs).
+ *
+ * Only adds to allow-lists; behavior/intervention maps are untouched, so the result still passes
+ * `validateAssessmentStructured` (map values already referenced existing allow-list entries).
+ * Returns `null` when `structured` is `null`.
+ */
+export function withProfileListsUnioned(
+  structured: AssessmentStructuredRow | null,
+  profile: ClientProfileRow | null | undefined,
+): AssessmentStructuredRow | null {
+  if (!structured) return null;
+  const unionInto = (allow: string[], additions: string[]): string[] => {
+    const seen = new Set(allow);
+    const out = [...allow];
+    for (const raw of additions) {
+      const v = String(raw).trim();
+      if (v && !seen.has(v)) {
+        seen.add(v);
+        out.push(v);
+      }
+    }
+    return out;
+  };
+  return {
+    ...structured,
+    behaviors: unionInto(structured.behaviors, profile?.maladaptiveBehaviors ?? []),
+    replacement_programs: unionInto(structured.replacement_programs, [
+      ...(profile?.replacementPrograms ?? []),
+      ...(profile?.skillAcquisitionPrograms ?? []),
+    ]),
+    interventions: unionInto(structured.interventions, profile?.interventions ?? []),
+  };
+}
+
 /** Intersect catalog labels with assessment allow-list (exact string match). */
 export function intersectCatalog(catalog: string[], allowed: string[]): string[] {
   if (allowed.length === 0) return [];

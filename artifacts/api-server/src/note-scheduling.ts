@@ -78,7 +78,11 @@ function dedupeMaladaptiveBehaviorOrder(catalog: string[]): string[] {
 export type MaladaptiveBehaviorsCatalogForRotationResult = {
   /** Labels used for maladaptiveBehaviorForHour + compliance (exact strings for the model). */
   catalog: string[];
-  /** Standard-order names found in assessment text but not on the client profile. */
+  /**
+   * Standard-order names found in the assessment text but not on the client profile.
+   * These are **not** used in the note (the app profile is authoritative); they are surfaced only
+   * as a warning so the RBT can add them to the client profile if they want them included.
+   */
   labelsAddedFromAssessmentText: string[];
   /**
    * Catalog labels whose exact text does not appear verbatim in the stored assessment snapshot (OCR/wording drift).
@@ -88,13 +92,19 @@ export type MaladaptiveBehaviorsCatalogForRotationResult = {
 };
 
 /**
- * Build the maladaptive-behavior rotation list:
+ * Build the maladaptive-behavior rotation list.
+ *
+ * **The client app profile is authoritative.** The rotation catalog contains ONLY behaviors the RBT
+ * added to the client profile:
  * - Order profile entries using STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER when names match exactly.
  * - Append other profile labels (custom BIP wording) after that block.
- * - When assessment text is non-empty: add standard names that appear verbatim in the text but were missing from the profile.
  * - **All profile-listed behaviors stay in the catalog** even when the PDF snapshot does not contain that exact substring
- *   (common with OCR, line breaks, or alternate wording). Narrowing to “verbatim in text only” caused notes to repeat the same
- *   few behaviors; rotation must cover the full client/BIP list from the profile plus assessment-detected standards.
+ *   (common with OCR, line breaks, or alternate wording).
+ *
+ * Behaviors that appear in the assessment PDF text but were **not** added to the profile are reported in
+ * `labelsAddedFromAssessmentText` for a caller warning but are **never** added to the catalog — the note
+ * uses only what is on the app. (Historically these were auto-added to the rotation; that leaked
+ * assessment-only behaviors into notes, so it was removed.)
  */
 export function maladaptiveBehaviorsCatalogForRotation(
   profileBehaviors: string[],
@@ -110,6 +120,8 @@ export function maladaptiveBehaviorsCatalogForRotation(
     (p) => !head.some((h) => maladaptiveBehaviorLabelsEquivalent(p, h)),
   );
 
+  // Informational only: standard behavior names present in the assessment text but not on the profile.
+  // These are surfaced as a warning so the RBT can add them to the app if desired; they are NOT used.
   const labelsAddedFromAssessmentText: string[] = [];
   if (assessment.length > 0) {
     for (const s of STANDARD_MALADAPTIVE_BEHAVIOR_ROTATION_ORDER) {
@@ -122,9 +134,8 @@ export function maladaptiveBehaviorsCatalogForRotation(
     }
   }
 
-  const standardBlock = dedupeMaladaptiveBehaviorOrder([...head, ...labelsAddedFromAssessmentText]);
-
-  const catalog = dedupeMaladaptiveBehaviorOrder([...standardBlock, ...profileRemainder]);
+  // App-authoritative catalog: profile behaviors only (ordered), never assessment-only labels.
+  const catalog = dedupeMaladaptiveBehaviorOrder([...head, ...profileRemainder]);
 
   const labelsOmittedNotFoundInAssessment =
     assessment.length > 0 && catalog.length > 0
