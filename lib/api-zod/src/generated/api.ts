@@ -2188,6 +2188,239 @@ export const GenerateNoteResponse = zod.object({
 });
 
 /**
+ * Same validation and draft-slot rules as POST /notes/generate, but returns immediately with a job id (HTTP 202). Poll GET /notes/generate/jobs/{jobId} until status is `completed` or `failed`. Use this for long sessions so reverse proxies (e.g. Cloudflare ~100s origin timeout) do not cut off the request before OpenAI finishes.
+
+ * @summary Start async session note generation
+ */
+export const createNoteGenerationJobBodySessionHoursMax = 8;
+
+export const createNoteGenerationJobBodyAbcHintsMax = 8;
+
+export const CreateNoteGenerationJobBody = zod.object({
+  clientId: zod.number(),
+  sessionHours: zod
+    .number()
+    .min(1)
+    .max(createNoteGenerationJobBodySessionHoursMax),
+  sessionDate: zod.string(),
+  therapySetting: zod
+    .enum([
+      "Seasonal Residence",
+      "Walk-in Retail Health Clinic",
+      "Neighbor Residence",
+      "Office",
+      "Prescribed Pediatric Extended Care (PPEC) Center",
+      "Relative Residence",
+      "School",
+      "School/Community",
+      "School/Home",
+      "Home",
+      "Home/School",
+      "Home/Community",
+      "Home/Daycare",
+      "Independent Clinic",
+      "Medical Facility",
+      "Member Home",
+      "Comprehensive Outpatient Rehab Facility",
+      "Daycare",
+      "Daycare/Community",
+      "Daycare/Home",
+      "Family Home",
+      "Friend Residence",
+      "Group Home",
+      "Assisted Living Facility (ALF)",
+      "Community Mental Health Center",
+      "Community",
+      "Community/Daycare",
+      "Community/Home",
+      "Community/School",
+    ])
+    .describe(
+      "Where therapy was delivered. Must be one of the approved location labels; drives the locked opening location phrase assembled server-side (do not paraphrase the stored label when interpreting setting for the clinical body).\n",
+    ),
+  presentPeople: zod.array(zod.string()),
+  hasEnvironmentalChanges: zod.boolean(),
+  environmentalChanges: zod.string().optional(),
+  selectedReplacements: zod.array(zod.number()),
+  nextSessionDate: zod.string().optional(),
+  abcHints: zod
+    .array(
+      zod
+        .object({
+          activityAntecedent: zod
+            .string()
+            .nullish()
+            .describe(
+              "Exact string from GET \/notes\/abc-builder\/activity-antecedents",
+            ),
+          maladaptiveBehavior: zod
+            .string()
+            .nullish()
+            .describe(
+              "Exact maladaptive behavior label from the client BIP\/profile catalog",
+            ),
+          replacementProgramId: zod
+            .number()
+            .nullish()
+            .describe(
+              "Optional. ID of a replacement program linked to this client (GET \/clients\/:id\/programs). When set, hour h uses this program in the ABC instead of the default rotation from selectedReplacements. If this id is not in selectedReplacements, the clinical narrative for that hour must describe RBT implementation only and must not state positive or negative client outcomes for that program.\n",
+            ),
+        })
+        .describe(
+          "One optional ABC row. activityAntecedent and maladaptiveBehavior must be non-empty together, or both empty\/null — partial pairs are invalid. replacementProgramId may be set alone or with a complete activity\/behavior pair.\n",
+        ),
+    )
+    .max(createNoteGenerationJobBodyAbcHintsMax)
+    .optional()
+    .describe(
+      "Optional ABC Builder rows, index-aligned with service hours (index 0 = first hour). When both activityAntecedent and maladaptiveBehavior are set for an index, the AI must use those exact strings for that hour; empty rows use default AI rotation. Optional replacementProgramId per index assigns which linked replacement program that hour's ABC documents (defaults to server rotation from selectedReplacements). When replacementProgramId is not among selectedReplacements, the narrative must document RBT actions only for that hour—no valenced client outcome. Length must not exceed sessionHours. Omit or send [] for fully automatic ABCs.\n",
+    ),
+  programTrialData: zod
+    .record(
+      zod.string(),
+      zod.object({
+        count: zod
+          .number()
+          .nullable()
+          .describe(
+            'Total trials conducted for this replacement program when therapist-entered. `null` means \"no trial data entered\" — the server falls back to default quantified language. `>= 1` means trials were entered (including a deliberate 0% selection, encoded as `count >= 1` plus an empty `effectiveTrials`).\n',
+          ),
+        effectiveTrials: zod
+          .array(zod.number())
+          .describe(
+            "1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty AND `count >= 1`, this represents \*\*0 successes \/ count trials\*\* (a 0% entry); the server still injects the rounded percentage into the prose. When empty AND `count` is null, no data was entered.\n",
+          ),
+      }),
+    )
+    .optional()
+    .describe(
+      'Optional. Maps replacement program id (string keys, e.g. \"42\") to trial metadata. When `count` is \*\*null\*\*, no trial data was entered and the server uses default quantified replacement-program language for that hour. When `count` is \*\*>= 1\*\*, the therapist entered trial data for that program — `effectiveTrials` lists the 1-based trial indices that met criterion (so an empty `effectiveTrials` paired with `count >= 1` represents \*\*0 successes \/ count trials\*\*, i.e. a deliberate 0% entry, not \"no data\"). The clinical narrative for that hour must incorporate the rounded percentage (`successfulTrialNumbers.length` \/ `totalTrials`) for the verbatim replacement program name. Ignored for hours that document RBT-only replacement programs (not selected session targets).\n',
+    ),
+});
+
+/**
+ * @summary Poll async note generation job status
+ */
+export const GetNoteGenerationJobParams = zod.object({
+  jobId: zod.coerce.string(),
+});
+
+export const getNoteGenerationJobResponseDataNoteMaladaptiveReplacementPairingsItemSegmentIndexMin = 0;
+
+export const getNoteGenerationJobResponseDataNoteDraftQuotaUsedMin = 0;
+
+export const getNoteGenerationJobResponseDataDraftQuotaUsedMin = 0;
+
+export const GetNoteGenerationJobResponse = zod.object({
+  success: zod.boolean(),
+  data: zod.object({
+    jobId: zod.string(),
+    status: zod.enum(["pending", "running", "completed", "failed"]),
+    note: zod
+      .object({
+        noteId: zod.number(),
+        content: zod.string(),
+        clientId: zod.number(),
+        clientName: zod.string(),
+        sessionDate: zod.string(),
+        sessionHours: zod.number(),
+        generatedAt: zod.string(),
+        generationSource: zod
+          .enum(["openai", "template"])
+          .describe(
+            "Always openai on success; template is legacy for older clients only",
+          ),
+        generationModel: zod
+          .string()
+          .nullable()
+          .describe(
+            "OpenAI model id used for the clinical body (set on success)",
+          ),
+        maladaptiveReplacementPairings: zod
+          .array(
+            zod
+              .object({
+                segmentIndex: zod
+                  .number()
+                  .min(
+                    getNoteGenerationJobResponseDataNoteMaladaptiveReplacementPairingsItemSegmentIndexMin,
+                  )
+                  .describe(
+                    "Zero-based narrative segment index after session collapse (replacement-program slots).",
+                  ),
+                maladaptiveBehavior: zod
+                  .string()
+                  .describe(
+                    "Maladaptive behavior catalog label for this segment (never a replacement program name).",
+                  ),
+                replacementProgramName: zod
+                  .string()
+                  .describe(
+                    "Replacement program name documented for this segment in the generated note.",
+                  ),
+              })
+              .describe(
+                "One row for integrations that need \*\*maladaptive catalog behavior → replacement program\*\* pairings only. Omitted for skill-acquisition-only narrative segments (no maladaptive episode).\n",
+              ),
+          )
+          .optional()
+          .describe(
+            'Authoritative \*\*behavior → replacement program\*\* rows for this session (post-collapse segments). \*\*Excludes\*\* skill-acquisition-only segments (e.g. program names containing \"Echoic\", or \"Respond to Own Name\"), which are not maladaptive-behavior episodes. Downstream `replacementProgramImplementation`-style lists should use this array instead of inferring a \"behavior\" from replacement program names for every paragraph.\n',
+          ),
+        draftQuota: zod
+          .object({
+            used: zod
+              .number()
+              .min(getNoteGenerationJobResponseDataNoteDraftQuotaUsedMin)
+              .describe(
+                "Current count of unsaved drafts this user has generated.",
+              ),
+            max: zod
+              .number()
+              .min(1)
+              .describe(
+                "Configured cap. Default 3 (env `MAX_UNSAVED_DRAFTS`). May vary per plan in future.",
+              ),
+          })
+          .optional()
+          .describe(
+            "Updated unsaved-draft slot snapshot AFTER this generation was counted. The UI uses `used == max` to disable the Generate button until the user saves or discards.\n",
+          ),
+      })
+      .optional()
+      .describe("Present when status is completed"),
+    draftQuota: zod
+      .object({
+        used: zod
+          .number()
+          .min(getNoteGenerationJobResponseDataDraftQuotaUsedMin)
+          .describe("Current count of unsaved drafts this user has generated."),
+        max: zod
+          .number()
+          .min(1)
+          .describe(
+            "Configured cap. Default 3 (env `MAX_UNSAVED_DRAFTS`). May vary per plan in future.",
+          ),
+      })
+      .optional()
+      .describe(
+        "Present when status is completed (same as GenerateNoteResponse.data.draftQuota)",
+      ),
+  }),
+  warnings: zod
+    .array(zod.string())
+    .optional()
+    .describe(
+      "Present when status is completed (same as GenerateNoteResponse.warnings)",
+    ),
+  error: zod.string().nullish().describe("Present when status is failed"),
+  messages: zod
+    .array(zod.string())
+    .optional()
+    .describe("Present when status is failed (detail lines for the UI)"),
+});
+
+/**
  * Returns the per-user counter of generated-but-not-yet-saved drafts and the configured cap. The UI uses this on page load (and after any generate/save/discard) to decide whether the Generate button should be disabled and to render the "X of N drafts" hint. Per-user, not per-company — two RBTs in the same company each have their own pool.
 
  * @summary Current unsaved-draft slots for the authenticated user

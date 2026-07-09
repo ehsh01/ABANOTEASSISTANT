@@ -109,7 +109,8 @@ export const translations = {
         "This note was generated based on your inputs. Please review carefully and edit as needed to ensure complete clinical accuracy before saving as final.",
       regenerate: "Regenerate Note",
       regeneratingTitle: "Generating a new draft…",
-      regeneratingBody: "Using the same session settings you entered. This may take a moment.",
+      regeneratingBody:
+        "Using the same session settings you entered. Long sessions (4+ hours) can take several minutes — please keep this tab open.",
       regenerateSettingsLost: "Session settings were lost. Use Start Over (New Note) to begin again.",
       startOver: "Start Over (New Note)",
       noteSaved: "Note Saved",
@@ -185,7 +186,7 @@ export const translations = {
         "Review the session details below before generating the note.",
       generatingTitle: "Generating session note…",
       generatingBody:
-        "Generation uses OpenAI and usually takes about 15–40 seconds. If something is wrong (missing API key, model error, or quota), you will see an error message instead of a note.",
+        "Generation uses OpenAI. Most sessions finish in under a minute; longer visits (4–6 hours) can take several minutes. Please keep this tab open until the note is ready.",
       generateFailedTitle: "Could not generate note",
       draftQuotaTitle: "Unsaved generation limit reached",
       draftQuotaBody:
@@ -438,7 +439,8 @@ export const translations = {
         "Esta nota fue generada en base a tus entradas. Revisa cuidadosamente y edita según sea necesario para asegurar precisión clínica antes de guardar como final.",
       regenerate: "Regenerar Nota",
       regeneratingTitle: "Generando un nuevo borrador…",
-      regeneratingBody: "Usando la misma configuración de sesión que ingresó. Esto puede tardar un momento.",
+      regeneratingBody:
+        "Usando la misma configuración de sesión que ingresó. Las sesiones largas (4+ horas) pueden tardar varios minutos — mantenga esta pestaña abierta.",
       regenerateSettingsLost: "Se perdió la configuración de la sesión. Use Comenzar de nuevo para empezar otra vez.",
       startOver: "Comenzar de nuevo (Nueva nota)",
       noteSaved: "Nota guardada",
@@ -515,7 +517,7 @@ export const translations = {
         "Revisa los detalles de la sesión antes de generar la nota.",
       generatingTitle: "Generando nota de sesión…",
       generatingBody:
-        "La generación usa OpenAI y suele tardar unos 15–40 segundos. Si hay un problema (clave faltante, error del modelo o cuota), verás un mensaje de error en lugar de una nota.",
+        "La generación usa OpenAI. La mayoría de las sesiones terminan en menos de un minuto; las visitas largas (4–6 horas) pueden tardar varios minutos. Mantenga esta pestaña abierta hasta que la nota esté lista.",
       generateFailedTitle: "No se pudo generar la nota",
       draftQuotaTitle: "Límite de borradores sin guardar",
       draftQuotaBody:

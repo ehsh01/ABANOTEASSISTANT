@@ -1,8 +1,8 @@
 import { Router, type IRouter } from "express";
-import { and, desc, eq } from "drizzle-orm";
 import {
-  GenerateNoteBody,
   GenerateNoteResponse,
+  GetNoteGenerationJobParams,
+  GetNoteGenerationJobResponse,
   ListNotesResponse,
   ListAbcBuilderActivityAntecedentsResponse,
   GetNoteParams,
@@ -13,19 +13,21 @@ import {
   SaveNoteBody,
   SaveNoteResponse,
 } from "@workspace/api-zod";
-import { normalizeLegacyTherapySetting } from "@workspace/therapy-settings";
 import { db } from "@workspace/db";
-import { clientsTable, companiesTable, notesTable } from "@workspace/db/schema";
-import { isOpenAINoteGenerationConfigured } from "../openai-notes";
+import { clientsTable, companiesTable, noteGenerationJobsTable, notesTable } from "@workspace/db/schema";
+import { and, desc, eq } from "drizzle-orm";
 import { generateSessionNoteForClient } from "../notes-service";
 import { evaluateBilling, recordSavedNote } from "../billing/service";
 import {
-  draftCapMessage,
   getMaxUnsavedDraftsForCompany,
   readDraftQuotaForUser,
   resetDraftQuotaForUser,
-  tryConsumeDraftSlot,
 } from "../draft-quota";
+import {
+  createNoteGenerationJobRecord,
+  enqueueNoteGenerationJob,
+  prepareNoteGeneration,
+} from "../note-generation-jobs";
 import { ABC_ACTIVITY_ANTECEDENT_CATALOG } from "../abc-activity-antecedent-catalog";
 
 const router: IRouter = Router();
@@ -221,6 +223,116 @@ router.delete("/notes/:noteId", async (req, res) => {
   res.json(data);
 });
 
+router.post("/notes/generate/jobs", async (req, res) => {
+  const companyId = req.companyId;
+  const userId = req.userId;
+  if (companyId === undefined || userId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const prepared = await prepareNoteGeneration({
+    companyId,
+    userId,
+    rawBody: req.body,
+  });
+  if (!prepared.ok) {
+    res.status(prepared.status).json({
+      success: false,
+      error: prepared.error,
+      messages: prepared.messages,
+      ...(prepared.draftQuota ? { draftQuota: prepared.draftQuota } : {}),
+    });
+    return;
+  }
+
+  const jobId = await createNoteGenerationJobRecord({
+    companyId: prepared.companyId,
+    userId: prepared.userId,
+    clientId: prepared.client.id,
+    body: prepared.body,
+    draftQuota: prepared.draftQuota,
+  });
+  enqueueNoteGenerationJob(jobId);
+
+  res.status(202).json({
+    success: true,
+    data: { jobId, status: "pending" as const },
+    error: null,
+  });
+});
+
+router.get("/notes/generate/jobs/:jobId", async (req, res) => {
+  const companyId = req.companyId;
+  const userId = req.userId;
+  if (companyId === undefined || userId === undefined) {
+    res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+    return;
+  }
+
+  const params = GetNoteGenerationJobParams.parse(req.params);
+  const [job] = await db
+    .select()
+    .from(noteGenerationJobsTable)
+    .where(
+      and(
+        eq(noteGenerationJobsTable.id, params.jobId),
+        eq(noteGenerationJobsTable.companyId, companyId),
+        eq(noteGenerationJobsTable.userId, userId),
+      ),
+    )
+    .limit(1);
+
+  if (!job) {
+    res.status(404).json({ success: false, error: "Job not found", messages: [] });
+    return;
+  }
+
+  if (job.status === "pending" || job.status === "running") {
+    const payload = GetNoteGenerationJobResponse.parse({
+      success: true,
+      data: { jobId: job.id, status: job.status },
+      error: null,
+    });
+    res.json(payload);
+    return;
+  }
+
+  if (job.status === "failed") {
+    const payload = GetNoteGenerationJobResponse.parse({
+      success: true,
+      data: { jobId: job.id, status: "failed" },
+      error: job.errorMessage ?? "Note generation failed",
+      messages: job.errorMessages ?? [],
+    });
+    res.json(payload);
+    return;
+  }
+
+  const note = job.resultData;
+  if (!note) {
+    res.status(500).json({
+      success: false,
+      error: "Completed job is missing result data",
+      messages: [],
+    });
+    return;
+  }
+
+  const payload = GetNoteGenerationJobResponse.parse({
+    success: true,
+    data: {
+      jobId: job.id,
+      status: "completed",
+      note,
+      draftQuota: note.draftQuota,
+    },
+    warnings: job.warnings && job.warnings.length > 0 ? job.warnings : undefined,
+    error: null,
+  });
+  res.json(payload);
+});
+
 router.post("/notes/generate", async (req, res) => {
   const companyId = req.companyId;
   const userId = req.userId;
@@ -229,111 +341,22 @@ router.post("/notes/generate", async (req, res) => {
     return;
   }
 
-  const raw = req.body;
-  const bodyIn =
-    raw != null && typeof raw === "object"
-      ? {
-          ...(raw as Record<string, unknown>),
-          therapySetting:
-            typeof (raw as { therapySetting?: unknown }).therapySetting === "string"
-              ? normalizeLegacyTherapySetting((raw as { therapySetting: string }).therapySetting)
-              : (raw as { therapySetting?: unknown }).therapySetting,
-        }
-      : raw;
-
-  const body = GenerateNoteBody.parse(bodyIn);
-
-  if (process.env.ENFORCE_COMPLIMENTARY_ACCESS === "true") {
-    const [co] = await db
-      .select()
-      .from(companiesTable)
-      .where(eq(companiesTable.id, companyId))
-      .limit(1);
-    if (!co?.freeUsage) {
-      res.status(402).json({
-        success: false,
-        error: "Complimentary or paid access required for note generation.",
-        messages: [],
-      });
-      return;
-    }
-  }
-
-  // Stripe billing gate (independent of the legacy ENFORCE_COMPLIMENTARY_ACCESS flag). When the
-  // server is configured with BILLING_ENFORCEMENT=off (default) this resolves to a permissive
-  // decision so the legacy flow is untouched. Policy:
-  //   - subscribed/trialing within grace → generation BLOCKED (user can still save in-progress)
-  //   - suspended (no sub, expired sub, manually suspended) → generation BLOCKED
-  //   - complimentary → always allowed
-  const billing = await evaluateBilling(companyId);
-  if (billing && !billing.generationAllowed) {
-    res.status(402).json({
+  const prepared = await prepareNoteGeneration({
+    companyId,
+    userId,
+    rawBody: req.body,
+  });
+  if (!prepared.ok) {
+    res.status(prepared.status).json({
       success: false,
-      error: billing.blockedReason ?? "Subscription required to generate new notes.",
-      messages: [],
+      error: prepared.error,
+      messages: prepared.messages,
+      ...(prepared.draftQuota ? { draftQuota: prepared.draftQuota } : {}),
     });
     return;
   }
 
-  if (!isOpenAINoteGenerationConfigured()) {
-    res.status(503).json({
-      success: false,
-      error: "AI note generation is not configured on the server.",
-      messages: [
-        "OPENAI_API_KEY is missing or empty. Set it in artifacts/api-server/.env (or your host environment) and restart the API (e.g. pm2 restart abanoteassistant-api). " +
-          "Session notes are generated only with OpenAI; there is no template fallback.",
-      ],
-    });
-    return;
-  }
-
-  const [client] = await db
-    .select()
-    .from(clientsTable)
-    .where(and(eq(clientsTable.id, body.clientId), eq(clientsTable.companyId, companyId)))
-    .limit(1);
-
-  if (!client) {
-    res.status(404).json({ success: false, error: "Client not found", messages: [] });
-    return;
-  }
-
-  // Policy: no session note generation without an assessment on file for this client.
-  if (!client.hasAssessment || client.assessmentStatus === "missing") {
-    res.status(422).json({
-      success: false,
-      error: "Assessment required",
-      messages: [
-        "This client does not have an assessment on file. Upload an assessment (e.g. FBA/BIP PDF) for the client before generating session notes.",
-      ],
-    });
-    return;
-  }
-
-  // Unsaved-draft cap. Atomically reserves one of MAX_UNSAVED_DRAFTS slots BEFORE we make the
-  // expensive OpenAI call. Two concurrent requests from two tabs can't race past the cap because
-  // the slot-consume update is a single CAS-style WHERE count < max. On 429 the UI shows the
-  // calm SaaS copy from `draftCapMessage()` and either saves a draft or POSTs /notes/drafts/discard
-  // to free the pool. Slots are also reserved even when generation later fails — intentional, so
-  // a flaky AI provider can't be turned into an unlimited-regenerate loophole; the user can
-  // always click "Discard drafts" to recover. Validation/lookup failures above this point don't
-  // burn a slot because they short-circuit before we get here.
-  const [companyForCap] = await db
-    .select()
-    .from(companiesTable)
-    .where(eq(companiesTable.id, companyId))
-    .limit(1);
-  const maxUnsavedDrafts = getMaxUnsavedDraftsForCompany(companyForCap ?? null);
-  const slot = await tryConsumeDraftSlot(userId, maxUnsavedDrafts);
-  if (!slot.ok) {
-    res.status(429).json({
-      success: false,
-      error: draftCapMessage(maxUnsavedDrafts),
-      messages: [],
-      draftQuota: { used: slot.used, max: slot.max },
-    });
-    return;
-  }
+  const { client, body, draftQuota: slot } = prepared;
 
   const result = await generateSessionNoteForClient({ companyId, client, body });
   if (!result.ok) {

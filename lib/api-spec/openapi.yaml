@@ -1045,6 +1045,101 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /notes/generate/jobs:
+    post:
+      operationId: createNoteGenerationJob
+      tags: [notes]
+      summary: Start async session note generation
+      description: >
+        Same validation and draft-slot rules as POST /notes/generate, but returns immediately with a
+        job id (HTTP 202). Poll GET /notes/generate/jobs/{jobId} until status is `completed` or
+        `failed`. Use this for long sessions so reverse proxies (e.g. Cloudflare ~100s origin
+        timeout) do not cut off the request before OpenAI finishes.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateNoteRequest"
+      responses:
+        "202":
+          description: Job accepted; poll GET /notes/generate/jobs/{jobId}
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreateNoteGenerationJobResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Cannot generate — assessment or client data issue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Too many unsaved drafts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: AI not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /notes/generate/jobs/{jobId}:
+    get:
+      operationId: getNoteGenerationJob
+      tags: [notes]
+      summary: Poll async note generation job status
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job status (pending, running, completed, or failed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetNoteGenerationJobResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Job not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /notes/draft-quota:
     get:
       operationId: getDraftQuota
@@ -2641,6 +2736,74 @@ components:
         - generatedAt
         - generationSource
         - generationModel
+
+    NoteGenerationJobStatus:
+      type: string
+      enum: [pending, running, completed, failed]
+
+    NoteGenerationJobSummary:
+      type: object
+      required:
+        - jobId
+        - status
+      properties:
+        jobId:
+          type: string
+        status:
+          $ref: "#/components/schemas/NoteGenerationJobStatus"
+
+    CreateNoteGenerationJobResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: "#/components/schemas/NoteGenerationJobSummary"
+        error:
+          type: string
+          nullable: true
+
+    GetNoteGenerationJobResponse:
+      type: object
+      required:
+        - success
+        - data
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          required:
+            - jobId
+            - status
+          properties:
+            jobId:
+              type: string
+            status:
+              $ref: "#/components/schemas/NoteGenerationJobStatus"
+            note:
+              $ref: "#/components/schemas/GeneratedNote"
+              description: Present when status is completed
+            draftQuota:
+              $ref: "#/components/schemas/DraftQuota"
+              description: Present when status is completed (same as GenerateNoteResponse.data.draftQuota)
+        warnings:
+          type: array
+          items:
+            type: string
+          description: Present when status is completed (same as GenerateNoteResponse.warnings)
+        error:
+          type: string
+          nullable: true
+          description: Present when status is failed
+        messages:
+          type: array
+          items:
+            type: string
+          description: Present when status is failed (detail lines for the UI)
 
     NoteSummary:
       type: object

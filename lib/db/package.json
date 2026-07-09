@@ -12,6 +12,7 @@
     "push-force": "node ./scripts/ensure-abanote-schema.mjs && drizzle-kit push --force --config ./drizzle.config.ts",
     "ensure:behavior-approvals-table": "node ./scripts/ensure-client-behavior-program-approvals-table.mjs",
     "ensure:note-generation-audit-table": "node ./scripts/ensure-note-generation-audit-table.mjs",
+    "ensure:note-generation-jobs-table": "node ./scripts/ensure-note-generation-jobs-table.mjs",
     "push:from-api-env": "node ./scripts/ensure-client-behavior-program-approvals-table.mjs"
   },
   "dependencies": {

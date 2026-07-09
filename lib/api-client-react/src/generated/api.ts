@@ -32,6 +32,7 @@ import type {
   ClinicalRecommendationRequest,
   ClinicalRecommendationResponse,
   CreateClientRequest,
+  CreateNoteGenerationJobResponse,
   DeleteClientProgramResponse,
   DeleteClientResponse,
   DeleteNoteResponse,
@@ -41,6 +42,7 @@ import type {
   GenerateNoteRequest,
   GenerateNoteResponse,
   GetDraftQuotaResponse,
+  GetNoteGenerationJobResponse,
   HealthStatus,
   ListBehaviorProgramApprovalsResponse,
   LoginRequest,
@@ -2543,6 +2545,189 @@ export const useGenerateNote = <
 > => {
   return useMutation(getGenerateNoteMutationOptions(options));
 };
+
+/**
+ * Same validation and draft-slot rules as POST /notes/generate, but returns immediately with a job id (HTTP 202). Poll GET /notes/generate/jobs/{jobId} until status is `completed` or `failed`. Use this for long sessions so reverse proxies (e.g. Cloudflare ~100s origin timeout) do not cut off the request before OpenAI finishes.
+
+ * @summary Start async session note generation
+ */
+export const getCreateNoteGenerationJobUrl = () => {
+  return `/api/notes/generate/jobs`;
+};
+
+export const createNoteGenerationJob = async (
+  generateNoteRequest: GenerateNoteRequest,
+  options?: RequestInit,
+): Promise<CreateNoteGenerationJobResponse> => {
+  return customFetch<CreateNoteGenerationJobResponse>(
+    getCreateNoteGenerationJobUrl(),
+    {
+      ...options,
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...options?.headers },
+      body: JSON.stringify(generateNoteRequest),
+    },
+  );
+};
+
+export const getCreateNoteGenerationJobMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createNoteGenerationJob>>,
+    TError,
+    { data: BodyType<GenerateNoteRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof createNoteGenerationJob>>,
+  TError,
+  { data: BodyType<GenerateNoteRequest> },
+  TContext
+> => {
+  const mutationKey = ["createNoteGenerationJob"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof createNoteGenerationJob>>,
+    { data: BodyType<GenerateNoteRequest> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return createNoteGenerationJob(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type CreateNoteGenerationJobMutationResult = NonNullable<
+  Awaited<ReturnType<typeof createNoteGenerationJob>>
+>;
+export type CreateNoteGenerationJobMutationBody = BodyType<GenerateNoteRequest>;
+export type CreateNoteGenerationJobMutationError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Start async session note generation
+ */
+export const useCreateNoteGenerationJob = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof createNoteGenerationJob>>,
+    TError,
+    { data: BodyType<GenerateNoteRequest> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof createNoteGenerationJob>>,
+  TError,
+  { data: BodyType<GenerateNoteRequest> },
+  TContext
+> => {
+  return useMutation(getCreateNoteGenerationJobMutationOptions(options));
+};
+
+/**
+ * @summary Poll async note generation job status
+ */
+export const getGetNoteGenerationJobUrl = (jobId: string) => {
+  return `/api/notes/generate/jobs/${jobId}`;
+};
+
+export const getNoteGenerationJob = async (
+  jobId: string,
+  options?: RequestInit,
+): Promise<GetNoteGenerationJobResponse> => {
+  return customFetch<GetNoteGenerationJobResponse>(
+    getGetNoteGenerationJobUrl(jobId),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
+};
+
+export const getGetNoteGenerationJobQueryKey = (jobId: string) => {
+  return [`/api/notes/generate/jobs/${jobId}`] as const;
+};
+
+export const getGetNoteGenerationJobQueryOptions = <
+  TData = Awaited<ReturnType<typeof getNoteGenerationJob>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  jobId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getNoteGenerationJob>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+
+  const queryKey =
+    queryOptions?.queryKey ?? getGetNoteGenerationJobQueryKey(jobId);
+
+  const queryFn: QueryFunction<
+    Awaited<ReturnType<typeof getNoteGenerationJob>>
+  > = ({ signal }) =>
+    getNoteGenerationJob(jobId, { signal, ...requestOptions });
+
+  return {
+    queryKey,
+    queryFn,
+    enabled: !!jobId,
+    ...queryOptions,
+  } as UseQueryOptions<
+    Awaited<ReturnType<typeof getNoteGenerationJob>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export type GetNoteGenerationJobQueryResult = NonNullable<
+  Awaited<ReturnType<typeof getNoteGenerationJob>>
+>;
+export type GetNoteGenerationJobQueryError = ErrorType<ErrorResponse>;
+
+/**
+ * @summary Poll async note generation job status
+ */
+
+export function useGetNoteGenerationJob<
+  TData = Awaited<ReturnType<typeof getNoteGenerationJob>>,
+  TError = ErrorType<ErrorResponse>,
+>(
+  jobId: string,
+  options?: {
+    query?: UseQueryOptions<
+      Awaited<ReturnType<typeof getNoteGenerationJob>>,
+      TError,
+      TData
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetNoteGenerationJobQueryOptions(jobId, options);
+
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & {
+    queryKey: QueryKey;
+  };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
 
 /**
  * Returns the per-user counter of generated-but-not-yet-saved drafts and the configured cap. The UI uses this on page load (and after any generate/save/discard) to decide whether the Generate button should be disabled and to render the "X of N drafts" hint. Per-user, not per-company — two RBTs in the same company each have their own pool.

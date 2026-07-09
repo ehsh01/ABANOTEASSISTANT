@@ -67,6 +67,9 @@ else
   echo "⏭️  Skipping drizzle push (set RUN_DRIZZLE_PUSH=1 when you need schema sync)"
 fi
 
+echo "🗄️  Ensuring note_generation_jobs table (async note generation)..."
+node lib/db/scripts/ensure-note-generation-jobs-table.mjs
+
 echo "🔨 Building API server..."
 pnpm --filter @workspace/api-server run build
 

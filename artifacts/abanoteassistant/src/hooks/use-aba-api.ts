@@ -34,7 +34,7 @@ import {
   putClientBehaviorApprovedPrograms,
   listNotes,
   getNote,
-  generateNote,
+  generateNoteAsync,
   saveNote,
   deleteNote as deleteNoteRequest,
   deleteClient as deleteClientRequest,
@@ -167,7 +167,7 @@ export function useGenerateSessionNote() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (data: GenerateNoteRequest): Promise<GenerateNoteResponse> =>
-      generateNote(data),
+      generateNoteAsync(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notes/draft-quota"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notes"] });

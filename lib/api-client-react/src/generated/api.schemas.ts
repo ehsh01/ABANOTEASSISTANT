@@ -812,6 +812,47 @@ export interface GenerateNoteResponse {
   error?: string | null;
 }
 
+export type NoteGenerationJobStatus =
+  (typeof NoteGenerationJobStatus)[keyof typeof NoteGenerationJobStatus];
+
+export const NoteGenerationJobStatus = {
+  pending: "pending",
+  running: "running",
+  completed: "completed",
+  failed: "failed",
+} as const;
+
+export interface NoteGenerationJobSummary {
+  jobId: string;
+  status: NoteGenerationJobStatus;
+}
+
+export interface CreateNoteGenerationJobResponse {
+  success: boolean;
+  data: NoteGenerationJobSummary;
+  error?: string | null;
+}
+
+export type GetNoteGenerationJobResponseData = {
+  jobId: string;
+  status: NoteGenerationJobStatus;
+  /** Present when status is completed */
+  note?: GeneratedNote;
+  /** Present when status is completed (same as GenerateNoteResponse.data.draftQuota) */
+  draftQuota?: DraftQuota;
+};
+
+export interface GetNoteGenerationJobResponse {
+  success: boolean;
+  data: GetNoteGenerationJobResponseData;
+  /** Present when status is completed (same as GenerateNoteResponse.warnings) */
+  warnings?: string[];
+  /** Present when status is failed */
+  error?: string | null;
+  /** Present when status is failed (detail lines for the UI) */
+  messages?: string[];
+}
+
 export type NoteSummaryStatus =
   (typeof NoteSummaryStatus)[keyof typeof NoteSummaryStatus];
 

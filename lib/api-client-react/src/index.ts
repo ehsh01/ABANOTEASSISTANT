@@ -1,6 +1,7 @@
 export * from "./generated/api";
 export * from "./generated/api.schemas";
 export * from "./extract-assessment-from-pdf";
+export { generateNoteAsync } from "./generate-note-async";
 export {
   setAccessTokenGetter,
   setApiBaseUrl,
