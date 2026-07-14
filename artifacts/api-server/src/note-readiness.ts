@@ -23,6 +23,56 @@ export type NoteReadinessReport = {
   messages: string[];
 };
 
+/** Below this threshold, parser output is not meaningful clinical grounding (usually a scanned PDF without OCR). */
+export const MIN_USABLE_ASSESSMENT_TEXT_CHARS = 80;
+
+export function hasUsableAssessmentText(profile: ClientProfileRow | null | undefined): boolean {
+  return (profile?.assessmentTextSnapshot?.trim().length ?? 0) >= MIN_USABLE_ASSESSMENT_TEXT_CHARS;
+}
+
+export type AssessmentGenerationGateResult =
+  | { ok: true }
+  | { ok: false; status: 422; error: string; messages: string[] };
+
+/** Strict shared gate for synchronous and queued note generation. */
+export function assessmentGenerationGate(params: {
+  hasAssessment: boolean;
+  assessmentStatus: string;
+  profile: ClientProfileRow | null | undefined;
+}): AssessmentGenerationGateResult {
+  if (!params.hasAssessment || params.assessmentStatus === "missing") {
+    return {
+      ok: false,
+      status: 422,
+      error: "Assessment required",
+      messages: [
+        "This client does not have an assessment on file. Upload an assessment (e.g. FBA/BIP PDF) for the client before generating session notes.",
+      ],
+    };
+  }
+  if (!hasUsableAssessmentText(params.profile)) {
+    return {
+      ok: false,
+      status: 422,
+      error: "Usable assessment text required",
+      messages: [
+        `The uploaded assessment does not contain enough readable text for grounded note generation (minimum ${MIN_USABLE_ASSESSMENT_TEXT_CHARS} characters). If the PDF is scanned or image-only, run OCR or export a PDF with a selectable text layer, then upload it again.`,
+      ],
+    };
+  }
+  if (params.assessmentStatus !== "ready") {
+    return {
+      ok: false,
+      status: 422,
+      error: "Assessment is not ready",
+      messages: [
+        "The assessment upload has not completed successfully. Re-upload a readable PDF with a text layer before generating session notes.",
+      ],
+    };
+  }
+  return { ok: true };
+}
+
 export function buildNoteReadinessReport(profile: ClientProfileRow): NoteReadinessReport {
   const targets = expandMaladaptiveTargetsFromProfile(profile);
 
@@ -45,7 +95,7 @@ export function buildNoteReadinessReport(profile: ClientProfileRow): NoteReadine
     .map((t) => t.name);
 
   const snapshot = profile.assessmentTextSnapshot?.trim() ?? "";
-  const assessmentTextMissing = snapshot.length === 0;
+  const assessmentTextMissing = snapshot.length < MIN_USABLE_ASSESSMENT_TEXT_CHARS;
   const assessmentTextTruncatedForPrompt = snapshot.length > MAX_ASSESSMENT_TEXT_NOTE_CONTEXT_CHARS;
 
   const messages: string[] = [];
@@ -66,7 +116,7 @@ export function buildNoteReadinessReport(profile: ClientProfileRow): NoteReadine
   }
   if (assessmentTextMissing) {
     messages.push(
-      "No assessment text is on file for this client. Upload the assessment PDF so note generation can reference the real BIP.",
+      `No usable assessment text is on file for this client. Upload a readable assessment PDF with at least ${MIN_USABLE_ASSESSMENT_TEXT_CHARS} characters of selectable text; scanned/image-only PDFs require OCR before upload.`,
     );
   } else if (assessmentTextTruncatedForPrompt) {
     messages.push(

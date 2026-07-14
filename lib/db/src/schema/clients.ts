@@ -70,6 +70,21 @@ export type ClientAssessmentSummaryRow = {
   supervisorRequirements?: string | null;
 };
 
+/**
+ * Internal provenance for values populated from the latest assessment upload.
+ *
+ * Upload refresh policy is conservative: fields not named here are treated as therapist-curated
+ * and win over extraction. Fields named here may be replaced or cleared by a later successful
+ * upload, which prevents stale extracted clinical details from surviving a document replacement.
+ */
+export type AssessmentExtractionProvenanceRow = {
+  topographyBehaviors: string[];
+  functionBehaviors: string[];
+  replacementMapBehaviors: string[];
+  interventionMapBehaviors: string[];
+  assessmentSummaryExtracted: boolean;
+};
+
 /** Extended client fields stored in Postgres (UI wizard + edit). */
 export type ClientProfileRow = {
   firstName: string;
@@ -111,6 +126,8 @@ export type ClientProfileRow = {
    * imported from the PDF on client onboarding.
    */
   assessmentSummary?: ClientAssessmentSummaryRow | null;
+  /** Server-only provenance for assessment-derived fields; omitted from public API responses. */
+  assessmentExtractionProvenance?: AssessmentExtractionProvenanceRow;
 };
 
 export const clientsTable = abanote.table("clients", {

@@ -64,6 +64,7 @@ import {
   buildPerformanceSentence,
   type TherapySetting,
 } from "./note-assembly";
+import { assessmentGenerationGate } from "./note-readiness";
 import {
   enrichMaladaptiveTargetsWithAssessmentTopography,
   truncateAssessmentTextForNoteContext,
@@ -209,6 +210,14 @@ export async function generateSessionNoteForClient(params: {
 
   const profile = (client.profile as ClientProfileRow | null | undefined) ?? null;
   const rawAssessmentSnapshot = profile?.assessmentTextSnapshot?.trim() ?? "";
+  const assessmentGate = assessmentGenerationGate({
+    hasAssessment: client.hasAssessment,
+    assessmentStatus: client.assessmentStatus,
+    profile,
+  });
+  if (!assessmentGate.ok) {
+    return assessmentGate;
+  }
 
   if (body.selectedReplacements.length === 0) {
     return {
@@ -887,7 +896,7 @@ export async function generateSessionNoteForClient(params: {
   const programSlotNeed = replacementProgramSlotCount(body.sessionHours);
   if (body.selectedReplacements.length < programSlotNeed) {
     warnings.push(
-      `Fewer programs selected than replacement-program slots for this session (${programSlotNeed} slot(s) for ${body.sessionHours} hour(s); 2-hour sessions use one program per hour, longer sessions use about one program per 90 minutes). Slots without a matching selection in ABC Builder are auto-filled from the client's assessment/profile replacement-program list (selected session targets first, then other assessment-listed programs). Use ABC Builder to override any hour.`,
+      `Fewer programs selected than billable session hours (${programSlotNeed} hourly segment(s) for ${body.sessionHours} hour(s)). Hours without a matching selection in ABC Builder are auto-filled from the client's assessment/profile replacement-program list (selected session targets first, then other assessment-listed programs). Use ABC Builder to override any hour.`,
     );
   }
   if (narrativeCollapsed.rbtActionsOnlyOutcomeForHour.some(Boolean)) {

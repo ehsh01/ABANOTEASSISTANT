@@ -5,16 +5,17 @@ import { GetClientParams, GetClientResponse } from "@workspace/api-zod";
 import { db } from "@workspace/db";
 import { clientsTable, type ClientProfileRow } from "@workspace/db/schema";
 import {
+  extractAssessmentFromPdfText,
   extractBehaviorMapsFromBipText,
   extractTextFromPdfBuffer,
+  enrichMaladaptiveTargetsWithAssessmentTopography,
   truncateAssessmentTextForStorage,
 } from "../assessment-extract";
-import {
-  getAssessmentStructuredFromProfile,
-  mergeAutoExtractedBehaviorMapsIntoStructured,
-} from "../assessment-structured";
 import { clientRowToApiData } from "../client-profile-api";
 import { sanitizeTextForJsonStorage } from "../sanitize-text-for-json";
+import { refreshProfileFromAssessmentUpload } from "../assessment-persistence";
+import { MIN_USABLE_ASSESSMENT_TEXT_CHARS } from "../note-readiness";
+import { enrichMaladaptiveTargetsWithAssessmentFunctions } from "../clinical-behavior-function";
 
 function extractDeepestDriverMessage(err: unknown): string {
   let best = err instanceof Error ? err.message : String(err);
@@ -91,9 +92,11 @@ router.post(
     }
 
     let rawText: string;
+    let pdfPageCount = 0;
     try {
-      const { text } = await extractTextFromPdfBuffer(file.buffer);
+      const { text, numpages } = await extractTextFromPdfBuffer(file.buffer);
       rawText = text ?? "";
+      pdfPageCount = numpages;
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to read PDF";
       res.status(400).json({ success: false, error: message, messages: [] });
@@ -101,6 +104,16 @@ router.post(
     }
 
     const { text: snapshot, truncated } = truncateAssessmentTextForStorage(rawText);
+    if (snapshot.length < MIN_USABLE_ASSESSMENT_TEXT_CHARS) {
+      res.status(422).json({
+        success: false,
+        error: "Assessment PDF does not contain usable text",
+        messages: [
+          `Only ${snapshot.length} readable characters were extracted; at least ${MIN_USABLE_ASSESSMENT_TEXT_CHARS} are required for grounded note generation. If this PDF is scanned or image-only, run OCR or export it with a selectable text layer, then upload it again.`,
+        ],
+      });
+      return;
+    }
     if (truncated) {
       console.warn(
         `[clients/${params.data.clientId}/assessment/document] Stored text truncated to ${snapshot.length} chars`,
@@ -119,47 +132,93 @@ router.post(
       interventions: [],
     };
 
-    const nextProfile: ClientProfileRow = {
-      ...base,
-      assessmentFileName: sanitizeTextForJsonStorage(file.originalname || base.assessmentFileName || "").trim() || base.assessmentFileName,
-    };
-    if (snapshot.length > 0) {
-      nextProfile.assessmentTextSnapshot = snapshot;
-    } else {
-      delete nextProfile.assessmentTextSnapshot;
+    const profilePrograms = [
+      ...(base.replacementPrograms ?? []),
+      ...(base.skillAcquisitionPrograms ?? []),
+    ];
+    const deterministicMaps = extractBehaviorMapsFromBipText(
+      rawText,
+      base.maladaptiveBehaviors ?? [],
+      profilePrograms,
+      base.interventions ?? [],
+    );
+    const blankTargets = (base.maladaptiveBehaviors ?? []).map((name) => ({
+      name,
+      topography: null as string | null,
+      functions: null,
+    }));
+    const deterministicTargets = enrichMaladaptiveTargetsWithAssessmentTopography(
+      enrichMaladaptiveTargetsWithAssessmentFunctions(blankTargets, rawText),
+      rawText,
+    );
+
+    // The upload endpoint owns persistence. LLM extraction is best-effort enrichment; a temporary
+    // extraction failure never discards the usable authoritative text or deterministic fields.
+    let llmExtracted: Awaited<ReturnType<typeof extractAssessmentFromPdfText>>["extracted"] | null =
+      null;
+    try {
+      llmExtracted = (await extractAssessmentFromPdfText(rawText, pdfPageCount)).extracted;
+    } catch (error) {
+      console.warn(
+        `[clients/${params.data.clientId}/assessment/document] optional LLM extraction failed; ` +
+          `persisting deterministic assessment fields: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
 
-    // Auto-extract behavior→replacement and behavior→intervention maps from the BIP text and
-    // persist them into assessmentStructured. Curated map entries are never overwritten; a new
-    // structured row is only created when at least one map entry was found in the document.
-    if (rawText.trim().length > 0) {
-      const profilePrograms = [
-        ...(nextProfile.replacementPrograms ?? []),
-        ...(nextProfile.skillAcquisitionPrograms ?? []),
-      ];
-      const maps = extractBehaviorMapsFromBipText(
-        rawText,
-        nextProfile.maladaptiveBehaviors ?? [],
-        profilePrograms,
-        nextProfile.interventions ?? [],
-      );
-      const merged = mergeAutoExtractedBehaviorMapsIntoStructured({
-        existing: getAssessmentStructuredFromProfile(nextProfile),
-        profileBehaviors: nextProfile.maladaptiveBehaviors ?? [],
-        profileReplacementPrograms: profilePrograms,
-        profileInterventions: nextProfile.interventions ?? [],
-        behaviorToReplacements: maps.behaviorToReplacements,
-        behaviorToInterventions: maps.behaviorToInterventions,
-      });
-      if (merged) {
-        nextProfile.assessmentStructured = merged;
-        console.log(
-          `[clients/${params.data.clientId}/assessment/document] assessmentStructured maps: ` +
-            `${Object.keys(merged.behavior_to_replacements_map).length} behavior→replacement, ` +
-            `${Object.keys(merged.behavior_to_interventions_map).length} behavior→intervention`,
-        );
+    const mergeMapValues = (
+      primary: Record<string, string[]> | undefined,
+      fallback: Record<string, string[]>,
+    ): Record<string, string[]> => {
+      const merged = { ...(primary ?? {}) };
+      for (const [behavior, values] of Object.entries(fallback)) {
+        merged[behavior] = [...new Set([...(merged[behavior] ?? []), ...values])];
       }
-    }
+      return merged;
+    };
+    const llmTargetsByLower = new Map(
+      (llmExtracted?.maladaptiveBehaviorTopographies ?? []).map((target) => [
+        target.name.trim().toLowerCase(),
+        target,
+      ]),
+    );
+    const extractedTargets = deterministicTargets.map((target) => {
+      const llm = llmTargetsByLower.get(target.name.trim().toLowerCase());
+      return {
+        name: target.name,
+        topography: llm?.topography?.trim() || target.topography,
+        ...(llm?.functions !== undefined
+          ? { functions: llm.functions }
+          : target.functions != null
+            ? { functions: target.functions }
+            : {}),
+      };
+    });
+    const nextProfile = refreshProfileFromAssessmentUpload({
+      profile: base,
+      fileName:
+        sanitizeTextForJsonStorage(file.originalname || base.assessmentFileName || "").trim() ||
+        base.assessmentFileName ||
+        "assessment.pdf",
+      assessmentTextSnapshot: snapshot,
+      extracted: {
+        maladaptiveBehaviorTopographies: extractedTargets,
+        behaviorReplacementMap: mergeMapValues(
+          llmExtracted?.behaviorReplacementMap,
+          deterministicMaps.behaviorToReplacements,
+        ),
+        behaviorInterventionMap: mergeMapValues(
+          llmExtracted?.behaviorInterventionMap,
+          deterministicMaps.behaviorToInterventions,
+        ),
+        assessmentSummary: llmExtracted?.assessmentSummary,
+      },
+    });
+
+    console.log(
+      `[clients/${params.data.clientId}/assessment/document] assessmentStructured maps: ` +
+        `${Object.keys(nextProfile.assessmentStructured?.behavior_to_replacements_map ?? {}).length} behavior→replacement, ` +
+        `${Object.keys(nextProfile.assessmentStructured?.behavior_to_interventions_map ?? {}).length} behavior→intervention`,
+    );
 
     let updated;
     try {

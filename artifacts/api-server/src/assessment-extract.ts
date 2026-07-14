@@ -341,7 +341,7 @@ Document text:
 ${text}
 """
 
-Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBehaviors, maladaptiveBehaviorTopographies, replacementPrograms, skillAcquisitionPrograms, interventions, assessmentAuthorizationExpiresOn, assessmentSummary, confidenceNotes (all optional except arrays default to []).`;
+Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBehaviors, maladaptiveBehaviorTopographies, replacementPrograms, skillAcquisitionPrograms, interventions, behaviorReplacementMap, behaviorInterventionMap, assessmentAuthorizationExpiresOn, assessmentSummary, confidenceNotes (all optional except arrays default to []).`;
 
   // GPT-5.x chat models only accept the default temperature; older models still benefit from a low value
   // (0.2) for deterministic JSON extraction. Branch the request shape so we don't trigger

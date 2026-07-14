@@ -1,6 +1,6 @@
 /**
  * Note scheduling & rotation: maladaptive-behavior rotation catalogs, per-hour behavior and
- * replacement-program assignment (90-minute slots), narrative-segment collapsing, BIP-aligned
+ * replacement-program assignment (one slot per billable hour), narrative-segment preparation, BIP-aligned
  * candidate building, rebalancing passes, and session-date helpers.
  *
  * Extracted from note-validation.ts (which re-exports everything here for import stability).
@@ -220,19 +220,13 @@ export function replacementProgramPoolOrdered(selectedIdsOrdered: number[], link
 }
 
 /**
- * Replacement program rotation buckets session time into **slots**:
- * - **Exactly 2 session hours:** two slots (one per hour) so each hour can document a different selected program.
- * - **All other lengths:** one slot per **90 minutes** of session time; consecutive calendar hours in the same
- *   bucket share the same replacement program unless ABC Builder sets an explicit `replacementProgramId` for an hour.
+ * Replacement program rotation uses exactly one slot per billable session hour.
  */
 export function replacementProgramSlotIdForHour(sessionHours: number, hourIndex: number): number {
   if (sessionHours <= 0 || hourIndex < 0 || hourIndex >= sessionHours) {
     return 0;
   }
-  if (sessionHours === 2) {
-    return hourIndex;
-  }
-  return Math.floor((hourIndex * 60) / 90);
+  return hourIndex;
 }
 
 /** Number of replacement-program slots for `sessionHours` (see `replacementProgramSlotIdForHour`). */
@@ -240,10 +234,7 @@ export function replacementProgramSlotCount(sessionHours: number): number {
   if (sessionHours <= 0) {
     return 0;
   }
-  if (sessionHours === 2) {
-    return 2;
-  }
-  return Math.floor(((sessionHours - 1) * 60) / 90) + 1;
+  return sessionHours;
 }
 
 /** Calendar-hour indices (0 … sessionHours−1) that belong to `slotId` for replacement-program rotation. */
@@ -263,9 +254,8 @@ export type TherapistTrialSummaryForHourEntry = {
 } | null;
 
 /**
- * Collapse per-calendar-hour narrative inputs to one row per **replacement-program slot** (~90 minutes, except
- * 2-hour sessions = two hourly slots). OpenAI and compliance use the collapsed arrays; `sessionHours` stays the
- * billable duration for context elsewhere.
+ * Prepare one complete narrative segment per billable session hour. Arrays are copied so later
+ * segment-level rebalancing cannot mutate the original hourly intake assignments.
  */
 export function collapseHourlyNoteNarrativeToSegments(params: {
   sessionHours: number;
@@ -284,34 +274,16 @@ export function collapseHourlyNoteNarrativeToSegments(params: {
   languageMaladaptiveEpisodeForHour: boolean[];
   therapistTrialSummaryForReplacementHour: TherapistTrialSummaryForHourEntry[];
 } {
-  const H = params.sessionHours;
-  const S = replacementProgramSlotCount(H);
-  const firstHourInSlot = (s: number): number => {
-    const xs = replacementProgramSlotHours(H, s);
-    return xs.length > 0 ? xs[0]! : 0;
-  };
-  const firstNonNullActivityInSlot = (s: number): string | null => {
-    for (const h of replacementProgramSlotHours(H, s)) {
-      const a = params.activityAntecedentForHour[h];
-      if (typeof a === "string" && a.length > 0) {
-        return a;
-      }
-    }
-    return null;
-  };
+  const S = params.sessionHours;
   return {
     narrativeSegmentCount: S,
-    maladaptiveBehaviorForHour: Array.from({ length: S }, (_, s) => params.maladaptiveBehaviorForHour[firstHourInSlot(s)]!),
-    replacementProgramForHour: Array.from({ length: S }, (_, s) => params.replacementProgramForHour[firstHourInSlot(s)]!),
-    rbtActionsOnlyOutcomeForHour: Array.from({ length: S }, (_, s) => params.rbtActionsOnlyOutcomeForHour[firstHourInSlot(s)]!),
-    activityAntecedentForHour: Array.from({ length: S }, (_, s) => firstNonNullActivityInSlot(s)),
-    languageMaladaptiveEpisodeForHour: Array.from({ length: S }, (_, s) =>
-      replacementProgramSlotHours(H, s).some((h) => params.languageMaladaptiveEpisodeForHour[h]),
-    ),
-    therapistTrialSummaryForReplacementHour: Array.from({ length: S }, (_, s) => {
-      const h0 = firstHourInSlot(s);
-      return params.therapistTrialSummaryForReplacementHour[h0] ?? null;
-    }),
+    maladaptiveBehaviorForHour: params.maladaptiveBehaviorForHour.slice(0, S),
+    replacementProgramForHour: params.replacementProgramForHour.slice(0, S),
+    rbtActionsOnlyOutcomeForHour: params.rbtActionsOnlyOutcomeForHour.slice(0, S),
+    activityAntecedentForHour: params.activityAntecedentForHour.slice(0, S),
+    languageMaladaptiveEpisodeForHour: params.languageMaladaptiveEpisodeForHour.slice(0, S),
+    therapistTrialSummaryForReplacementHour:
+      params.therapistTrialSummaryForReplacementHour.slice(0, S),
   };
 }
 
@@ -343,8 +315,7 @@ export function replacementProgramPoolForAutoAssignment(
 
 /**
  * Per-hour replacement program **names** and RBT-only flags. Explicit `replacementProgramId` per hour wins when
- * present in `idToName`. Other hours share a program when they fall in the same **90-minute slot** (except a
- * **2-hour** session, which uses one program per hour). See `replacementProgramSlotIdForHour`.
+ * present in `idToName`. Every billable hour has its own assignment slot.
  *
  * Pool comes from `replacementProgramPoolForAutoAssignment`: session-selected programs only when selection count ≥
  * replacement-program **slot** count; otherwise selected first then other linked ids. Avoids matching the **previous**

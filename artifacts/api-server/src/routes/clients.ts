@@ -1258,6 +1258,23 @@ router.patch("/clients/:clientId", async (req, res) => {
 
   if (clearingAssessment) {
     delete nextProfile.assessmentTextSnapshot;
+    delete nextProfile.assessmentExtractionProvenance;
+  } else if (nextProfile.assessmentExtractionProvenance) {
+    const provenance = { ...nextProfile.assessmentExtractionProvenance };
+    // Explicit profile edits are therapist-curated. Remove their extraction provenance so a later
+    // document upload cannot overwrite those choices.
+    if (body.maladaptiveBehaviorTargets !== undefined) {
+      provenance.topographyBehaviors = [];
+      provenance.functionBehaviors = [];
+    }
+    if (body.assessmentStructured !== undefined) {
+      provenance.replacementMapBehaviors = [];
+      provenance.interventionMapBehaviors = [];
+    }
+    if (body.assessmentSummary !== undefined) {
+      provenance.assessmentSummaryExtracted = false;
+    }
+    nextProfile.assessmentExtractionProvenance = provenance;
   }
 
   // Keep structured-assessment allow-lists in sync with profile edits: when the caller updates the

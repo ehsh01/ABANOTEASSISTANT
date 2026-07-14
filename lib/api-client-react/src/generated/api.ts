@@ -1163,7 +1163,7 @@ export const useDeleteClient = <
 };
 
 /**
- * Parses PDF text server-side, stores a truncated excerpt on the client profile (not returned in API JSON), and sets assessment status to ready. Call after creating or updating a client when the RBT selects an assessment file.
+ * Parses PDF text server-side and rejects scanned/image-only files without enough selectable text. On success, stores the authoritative truncated snapshot (not returned in API JSON), refreshes assessment-derived clinical enrichment while preserving therapist-curated values, prunes maps to app-profile catalogs, and sets assessment status to ready. Call after creating or updating a client when the RBT selects an assessment file.
 
  * @summary Upload assessment PDF and store text for AI note grounding
  */

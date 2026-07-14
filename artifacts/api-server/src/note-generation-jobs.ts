@@ -6,6 +6,7 @@ import {
   clientsTable,
   companiesTable,
   noteGenerationJobsTable,
+  type ClientProfileRow,
   type NoteGenerationJobResultData,
 } from "@workspace/db/schema";
 import { normalizeLegacyTherapySetting } from "@workspace/therapy-settings";
@@ -17,6 +18,7 @@ import {
 } from "./draft-quota";
 import { isOpenAINoteGenerationConfigured } from "./openai-notes";
 import { generateSessionNoteForClient } from "./notes-service";
+import { assessmentGenerationGate } from "./note-readiness";
 
 type DraftSlot = { used: number; max: number };
 
@@ -118,16 +120,12 @@ export async function prepareNoteGeneration(params: {
     return { ok: false, status: 404, error: "Client not found", messages: [] };
   }
 
-  if (!client.hasAssessment || client.assessmentStatus === "missing") {
-    return {
-      ok: false,
-      status: 422,
-      error: "Assessment required",
-      messages: [
-        "This client does not have an assessment on file. Upload an assessment (e.g. FBA/BIP PDF) for the client before generating session notes.",
-      ],
-    };
-  }
+  const assessmentGate = assessmentGenerationGate({
+    hasAssessment: client.hasAssessment,
+    assessmentStatus: client.assessmentStatus,
+    profile: client.profile as ClientProfileRow | null | undefined,
+  });
+  if (!assessmentGate.ok) return assessmentGate;
 
   const [companyForCap] = await db
     .select()
@@ -202,6 +200,20 @@ export async function runNoteGenerationJob(jobId: string): Promise<void> {
 
   if (!client) {
     await markJobFailed(jobId, 404, "Client not found", []);
+    return;
+  }
+  const assessmentGate = assessmentGenerationGate({
+    hasAssessment: client.hasAssessment,
+    assessmentStatus: client.assessmentStatus,
+    profile: client.profile as ClientProfileRow | null | undefined,
+  });
+  if (!assessmentGate.ok) {
+    await markJobFailed(
+      jobId,
+      assessmentGate.status,
+      assessmentGate.error,
+      assessmentGate.messages,
+    );
     return;
   }
 
