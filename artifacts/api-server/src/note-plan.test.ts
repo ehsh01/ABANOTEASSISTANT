@@ -217,6 +217,18 @@ describe("server-owned metrics and deterministic assembly", () => {
     expect(sanitized).not.toContain("30 seconds");
   });
 
+  it("removes forbidden third-party roles from stored behavior definitions", () => {
+    const sanitized = sanitizeStoredTopographyForNarrative(
+      "Defined as when Anthony uses threats towards caregiver/therapist/peers, vocalizes words, and screams above conversational level.",
+      ["Anthony"],
+    );
+    expect(sanitized).toContain("toward another person");
+    expect(sanitized).toMatch(/vocalizes|screams/);
+    expect(sanitized).not.toMatch(
+      /\b(?:Anthony|caregiver|therapist|peers?)\b/i,
+    );
+  });
+
   it("grounds weak motor and elopement topography in the stored assessment definitions", () => {
     const input = generationContext({
       sessionHours: 2,
@@ -376,7 +388,7 @@ describe("JSON-only repair orchestration", () => {
       "Task Refusal",
       "Task Refusal",
       "Excessive Motor Behavior",
-      "Task Refusal",
+      "Defiant Behavior",
       "Task Refusal",
       "Elopement",
     ];
@@ -384,7 +396,7 @@ describe("JSON-only repair orchestration", () => {
       "pushing task materials away and turning the head from the work area",
       "pushing task materials away and turning the head from the work area",
       "Defined as any instance in which Anthony repeats a movement pattern, including flapping his hands and walking back and forth.",
-      "pushing task materials away and turning the head from the work area",
+      "Defined as when Anthony uses threats towards caregiver/therapist/peers, vocalizes words, and screams above conversational level.",
       "pushing task materials away and turning the head from the work area",
       "Defined as any episode in which Anthony leaves the supervised area or sprints toward a door without permission.",
     ];
@@ -395,6 +407,7 @@ describe("JSON-only repair orchestration", () => {
       maladaptiveBehaviors: [
         "Task Refusal",
         "Excessive Motor Behavior",
+        "Defiant Behavior",
         "Elopement",
       ],
       maladaptiveBehaviorForHour: behaviors,
@@ -427,6 +440,7 @@ describe("JSON-only repair orchestration", () => {
       behaviorToReplacementsMap: {
         "Task Refusal": ["Request for Break"],
         "Excessive Motor Behavior": ["Request for Break"],
+        "Defiant Behavior": ["Request for Break"],
         Elopement: ["Request for Break"],
       },
     });
@@ -435,11 +449,24 @@ describe("JSON-only repair orchestration", () => {
         ...validPlan().segments[0]!,
         segmentIndex,
         behaviorLabel,
-        antecedent: `The RBT placed task materials ${segmentIndex + 1} on the table and presented the instruction to begin step ${segmentIndex + 1}`,
+        antecedent:
+          segmentIndex === 0
+            ? "Anthony sat at the table while the RBT placed task materials 1 and presented the instruction to begin step 1"
+            : `The RBT placed task materials ${segmentIndex + 1} on the table and presented the instruction to begin step ${segmentIndex + 1}`,
         topography:
-          segmentIndex === 2 || segmentIndex === 5
+          segmentIndex === 2 || segmentIndex === 3 || segmentIndex === 5
             ? behaviorLabel
             : validPlan().segments[0]!.topography,
+        interventions:
+          segmentIndex === 3
+            ? [
+                {
+                  label: "Premack principle",
+                  application:
+                    "The caregiver pointed to the required response before access to the preferred item",
+                },
+              ]
+            : validPlan().segments[0]!.interventions,
         responseToIntervention:
           segmentIndex < 2
             ? "The RBT re-presented the materials and repeated the instruction"
@@ -466,6 +493,7 @@ describe("JSON-only repair orchestration", () => {
     expect(result.body.split(/\n\s*\n/)[2]).toMatch(/flapping|walking/);
     expect(result.body.split(/\n\s*\n/)[5]).toMatch(/leaves|sprints/);
     expect(result.body).not.toContain("Anthony");
+    expect(result.body).not.toMatch(/\b(?:caregiver|peers?)\b/i);
   });
 
   it("repairs invalid structured fields without sending assembled prose", async () => {

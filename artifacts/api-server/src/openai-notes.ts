@@ -378,7 +378,9 @@ export async function generateClinicalBodyOpenAI(
     } else {
       const parsedPlan = NotePlanSchema.safeParse(parsed.value);
       const groundedCandidate = parsedPlan.success
-        ? groundNotePlanWithFrozenContext(parsedPlan.data, frozen)
+        ? groundNotePlanWithFrozenContext(parsedPlan.data, frozen, {
+            blockedClientNames: validationOptions?.blockedClientNames,
+          })
         : parsed.value;
       const result = validateNotePlan(groundedCandidate, frozen, {
         blockedClientNames: validationOptions?.blockedClientNames,

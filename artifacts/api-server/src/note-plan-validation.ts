@@ -85,6 +85,34 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+const THIRD_PARTY_ROLE_SOURCE =
+  "(?:caregiver|mother|father|mom|dad|parent|guardian|grandmother|grandfather|therapist|peers?)";
+
+function replaceBlockedNames(text: string, blockedClientNames: string[]): string {
+  let sanitized = text;
+  for (const name of [...new Set(blockedClientNames.map((value) => value.trim()).filter(Boolean))]) {
+    sanitized = sanitized
+      .replace(new RegExp(`\\b${escapeRegExp(name)}['’]s\\b`, "gi"), "the client's")
+      .replace(new RegExp(`\\b${escapeRegExp(name)}\\b`, "gi"), "the client");
+  }
+  return sanitized;
+}
+
+function sanitizeModelNarrativeText(text: string, blockedClientNames: string[]): string {
+  return replaceBlockedNames(text, blockedClientNames)
+    .replace(
+      new RegExp(`\\b(?:the\\s+)?${THIRD_PARTY_ROLE_SOURCE}['’]s\\b`, "gi"),
+      "the RBT's",
+    )
+    .replace(
+      new RegExp(`\\b(?:the\\s+)?${THIRD_PARTY_ROLE_SOURCE}\\b`, "gi"),
+      "the RBT",
+    )
+    .replace(/\bthe RBT(?:\s*\/\s*the RBT)+\b/gi, "the RBT")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 /**
  * Convert an authoritative assessment definition into a bounded narrative clause.
  * Scoring/timing text and learner names are metadata, not observable episode prose.
@@ -93,12 +121,19 @@ export function sanitizeStoredTopographyForNarrative(
   rawTopography: string,
   blockedClientNames: string[] = [],
 ): string {
-  let text = rawTopography.trim().replace(/\s+/g, " ");
-  for (const name of [...new Set(blockedClientNames.map((value) => value.trim()).filter(Boolean))]) {
-    text = text
-      .replace(new RegExp(`\\b${escapeRegExp(name)}['’]s\\b`, "gi"), "the client's")
-      .replace(new RegExp(`\\b${escapeRegExp(name)}\\b`, "gi"), "the client");
-  }
+  let text = replaceBlockedNames(
+    rawTopography.trim().replace(/\s+/g, " "),
+    blockedClientNames,
+  )
+    .replace(
+      new RegExp(
+        `\\b(?:toward|towards)\\s+${THIRD_PARTY_ROLE_SOURCE}(?:\\s*\\/\\s*${THIRD_PARTY_ROLE_SOURCE})*`,
+        "gi",
+      ),
+      "toward another person",
+    )
+    .replace(new RegExp(`\\b${THIRD_PARTY_ROLE_SOURCE}\\b`, "gi"), "another person")
+    .replace(/\banother person(?:\s*\/\s*another person)+\b/gi, "another person");
 
   const descriptiveSentence =
     text
@@ -219,7 +254,10 @@ export function buildFrozenSessionContext(
     clientAgeYears: ctx.clientAgeYears,
     ageBand: ctx.ageBand ?? null,
     environmentalChanges: ctx.environmentalChanges,
-    clientAssessmentTextExcerpt: ctx.clientAssessmentTextExcerpt,
+    // The model receives the assessment reference plus server-extracted topographies/functions.
+    // Raw prose is intentionally withheld because it can contain learner/caregiver names that are
+    // forbidden in the clinical body; the authoritative assessment still grounds this context.
+    clientAssessmentTextExcerpt: "",
     assessmentReferenceFileName: ctx.assessmentReferenceFileName,
     reinforcementPreferences: ctx.reinforcementPreferences,
     segments,
@@ -241,24 +279,50 @@ export function buildFrozenSessionContext(
 export function groundNotePlanWithFrozenContext(
   plan: NotePlan,
   context: SessionContext,
+  options?: { blockedClientNames?: string[] | undefined },
 ): NotePlan {
+  const blockedClientNames = options?.blockedClientNames ?? [];
   return {
     segments: plan.segments.map((segment, index) => {
       const locked = context.segments[index];
       if (!locked) return segment;
+      const sanitized = {
+        ...segment,
+        antecedent: sanitizeModelNarrativeText(segment.antecedent, blockedClientNames),
+        topography: sanitizeModelNarrativeText(segment.topography, blockedClientNames),
+        interventions: segment.interventions.map((intervention) => ({
+          ...intervention,
+          application: sanitizeModelNarrativeText(
+            intervention.application,
+            blockedClientNames,
+          ),
+        })),
+        responseToIntervention: sanitizeModelNarrativeText(
+          segment.responseToIntervention,
+          blockedClientNames,
+        ),
+        teachingOrPromptingSummary: sanitizeModelNarrativeText(
+          segment.teachingOrPromptingSummary,
+          blockedClientNames,
+        ),
+        resultSummary: sanitizeModelNarrativeText(
+          segment.resultSummary,
+          blockedClientNames,
+        ),
+      };
       const topography =
         !locked.acquisitionOnly &&
         locked.behaviorTopography &&
         containsObservableClinicalAction(locked.behaviorTopography)
           ? locked.behaviorTopography
-          : segment.topography;
+          : sanitized.topography;
       const responseToIntervention =
         !locked.acquisitionOnly &&
-        !containsObservableClientOutcome(segment.responseToIntervention) &&
-        containsObservableClientOutcome(segment.resultSummary)
-          ? segment.resultSummary
-          : segment.responseToIntervention;
-      return { ...segment, topography, responseToIntervention };
+        !containsObservableClientOutcome(sanitized.responseToIntervention) &&
+        containsObservableClientOutcome(sanitized.resultSummary)
+          ? sanitized.resultSummary
+          : sanitized.responseToIntervention;
+      return { ...sanitized, topography, responseToIntervention };
     }),
   };
 }

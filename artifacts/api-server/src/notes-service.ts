@@ -807,7 +807,10 @@ export async function generateSessionNoteForClient(params: {
     blockedClientNames,
   });
 
-  let complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, buildComplianceContext());
+  let complianceResult: ReturnType<typeof validateClinicalBodyComplianceDetailed> =
+    finalClinicalBody.trim().length > 0
+      ? validateClinicalBodyComplianceDetailed(finalClinicalBody, buildComplianceContext())
+      : { issues: [], blocking: [], warnings: [] };
   let complianceIssues = complianceResult.issues;
   const replacementProgramIssue = (issue: NoteValidationIssue): boolean =>
     issue.code === "PROGRAM_FUNCTION_MISMATCH";
