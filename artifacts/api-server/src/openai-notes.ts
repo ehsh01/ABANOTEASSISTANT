@@ -16,9 +16,10 @@ import {
   type NoteValidationIssue,
 } from "./note-validation";
 import { assembleClinicalBodyFromNotePlan } from "./note-plan-assembly";
-import type { NotePlan } from "./note-plan-schema";
+import { NotePlanSchema, type NotePlan } from "./note-plan-schema";
 import {
   buildFrozenSessionContext,
+  groundNotePlanWithFrozenContext,
   validateNotePlan,
   type NotePlanIssue,
 } from "./note-plan-validation";
@@ -72,10 +73,11 @@ The server-provided SessionContext is frozen and authoritative:
 - Acquisition-only segments must use an empty behaviorLabel and empty interventions array.
 - Write only bounded, observable details in antecedent, topography, intervention application, response, teaching/prompting, and result fields.
 - Do not use learner names, initials, caregivers, parents, guardians, subjective/emotional language, diagnoses, inferred intent, or unsupported clinical facts.
-- Ground topography in behaviorTopography and the client assessment excerpt when present. Do not contradict either source.
+- When behaviorTopography is present, use its observable action wording in topography. Never return only the behavior label or a generic phrase such as "motor behavior" or "elopement."
 - If activityAntecedent is non-null, include that exact text in antecedent.
 - Do not write prose opening/closing text, headings, markdown, counts, fractions, percentages, trial totals, durations, or invented metrics. The server owns all metrics and final prose.
-- Each intervention application describes only how the exact assigned intervention was applied. responseToIntervention and resultSummary must remain observable and must not claim mastery or progress beyond supplied facts.
+- Each intervention application describes only how the exact assigned intervention was applied.
+- For every non-acquisition segment, responseToIntervention must begin with "The client" and state at least one observable client action after intervention; RBT actions alone are not an outcome. resultSummary must also remain observable. Do not claim mastery or progress beyond supplied facts.
 - The output shape is {"segments":[{"segmentIndex":0,"acquisitionOnly":false,"behaviorLabel":"...","antecedent":"...","topography":"...","interventions":[{"label":"...","application":"..."}],"responseToIntervention":"...","replacementLabel":"...","teachingOrPromptingSummary":"...","resultSummary":"..."}]}.`;
 
 const NOTE_PLAN_JSON_SCHEMA = {
@@ -158,7 +160,7 @@ export function isOpenAINoteGenerationConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-14.phase4-audit-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-14.phase4-grounded-v2";
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
   .update("\u0000")
@@ -279,6 +281,8 @@ function mapPlanIssuesToCompatibilityIssues(issues: NotePlanIssue[]): NoteValida
                   ? "BEHAVIOR_TOPOGRAPHY"
                   : issue.code === "FABRICATED_METRIC"
                     ? "TRIAL_DATA"
+                    : issue.code === "POST_INTERVENTION_OUTCOME"
+                      ? "POST_INTERVENTION_OUTCOME"
                     : issue.code === "SUBJECTIVE_LANGUAGE"
                       ? "LANGUAGE_OBJECTIVITY"
                       : "PARAGRAPH_COUNT",
@@ -288,7 +292,7 @@ function mapPlanIssuesToCompatibilityIssues(issues: NotePlanIssue[]): NoteValida
   }));
 }
 
-const MAX_NOTE_PLAN_REPAIR_ATTEMPTS = 2;
+const MAX_NOTE_PLAN_REPAIR_ATTEMPTS = 4;
 
 export async function generateClinicalBodyOpenAI(
   ctx: NoteGenerationContext,
@@ -297,7 +301,9 @@ export async function generateClinicalBodyOpenAI(
     modelCall?: NotePlanModelCall | undefined;
   },
 ): Promise<GenerateClinicalBodyResult> {
-  const frozen = buildFrozenSessionContext(ctx);
+  const frozen = buildFrozenSessionContext(ctx, {
+    blockedClientNames: validationOptions?.blockedClientNames,
+  });
   const modelCall = validationOptions?.modelCall ?? defaultModelCall;
   const rawModelOutputs: string[] = [];
   const warnings: string[] = [];
@@ -370,7 +376,11 @@ export async function generateClinicalBodyOpenAI(
       plan = null;
       planIssues = [parsed.issue];
     } else {
-      const result = validateNotePlan(parsed.value, frozen, {
+      const parsedPlan = NotePlanSchema.safeParse(parsed.value);
+      const groundedCandidate = parsedPlan.success
+        ? groundNotePlanWithFrozenContext(parsedPlan.data, frozen)
+        : parsed.value;
+      const result = validateNotePlan(groundedCandidate, frozen, {
         blockedClientNames: validationOptions?.blockedClientNames,
         presentPeople: ctx.presentPeople,
       });

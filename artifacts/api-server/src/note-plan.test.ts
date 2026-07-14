@@ -13,6 +13,8 @@ import { NotePlanSchema, type NotePlan } from "./note-plan-schema";
 import {
   assignInterventionsForSegment,
   buildFrozenSessionContext,
+  groundNotePlanWithFrozenContext,
+  sanitizeStoredTopographyForNarrative,
   validateNotePlan,
 } from "./note-plan-validation";
 import { validateClinicalBodyComplianceDetailed } from "./note-validation";
@@ -141,6 +143,20 @@ describe("NotePlan schema and structured validation", () => {
     );
     expect(result.issues.map((issue) => issue.code)).toContain("FABRICATED_METRIC");
   });
+
+  it("rejects RBT-only response fields before prose assembly", () => {
+    const context = buildFrozenSessionContext(generationContext());
+    const result = validateNotePlan(
+      validPlan({
+        responseToIntervention:
+          "The RBT re-presented the materials and repeated the instruction",
+      }),
+      context,
+    );
+    expect(result.issues.map((issue) => issue.code)).toContain(
+      "POST_INTERVENTION_OUTCOME",
+    );
+  });
 });
 
 describe("deterministic intervention assignment", () => {
@@ -190,6 +206,106 @@ describe("deterministic intervention assignment", () => {
 });
 
 describe("server-owned metrics and deterministic assembly", () => {
+  it("sanitizes assessment definitions into name-free observable topography", () => {
+    const sanitized = sanitizeStoredTopographyForNarrative(
+      "Defined as any instance in which Anthony repeats a specific movement pattern, including frequently flapping his hands and walking back and forth repetitively. Episodes are scored after 30 seconds.",
+      ["Anthony"],
+    );
+    expect(sanitized).toContain("repeats a specific movement pattern");
+    expect(sanitized).toContain("flapping his hands");
+    expect(sanitized).not.toContain("Anthony");
+    expect(sanitized).not.toContain("30 seconds");
+  });
+
+  it("grounds weak motor and elopement topography in the stored assessment definitions", () => {
+    const input = generationContext({
+      sessionHours: 2,
+      narrativeSegmentCount: 2,
+      maladaptiveBehaviors: ["Excessive Motor Behavior", "Elopement"],
+      maladaptiveBehaviorForHour: ["Excessive Motor Behavior", "Elopement"],
+      replacementProgramsInOrder: ["Request for Break"],
+      replacementProgramForHour: ["Request for Break", "Request for Break"],
+      rbtActionsOnlyOutcomeForHour: [false, false],
+      activityAntecedentForHour: [null, null],
+      languageMaladaptiveEpisodeForHour: [false, false],
+      therapistTrialSummaryForReplacementHour: [null, null],
+      acquisitionOnlySegmentForHour: [false, false],
+      maladaptiveBehaviorFunctionsForHour: [["automatic"], ["escape"]],
+      maladaptiveBehaviorTopographyForHour: [
+        "Defined as any instance in which Anthony repeats a movement pattern, including flapping his hands and walking back and forth.",
+        "Defined as any episode in which Anthony leaves the supervised area or sprints toward a door without permission.",
+      ],
+      behaviorReplacementCandidatesForHour: [
+        ["Request for Break"],
+        ["Request for Break"],
+      ],
+      interventionCandidatesForHour: [
+        ["Premack principle"],
+        ["Premack principle"],
+      ],
+    });
+    const context = buildFrozenSessionContext(input, {
+      blockedClientNames: ["Anthony"],
+    });
+    const first = validPlan({
+      behaviorLabel: "Excessive Motor Behavior",
+      topography: "Excessive Motor Behavior",
+    }).segments[0]!;
+    const second = {
+      ...validPlan({
+        behaviorLabel: "Elopement",
+        topography: "Elopement",
+      }).segments[0]!,
+      segmentIndex: 1,
+    };
+    const grounded = groundNotePlanWithFrozenContext(
+      { segments: [first, second] },
+      context,
+    );
+    expect(grounded.segments[0]?.topography).toMatch(/flapping|walking/);
+    expect(grounded.segments[1]?.topography).toMatch(/leaves|sprints/);
+    expect(JSON.stringify(grounded)).not.toContain("Anthony");
+  });
+
+  it("moves an existing observable result into the post-intervention outcome slot", () => {
+    const context = buildFrozenSessionContext(generationContext());
+    const grounded = groundNotePlanWithFrozenContext(
+      validPlan({
+        responseToIntervention:
+          "The RBT re-presented the materials and repeated the instruction",
+        resultSummary:
+          "The client returned the red shape and remained near the materials",
+      }),
+      context,
+    );
+    expect(grounded.segments[0]?.responseToIntervention).toContain(
+      "The client returned the red shape",
+    );
+    const body = assembleClinicalBodyFromNotePlan(grounded, context);
+    expect(body.match(/The client returned the red shape/g)).toHaveLength(1);
+    const result = validateClinicalBodyComplianceDetailed(body, {
+      sessionHours: 1,
+      narrativeSegmentCount: 1,
+      replacementProgramsInOrder: ["Request for Break"],
+      replacementProgramForHour: ["Request for Break"],
+      maladaptiveBehaviors: ["Task Refusal"],
+      maladaptiveBehaviorForHour: ["Task Refusal"],
+      interventions: ["Premack principle"],
+      therapistTrialSummaryForReplacementHour: [null],
+      clientAgeYears: 8,
+      presentPeople: [],
+      acquisitionOnlySegmentForHour: [false],
+      maladaptiveBehaviorFunctionsForHour: [["escape"]],
+      maladaptiveBehaviorTopographyForHour: [
+        "pushing task materials away and turning the head from the work area",
+      ],
+      behaviorToReplacementsMap: { "Task Refusal": ["Request for Break"] },
+    });
+    expect(result.blocking.map((issue) => issue.code)).not.toContain(
+      "POST_INTERVENTION_OUTCOME",
+    );
+  });
+
   it.each([
     [{ totalTrials: 5, successfulTrialNumbers: [] }, 0],
     [{ totalTrials: 5, successfulTrialNumbers: [1, 3] }, 40],
@@ -255,6 +371,103 @@ describe("server-owned metrics and deterministic assembly", () => {
 });
 
 describe("JSON-only repair orchestration", () => {
+  it("stabilizes the six-hour production failure pattern before prose validation", async () => {
+    const behaviors = [
+      "Task Refusal",
+      "Task Refusal",
+      "Excessive Motor Behavior",
+      "Task Refusal",
+      "Task Refusal",
+      "Elopement",
+    ];
+    const storedTopographies = [
+      "pushing task materials away and turning the head from the work area",
+      "pushing task materials away and turning the head from the work area",
+      "Defined as any instance in which Anthony repeats a movement pattern, including flapping his hands and walking back and forth.",
+      "pushing task materials away and turning the head from the work area",
+      "pushing task materials away and turning the head from the work area",
+      "Defined as any episode in which Anthony leaves the supervised area or sprints toward a door without permission.",
+    ];
+    const input = generationContext({
+      firstName: "Anthony",
+      sessionHours: 6,
+      narrativeSegmentCount: 6,
+      maladaptiveBehaviors: [
+        "Task Refusal",
+        "Excessive Motor Behavior",
+        "Elopement",
+      ],
+      maladaptiveBehaviorForHour: behaviors,
+      replacementProgramForHour: Array.from(
+        { length: 6 },
+        () => "Request for Break",
+      ),
+      rbtActionsOnlyOutcomeForHour: Array.from({ length: 6 }, () => false),
+      activityAntecedentForHour: Array.from({ length: 6 }, () => null),
+      languageMaladaptiveEpisodeForHour: Array.from(
+        { length: 6 },
+        () => false,
+      ),
+      therapistTrialSummaryForReplacementHour: Array.from(
+        { length: 6 },
+        () => null,
+      ),
+      acquisitionOnlySegmentForHour: Array.from({ length: 6 }, () => false),
+      maladaptiveBehaviorFunctionsForHour: Array.from(
+        { length: 6 },
+        () => ["escape"] as const,
+      ),
+      maladaptiveBehaviorTopographyForHour: storedTopographies,
+      behaviorReplacementCandidatesForHour: Array.from({ length: 6 }, () => [
+        "Request for Break",
+      ]),
+      interventionCandidatesForHour: Array.from({ length: 6 }, () => [
+        "Premack principle",
+      ]),
+      behaviorToReplacementsMap: {
+        "Task Refusal": ["Request for Break"],
+        "Excessive Motor Behavior": ["Request for Break"],
+        Elopement: ["Request for Break"],
+      },
+    });
+    const weakPlan: NotePlan = {
+      segments: behaviors.map((behaviorLabel, segmentIndex) => ({
+        ...validPlan().segments[0]!,
+        segmentIndex,
+        behaviorLabel,
+        antecedent: `The RBT placed task materials ${segmentIndex + 1} on the table and presented the instruction to begin step ${segmentIndex + 1}`,
+        topography:
+          segmentIndex === 2 || segmentIndex === 5
+            ? behaviorLabel
+            : validPlan().segments[0]!.topography,
+        responseToIntervention:
+          segmentIndex < 2
+            ? "The RBT re-presented the materials and repeated the instruction"
+            : validPlan().segments[0]!.responseToIntervention,
+        resultSummary:
+          segmentIndex < 2
+            ? "The client returned the presented material and remained near the table"
+            : validPlan().segments[0]!.resultSummary,
+      })),
+    };
+    const modelCall = vi.fn<NotePlanModelCall>(async () =>
+      JSON.stringify(weakPlan),
+    );
+
+    const result = await generateClinicalBodyOpenAI(input, {
+      blockedClientNames: ["Anthony"],
+      modelCall,
+    });
+
+    expect(modelCall).toHaveBeenCalledTimes(1);
+    expect(result.repairAttempts).toBe(0);
+    expect(result.finalIssues.filter((issue) => issue.severity === "blocking")).toEqual([]);
+    expect(result.body.split(/\n\s*\n/)).toHaveLength(6);
+    expect(result.body.split(/\n\s*\n/)[2]).toMatch(/flapping|walking/);
+    expect(result.body.split(/\n\s*\n/)[5]).toMatch(/leaves|sprints/);
+    expect(result.body).not.toContain("Anthony");
+  });
+
   it("repairs invalid structured fields without sending assembled prose", async () => {
     const calls: Parameters<NotePlanModelCall>[0][] = [];
     const modelCall = vi.fn<NotePlanModelCall>(async (request) => {
@@ -275,11 +488,13 @@ describe("JSON-only repair orchestration", () => {
     );
   });
 
-  it("repairs a schema-valid assembled-prose defect through JSON only", async () => {
+  it("repairs an outcome field through JSON when no existing result can be reused", async () => {
     const calls: Parameters<NotePlanModelCall>[0][] = [];
     const defectivePlan = validPlan({
       responseToIntervention:
         "The RBT re-presented the task materials and repeated the instruction",
+      resultSummary:
+        "The RBT continued the teaching sequence and recorded the response",
     });
     const modelCall = vi.fn<NotePlanModelCall>(async (request) => {
       calls.push(request);
@@ -293,7 +508,7 @@ describe("JSON-only repair orchestration", () => {
     expect(result.body).toContain("The client returned the red shape");
 
     const repairPrompt = String(calls[1]?.messages.at(-1)?.content);
-    expect(repairPrompt).toContain("PROSE_POST_INTERVENTION_OUTCOME");
+    expect(repairPrompt).toContain("POST_INTERVENTION_OUTCOME");
     expect(repairPrompt).toContain("Prior model JSON/output");
     expect(repairPrompt).not.toContain("During this activity, the client manifested");
     expect(repairPrompt).not.toContain(
@@ -307,25 +522,27 @@ describe("JSON-only repair orchestration", () => {
     );
 
     const result = await generateClinicalBodyOpenAI(generationContext(), { modelCall });
-    expect(modelCall).toHaveBeenCalledTimes(3);
+    expect(modelCall).toHaveBeenCalledTimes(5);
     expect(result.body).toBe("");
-    expect(result.repairAttempts).toBe(2);
+    expect(result.repairAttempts).toBe(4);
     expect(result.planIssues.map((issue) => issue.code)).toContain("BEHAVIOR_ASSIGNMENT");
     expect(result.finalIssues.every((issue) => issue.severity === "blocking")).toBe(true);
   });
 
-  it("returns blocking prose issues when JSON repair cannot fix assembled compliance", async () => {
+  it("returns a blocking outcome issue when bounded JSON repair cannot fix it", async () => {
     const defectivePlan = validPlan({
       responseToIntervention:
         "The RBT re-presented the task materials and repeated the instruction",
+      resultSummary:
+        "The RBT continued the teaching sequence and recorded the response",
     });
     const modelCall = vi.fn<NotePlanModelCall>(async () => JSON.stringify(defectivePlan));
 
     const result = await generateClinicalBodyOpenAI(generationContext(), { modelCall });
-    expect(modelCall).toHaveBeenCalledTimes(3);
-    expect(result.repairAttempts).toBe(2);
+    expect(modelCall).toHaveBeenCalledTimes(5);
+    expect(result.repairAttempts).toBe(4);
     expect(result.planIssues.map((issue) => issue.code)).toContain(
-      "PROSE_POST_INTERVENTION_OUTCOME",
+      "POST_INTERVENTION_OUTCOME",
     );
     expect(result.finalIssues.map((issue) => issue.code)).toContain(
       "POST_INTERVENTION_OUTCOME",

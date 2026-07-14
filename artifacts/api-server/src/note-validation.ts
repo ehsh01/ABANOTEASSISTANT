@@ -35,6 +35,10 @@ import {
   manifestedBehaviorSentenceSpan,
   paragraphReflectsStoredTopography,
 } from "./maladaptive-behavior-topography";
+import {
+  containsObservableClinicalAction,
+  containsObservableClientOutcome,
+} from "./observable-clinical-language";
 import { primaryFunctionForReplacementSelection } from "./behavior-function-replacement-mapping";
 import {
   MALADAPTIVE_BEHAVIOR_SIB_CANONICAL,
@@ -465,7 +469,12 @@ function postInterventionOutcomeIssue(paragraph: string, paragraphIndex: number)
     /\b(?:items?|materials?|toys?|blocks?|pieces?)\s+were\s+(?:placed|returned|put|moved|removed)\b/i,
     /\b(?:remained|returned|completed|engaged|sat|walked|oriented|responded)\b[^.]{0,120}\b(?:with|after|following|across)\b/i,
   ];
-  if (outcomePatterns.some((re) => re.test(detail))) return null;
+  if (
+    containsObservableClientOutcome(detail) ||
+    outcomePatterns.some((re) => re.test(detail))
+  ) {
+    return null;
+  }
   return `Post-intervention outcome: paragraph ${paragraphIndex + 1} must state an observable result after the intervention (for example, the client completed one step, returned to the task, remained seated/nearby, placed materials, or engaged with materials). Do not stop after listing only RBT actions.`;
 }
 
@@ -657,9 +666,7 @@ function isSibMaladaptiveBehavior(behaviorName: string): boolean {
 function manifestedBehaviorLacksObservableTopography(paragraph: string): boolean {
   const sentence = manifestedBehaviorSentenceSpan(paragraph);
   if (!sentence) return false;
-  return !/\b(?:said|stated|shouted|yelled|vocalized|raised|turned|pushed|pulled|hit|kicked|grabbed|struck|scratched|ran|walked|walking|paced|left|moved|stood|sat|screamed|cried|threw|dropped|swept|tore|ripped|broke|leaned|shook|flapped|swatted|headbutt|bit|spat|eloped|bolted|wandered|reached|opened|closed|covered|placed|removed|refused)\b/i.test(
-    sentence,
-  );
+  return !containsObservableClinicalAction(sentence);
 }
 
 function paragraphDocumentsInterventionFromList(paragraph: string, labels: string[]): boolean {

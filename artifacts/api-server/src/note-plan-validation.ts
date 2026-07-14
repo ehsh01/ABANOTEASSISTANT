@@ -12,6 +12,14 @@ import {
   type NotePlan,
   type SessionContext,
 } from "./note-plan-schema";
+import {
+  containsObservableClinicalAction,
+  containsObservableClientOutcome,
+} from "./observable-clinical-language";
+import {
+  elopementEpisodeLacksObservableTopography,
+  isElopementFamilyBehaviorLabel,
+} from "./maladaptive-behavior-topography";
 
 export type NotePlanIssueCode =
   | "SCHEMA_INVALID"
@@ -28,6 +36,7 @@ export type NotePlanIssueCode =
   | "CAREGIVER_LEAKAGE"
   | "SUBJECTIVE_LANGUAGE"
   | "FABRICATED_METRIC"
+  | "POST_INTERVENTION_OUTCOME"
   | `PROSE_${string}`;
 
 export type NotePlanIssue = {
@@ -38,6 +47,7 @@ export type NotePlanIssue = {
 };
 
 type RuntimeGenerationContext = {
+  firstName?: string | undefined;
   narrativeSegmentCount: number;
   therapySetting: string;
   gender: string | null | undefined;
@@ -69,6 +79,48 @@ type RuntimeGenerationContext = {
 
 function uniqueLabels(labels: string[]): string[] {
   return [...new Set(labels.map((label) => label.trim()).filter(Boolean))];
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Convert an authoritative assessment definition into a bounded narrative clause.
+ * Scoring/timing text and learner names are metadata, not observable episode prose.
+ */
+export function sanitizeStoredTopographyForNarrative(
+  rawTopography: string,
+  blockedClientNames: string[] = [],
+): string {
+  let text = rawTopography.trim().replace(/\s+/g, " ");
+  for (const name of [...new Set(blockedClientNames.map((value) => value.trim()).filter(Boolean))]) {
+    text = text
+      .replace(new RegExp(`\\b${escapeRegExp(name)}['’]s\\b`, "gi"), "the client's")
+      .replace(new RegExp(`\\b${escapeRegExp(name)}\\b`, "gi"), "the client");
+  }
+
+  const descriptiveSentence =
+    text
+      .split(/(?<=[.!?])\s+/)
+      .find(
+        (sentence) =>
+          !/^(?:episodes?|responses?|instances?)\s+(?:are|were|must|should)\b/i.test(sentence) &&
+          !/^(?:scor(?:ed|ing)|data are|an instance is)\b/i.test(sentence),
+      ) ?? text;
+  text = descriptiveSentence
+    .replace(/[.!?]+$/, "")
+    .replace(/\s+(?:for|lasting)\s+(?:at least\s+)?\d+\s*(?:seconds?|minutes?)\b[\s\S]*$/i, "")
+    .replace(/^(?:characterized by|defined as)\s+/i, "")
+    .replace(
+      /^any\s+(?:instance|episode|incidence|occurrence)\s+(?:in which|when|where|of)\s+/i,
+      "",
+    )
+    .replace(/^when\s+/i, "")
+    .replace(/^the client(?!['’]s)\s+/i, "")
+    .trim();
+
+  return text;
 }
 
 /**
@@ -122,7 +174,14 @@ export function assignInterventionsForSegment(params: {
   return preferred ? [preferred] : [];
 }
 
-export function buildFrozenSessionContext(ctx: RuntimeGenerationContext): SessionContext {
+export function buildFrozenSessionContext(
+  ctx: RuntimeGenerationContext,
+  options?: { blockedClientNames?: string[] | undefined },
+): SessionContext {
+  const blockedClientNames = [
+    ...(options?.blockedClientNames ?? []),
+    ...(ctx.firstName && !/^the client$/i.test(ctx.firstName.trim()) ? [ctx.firstName] : []),
+  ];
   const segments = Array.from({ length: ctx.narrativeSegmentCount }, (_, segmentIndex) => {
     const acquisitionOnly = ctx.acquisitionOnlySegmentForHour[segmentIndex] === true;
     const behaviorLabel = acquisitionOnly
@@ -141,7 +200,12 @@ export function buildFrozenSessionContext(ctx: RuntimeGenerationContext): Sessio
         functionCandidates: ctx.interventionCandidatesForHour[segmentIndex],
       }),
       activityAntecedent: ctx.activityAntecedentForHour[segmentIndex] ?? null,
-      behaviorTopography: ctx.maladaptiveBehaviorTopographyForHour[segmentIndex] ?? null,
+      behaviorTopography: ctx.maladaptiveBehaviorTopographyForHour[segmentIndex]
+        ? sanitizeStoredTopographyForNarrative(
+            ctx.maladaptiveBehaviorTopographyForHour[segmentIndex]!,
+            blockedClientNames,
+          )
+        : null,
       behaviorFunctions: ctx.maladaptiveBehaviorFunctionsForHour[segmentIndex] ?? null,
       trialSummary: ctx.therapistTrialSummaryForReplacementHour[segmentIndex] ?? null,
       rbtActionsOnlyOutcome: ctx.rbtActionsOnlyOutcomeForHour[segmentIndex] === true,
@@ -166,6 +230,37 @@ export function buildFrozenSessionContext(ctx: RuntimeGenerationContext): Sessio
     },
     validationProfile: "phase-3-strict",
   });
+}
+
+/**
+ * Apply only source-preserving corrections before validation:
+ * - authoritative stored topography replaces a weaker model restatement;
+ * - an observable client result already present in resultSummary is reused when the model
+ *   accidentally placed only RBT actions in responseToIntervention.
+ */
+export function groundNotePlanWithFrozenContext(
+  plan: NotePlan,
+  context: SessionContext,
+): NotePlan {
+  return {
+    segments: plan.segments.map((segment, index) => {
+      const locked = context.segments[index];
+      if (!locked) return segment;
+      const topography =
+        !locked.acquisitionOnly &&
+        locked.behaviorTopography &&
+        containsObservableClinicalAction(locked.behaviorTopography)
+          ? locked.behaviorTopography
+          : segment.topography;
+      const responseToIntervention =
+        !locked.acquisitionOnly &&
+        !containsObservableClientOutcome(segment.responseToIntervention) &&
+        containsObservableClientOutcome(segment.resultSummary)
+          ? segment.resultSummary
+          : segment.responseToIntervention;
+      return { ...segment, topography, responseToIntervention };
+    }),
+  };
 }
 
 const SUBJECTIVE_RE =
@@ -275,8 +370,38 @@ export function validateNotePlan(
           index,
         );
       }
-    } else if (!segment.topography.trim()) {
-      add("TOPOGRAPHY_REQUIRED", "Observable topography is required.", index);
+    } else if (
+      !segment.topography.trim() ||
+      !containsObservableClinicalAction(segment.topography)
+    ) {
+      add(
+        "TOPOGRAPHY_REQUIRED",
+        "topography must describe a specific observable client action. Use the frozen behaviorTopography wording when provided; do not repeat only the behavior label or write a generic movement category.",
+        index,
+      );
+    } else if (
+      isElopementFamilyBehaviorLabel(locked.behaviorLabel) &&
+      elopementEpisodeLacksObservableTopography(
+        `The client manifested ${locked.behaviorLabel} by ${segment.topography}.`,
+        locked.behaviorLabel,
+      )
+    ) {
+      add(
+        "TOPOGRAPHY_REQUIRED",
+        "Elopement topography must state the observable leaving action or movement toward/beyond a supervised boundary. Use the frozen behaviorTopography wording.",
+        index,
+      );
+    }
+
+    if (
+      !locked.acquisitionOnly &&
+      !containsObservableClientOutcome(segment.responseToIntervention)
+    ) {
+      add(
+        "POST_INTERVENTION_OUTCOME",
+        'responseToIntervention must state an observable client result after the intervention in the form "The client [observable action] ..."; RBT actions alone are not an outcome. If resultSummary already contains that observed result, copy the same supported fact into responseToIntervention.',
+        index,
+      );
     }
 
     if (locked.behaviorTopography) {

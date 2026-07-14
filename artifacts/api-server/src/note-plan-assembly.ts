@@ -56,7 +56,12 @@ export function assembleClinicalBodyFromNotePlan(
       parts.push(
         `${replacementLead} RBT implemented the replacement program "${locked.replacementLabel}" by ${sentence(segment.teachingOrPromptingSummary)}`,
       );
-      parts.push(sentence(segment.resultSummary));
+      if (
+        segment.resultSummary.trim().toLowerCase() !==
+        segment.responseToIntervention.trim().toLowerCase()
+      ) {
+        parts.push(sentence(segment.resultSummary));
+      }
       parts.push(buildDeterministicTrialSentence(locked.replacementLabel, locked.trialSummary));
       return parts.join(" ");
     })

@@ -79,7 +79,7 @@ export function manifestedBehaviorSentenceSpan(paragraph: string): string {
 }
 
 const ELOPEMENT_LEAVING_ACTION_CUES =
-  /\b(ran|running|left|leaving|exited|bolted|bolting|wandered|wandering|eloped|eloping)\b/i;
+  /\b(ran|run|runs|running|left|leave|leaves|leaving|exited|exits|bolted|bolting|sprinted|sprints|sprinting|wandered|wandering|eloped|eloping)\b/i;
 const ELOPEMENT_BOUNDARY_CUES =
   /\b(hallway|doorway|door|exit|boundary|beyond|outside|yard|pathway|supervised area|activity area|arm's reach|permission)\b/i;
 
