@@ -20,12 +20,18 @@ import {
 } from "@workspace/db/schema";
 import {
   CLINICAL_BODY_PROMPT_VERSION,
+  CLINICAL_BODY_PROMPT_HASH,
   generateClinicalBodyOpenAI,
   openaiNoteGenerationLabel,
   resolvedOpenAIModel,
   type NoteGenerationContext,
+  type NoteGenerationAttemptTelemetry,
 } from "./openai-notes";
-import { hashNoteGenerationContext, writeNoteGenerationAudit } from "./note-generation-audit";
+import {
+  buildNoteGenerationAuditEntry,
+  hashNoteGenerationContext,
+  writeNoteGenerationAudit,
+} from "./note-generation-audit";
 import { maladaptiveBehaviorTargetsForNoteCatalog } from "./client-profile-maladaptive";
 import {
   maladaptiveBehaviorFunctionsForHourLabels,
@@ -711,13 +717,21 @@ export async function generateSessionNoteForClient(params: {
   let generationModel: string;
   let generationRepairAttempts = 0;
   let generationFinalIssues: NoteValidationIssue[] = [];
+  let generationAttemptHistory: NoteGenerationAttemptTelemetry[] = [];
+  let generationRawOutputs: string[] = [];
+  let generationRepairActions: string[] = [];
   const contextHash = hashNoteGenerationContext(oaCtx);
   const auditBase = {
     companyId,
     clientId: client.id,
     model: resolvedOpenAIModel(),
     promptVersion: CLINICAL_BODY_PROMPT_VERSION,
+    promptHash: CLINICAL_BODY_PROMPT_HASH,
     contextHash,
+    assessmentFilename: profile?.assessmentFileName ?? null,
+    assessmentText: rawAssessmentSnapshot,
+    assessmentExcerptLength: clientAssessmentTextExcerpt.length,
+    assessmentExcerptTruncated: assessmentExcerptForNoteTruncated,
     sessionDate: body.sessionDate,
     sessionHours: body.sessionHours,
   };
@@ -730,16 +744,50 @@ export async function generateSessionNoteForClient(params: {
     generationModel = resolvedOpenAIModel();
     generationRepairAttempts = oaResult.repairAttempts;
     generationFinalIssues = oaResult.finalIssues;
+    generationAttemptHistory = oaResult.attemptHistory;
+    generationRawOutputs = oaResult.rawModelOutputs;
+    generationRepairActions = oaResult.repairActions;
   } catch (err) {
-    console.error("[notes/generate] OpenAI failed:", err);
-    await writeNoteGenerationAudit({
+    generationAttemptHistory =
+      err && typeof err === "object" && "noteGenerationAttemptHistory" in err
+        ? ((err as { noteGenerationAttemptHistory?: NoteGenerationAttemptTelemetry[] })
+            .noteGenerationAttemptHistory ?? [])
+        : [];
+    generationRawOutputs =
+      err && typeof err === "object" && "noteGenerationRawModelOutputs" in err
+        ? ((err as { noteGenerationRawModelOutputs?: string[] }).noteGenerationRawModelOutputs ??
+          [])
+        : [];
+    generationRepairActions =
+      err && typeof err === "object" && "noteGenerationRepairActions" in err
+        ? ((err as { noteGenerationRepairActions?: string[] }).noteGenerationRepairActions ?? [])
+        : [];
+    console.error(
+      `[notes/generate] OpenAI failed status=${err instanceof APIError ? err.status : "unknown"} type=${err instanceof Error ? err.name : "unknown"}`,
+    );
+    const modelFailurePlanIssues = generationAttemptHistory.flatMap(
+      (attempt) => attempt.planIssues,
+    );
+    const modelFailureProseIssues = generationAttemptHistory.flatMap(
+      (attempt) => attempt.proseIssues,
+    );
+    await writeNoteGenerationAudit(buildNoteGenerationAuditEntry({
       ...auditBase,
       noteId: null,
-      repairAttempts: 0,
+      repairAttempts: generationRepairActions.length,
       validatorIssues: [],
       criticalIssues: [],
+      finalValidatorIssues: [...modelFailurePlanIssues, ...modelFailureProseIssues],
+      finalCriticalIssues: [
+        ...modelFailurePlanIssues,
+        ...modelFailureProseIssues.filter((issue) => issue.severity === "blocking"),
+      ],
+      attemptHistory: generationAttemptHistory,
+      repairActions: generationRepairActions,
+      warnings,
+      rawModelOutputs: generationRawOutputs,
       finalStatus: "model_failed",
-    });
+    }));
     return {
       ok: false,
       status: 502,
@@ -818,9 +866,10 @@ export async function generateSessionNoteForClient(params: {
     }
   }
   const effectiveIssues = [...effectiveIssueMap.values()];
-  const criticalComplianceIssues = effectiveIssues
-    .filter((issue) => issue.severity === "blocking")
-    .map((issue) => issue.message);
+  const criticalEffectiveIssues = effectiveIssues.filter(
+    (issue) => issue.severity === "blocking",
+  );
+  const criticalComplianceIssues = criticalEffectiveIssues.map((issue) => issue.message);
   const stylisticComplianceIssues = effectiveIssues
     .filter((issue) => issue.severity === "warning")
     .map((issue) => issue.message);
@@ -832,14 +881,21 @@ export async function generateSessionNoteForClient(params: {
     console.error(
       `[notes/generate] blocked_critical_compliance clientId=${client.id} companyId=${companyId} issues=${criticalComplianceIssues.length}`,
     );
-    await writeNoteGenerationAudit({
+    await writeNoteGenerationAudit(buildNoteGenerationAuditEntry({
       ...auditBase,
       noteId: null,
       repairAttempts: generationRepairAttempts,
       validatorIssues: effectiveIssues.map((issue) => issue.message),
       criticalIssues: criticalComplianceIssues,
+      finalValidatorIssues: effectiveIssues,
+      finalCriticalIssues: criticalEffectiveIssues,
+      attemptHistory: generationAttemptHistory,
+      repairActions: generationRepairActions,
+      warnings,
+      rawModelOutputs: generationRawOutputs,
+      clinicalBody: finalClinicalBody,
       finalStatus: "blocked_critical",
-    });
+    }));
     return {
       ok: false,
       status: 422,
@@ -874,7 +930,7 @@ export async function generateSessionNoteForClient(params: {
   });
   if (assembledValidation.blocking.length > 0) {
     const messages = assembledValidation.blocking.map((issue) => issue.message);
-    await writeNoteGenerationAudit({
+    await writeNoteGenerationAudit(buildNoteGenerationAuditEntry({
       ...auditBase,
       noteId: null,
       repairAttempts: generationRepairAttempts,
@@ -883,8 +939,16 @@ export async function generateSessionNoteForClient(params: {
         ...assembledValidation.issues.map((issue) => issue.message),
       ],
       criticalIssues: messages,
+      finalValidatorIssues: [...effectiveIssues, ...assembledValidation.issues],
+      finalCriticalIssues: assembledValidation.blocking,
+      attemptHistory: generationAttemptHistory,
+      repairActions: generationRepairActions,
+      warnings,
+      rawModelOutputs: generationRawOutputs,
+      clinicalBody: finalClinicalBody,
+      finalNoteText: noteContent,
       finalStatus: "blocked_critical",
-    });
+    }));
     return {
       ok: false,
       status: 422,
@@ -923,14 +987,22 @@ export async function generateSessionNoteForClient(params: {
   console.log(
     `[notes/generate] openai_ok noteId=${inserted.id} model=${generationModel} clientId=${client.id} companyId=${companyId}`,
   );
-  await writeNoteGenerationAudit({
+  await writeNoteGenerationAudit(buildNoteGenerationAuditEntry({
     ...auditBase,
     noteId: inserted.id,
     repairAttempts: generationRepairAttempts,
     validatorIssues: effectiveIssues.map((issue) => issue.message),
     criticalIssues: [],
+    finalValidatorIssues: effectiveIssues,
+    finalCriticalIssues: [],
+    attemptHistory: generationAttemptHistory,
+    repairActions: generationRepairActions,
+    warnings,
+    rawModelOutputs: generationRawOutputs,
+    clinicalBody: finalClinicalBody,
+    finalNoteText: noteContent,
     finalStatus: "saved",
-  });
+  }));
 
   const maladaptiveReplacementPairings = maladaptiveReplacementPairingsForSessionNote({
     acquisitionOnlySegmentForHour,

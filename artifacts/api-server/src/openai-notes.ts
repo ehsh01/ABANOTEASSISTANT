@@ -5,6 +5,7 @@
  * NotePlan, repairs JSON only, deterministically assembles the clinical body, and then runs the
  * existing prose validator as defense-in-depth.
  */
+import { createHash } from "node:crypto";
 import type { ClinicalFunction, MaladaptiveBehaviorProfileEntry } from "@workspace/db/schema";
 import type { TherapySetting } from "@workspace/therapy-settings";
 import OpenAI from "openai";
@@ -131,10 +132,23 @@ const NOTE_PLAN_JSON_SCHEMA = {
   },
 } as const;
 
+export type NoteModelUsage = {
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+};
+
+export type NotePlanModelCallOutput = {
+  output: string;
+  completionId?: string | undefined;
+  usage?: NoteModelUsage | undefined;
+};
+
+/** String return remains supported for existing tests/custom adapters. */
 export type NotePlanModelCall = (params: {
   messages: ChatCompletionMessageParam[];
   attempt: number;
-}) => Promise<string>;
+}) => Promise<string | NotePlanModelCallOutput>;
 
 export function resolvedOpenAIModel(): string {
   return process.env.OPENAI_MODEL?.trim() || DEFAULT_OPENAI_NOTE_MODEL;
@@ -144,7 +158,22 @@ export function isOpenAINoteGenerationConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-14.phase3-structured-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-14.phase4-audit-v1";
+export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
+  .update(SYSTEM_PROMPT)
+  .update("\u0000")
+  .update(JSON.stringify(NOTE_PLAN_JSON_SCHEMA))
+  .digest("hex");
+
+export type NoteGenerationAttemptTelemetry = {
+  attempt: number;
+  latencyMs: number;
+  completionId: string | null;
+  usage: NoteModelUsage | null;
+  planIssues: NotePlanIssue[];
+  proseIssues: NoteValidationIssue[];
+  passed: boolean;
+};
 
 export type GenerateClinicalBodyResult = {
   body: string;
@@ -155,6 +184,8 @@ export type GenerateClinicalBodyResult = {
   notePlan: NotePlan | null;
   rawModelOutputs: string[];
   planIssues: NotePlanIssue[];
+  attemptHistory: NoteGenerationAttemptTelemetry[];
+  repairActions: string[];
 };
 
 function isGpt5FamilyNoteModel(modelId: string): boolean {
@@ -176,7 +207,17 @@ const defaultModelCall: NotePlanModelCall = async ({ messages }) => {
     : await client.chat.completions.create({ ...common, max_tokens: 12000 });
   const text = completion.choices[0]?.message?.content?.trim();
   if (!text) throw new Error("OpenAI returned empty message content");
-  return text;
+  return {
+    output: text,
+    completionId: completion.id,
+    usage: completion.usage
+      ? {
+          promptTokens: completion.usage.prompt_tokens,
+          completionTokens: completion.usage.completion_tokens,
+          totalTokens: completion.usage.total_tokens,
+        }
+      : undefined,
+  };
 };
 
 function toComplianceCtx(
@@ -260,15 +301,60 @@ export async function generateClinicalBodyOpenAI(
   const modelCall = validationOptions?.modelCall ?? defaultModelCall;
   const rawModelOutputs: string[] = [];
   const warnings: string[] = [];
+  const attemptHistory: NoteGenerationAttemptTelemetry[] = [];
+  const repairActions: string[] = [];
+
+  const callModel = async (
+    params: Parameters<NotePlanModelCall>[0],
+  ): Promise<{ raw: string; telemetry: NoteGenerationAttemptTelemetry }> => {
+    const started = Date.now();
+    try {
+      const result = await modelCall(params);
+      const normalized = typeof result === "string" ? { output: result } : result;
+      return {
+        raw: normalized.output,
+        telemetry: {
+          attempt: params.attempt,
+          latencyMs: Math.max(0, Date.now() - started),
+          completionId: normalized.completionId ?? null,
+          usage: normalized.usage ?? null,
+          planIssues: [],
+          proseIssues: [],
+          passed: false,
+        },
+      };
+    } catch (error) {
+      const telemetry: NoteGenerationAttemptTelemetry = {
+        attempt: params.attempt,
+        latencyMs: Math.max(0, Date.now() - started),
+        completionId: null,
+        usage: null,
+        planIssues: [],
+        proseIssues: [],
+        passed: false,
+      };
+      attemptHistory.push(telemetry);
+      if (error && typeof error === "object") {
+        Object.assign(error, {
+          noteGenerationAttemptHistory: [...attemptHistory],
+          noteGenerationRawModelOutputs: [...rawModelOutputs],
+          noteGenerationRepairActions: [...repairActions],
+        });
+      }
+      throw error;
+    }
+  };
 
   const initialUser = `Frozen SessionContext JSON:\n${JSON.stringify(frozen, null, 2)}\n\nReturn the NotePlan JSON now.`;
-  let raw = await modelCall({
+  let modelResponse = await callModel({
     attempt: 0,
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: initialUser },
     ],
   });
+  let raw = modelResponse.raw;
+  let currentTelemetry = modelResponse.telemetry;
   rawModelOutputs.push(raw);
 
   let repairAttempts = 0;
@@ -291,6 +377,7 @@ export async function generateClinicalBodyOpenAI(
       plan = result.plan;
       planIssues = result.issues;
     }
+    const structuredIssuesForAttempt = [...planIssues];
 
     body = "";
     finalProseIssues = [];
@@ -303,14 +390,19 @@ export async function generateClinicalBodyOpenAI(
       );
       finalProseIssues = proseValidation.issues;
       blockingProseIssues = proseValidation.blocking;
-      if (blockingProseIssues.length === 0) break;
-
-      planIssues = blockingProseIssues.map((issue) => ({
-        code: `PROSE_${issue.code}`,
-        message: issue.message,
-        segmentIndex: issue.paragraphIndex,
-      }));
+      if (blockingProseIssues.length > 0) {
+        planIssues = blockingProseIssues.map((issue) => ({
+          code: `PROSE_${issue.code}`,
+          message: issue.message,
+          segmentIndex: issue.paragraphIndex,
+        }));
+      }
     }
+    currentTelemetry.planIssues = structuredIssuesForAttempt;
+    currentTelemetry.proseIssues = [...finalProseIssues];
+    currentTelemetry.passed = planIssues.length === 0 && blockingProseIssues.length === 0;
+    attemptHistory.push(currentTelemetry);
+    if (currentTelemetry.passed) break;
 
     if (repairAttempts >= MAX_NOTE_PLAN_REPAIR_ATTEMPTS) {
       warnings.push(
@@ -329,10 +421,15 @@ export async function generateClinicalBodyOpenAI(
         notePlan: plan,
         rawModelOutputs,
         planIssues,
+        attemptHistory,
+        repairActions,
       };
     }
 
     repairAttempts += 1;
+    repairActions.push(
+      `${blockingProseIssues.length > 0 ? "prose" : "plan"}_json_repair_attempt_${repairAttempts}`,
+    );
     warnings.push(
       `${blockingProseIssues.length > 0 ? "Assembled clinical body compliance validation" : "Structured NotePlan validation"} failed; attempting JSON-only repair (${repairAttempts}/${MAX_NOTE_PLAN_REPAIR_ATTEMPTS}).`,
     );
@@ -346,13 +443,15 @@ ${JSON.stringify(frozen, null, 2)}
 
 Prior model JSON/output:
 ${raw}`;
-    raw = await modelCall({
+    modelResponse = await callModel({
       attempt: repairAttempts,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: repairUser },
       ],
     });
+    raw = modelResponse.raw;
+    currentTelemetry = modelResponse.telemetry;
     rawModelOutputs.push(raw);
   }
 
@@ -364,6 +463,8 @@ ${raw}`;
     notePlan: plan,
     rawModelOutputs,
     planIssues: [],
+    attemptHistory,
+    repairActions,
   };
 }
 

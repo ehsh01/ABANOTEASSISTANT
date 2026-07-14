@@ -1,4 +1,4 @@
-import { serial, text, integer, timestamp, jsonb } from "drizzle-orm/pg-core";
+import { serial, text, integer, timestamp, jsonb, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { abanote } from "./abanote";
@@ -28,14 +28,47 @@ export const noteGenerationAuditTable = abanote.table("note_generation_audit", {
   promptVersion: text("prompt_version").notNull(),
   /** SHA-256 of the generation context (session facts + catalogs) for reproducibility. */
   contextHash: text("context_hash").notNull(),
+  assessmentFilename: text("assessment_filename"),
+  assessmentHash: text("assessment_hash"),
+  assessmentExcerptLength: integer("assessment_excerpt_length"),
+  assessmentExcerptTruncated: boolean("assessment_excerpt_truncated").notNull().default(false),
+  promptHash: text("prompt_hash"),
   sessionDate: text("session_date").notNull(),
   sessionHours: integer("session_hours").notNull(),
   /** Repair passes consumed inside the OpenAI loop (0 = first draft passed). */
   repairAttempts: integer("repair_attempts").notNull().default(0),
-  /** Validator issues remaining after the repair loop (full strings). */
+  /** Legacy full messages; empty by default, populated only with content opt-in. */
   validatorIssues: jsonb("validator_issues").$type<string[]>().notNull().default([]),
-  /** Subset of validatorIssues classified as critical (blocking). */
+  /** Legacy blocking messages; empty by default, populated only with content opt-in. */
   criticalIssues: jsonb("critical_issues").$type<string[]>().notNull().default([]),
+  /** Code-only final validator telemetry, safe for default-redacted rows. */
+  finalValidatorIssueCodes: jsonb("final_validator_issue_codes")
+    .$type<string[]>()
+    .notNull()
+    .default([]),
+  /** Code-only blocking subset of finalValidatorIssueCodes. */
+  finalCriticalIssueCodes: jsonb("final_critical_issue_codes")
+    .$type<string[]>()
+    .notNull()
+    .default([]),
+  validatorIssueCount: integer("validator_issue_count").notNull().default(0),
+  criticalIssueCount: integer("critical_issue_count").notNull().default(0),
+  warningCount: integer("warning_count").notNull().default(0),
+  structuredPlanHistory: jsonb("structured_plan_history").$type<unknown[]>().notNull().default([]),
+  proseIssueHistory: jsonb("prose_issue_history").$type<unknown[]>().notNull().default([]),
+  repairActions: jsonb("repair_actions").$type<string[]>().notNull().default([]),
+  warnings: jsonb("warnings").$type<string[]>().notNull().default([]),
+  latencyMs: integer("latency_ms"),
+  promptTokens: integer("prompt_tokens"),
+  completionTokens: integer("completion_tokens"),
+  totalTokens: integer("total_tokens"),
+  completionIds: jsonb("completion_ids").$type<string[]>().notNull().default([]),
+  clinicalBodyHash: text("clinical_body_hash"),
+  finalNoteHash: text("final_note_hash"),
+  /** Null unless NOTE_AUDIT_STORE_CONTENT=true. Values may include invalid model JSON strings. */
+  rawModelJson: jsonb("raw_model_json").$type<unknown[] | null>(),
+  /** Null unless NOTE_AUDIT_STORE_CONTENT=true. */
+  finalNoteText: text("final_note_text"),
   /** saved | blocked_critical | model_failed */
   finalStatus: text("final_status").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

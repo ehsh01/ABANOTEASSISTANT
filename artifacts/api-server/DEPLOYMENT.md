@@ -2,9 +2,8 @@
 
 ## Quick Start
 
-1. **Update `ecosystem.config.js`** with your configuration:
-   - Set `cwd` to your deployment path (e.g., `/var/www/ABANOTEASSISTANT`)
-   - Set `PORT` for production (default: 5002) and staging (default: 5005)
+1. **Configure `artifacts/api-server/.env`** (loaded by `artifacts/api-server/ecosystem.config.cjs`):
+   - Set `API_PORT_PROD` for production (default: 5002) and `API_PORT_STAGING` for staging (default: 5007)
    - Add your `DATABASE_URL` for both environments
    - Add your `JWT_SECRET` for both environments
 
@@ -14,6 +13,29 @@
    ```
 
 ## Manual Deployment Steps
+
+### Staging release gate (required)
+
+Promote the same tested commit; do not pull a second commit between staging and production:
+
+```bash
+git rev-parse HEAD
+pnpm run test:api
+pnpm run eval:notes
+pnpm run build:api-server
+pnpm --filter @workspace/db run ensure:note-generation-audit-table
+pnpm --filter @workspace/db run ensure:note-generation-jobs-table
+pm2 restart abanoteassistant-api-staging
+curl --fail --retry 10 --retry-delay 2 http://127.0.0.1:5007/api/healthz
+# Review staging, then promote the unchanged checkout:
+git rev-parse HEAD
+pm2 restart abanoteassistant-api
+curl --fail --retry 10 --retry-delay 2 http://127.0.0.1:5002/api/healthz
+```
+
+The offline evaluation threshold is 100% strict/critical/first-pass, zero repairs, and stable
+deterministic hashes. `deploy.sh` enforces tests/evaluation before build and performs health checks
+after each restart. Its ports remain configurable through `STAGING_PORT` and `PROD_PORT`.
 
 ### 1. SSH into Droplet
 
@@ -225,6 +247,22 @@ Or use the deployment script:
 Required in `artifacts/api-server/.env`:
 - `DATABASE_URL` - PostgreSQL connection string
 - `JWT_SECRET` - Secret for JWT token signing (min 32 chars)
+
+Optional note audit retention:
+- `NOTE_AUDIT_STORE_CONTENT=false` (default): stores assessment/body/final-note hashes, prompt
+  identity, code-only issue histories/final issue arrays, counts, latency, usage, and completion
+  IDs. Assessment filenames, free-text diagnostics/warnings/repair details, raw model JSON, and
+  final note text are omitted.
+- `NOTE_AUDIT_STORE_CONTENT=true`: additionally stores filenames, full diagnostic histories,
+  warnings/repair details, raw model outputs, and final note text.
+  Enable only with restricted database access and an approved clinical-data retention policy.
+
+Before releasing the audit schema extension, run the additive idempotent ensure script against the
+configured production/staging databases:
+
+```bash
+pnpm --filter @workspace/db run ensure:note-generation-audit-table
+```
 
 Generate JWT_SECRET:
 ```bash

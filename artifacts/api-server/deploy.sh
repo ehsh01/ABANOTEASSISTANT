@@ -9,7 +9,7 @@ echo "========================================"
 # Configuration (update these if needed)
 DEPLOY_PATH="${DEPLOY_PATH:-/var/www/ABANOTEASSISTANT}"
 PROD_PORT="${PROD_PORT:-5002}"
-STAGING_PORT="${STAGING_PORT:-5005}"
+STAGING_PORT="${STAGING_PORT:-5007}"
 
 echo ""
 echo "Configuration:"
@@ -42,22 +42,30 @@ echo "✅ Changed to $DEPLOY_PATH"
 # Step 2: Pull latest code
 echo ""
 echo "📥 Pulling latest code..."
-git pull origin main || git pull origin master || echo "⚠️  Could not pull (maybe not a git repo?)"
+git pull --ff-only origin main
 
 # Step 3: Install dependencies
 echo ""
 echo "📦 Installing dependencies..."
-pnpm install
+corepack pnpm install
 
-# Step 4: Build API + SPA (when nginx serves dist/public from this repo)
+# Step 4: Release gates (must pass before any build or restart)
+echo ""
+echo "🧪 Running API regression tests..."
+corepack pnpm run test:api
+echo ""
+echo "📏 Running offline note-quality evaluation..."
+corepack pnpm run eval:notes
+
+# Step 5: Build API + SPA (when nginx serves dist/public from this repo)
 echo ""
 echo "🔨 Building API server..."
-pnpm run build:api-server
+corepack pnpm run build:api-server
 echo ""
 echo "🔨 Building frontend (ABA Note Assistant SPA)..."
-pnpm run build:frontend
+PORT="${FRONTEND_BUILD_PORT:-5000}" BASE_PATH="${FRONTEND_BASE_PATH:-/}" corepack pnpm run build:frontend
 
-# Step 5: Check environment variables
+# Step 6: Check environment variables
 echo ""
 echo "🔍 Checking environment configuration..."
 if [ ! -f "artifacts/api-server/.env" ]; then
@@ -75,56 +83,56 @@ if [ ! -f "artifacts/api-server/.env" ]; then
   fi
 fi
 
-# Step 6: Update ecosystem.config.js if needed
+# Step 7: Verify the checked-in PM2 configuration
 echo ""
-echo "⚙️  Checking ecosystem.config.js..."
-if [ -f "ecosystem.config.js" ]; then
-  # Check if cwd needs updating
-  if grep -q "/var/www/ABANOTEASSISTANT" ecosystem.config.js; then
-    echo "   ⚠️  Please update ecosystem.config.js:"
-    echo "      - Set correct 'cwd' path"
-    echo "      - Set DATABASE_URL for production and staging"
-    echo "      - Set JWT_SECRET for production and staging"
-    echo "      - Verify PORT values ($PROD_PORT for prod, $STAGING_PORT for staging)"
-    read -p "   Press Enter after updating ecosystem.config.js..."
-  fi
-else
-  echo "   ❌ ecosystem.config.js not found. Please create it first."
+echo "⚙️  Checking artifacts/api-server/ecosystem.config.cjs..."
+if [ ! -f "artifacts/api-server/ecosystem.config.cjs" ]; then
+  echo "   ❌ artifacts/api-server/ecosystem.config.cjs not found."
   exit 1
 fi
 
-# Step 7: Run database migrations (optional)
+# Additive/idempotent audit DDL is required before the new API bundle starts writing telemetry.
+echo ""
+echo "🗄️  Ensuring note-generation audit tables/columns..."
+corepack pnpm --filter @workspace/db run ensure:note-generation-audit-table
+corepack pnpm --filter @workspace/db run ensure:note-generation-jobs-table
+
+# Step 8: Run database migrations (optional)
 echo ""
 read -p "🗄️  Run database migrations? (y/N) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
   echo "   Running migrations..."
-  pnpm --filter @workspace/db run push
+  corepack pnpm --filter @workspace/db run push
 fi
 
-# Step 8: Restart PM2
+# Step 9: Restart staging, health-check, then optionally promote the same checkout
 echo ""
 echo "🔄 Restarting PM2 processes..."
-read -p "   Restart production API? (Y/n) " -n 1 -r
+read -p "   Restart staging API first? (Y/n) " -n 1 -r
 echo
 if [[ ! $REPLY =~ ^[Nn]$ ]]; then
-  pm2 restart abanoteassistant-api || pm2 start ecosystem.config.js --only abanoteassistant-api
-  echo "   ✅ Production API restarted"
+  pm2 restart abanoteassistant-api-staging || pm2 start artifacts/api-server/ecosystem.config.cjs --only abanoteassistant-api-staging
+  echo "   Waiting for staging health on port $STAGING_PORT..."
+  curl --fail --silent --show-error --retry 10 --retry-delay 2 "http://127.0.0.1:$STAGING_PORT/api/healthz" >/dev/null
+  echo "   ✅ Staging API restarted and healthy"
 fi
 
-read -p "   Restart staging API? (y/N) " -n 1 -r
+read -p "   Promote this same commit to production? (y/N) " -n 1 -r
 echo
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-  pm2 restart abanoteassistant-api-staging || pm2 start ecosystem.config.js --only abanoteassistant-api-staging
-  echo "   ✅ Staging API restarted"
+  pm2 restart abanoteassistant-api || pm2 start artifacts/api-server/ecosystem.config.cjs --only abanoteassistant-api
+  echo "   Waiting for production health on port $PROD_PORT..."
+  curl --fail --silent --show-error --retry 10 --retry-delay 2 "http://127.0.0.1:$PROD_PORT/api/healthz" >/dev/null
+  echo "   ✅ Production API restarted and healthy"
 fi
 
-# Step 9: Save PM2 config
+# Step 10: Save PM2 config
 echo ""
 echo "💾 Saving PM2 configuration..."
 pm2 save
 
-# Step 10: Show status
+# Step 11: Show status
 echo ""
 echo "📊 PM2 Status:"
 pm2 list | grep abanoteassistant || echo "   (No abanoteassistant processes found)"

@@ -45,8 +45,15 @@ Before pushing to **`main`**:
 
 - [ ] `pnpm install` (especially if `pnpm-lock.yaml` changed)
 - [ ] If OpenAPI changed: `pnpm run codegen`
+- [ ] `pnpm run test:api` (fixture-driven API and note pipeline regressions)
+- [ ] `pnpm run eval:notes` (offline frozen corpus; no model/network access)
 - [ ] `pnpm run typecheck`
 - [ ] `pnpm run build` (root script runs workspace builds)
+
+`pnpm run verify` runs library/codegen/type checks, API tests, and the offline note evaluation.
+The note release gate requires 100% strict, critical, and first-pass rates, zero repair attempts,
+and stable deterministic output hashes. Live evaluation is diagnostic only and requires both
+`NOTE_EVAL_LIVE=true` and `pnpm run eval:notes -- --live`.
 
 ## Lockfile conflicts
 
