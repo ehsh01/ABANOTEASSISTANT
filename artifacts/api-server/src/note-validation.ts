@@ -1299,6 +1299,12 @@ function validateClinicalBodyComplianceInternal(
       );
     }
 
+    // Phase 3 acquisition-only segments are teaching narratives, not maladaptive ABC chains.
+    // Their labels/metrics are still checked above, but no behavior intervention is assigned.
+    if (acquisitionOnly) {
+      continue;
+    }
+
     if (interventionCatalog.length === 0) {
       continue;
     }
