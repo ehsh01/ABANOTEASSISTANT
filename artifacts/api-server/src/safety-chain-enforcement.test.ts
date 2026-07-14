@@ -31,7 +31,7 @@ describe("safety-chain enforcement (Anthony SIB regression)", () => {
     ).toBe(false);
   });
 
-  test("injection adds DRA naming sentence and follow-up detail", () => {
+  test("injection adds only the exact DRA naming sentence", () => {
     const injected = injectMissingSafetyChainFunctionIntervention(ANTHONY_SIB_PARAGRAPH, {
       narrativeSegmentCount: 1,
       maladaptiveBehaviorForHour: ["Self-Injurious Behavior (SIB)"],
@@ -43,10 +43,8 @@ describe("safety-chain enforcement (Anthony SIB regression)", () => {
 
     expect(injected).toMatch(/implemented Response Blocking\./);
     expect(injected).toMatch(/implemented Differential Reinforcement of Alternative Behavior \(DRA\)\./);
-    expect(injected).toMatch(
-      /Following this intervention, the RBT did not provide attention during the maladaptive response/,
-    );
-    expect(injected).not.toMatch(/\bbrief praise\b/i);
+    expect(injected).not.toMatch(/Following this intervention, the RBT did not provide attention/);
+    expect(injected).not.toMatch(/After the client oriented toward the task/);
   });
 
   test("injection is a no-op when a function-matched intervention is already named", () => {
@@ -80,6 +78,7 @@ describe("attention NCR injection (attention-maintained SIB)", () => {
     expect(paragraphDocumentsNonContingentReinforcement(withDra)).toBe(false);
     const injected = injectMissingAttentionNcrIntervention(withDra, NCR_PARAMS);
     expect(injected).toMatch(/implemented Attention independent response delivery\./);
+    expect(injected).not.toMatch(/fixed time-based schedule independent/);
     expect(paragraphDocumentsNonContingentReinforcement(injected)).toBe(true);
   });
 

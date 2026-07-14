@@ -50,6 +50,13 @@ import {
   phraseMatchesAuthorizedIntervention,
   phraseMatchesAuthorizedReplacementProgram,
 } from "./note-normalization";
+import {
+  buildLockedClosingParagraph,
+  buildLockedOpening,
+  buildNextSessionSentence,
+  buildPerformanceSentence,
+  type TherapySetting,
+} from "./note-assembly";
 
 export * from "./note-scheduling";
 export * from "./note-normalization";
@@ -111,7 +118,63 @@ export type NoteComplianceContext = {
   /** Approximate age in years from DOB + session date; null if unknown */
   clientAgeYears: number | null;
   presentPeople: string[];
+  /** Profile/assessment-derived learner names forbidden in the AI clinical body. */
+  blockedClientNames?: string[] | undefined;
 };
+
+export type NoteValidationSeverity = "blocking" | "warning";
+
+export type NoteValidationIssueCode =
+  | "FORMAT_QUOTATION"
+  | "LANGUAGE_OBJECTIVITY"
+  | "AGE_APPROPRIATENESS"
+  | "SCHOOL_ACTIVITY_OWNERSHIP"
+  | "PARAGRAPH_COUNT"
+  | "CLIENT_NAME_LEAKAGE"
+  | "CAREGIVER_LEAKAGE"
+  | "PRESENT_PERSON_LEAKAGE"
+  | "PEER_GROUP_LEAKAGE"
+  | "ANTECEDENT_INVALID"
+  | "PROGRAM_ASSIGNMENT"
+  | "PROGRAM_FUNCTION_MISMATCH"
+  | "BEHAVIOR_ASSIGNMENT"
+  | "BEHAVIOR_TOPOGRAPHY"
+  | "INTERVENTION_CATALOG"
+  | "INTERVENTION_COUNT"
+  | "INTERVENTION_MISSING"
+  | "INTERVENTION_FUNCTION_MISMATCH"
+  | "POST_INTERVENTION_OUTCOME"
+  | "REINFORCEMENT_CONTINGENCY"
+  | "TRIAL_DATA"
+  | "SAFETY_CHAIN"
+  | "UNAUTHORIZED_CONTENT"
+  | "UNSUPPORTED_COMPARISON"
+  | "LOCKED_OPENING"
+  | "LOCKED_ENVIRONMENT"
+  | "LOCKED_CLOSING"
+  | "END_SEQUENCE"
+  | "NEXT_SESSION_LOCATION";
+
+export type NoteValidationIssue = {
+  code: NoteValidationIssueCode;
+  severity: NoteValidationSeverity;
+  message: string;
+  paragraphIndex?: number | undefined;
+};
+
+export type NoteValidationResult = {
+  issues: NoteValidationIssue[];
+  blocking: NoteValidationIssue[];
+  warnings: NoteValidationIssue[];
+};
+
+function validationResult(issues: NoteValidationIssue[]): NoteValidationResult {
+  return {
+    issues,
+    blocking: issues.filter((issue) => issue.severity === "blocking"),
+    warnings: issues.filter((issue) => issue.severity === "warning"),
+  };
+}
 
 const MENTAL_STATE_PATTERNS: RegExp[] = [
   /\bthe client felt\b/i,
@@ -822,38 +885,15 @@ export function validateCaregiverMentionRule(fullNote: string, presentPeople: st
   return issues;
 }
 
-/**
- * Compliance issues that make a note clinically wrong (not merely stylistic):
- * safety chains, function mismatches, invented interventions/programs, wrong trial percentages.
- * These block note creation when they survive the repair loop.
- */
-const CRITICAL_COMPLIANCE_ISSUE_PATTERNS: RegExp[] = [
-  /^SIB response blocking:/,
-  /^SIB attention function:/,
-  /^SIB function match:/,
-  /^SIB safety:/,
-  /^SIB intervention coherence:/,
-  /^Safety chain function match:/,
-  /^Attention function safety chain:/,
-  /^Safety-priority behavior/,
-  /^Physical Aggression intervention coherence:/,
-  /^Response Block prohibited:/,
-  /^Mandatory DRA:/,
-  /^Intervention function match:/,
-  /^Behavior topography:/,
-  /^Elopement topography:/,
-  /^Tantrum topography:/,
-  /^Therapist trial counts:/,
-  /Unauthorized replacement program/i,
-  /unauthorized intervention name/i,
-  /unauthorized replacement program/i,
-];
+const issuedMessageMetadata = new Map<string, Pick<NoteValidationIssue, "code" | "severity">>();
+const MAX_COMPATIBILITY_MESSAGE_METADATA = 1_000;
 
+/** Compatibility helper for callers that still retain validator messages as strings. */
 export function isCriticalComplianceIssue(issue: string): boolean {
-  return CRITICAL_COMPLIANCE_ISSUE_PATTERNS.some((re) => re.test(issue));
+  return issuedMessageMetadata.get(issue)?.severity === "blocking";
 }
 
-/** Split validator output into blocking (critical) and warning-only (stylistic) issues. */
+/** Split string output using source-assigned metadata, never mutable English prefixes. */
 export function classifyComplianceIssues(issues: string[]): {
   critical: string[];
   stylistic: string[];
@@ -866,12 +906,36 @@ export function classifyComplianceIssues(issues: string[]): {
   return { critical, stylistic };
 }
 
-export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteComplianceContext): string[] {
+function validateClinicalBodyComplianceInternal(
+  clinicalBody: string,
+  ctx: NoteComplianceContext,
+  typedSink?: NoteValidationIssue[],
+): string[] {
   const issues: string[] = [];
+  const emittedIssueKeys = new Set<string>();
+  const maxIssues = 200;
+  const add = (
+    code: NoteValidationIssueCode,
+    severity: NoteValidationSeverity,
+    message: string,
+    paragraphIndex?: number,
+  ): void => {
+    const key = `${code}\u0000${paragraphIndex ?? -1}\u0000${message}`;
+    if (emittedIssueKeys.has(key) || issues.length >= maxIssues) return;
+    emittedIssueKeys.add(key);
+    const issue = { code, severity, message, paragraphIndex };
+    issues.push(message);
+    typedSink?.push(issue);
+    issuedMessageMetadata.set(message, { code, severity });
+    if (issuedMessageMetadata.size > MAX_COMPATIBILITY_MESSAGE_METADATA) {
+      const oldest = issuedMessageMetadata.keys().next().value;
+      if (oldest !== undefined) issuedMessageMetadata.delete(oldest);
+    }
+  };
   const schoolSetting = isSchoolSettingLabel(ctx.therapySetting);
 
   if (/\\["']/.test(clinicalBody)) {
-    issues.push(
+    add("FORMAT_QUOTATION", "warning",
       'Quotation marks: do not use backslash characters before quotes in the clinical body. Write plain straight double quotes only (for example Respond to safety instructions "Stop" or "wait", not \\"Stop\\").',
     );
   }
@@ -879,7 +943,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   let mentalHits = 0;
   for (const re of MENTAL_STATE_PATTERNS) {
     if (re.test(clinicalBody)) {
-      issues.push(
+      add("LANGUAGE_OBJECTIVITY", "warning",
         `Observational-only rule: remove mental-state / interpretation phrasing (pattern "${re.source.slice(0, 48)}…") — document only observable actions and events.`,
       );
       if (++mentalHits >= 3) {
@@ -893,7 +957,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     const m = re.exec(clinicalBody);
     if (m) {
       const snippet = m[0];
-      issues.push(
+      add("LANGUAGE_OBJECTIVITY", "warning",
         `Subjective wording: remove "${snippet}" — ABA notes must be objective and observable. Replace with topography (e.g. "cried, dropped to the floor, kicked legs, threw materials") and measurable performance, not value words like upset/frustrated/happy/noncompliant/stubborn/bad day/fair performance/did well/did poorly.`,
       );
       if (++subjectiveHits >= 3) {
@@ -905,7 +969,7 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   if (ctx.clientAgeYears !== null && ctx.clientAgeYears >= 0) {
     for (const re of ageInappropriatePatterns(ctx.clientAgeYears)) {
       if (re.test(clinicalBody)) {
-        issues.push(
+        add("AGE_APPROPRIATENESS", "warning",
           `Age-appropriate activities: narrative may describe tasks unsuitable for approximately ${ctx.clientAgeYears} years old; use toddler/early-childhood activities only when age is low.`,
         );
         break;
@@ -922,17 +986,17 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   if (schoolSetting) {
     for (let i = 0; i < paragraphs.length; i++) {
       if (schoolParagraphHasRbtOwnedClassroomActivity(paragraphs[i]!)) {
-        issues.push(
+        add("SCHOOL_ACTIVITY_OWNERSHIP", "warning",
           `School setting activity ownership: paragraph ${i + 1} makes the RBT sound like they created, arranged, led, or presented the classroom lesson/activity. In school notes, the teacher should present classroom lessons/activities/materials, while the RBT supports the client and implements ABA programs, prompts, interventions, reinforcement, and data collection.`,
+          i,
         );
-        break;
       }
     }
   }
 
   const expectedParagraphs = ctx.narrativeSegmentCount ?? ctx.sessionHours;
   if (paragraphs.length !== expectedParagraphs) {
-    issues.push(
+    add("PARAGRAPH_COUNT", "blocking",
       `Expected exactly ${expectedParagraphs} clinical paragraph(s) separated by blank lines (aligned with narrative segments for this session duration); found ${paragraphs.length}.`,
     );
   }
@@ -945,8 +1009,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const p = paragraphs[i]!;
       for (const re of TODDLER_ATTRIBUTED_SPEECH) {
         if (re.test(p)) {
-          issues.push(
+          add("LANGUAGE_OBJECTIVITY", "warning",
             `Toddler / limited verbal: for very young clients, minimize complex speech attributed to the client (e.g. avoid "the client said/stated/replied…"); use vocalizations, gestures, and observable actions instead.`,
+            i,
           );
           if (++speechHits >= 1) {
             break;
@@ -970,14 +1035,16 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     }
     const progCount = countDistinctCatalogLabelsInParagraph(p, programs);
     if (progCount > 1) {
-      issues.push(
+      add("PROGRAM_ASSIGNMENT", "blocking",
         `One program per ABC: paragraph ${i + 1} references more than one distinct replacement program name from the catalog; that segment must name only the assigned program and must not describe or cite a second program from the list.`,
+        i,
       );
     }
     const assignedRp = replacementPerHour[i]?.trim() ?? "";
     if (assignedRp.length > 0 && !p.includes(assignedRp)) {
-      issues.push(
+      add("PROGRAM_ASSIGNMENT", "blocking",
         `Replacement program for paragraph ${i + 1}: include the assigned program exactly as given (character-for-character, including every "(" and ")"): "${assignedRp}".`,
+        i,
       );
     }
     const assignedBeh = assignedPerHour[i]?.trim() ?? "";
@@ -998,8 +1065,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
           primary != null
             ? ` Documented function: ${primary}. Use only replacement programs mapped to "${assignedBeh}" in the BIP (see JSON \`behaviorReplacementCandidatesForHour[${i}]\`)—not generic function-category programs unless they appear in that candidate list.`
             : " Use a BIP-aligned replacement program for that behavior's topography—not safety stop/wait or leave-area programs unless the behavior is elopement/wandering.";
-        issues.push(
+        add("PROGRAM_FUNCTION_MISMATCH", "blocking",
           `Replacement program function: paragraph ${i + 1} pairs "${assignedBeh}" with "${assignedRp}".${functionHint} The server rebalances auto-assignment when possible; align antecedent and teaching prose to the assigned program's function.`,
+          i,
         );
       }
     }
@@ -1017,8 +1085,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const fnI = primaryFunctionForReplacementSelection(ctx.maladaptiveBehaviorFunctionsForHour?.[i]);
       const fnJ = primaryFunctionForReplacementSelection(ctx.maladaptiveBehaviorFunctionsForHour?.[j]);
       if (fnI && fnJ && fnI !== fnJ) {
-        issues.push(
+        add("PROGRAM_FUNCTION_MISMATCH", "blocking",
           `Replacement program logic: paragraphs ${i + 1} (${behI}, ${fnI}) and ${j + 1} (${behJ}, ${fnJ}) share the same replacement program "${rpI}" but document different behavior functions. Use function-matched replacements from behaviorReplacementCandidatesForHour for each segment.`,
+          i,
         );
       }
     }
@@ -1031,70 +1100,68 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     const acquisitionOnly = acquisitionFlags[i] === true;
     const antecedentIssue = antecedentSpecificityIssue(p, i);
     if (antecedentIssue) {
-      issues.push(antecedentIssue);
-      break;
+      add("ANTECEDENT_INVALID", "warning", antecedentIssue, i);
     }
     const lockedActivity = activityLockedPerHour[i];
     if (typeof lockedActivity === "string" && lockedActivity.length > 0 && !p.includes(lockedActivity)) {
-      issues.push(
+      add("ANTECEDENT_INVALID", "warning",
         `ABC Builder: paragraph ${i + 1} must include the selected activity/antecedent string verbatim (character-for-character): "${lockedActivity.slice(0, 80)}${lockedActivity.length > 80 ? "…" : ""}".`,
+        i,
       );
-      break;
     }
     if (behaviorCatalog.length > 0) {
       const bCount = countCatalogBehaviorsInParagraph(p, behaviorCatalog);
       if (acquisitionOnly) {
         if (bCount > 0) {
-          issues.push(
+          add("BEHAVIOR_ASSIGNMENT", "blocking",
             `Skill-acquisition segment (paragraph ${i + 1}): do not cite any maladaptive behavior catalog label; this segment documents only the assigned skill-acquisition replacement program (no "manifested [maladaptive]" framing).`,
+            i,
           );
-          break;
         }
         const deficit = acquisitionOnlySkillDeficitFraming(p);
         if (deficit) {
-          issues.push(
+          add("BEHAVIOR_ASSIGNMENT", "blocking",
             `Skill-acquisition segment (paragraph ${i + 1}): remove deficit/nonperformance wording (${deficit}). Skill-acquisition programs such as Echoic, Respond to Own Name, and Improve eye contact are teaching targets, not maladaptive behaviors targeted for reduction. Describe RBT teaching opportunities, prompt levels, observed approximations/orienting responses, and the entered trial percentage without framing missed or inconsistent responses as problem behavior.`,
+            i,
           );
-          break;
         }
       } else if (bCount > 1) {
-        issues.push(
+        add("BEHAVIOR_ASSIGNMENT", "blocking",
           `One maladaptive behavior per ABC: paragraph ${i + 1} references more than one behavior name from the client catalog; use exactly one catalog behavior per narrative segment.`,
+          i,
         );
-        break;
       }
     }
     const assigned = assignedPerHour[i]?.trim();
     if (!acquisitionOnly && assigned && !p.includes(assigned)) {
-      issues.push(
+      add("BEHAVIOR_ASSIGNMENT", "blocking",
         `Maladaptive behavior rotation: paragraph ${i + 1} must cite the assigned catalog label "${assigned}" (maladaptiveBehaviorForHour[${i}]) verbatim in the manifested-behavior portion.`,
+        i,
       );
-      break;
     }
     if (!acquisitionOnly && assigned && /\bthe client manifested\b/i.test(p) && manifestedBehaviorLacksObservableTopography(p)) {
-      issues.push(
+      add("BEHAVIOR_TOPOGRAPHY", "blocking",
         `Behavior topography: paragraph ${i + 1} must describe observable actions in the manifested-behavior sentence (e.g. "manifested ${assigned} by …" with specific body movements, vocalizations, or contact)—not the catalog label alone. Use maladaptiveBehaviorTopographyForHour[${i}] when provided.`,
+        i,
       );
-      break;
     }
     if (!acquisitionOnly && assigned) {
       const abbrev = findMaladaptiveBehaviorAbbreviationIssue(p, assigned, behaviorCatalog);
       if (abbrev) {
-        issues.push(`Maladaptive behavior rotation: paragraph ${i + 1}: ${abbrev}`);
-        break;
+        add("BEHAVIOR_ASSIGNMENT", "blocking", `Maladaptive behavior rotation: paragraph ${i + 1}: ${abbrev}`, i);
       }
       if (/physical\s+aggression/i.test(assigned) && physicalAggressionParagraphHasVerbalTopography(p)) {
-        issues.push(
+        add("BEHAVIOR_TOPOGRAPHY", "blocking",
           `Physical Aggression topography: paragraph ${i + 1} must not include quoted speech, shouting, raised voice, or other verbal/vocal topography in the Physical Aggression episode. Use only person-directed physical contact/attempts such as hitting, kicking, pushing, scratching, pinching, headbutting, hair pulling, or throwing items at a person. If verbal aggression occurred, it requires a separate assigned verbal/language behavior paragraph; do not bundle it into Physical Aggression.`,
+          i,
         );
-        break;
       }
     }
     if (!acquisitionOnly && tantrumWithoutTopography(p)) {
-      issues.push(
+      add("BEHAVIOR_TOPOGRAPHY", "blocking",
         `Tantrum topography: paragraph ${i + 1} mentions tantrum/meltdown without enough observable detail; describe what the client did (sounds, movements, materials) consistent with the assessment behavior definitions.`,
+        i,
       );
-      break;
     }
     if (!acquisitionOnly && assigned) {
       const storedTopography = ctx.maladaptiveBehaviorTopographyForHour?.[i]?.trim() ?? "";
@@ -1102,10 +1169,10 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         isElopementFamilyBehaviorLabel(assigned) &&
         elopementEpisodeLacksObservableTopography(p, assigned)
       ) {
-        issues.push(
+        add("BEHAVIOR_TOPOGRAPHY", "blocking",
           `Elopement topography: paragraph ${i + 1} must describe observable leaving/boundary topography in the manifested-behavior sentence (e.g. ran toward exit/hallway, left the activity area without permission, moved beyond arm's reach)—not the catalog label alone. Use the client's stored BIP topography when provided in JSON maladaptiveBehaviorTopographyForHour[${i}].`,
+          i,
         );
-        break;
       }
       if (
         storedTopography.length > 0 &&
@@ -1114,10 +1181,10 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
           storedTopography,
         )
       ) {
-        issues.push(
+        add("BEHAVIOR_TOPOGRAPHY", "blocking",
           `Behavior topography: paragraph ${i + 1} addresses "${assigned}" but does not reflect the client's stored operational definition (${storedTopography.slice(0, 120)}${storedTopography.length > 120 ? "…" : ""}). Include observable actions from that BIP/profile topography in the manifested-behavior sentence so each ABC matches the same definition used in prior notes for this behavior.`,
+          i,
         );
-        break;
       }
     }
   }
@@ -1127,8 +1194,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     for (let i = 0; i < paragraphs.length; i++) {
       const joined = findJoinedInterventionPairPhrase(paragraphs[i]!, interventionCatalog);
       if (joined) {
-        issues.push(
+        add("INTERVENTION_CATALOG", "blocking",
           `Interventions: paragraph ${i + 1} joins two catalog interventions (${joined.a} and ${joined.b}) in one phrase (comma or "and" between names). Do not combine two catalog names into one noun phrase; use exact JSON labels in separate naming sentences (each ending with a period after the name). For most ABC segments document **one** intervention only—only safety-priority segments with Response Block on the client's list may use multiple **separate** naming sentences (never a compound label).`,
+          i,
         );
       }
     }
@@ -1136,35 +1204,50 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
   if (interventionCatalog.length >= 1) {
     for (let i = 0; i < paragraphs.length; i++) {
       const p = paragraphs[i]!;
+      for (const label of interventionCatalog) {
+        const loose = new RegExp(`(?:implemented|applied)\\s+${escapeRegExp(label)}\\s*\\.`, "i");
+        const exact = new RegExp(`(?:implemented|applied)\\s+${escapeRegExp(label)}\\s*\\.`);
+        if (loose.test(p) && !exact.test(p)) {
+          add(
+            "INTERVENTION_CATALOG",
+            "blocking",
+            `Intervention exact match: paragraph ${i + 1} must use the catalog label "${label}" with exact capitalization, spacing, and punctuation.`,
+            i,
+          );
+        }
+      }
       const commaAfter = firstInterventionWithCommaBeforeBy(p, interventionCatalog);
       if (commaAfter) {
-        issues.push(
+        add("INTERVENTION_CATALOG", "blocking",
           `Interventions: paragraph ${i + 1}: remove the comma between "${commaAfter}" and "by" (do not use a "…, by …" clause attached to the catalog name). End the naming sentence after the exact catalog name with a period, then describe implementation in a new sentence.`,
+          i,
         );
       }
       const quoted = firstQuotedCatalogIntervention(p, interventionCatalog);
       if (quoted) {
-        issues.push(
+        add("INTERVENTION_CATALOG", "blocking",
           `Interventions: paragraph ${i + 1}: remove double quotes around "${quoted}"; write the catalog intervention as plain text matching JSON exactly, in its own sentence ending with a period after the name.`,
+          i,
         );
       }
       const attachedBy = firstInterventionNameWithAttachedByClause(p, interventionCatalog);
       if (attachedBy) {
-        issues.push(
+        add("INTERVENTION_CATALOG", "blocking",
           `Interventions: paragraph ${i + 1}: do not attach "by …" to "${attachedBy}" in the same sentence as implemented/applied. Use two sentences: (1) "The RBT implemented ${attachedBy}." or "To address this behavior, the RBT implemented ${attachedBy}." with the exact JSON string and a period immediately after the name; (2) a separate sentence describing what was done (for example beginning with "Following this intervention, …").`,
+          i,
         );
       }
       const partial = findInterventionPartialMatchIssue(p, interventionCatalog);
       if (partial) {
-        issues.push(`Interventions: paragraph ${i + 1}: ${partial}`);
+        add("INTERVENTION_CATALOG", "blocking", `Interventions: paragraph ${i + 1}: ${partial}`, i);
       }
       const inventedIntervention = findInventedInterventionLikePhraseIssues(p, interventionCatalog);
       if (inventedIntervention) {
-        issues.push(`Interventions: paragraph ${i + 1}: ${inventedIntervention}`);
+        add("UNAUTHORIZED_CONTENT", "blocking", `Interventions: paragraph ${i + 1}: ${inventedIntervention}`, i);
       }
       const draDroCompound = compoundDraDroInterventionLabelIssue(p, i);
       if (draDroCompound) {
-        issues.push(draDroCompound);
+        add("INTERVENTION_CATALOG", "blocking", draDroCompound, i);
       }
     }
   }
@@ -1177,12 +1260,12 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     const assigned = ctx.replacementProgramForHour[i]?.trim() ?? "";
     const invented = findInventedReplacementProgramPhraseIssues(p, replacementCatalog);
     if (invented) {
-      issues.push(`Replacement programs: paragraph ${i + 1}: ${invented}`);
+      add("UNAUTHORIZED_CONTENT", "blocking", `Replacement programs: paragraph ${i + 1}: ${invented}`, i);
     }
     if (assigned) {
       const unauthorized = findUnauthorizedQuotedReplacementProgramIssue(p, assigned, replacementCatalog);
       if (unauthorized) {
-        issues.push(`Replacement programs: paragraph ${i + 1}: ${unauthorized}`);
+        add("UNAUTHORIZED_CONTENT", "blocking", `Replacement programs: paragraph ${i + 1}: ${unauthorized}`, i);
       }
     }
   }
@@ -1203,14 +1286,16 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       const successN = trialEntry.successfulTrialNumbers.length;
       const pct = therapistTrialSuccessPercentRounded(successN, trialEntry.totalTrials);
       if (!therapistTrialPercentRollupPhrasePresent(p, successN, trialEntry.totalTrials)) {
-        issues.push(
+        add("TRIAL_DATA", "blocking",
           `Therapist trial counts: paragraph ${i + 1} must state discrete-trial outcomes as a **percentage** tied to that program (rounded from intake: **${pct}%** of trials met criterion / **~${pct}%** of the time / **successful ~${pct}%** of the time — same rounding as the end-of-note performance line). Do **not** use "${successN} out of ${trialEntry.totalTrials} trials were successful" or other N-of-M trial count rollups. Do not use "trials were conducted" plus separate per-trial success lists.`,
+          i,
         );
       }
     }
     if (ctx.rbtActionsOnlyOutcomeForHour?.[i] !== true && unsupportedProgressComparison(p)) {
-      issues.push(
+      add("UNSUPPORTED_COMPARISON", "warning",
         `Unsupported progress comparison: paragraph ${i + 1} compares current performance to recent/prior sessions, baseline, or treatment goals, but prior-session trajectory data is not part of the session context. Remove the comparison and state only current-session performance supported by the entered data.`,
+        i,
       );
     }
 
@@ -1224,25 +1309,27 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       assignedBehaviorAllowsResponseBlockSafetyChain(assignedBehavior);
 
     if (!safetyChainAllowed && implCount > 1) {
-      issues.push(
+      add("INTERVENTION_COUNT", "blocking",
         `Interventions: paragraph ${i + 1} must document **one** catalog intervention for this ABC segment (one naming sentence: "… implemented [exact JSON label]." or "… applied [exact JSON label]." with a period immediately after the name, then separate sentences for detail). Pick the single best-matching entry from JSON interventions unless the segment is a safety-priority behavior with a response-blocking label on the client's list (Self-Injurious Behavior (SIB), **Physical Aggression**, wandering, elopement, baiting, bolting, running away, Property Destruction when immediately preventing harm)—then that response-blocking label must be first with additional interventions in separate naming sentences. **Never** use Response Block for Verbal Aggression, Task Refusal, Inappropriate Language, screaming/yelling alone, or noncompliance without unsafe physical behavior.`,
+        i,
       );
     }
     if (implCount === 0) {
-      issues.push(
+      add("INTERVENTION_MISSING", "blocking",
         `Interventions: paragraph ${i + 1} must document at least one catalog intervention using the exact JSON label in a naming sentence ending with a period right after the name (for example "The RBT implemented [exact label]." or "To address this behavior, the RBT implemented [exact label]."), then describe what was done in following sentences—do not put "by …" in the same sentence as the catalog name.`,
+        i,
       );
     }
     if (implCount > 0) {
       const outcomeIssue = postInterventionOutcomeIssue(p, i);
       if (outcomeIssue) {
-        issues.push(outcomeIssue);
+        add("POST_INTERVENTION_OUTCOME", "blocking", outcomeIssue, i);
       }
     }
     if (!acquisitionOnly && /\bthe client manifested\b/i.test(p)) {
       const reinforcementIssue = maladaptiveReinforcementContingencyIssue(p, i);
       if (reinforcementIssue) {
-        issues.push(reinforcementIssue);
+        add("REINFORCEMENT_CONTINGENCY", "blocking", reinforcementIssue, i);
       }
     }
     if (
@@ -1252,8 +1339,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     ) {
       const responseBlockLabels = interventionList.filter(isResponseBlockInterventionLabel);
       if (paragraphDocumentsInterventionFromList(p, responseBlockLabels)) {
-        issues.push(
+        add("SAFETY_CHAIN", "blocking",
           `Response Block prohibited: paragraph ${i + 1} addresses "${assignedBehavior}" but names "${responseBlockLabel}". Response Blocking is only for immediate safety-risk physical topographies (Physical Aggression, Self-Injurious Behavior (SIB), elopement/wandering/bolting, Property Destruction when immediately preventing harm)—use function-based interventions from interventionCandidatesForHour[s] instead.`,
+          i,
         );
       }
     }
@@ -1274,12 +1362,14 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         const responseBlockFirst = paragraphHasResponseBlockFirst(p, responseBlockLabel, interventionList);
         if (!responseBlockFirst) {
           if (firstNamed && isResponseBlockInterventionLabel(firstNamed)) {
-            issues.push(
+            add("SAFETY_CHAIN", "blocking",
               `SIB response blocking: paragraph ${i + 1} must use exact catalog spelling "${responseBlockLabel}" in the intervention naming sentence (for example "The RBT implemented ${responseBlockLabel}.").`,
+              i,
             );
           } else {
-            issues.push(
+            add("SAFETY_CHAIN", "blocking",
               `SIB response blocking: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" but must name "${responseBlockLabel}" as the **first** catalog intervention after the manifested-behavior line—before DRA, DRI, Premack principle, Redirection, Environmental Manipulation, or any other approved intervention. Use "To address this behavior, the RBT implemented ${responseBlockLabel}." then describe blocking/protection in **Following this intervention,** and only then name any additional approved catalog intervention or replacement program.`,
+              i,
             );
           }
         } else {
@@ -1312,12 +1402,14 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
               primaryFunction === "attention" &&
               draDriCandidates.length > 0
             ) {
-              issues.push(
+              add("SAFETY_CHAIN", "blocking",
                 `SIB attention function: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" with documented attention function and Response Block first. Name "${draDriCandidates[0]}" (or another listed DRA/DRI label) as the **second** catalog intervention naming sentence after blocking is described—Attention independent response delivery alone does not target the attention-maintained contingency when DRA/DRI are on the approved list.`,
+                i,
               );
             } else {
-              issues.push(
+              add("SAFETY_CHAIN", "blocking",
                 `Safety chain function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${responseBlockLabel}" only. Response Block is safety/support only—not primary treatment. Name "${sample}" as the **second** catalog intervention naming sentence after blocking is described.`,
+                i,
               );
             }
           } else {
@@ -1337,8 +1429,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
               draDriCandidates.length > 0 &&
               isInsufficientAttentionInterventionAfterSibSafetyChain(secondNamed, interventionList)
             ) {
-              issues.push(
+              add("SAFETY_CHAIN", "blocking",
                 `SIB attention function: paragraph ${i + 1} names "${secondNamed}" after Response Block, but DRA/DRI are on the approved intervention list for attention-maintained SIB. Use "${draDriCandidates[0]}" as the second catalog intervention naming sentence to reinforce an alternative/incompatible behavior.`,
+                i,
               );
             }
           }
@@ -1354,8 +1447,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
           MALADAPTIVE_BEHAVIOR_SIB_CANONICAL,
         )
       ) {
-        issues.push(
+        add("INTERVENTION_FUNCTION_MISMATCH", "blocking",
           `SIB function match: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" with documented attention function but names "${firstNamed}" as the catalog intervention. ${functionInterventionMismatchHint("attention", attentionInterventions)} Do not use Environmental Manipulation alone for attention-maintained SIB when attention-matched interventions are on the approved list.`,
+          i,
         );
       } else if (
         sibEnvironmentalManipulationLabel &&
@@ -1363,20 +1457,23 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         isNonBlockingFirstInterventionForSib(firstNamed) &&
         firstNamed !== sibEnvironmentalManipulationLabel
       ) {
-        issues.push(
+        add("SAFETY_CHAIN", "blocking",
           `SIB safety: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" but names "${firstNamed}" before immediate physical protection. Response Block/Response Blocking is not on the client's approved intervention list—add it to the BIP when possible. Until then, use "${sibEnvironmentalManipulationLabel}" as the first catalog intervention naming sentence for SIB (for example padding/removing hard surfaces or blocking access), then describe protective blocking in following plain prose before any DRA/Redirection/Premack naming sentence.`,
+          i,
         );
       } else if (!sibEnvironmentalManipulationLabel && firstNamed && isNonBlockingFirstInterventionForSib(firstNamed)) {
-        issues.push(
+        add("SAFETY_CHAIN", "blocking",
           `SIB safety: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" but the client's approved intervention list does not include Response Block, Response Blocking, or Environmental Manipulation. Add Response Block/Response Blocking to the client BIP for SIB episodes; do not use "${firstNamed}" as the first named intervention without a documented response-blocking safety chain.`,
+          i,
         );
       } else if (
         sibFunctionInterventionLabel &&
         firstNamed &&
         /^redirection$/i.test(firstNamed.trim())
       ) {
-        issues.push(
+        add("SAFETY_CHAIN", "blocking",
           `SIB intervention coherence: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" with Redirection even though "${sibFunctionInterventionLabel}" is on the client's approved intervention list. Use "${sibFunctionInterventionLabel}" only after response blocking is documented (Response Block/Response Blocking when listed, otherwise Environmental Manipulation when listed). Redirection alone does not address SIB safety.`,
+          i,
         );
       }
     }
@@ -1410,8 +1507,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         );
         const mismatchFn =
           primaryFunction && primaryFunction !== "automatic" ? primaryFunction : "tangible";
-        issues.push(
+        add("INTERVENTION_FUNCTION_MISMATCH", "blocking",
           `Intervention function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${firstNamedIntervention}". ${functionInterventionMismatchHint(mismatchFn, candidates)} Use one exact catalog intervention from JSON \`interventionCandidatesForHour[${i}]\` when that array is non-empty.`,
+          i,
         );
       }
       if (
@@ -1438,8 +1536,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
               interventions: interventionList,
               behaviorFunctions: segmentFunctions,
             }) ?? checkCandidates[0];
-          issues.push(
+          add("SAFETY_CHAIN", "blocking",
             `Safety chain function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${responseBlockLabel}" only. Response Block is safety/support only—not primary treatment. ${functionInterventionAfterSafetyChainHint(primaryFunction, checkCandidates)} Name "${sample}" as the **second** catalog intervention naming sentence after blocking is described.`,
+            i,
           );
         } else if (primaryFunction === "attention" && candidates.some(isDraOrDriInterventionLabel)) {
           const consequenceAfterBlock = interventionTailAfterManifestedBehavior(p);
@@ -1454,8 +1553,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
             isInsufficientAttentionInterventionAfterSibSafetyChain(secondNamed, interventionList)
           ) {
             const draDri = candidates.filter(isDraOrDriInterventionLabel);
-            issues.push(
+            add("SAFETY_CHAIN", "blocking",
               `Attention function safety chain: paragraph ${i + 1} names "${secondNamed}" after Response Block, but DRA/DRI are on the approved list for attention-maintained "${assignedBehavior}". Use "${draDri[0] ?? "DRA/DRI"}" as the second catalog intervention naming sentence.`,
+              i,
             );
           }
         }
@@ -1467,8 +1567,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       ) {
         const draDriLabels = interventionList.filter(isDraOrDriInterventionLabel);
         if (!paragraphDocumentsInterventionFromList(p, draDriLabels)) {
-          issues.push(
+          add("INTERVENTION_FUNCTION_MISMATCH", "blocking",
             `Mandatory DRA: paragraph ${i + 1} documents attention-maintained "${assignedBehavior}" but does not name DRA/DRI from JSON interventions. Include ${draDriLabels[0] ?? "DRA/DRI"} as the catalog intervention naming sentence when listed.`,
+            i,
           );
         }
       } else if (
@@ -1487,8 +1588,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
               interventions: interventionList,
               behaviorFunctions: segmentFunctions,
             }) ?? fallback[0];
-          issues.push(
+          add("SAFETY_CHAIN", "blocking",
             `Safety chain function match: paragraph ${i + 1} documents "${responseBlockLabel}" only for "${assignedBehavior}". Response Block is safety/support only. Name "${sample}" as a **second** catalog intervention naming sentence after blocking is described.`,
+            i,
           );
         }
       }
@@ -1499,8 +1601,9 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       ) {
         const ncrLabel = findNonContingentReinforcementInterventionLabel(interventionList);
         if (ncrLabel && !paragraphDocumentsNonContingentReinforcement(p)) {
-          issues.push(
+          add("SAFETY_CHAIN", "warning",
             `Attention NCR: paragraph ${i + 1} documents attention-maintained "${assignedBehavior}" but does not name "${ncrLabel}" (non-contingent reinforcement / attention independent response delivery). NCR is the BIP-mapped intervention that targets the attention contingency maintaining SIB; Response Block manages topography and DRA reinforces an alternative behavior, but neither reduces the reinforcing value of attention on its own. Add "${ncrLabel}" as a catalog intervention naming sentence alongside the rest of the chain when it is on the approved list—confirm the strategy with the BCBA.`,
+            i,
           );
         }
       }
@@ -1516,21 +1619,24 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         if (
           !paragraphHasResponseBlockFirst(p, responseBlockLabel, interventionList)
         ) {
-          issues.push(
+          add("SAFETY_CHAIN", "blocking",
             `Physical Aggression intervention coherence: paragraph ${i + 1} must use exact catalog spelling "${responseBlockLabel}" when Response Block is the first intervention.`,
+            i,
           );
         } else if (
           !hasFunctionMatchedInterventionAfterResponseBlock(p, responseBlockLabel, [
             demandEscapeInterventionLabel,
           ])
         ) {
-          issues.push(
+          add("SAFETY_CHAIN", "blocking",
             `Physical Aggression intervention coherence: paragraph ${i + 1} describes physical aggression during a demand or guided task with Response Block/Response Blocking first. Also name "${demandEscapeInterventionLabel}" in a **second** catalog intervention naming sentence after blocking is described, then describe DRA/prompting/reinforcement only as plain follow-up detail if clinically appropriate and approved.`,
+            i,
           );
         }
       } else if (firstNamed && firstNamed !== demandEscapeInterventionLabel) {
-        issues.push(
+        add("INTERVENTION_FUNCTION_MISMATCH", "blocking",
           `Physical Aggression intervention coherence: paragraph ${i + 1} describes physical aggression during a demand or guided task and the approved intervention list includes "${demandEscapeInterventionLabel}". Use "${demandEscapeInterventionLabel}" as the exact catalog intervention naming sentence for this demand-escape episode, then describe DRA/prompting/reinforcement only as plain follow-up detail if clinically appropriate and approved.`,
+          i,
         );
       }
     }
@@ -1555,21 +1661,22 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         !paragraphHasResponseBlockFirst(p, responseBlockLabel, interventionList) &&
         firstInterventionMentionInText(consequenceTail, interventionList)
       ) {
-        issues.push(
+        add("SAFETY_CHAIN", "blocking",
           `Safety-priority behavior (${assignedBehavior}): paragraph ${i + 1} must name "${responseBlockLabel}" as the first catalog intervention after the manifested-behavior line (before other listed interventions such as environmental manipulation), in its own naming sentence ending with a period after the exact label—for example "To address this behavior, the RBT implemented ${responseBlockLabel}."`,
+          i,
         );
       }
     }
   }
 
   if (CAREGIVER_LEXICON.test(clinicalBody)) {
-    issues.push(
+    add("CAREGIVER_LEAKAGE", "blocking",
       "Clinical body must not mention caregivers, parents, or guardians; the fixed opening already covers presence once.",
     );
   }
 
   if (PEER_OR_GROUP_ACTIVITY_LEXICON.test(clinicalBody)) {
-    issues.push(
+    add("PEER_GROUP_LEAKAGE", "warning",
       "Clinical body must document only the RBT's one-to-one work with the client. Remove small-group, peer, classmate, children, kids, other-student, or group-play language; describe the materials/activity as arranged for the client only.",
     );
   }
@@ -1580,13 +1687,114 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
     if (schoolSetting && isTeacherRole(n)) continue;
     const re = new RegExp(`\\b${escapeRegExp(n)}\\b`, "i");
     if (re.test(clinicalBody)) {
-      issues.push(
+      add("PRESENT_PERSON_LEAKAGE", "blocking",
         `Clinical body must not name present people (e.g. "${n}"); only the system opening sentence lists who was present.`,
       );
-      break;
+    }
+  }
+
+  const blockedNames = [...new Set((ctx.blockedClientNames ?? []).map((name) => name.trim()).filter((name) => name.length >= 2))];
+  for (const name of blockedNames) {
+    const re = new RegExp(`\\b${escapeRegExp(name)}\\b`, "i");
+    if (re.test(clinicalBody)) {
+      add(
+        "CLIENT_NAME_LEAKAGE",
+        "blocking",
+        `Clinical body must refer to the learner only as "the client"; remove the learner name "${name}".`,
+      );
     }
   }
 
   return issues;
+}
+
+export function validateClinicalBodyComplianceDetailed(
+  clinicalBody: string,
+  ctx: NoteComplianceContext,
+): NoteValidationResult {
+  const typed: NoteValidationIssue[] = [];
+  validateClinicalBodyComplianceInternal(clinicalBody, ctx, typed);
+  return validationResult(typed);
+}
+
+/** Backward-compatible string-only validator output. */
+export function validateClinicalBodyCompliance(
+  clinicalBody: string,
+  ctx: NoteComplianceContext,
+): string[] {
+  return validateClinicalBodyComplianceInternal(clinicalBody, ctx);
+}
+
+export type AssembledSessionNoteValidationContext = {
+  presentPeople: string[];
+  hasEnvironmentalChanges: boolean;
+  therapySetting: TherapySetting;
+  nextSessionDate?: string | undefined;
+  clientFirstName?: string | null | undefined;
+  blockedClientNames?: string[] | undefined;
+  narrativeProgramSegmentCount: number;
+  therapistTrialSummaryForReplacementHour?: TherapistTrialSummaryForHourEntry[] | undefined;
+  reinforcementPreferences?: string[] | null | undefined;
+};
+
+/** Final deterministic gate for locked prose and end-of-note ordering. */
+export function validateAssembledSessionNote(
+  fullNote: string,
+  ctx: AssembledSessionNoteValidationContext,
+): NoteValidationResult {
+  const issues: NoteValidationIssue[] = [];
+  const add = (code: NoteValidationIssueCode, message: string): void => {
+    issues.push({ code, severity: "blocking", message });
+  };
+  const opening = buildLockedOpening(
+    ctx.presentPeople,
+    ctx.hasEnvironmentalChanges,
+    ctx.therapySetting,
+    ctx.clientFirstName,
+  );
+  const closing = buildLockedClosingParagraph(ctx.reinforcementPreferences);
+  const performance = buildPerformanceSentence(
+    ctx.narrativeProgramSegmentCount,
+    ctx.therapistTrialSummaryForReplacementHour,
+    ctx.clientFirstName,
+  );
+  const nextSession = buildNextSessionSentence(ctx.nextSessionDate);
+  const expectedTail = `${closing}\n\n${performance}\n\n${nextSession}`;
+
+  if (!fullNote.startsWith(`${opening}\n\n`)) {
+    add("LOCKED_OPENING", "Assembled note does not begin with the exact runtime locked opening.");
+    const expectedEnvironment = opening.slice(opening.indexOf(". ") + 2);
+    if (!fullNote.includes(expectedEnvironment)) {
+      add("LOCKED_ENVIRONMENT", "Assembled note is missing or contradicts the runtime environmental-status sentence.");
+    }
+  }
+  if (!fullNote.endsWith(expectedTail)) {
+    if (!fullNote.includes(closing)) {
+      add("LOCKED_CLOSING", "Assembled note is missing the exact runtime locked closing paragraph.");
+    }
+    add(
+      "END_SEQUENCE",
+      "Assembled note must end with locked closing, performance sentence, and date-only next-session sentence in exact order.",
+    );
+  }
+  if (/\bnext session\b[^\n]*(?:home|school|community|clinic|center)\b/i.test(fullNote)) {
+    add("NEXT_SESSION_LOCATION", "Next-session sentence must contain only the date and no session location.");
+  }
+  for (const message of validateCaregiverMentionRule(fullNote, ctx.presentPeople)) {
+    add("CAREGIVER_LEAKAGE", message);
+  }
+
+  const blockedNames = [...new Set((ctx.blockedClientNames ?? []).map((name) => name.trim()).filter((name) => name.length >= 2))];
+  const learnerNameLeakScan = fullNote.replace(opening, "").replace(performance, "");
+  for (const name of blockedNames) {
+    if (new RegExp(`\\b${escapeRegExp(name)}\\b`, "i").test(learnerNameLeakScan)) {
+      add(
+        "CLIENT_NAME_LEAKAGE",
+        `Assembled note uses learner name "${name}" outside the locked opening/performance slots.`,
+      );
+    }
+  }
+
+  return validationResult(issues);
 }
 

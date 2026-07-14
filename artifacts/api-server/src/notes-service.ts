@@ -48,11 +48,11 @@ import {
   isSundaySessionDate,
   replacementProgramPoolForAutoAssignment,
   replacementProgramSlotCount,
-  classifyComplianceIssues,
-  validateCaregiverMentionRule,
-  validateClinicalBodyCompliance,
+  validateAssembledSessionNote,
+  validateClinicalBodyComplianceDetailed,
   collapseHourlyNoteNarrativeToSegments,
   maladaptiveBehaviorLabelsEquivalent,
+  type NoteValidationIssue,
   type NoteComplianceContext,
   type TherapistTrialSummaryForHourEntry,
 } from "./note-validation";
@@ -660,6 +660,8 @@ export async function generateSessionNoteForClient(params: {
     maladaptiveBehaviorFunctionsForHour,
   });
 
+  const blockedClientNames = [profile?.firstName, profile?.lastName]
+    .filter((name): name is string => typeof name === "string" && name.trim().length >= 2);
   const oaCtx: NoteGenerationContext = {
     /** Deliberately not the profile name — session notes must not contain personal names. */
     clientName: "the client",
@@ -699,6 +701,7 @@ export async function generateSessionNoteForClient(params: {
   let clinicalBody: string;
   let generationModel: string;
   let generationRepairAttempts = 0;
+  let generationFinalIssues: NoteValidationIssue[] = [];
   const contextHash = hashNoteGenerationContext(oaCtx);
   const auditBase = {
     companyId,
@@ -711,12 +714,13 @@ export async function generateSessionNoteForClient(params: {
   };
 
   try {
-    const oaResult = await generateClinicalBodyOpenAI(oaCtx);
+    const oaResult = await generateClinicalBodyOpenAI(oaCtx, { blockedClientNames });
     clinicalBody = oaResult.body;
     warnings.push(`Clinical narrative generated via ${openaiNoteGenerationLabel()}.`);
     warnings.push(...oaResult.warnings);
     generationModel = resolvedOpenAIModel();
     generationRepairAttempts = oaResult.repairAttempts;
+    generationFinalIssues = oaResult.finalIssues;
   } catch (err) {
     console.error("[notes/generate] OpenAI failed:", err);
     await writeNoteGenerationAudit({
@@ -743,11 +747,13 @@ export async function generateSessionNoteForClient(params: {
     maladaptiveBehaviorFunctionsForHour,
     maladaptiveBehaviorTopographyForHour,
     behaviorToReplacementsMap,
+    blockedClientNames,
   });
 
-  let complianceIssues = validateClinicalBodyCompliance(finalClinicalBody, buildComplianceContext());
-  const replacementProgramIssue = (issue: string): boolean =>
-    /^Replacement program function:/.test(issue) || /^Replacement program logic:/.test(issue);
+  let complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, buildComplianceContext());
+  let complianceIssues = complianceResult.issues;
+  const replacementProgramIssue = (issue: NoteValidationIssue): boolean =>
+    issue.code === "PROGRAM_FUNCTION_MISMATCH";
 
   if (complianceIssues.some(replacementProgramIssue)) {
     const assignmentsBeforeRepair = [...narrativeCollapsed.replacementProgramForHour];
@@ -782,26 +788,33 @@ export async function generateSessionNoteForClient(params: {
       narrativeCollapsed.replacementProgramForHour = repairNames;
       narrativeCollapsed.rbtActionsOnlyOutcomeForHour = repairRbt;
       warnings.push(...repairSwaps);
-      complianceIssues = validateClinicalBodyCompliance(finalClinicalBody, {
+      complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, {
         ...buildComplianceContext(),
         replacementProgramForHour: repairNames,
         rbtActionsOnlyOutcomeForHour: repairRbt,
       });
+      complianceIssues = complianceResult.issues;
     }
   }
 
-  let { critical: criticalComplianceIssues, stylistic: stylisticComplianceIssues } =
-    classifyComplianceIssues(complianceIssues);
-
-  const unresolvedReplacementIssues = criticalComplianceIssues.filter(replacementProgramIssue);
-  if (unresolvedReplacementIssues.length > 0) {
-    for (const issue of unresolvedReplacementIssues) {
-      warnings.push(`Clinical body compliance check: ${issue} (note saved; review replacement program assignments on the client BIP).`);
+  const effectiveIssueMap = new Map(
+    complianceResult.issues.map((issue) => [`${issue.code}\u0000${issue.message}`, issue]),
+  );
+  for (const issue of generationFinalIssues) {
+    const repairedReplacementMismatch =
+      issue.code === "PROGRAM_FUNCTION_MISMATCH" &&
+      !complianceResult.issues.some((current) => current.code === "PROGRAM_FUNCTION_MISMATCH");
+    if (!repairedReplacementMismatch) {
+      effectiveIssueMap.set(`${issue.code}\u0000${issue.message}`, issue);
     }
-    criticalComplianceIssues = criticalComplianceIssues.filter(
-      (issue) => !replacementProgramIssue(issue),
-    );
   }
+  const effectiveIssues = [...effectiveIssueMap.values()];
+  const criticalComplianceIssues = effectiveIssues
+    .filter((issue) => issue.severity === "blocking")
+    .map((issue) => issue.message);
+  const stylisticComplianceIssues = effectiveIssues
+    .filter((issue) => issue.severity === "warning")
+    .map((issue) => issue.message);
 
   for (const issue of stylisticComplianceIssues) {
     warnings.push(`Clinical body compliance check: ${issue}`);
@@ -814,7 +827,7 @@ export async function generateSessionNoteForClient(params: {
       ...auditBase,
       noteId: null,
       repairAttempts: generationRepairAttempts,
-      validatorIssues: complianceIssues,
+      validatorIssues: effectiveIssues.map((issue) => issue.message),
       criticalIssues: criticalComplianceIssues,
       finalStatus: "blocked_critical",
     });
@@ -839,8 +852,36 @@ export async function generateSessionNoteForClient(params: {
     profile?.assessmentSummary?.reinforcementPreferences ?? null,
   );
 
-  for (const issue of validateCaregiverMentionRule(noteContent, body.presentPeople)) {
-    warnings.push(`Full-note check: ${issue}`);
+  const assembledValidation = validateAssembledSessionNote(noteContent, {
+    presentPeople: body.presentPeople,
+    hasEnvironmentalChanges: body.hasEnvironmentalChanges,
+    therapySetting: body.therapySetting,
+    nextSessionDate: body.nextSessionDate,
+    clientFirstName: profile?.firstName,
+    blockedClientNames,
+    narrativeProgramSegmentCount: narrativeCollapsed.narrativeSegmentCount,
+    therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
+    reinforcementPreferences: profile?.assessmentSummary?.reinforcementPreferences ?? null,
+  });
+  if (assembledValidation.blocking.length > 0) {
+    const messages = assembledValidation.blocking.map((issue) => issue.message);
+    await writeNoteGenerationAudit({
+      ...auditBase,
+      noteId: null,
+      repairAttempts: generationRepairAttempts,
+      validatorIssues: [
+        ...effectiveIssues.map((issue) => issue.message),
+        ...assembledValidation.issues.map((issue) => issue.message),
+      ],
+      criticalIssues: messages,
+      finalStatus: "blocked_critical",
+    });
+    return {
+      ok: false,
+      status: 422,
+      error: "The assembled note failed locked-prose validation and was not saved.",
+      messages,
+    };
   }
 
   const programSlotNeed = replacementProgramSlotCount(body.sessionHours);
@@ -877,7 +918,7 @@ export async function generateSessionNoteForClient(params: {
     ...auditBase,
     noteId: inserted.id,
     repairAttempts: generationRepairAttempts,
-    validatorIssues: complianceIssues,
+    validatorIssues: effectiveIssues.map((issue) => issue.message),
     criticalIssues: [],
     finalStatus: "saved",
   });

@@ -155,22 +155,6 @@ export function selectSecondSafetyChainIntervention(params: {
   return anyNonRb[0] ?? null;
 }
 
-function followingDetailForFunctionIntervention(
-  label: string,
-  primary: ClinicalFunction | null,
-): string {
-  if (isDraOrDriInterventionLabel(label) || primary === "attention") {
-    return "Following this intervention, the RBT did not provide attention during the maladaptive response. After the client oriented toward the task, the RBT provided brief attention and continued the instruction.";
-  }
-  if (primary === "escape") {
-    return "Following this intervention, the RBT re-presented the instruction. After the client completed a prompted step, the RBT acknowledged the response and continued the task.";
-  }
-  if (primary === "tangible") {
-    return "Following this intervention, access to preferred items was withheld during the topography and was delivered contingent on appropriate requesting or waiting.";
-  }
-  return "Following this intervention, the RBT did not provide reinforcement during the topography. After the client displayed compatible replacement behavior, the RBT acknowledged the response and continued the activity.";
-}
-
 /** Normalize Response Block spelling in paragraph to exact catalog label. */
 function normalizeResponseBlockLabelInParagraph(paragraph: string, responseBlockLabel: string): string {
   const re = new RegExp(
@@ -237,10 +221,8 @@ export function injectMissingSafetyChainFunctionIntervention(
     });
     if (!secondLabel) continue;
 
-    const primary = primaryFunctionForReplacementSelection(segmentFunctions);
     const naming = `The RBT implemented ${secondLabel}.`;
-    const detail = followingDetailForFunctionIntervention(secondLabel, primary);
-    const insertBlock = ` ${naming} ${detail}`;
+    const insertBlock = ` ${naming}`;
 
     const replacementRe =
       /(\s*)(Additionally,\s*)?the RBT implemented the replacement program\b/i;
@@ -300,10 +282,7 @@ export function injectMissingAttentionNcrIntervention(
     if (!/\bthe client manifested\b/i.test(p)) continue;
     if (paragraphDocumentsNonContingentReinforcement(p)) continue;
 
-    const naming = `The RBT implemented ${ncrLabel}.`;
-    const detail =
-      "Following this intervention, the RBT delivered brief attention on a fixed time-based schedule independent of the client's behavior, reducing the reinforcing value of attention for the maladaptive response.";
-    const insertBlock = ` ${naming} ${detail}`;
+    const insertBlock = ` The RBT implemented ${ncrLabel}.`;
 
     const replacementRe = /(\s*)(Additionally,\s*)?the RBT implemented the replacement program\b/i;
     const replacementMatch = replacementRe.exec(p);

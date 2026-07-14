@@ -15,7 +15,8 @@ import {
   normalizeClinicalBodyPraiseWording,
   normalizeClinicalBodyReplacementLikePhrases,
   normalizeClinicalBodyEscapedQuotes,
-  validateClinicalBodyCompliance,
+  validateClinicalBodyComplianceDetailed,
+  type NoteValidationIssue,
   type NoteComplianceContext,
 } from "./note-validation";
 import type { TherapySetting } from "@workspace/therapy-settings";
@@ -424,7 +425,10 @@ ABC BUILDER (optional — JSON \`activityAntecedentForHour\`):
 - When \`activityAntecedentForHour[s]\` is null, choose the antecedent/activity for that segment as usual (full AI).
 - When \`acquisitionOnlySegmentForHour[s]\` is **false**, \`maladaptiveBehaviorForHour[s]\` assigns the single manifested catalog behavior name for that paragraph; never replace it with a different catalog label even when the activity string mentions other demands.`;
 
-function toComplianceCtx(ctx: NoteGenerationContext): NoteComplianceContext {
+function toComplianceCtx(
+  ctx: NoteGenerationContext,
+  blockedClientNames?: string[],
+): NoteComplianceContext {
   return {
     sessionHours: ctx.sessionHours,
     therapySetting: ctx.therapySetting,
@@ -444,6 +448,7 @@ function toComplianceCtx(ctx: NoteGenerationContext): NoteComplianceContext {
     maladaptiveBehaviorFunctionsForHour: ctx.maladaptiveBehaviorFunctionsForHour,
     maladaptiveBehaviorTopographyForHour: ctx.maladaptiveBehaviorTopographyForHour,
     behaviorToReplacementsMap: ctx.behaviorToReplacementsMap,
+    blockedClientNames,
   };
 }
 
@@ -472,8 +477,8 @@ export type GenerateClinicalBodyResult = {
   warnings: string[];
   /** Repair passes consumed (0 = first draft passed automated checks). */
   repairAttempts: number;
-  /** Validator issues remaining after the repair loop (empty when fully compliant). */
-  finalIssues: string[];
+  /** Typed validator issues remaining after the repair loop (empty when fully compliant). */
+  finalIssues: NoteValidationIssue[];
 };
 
 /**
@@ -597,9 +602,10 @@ function applySafetyChainEnforcement(body: string, ctx: NoteGenerationContext): 
 
 export async function generateClinicalBodyOpenAI(
   ctx: NoteGenerationContext,
+  validationOptions?: { blockedClientNames?: string[] | undefined },
 ): Promise<GenerateClinicalBodyResult> {
   const warnings: string[] = [];
-  const compliance = toComplianceCtx(ctx);
+  const compliance = toComplianceCtx(ctx, validationOptions?.blockedClientNames);
 
   const authorizedPrograms = ctx.replacementProgramsInOrder ?? [];
   const maladaptiveCatalog = ctx.maladaptiveBehaviors ?? [];
@@ -610,22 +616,24 @@ export async function generateClinicalBodyOpenAI(
   body = applySafetyChainEnforcement(body, ctx);
   body = normalizeClinicalBodyInterventionLabels(body, interventions);
 
-  let issues = validateClinicalBodyCompliance(body, compliance);
+  let validation = validateClinicalBodyComplianceDetailed(body, compliance);
+  let issues = validation.issues;
   let repairAttempts = 0;
 
   while (issues.length > 0 && repairAttempts < MAX_CLINICAL_BODY_REPAIR_ATTEMPTS) {
     repairAttempts += 1;
     warnings.push(
-      `Clinical narrative pre-check flagged: ${issues.join(" | ")}. Attempting automatic revision (${repairAttempts}/${MAX_CLINICAL_BODY_REPAIR_ATTEMPTS}).`,
+      `Clinical narrative pre-check flagged: ${issues.map((issue) => issue.message).join(" | ")}. Attempting automatic revision (${repairAttempts}/${MAX_CLINICAL_BODY_REPAIR_ATTEMPTS}).`,
     );
     try {
-      const revised = await generateRepairBody(ctx, body, issues);
+      const revised = await generateRepairBody(ctx, body, issues.map((issue) => issue.message));
       if (revised.trim().length === 0) break;
       body = revised;
       body = normalizeClinicalBodyPipeline(body, interventions, maladaptiveCatalog, authorizedPrograms);
       body = applySafetyChainEnforcement(body, ctx);
       body = normalizeClinicalBodyInterventionLabels(body, interventions);
-      issues = validateClinicalBodyCompliance(body, compliance);
+      validation = validateClinicalBodyComplianceDetailed(body, compliance);
+      issues = validation.issues;
       if (issues.length === 0) {
         warnings.push("Automatic revision satisfied automated compliance checks.");
         break;
@@ -640,7 +648,7 @@ export async function generateClinicalBodyOpenAI(
 
   if (issues.length > 0) {
     warnings.push(
-      `After automatic revision, remaining automated checks: ${issues.join(" | ")}. Please review and edit the note before finalizing.`,
+      `After automatic revision, remaining automated checks: ${issues.map((issue) => issue.message).join(" | ")}. Please review and edit the note before finalizing.`,
     );
   }
 

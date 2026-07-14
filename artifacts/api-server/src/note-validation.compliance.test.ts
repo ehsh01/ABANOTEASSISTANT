@@ -3,6 +3,7 @@ import {
   classifyComplianceIssues,
   isCriticalComplianceIssue,
   validateClinicalBodyCompliance,
+  validateClinicalBodyComplianceDetailed,
   type NoteComplianceContext,
 } from "./note-validation";
 import {
@@ -160,29 +161,26 @@ describe("structure rules", () => {
 });
 
 describe("classifyComplianceIssues", () => {
-  test("splits critical from stylistic by pattern", () => {
-    const { critical, stylistic } = classifyComplianceIssues([
-      "SIB response blocking: paragraph 1 must use exact catalog spelling",
-      "Intervention function match: paragraph 1 pairs X with Y",
-      "Therapist trial counts: paragraph 1 must state discrete-trial outcomes as a percentage",
-      "Quotation marks: do not use backslash characters before quotes",
-      "Expected exactly 2 clinical paragraph(s) separated by blank lines; found 1.",
-    ]);
-    expect(critical).toHaveLength(3);
-    expect(stylistic).toHaveLength(2);
+  test("uses source-assigned severity, not mutable English prefixes", () => {
+    const result = validateClinicalBodyComplianceDetailed(
+      `${ANTHONY_SIB_PARAGRAPH}\n\nSecond stray paragraph.`,
+      sibCtx(),
+    );
+    const paragraphCount = result.issues.find((issue) => issue.code === "PARAGRAPH_COUNT");
+    expect(paragraphCount?.severity).toBe("blocking");
+    expect(isCriticalComplianceIssue(paragraphCount!.message)).toBe(true);
+    expect(isCriticalComplianceIssue(`SIB response blocking: copied text with no source metadata`)).toBe(false);
   });
 
   test("unauthorized program/intervention issues are critical", () => {
-    expect(
-      isCriticalComplianceIssue(
-        'Replacement programs: paragraph 1: Unauthorized replacement program "Made Up" — use only the verbatim assigned program',
+    const result = validateClinicalBodyComplianceDetailed(
+      ANTHONY_SIB_PARAGRAPH.replace(
+        'replacement program "Compliance Training"',
+        'replacement program "Made Up Program"',
       ),
-    ).toBe(true);
-    expect(
-      isCriticalComplianceIssue(
-        'Interventions: paragraph 1: Interventions: do not use detail phrasing that resembles an unauthorized intervention name (found "token praise system").',
-      ),
-    ).toBe(true);
+      sibCtx(),
+    );
+    expect(result.blocking.some((issue) => issue.code === "UNAUTHORIZED_CONTENT")).toBe(true);
   });
 });
 
@@ -204,7 +202,78 @@ describe("response block eligibility (Verbal Aggression)", () => {
     });
     const { critical } = classifyComplianceIssues(issues);
     expect(critical.some((i) => i.startsWith("Response Block prohibited:"))).toBe(true);
-    expect(isCriticalComplianceIssue("Response Block prohibited: paragraph 1 addresses Verbal Aggression")).toBe(true);
+  });
+});
+
+describe("typed blocking regressions", () => {
+  test("collects assigned behavior failures from every paragraph", () => {
+    const body = [
+      "The RBT placed cards on the table. The client moved cards. The RBT implemented Redirection.",
+      "The RBT placed blocks on the floor. The client moved blocks. The RBT implemented Redirection.",
+    ].join("\n\n");
+    const result = validateClinicalBodyComplianceDetailed(body, sibCtx({
+      sessionHours: 2,
+      narrativeSegmentCount: 2,
+      replacementProgramForHour: ["Compliance Training", "Compliance Training"],
+      maladaptiveBehaviorForHour: [SIB, SIB],
+    }));
+    const behaviorParagraphs = result.blocking
+      .filter((issue) => issue.code === "BEHAVIOR_ASSIGNMENT")
+      .map((issue) => issue.paragraphIndex);
+    expect(behaviorParagraphs).toEqual(expect.arrayContaining([0, 1]));
+  });
+
+  test("blocks paragraph, program, intervention, outcome, contingency, and name defects", () => {
+    const body = `${ANTHONY_SIB_PARAGRAPH.replace(
+      "Following this intervention, the RBT blocked further contact with the client's head and arms and maintained neutral attention while repositioning the materials in front of him.",
+      "Following this intervention, the RBT provided praise.",
+    ).replace('"Compliance Training"', '"Made Up Program"')} Anthony returned to the table.`;
+    const result = validateClinicalBodyComplianceDetailed(body, sibCtx({
+      blockedClientNames: ["Anthony", "Smith"],
+    }));
+    expect(result.blocking.map((issue) => issue.code)).toEqual(expect.arrayContaining([
+      "PROGRAM_ASSIGNMENT",
+      "UNAUTHORIZED_CONTENT",
+      "REINFORCEMENT_CONTINGENCY",
+      "CLIENT_NAME_LEAKAGE",
+    ]));
+  });
+
+  test("blocks missing/count/exact intervention and missing post-intervention outcome", () => {
+    const base = `At the table, the RBT presented cards. During this activity, the client manifested Disruptive Behavior by pushing cards onto the floor. REPLACEMENT The RBT implemented the replacement program "Compliance Training" by presenting one-step instructions; criterion was met on approximately 20% of trials.`;
+    const ctx = sibCtx({
+      maladaptiveBehaviors: ["Disruptive Behavior"],
+      maladaptiveBehaviorForHour: ["Disruptive Behavior"],
+      maladaptiveBehaviorFunctionsForHour: [["escape"]],
+      interventions: ["Redirection", DRA],
+    });
+    const missing = validateClinicalBodyComplianceDetailed(base.replace("REPLACEMENT ", ""), ctx);
+    expect(missing.blocking.some((issue) => issue.code === "INTERVENTION_MISSING")).toBe(true);
+
+    const tooMany = validateClinicalBodyComplianceDetailed(
+      base.replace("REPLACEMENT", `The RBT implemented Redirection. The RBT implemented ${DRA}.`),
+      ctx,
+    );
+    expect(tooMany.blocking.some((issue) => issue.code === "INTERVENTION_COUNT")).toBe(true);
+
+    const wrongExact = validateClinicalBodyComplianceDetailed(
+      base.replace("REPLACEMENT", "The RBT implemented redirection."),
+      ctx,
+    );
+    expect(wrongExact.blocking.some((issue) => issue.code === "INTERVENTION_CATALOG")).toBe(true);
+
+    const noOutcome = validateClinicalBodyComplianceDetailed(
+      base.replace("REPLACEMENT", "The RBT implemented Redirection."),
+      ctx,
+    );
+    expect(noOutcome.blocking.some((issue) => issue.code === "POST_INTERVENTION_OUTCOME")).toBe(true);
+  });
+
+  test("replacement function mismatch is blocking", () => {
+    const result = validateClinicalBodyComplianceDetailed(ANTHONY_SIB_PARAGRAPH, sibCtx({
+      behaviorToReplacementsMap: { [SIB]: ["Functional Communication Training (FCT)"] },
+    }));
+    expect(result.blocking.some((issue) => issue.code === "PROGRAM_FUNCTION_MISMATCH")).toBe(true);
   });
 });
 

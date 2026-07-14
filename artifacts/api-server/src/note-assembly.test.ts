@@ -8,6 +8,7 @@ import {
   formatCaregiverList,
   LOCKED_CLOSING_PARAGRAPH,
 } from "./note-assembly";
+import { validateAssembledSessionNote } from "./note-validation";
 
 describe("locked opening", () => {
   test("uses first name and possessive home wording when profile has a name", () => {
@@ -110,5 +111,43 @@ describe("assembled note order", () => {
     expect(idx(performance)).toBeGreaterThan(idx(closing));
     expect(idx(nextSession)).toBeGreaterThan(idx(performance));
     expect(note.startsWith("The RBT met with ")).toBe(true);
+  });
+
+  test("blocks locked prose, order, caregiver, name, and next-session location violations", () => {
+    const context = {
+      presentPeople: ["Mother"],
+      hasEnvironmentalChanges: false,
+      therapySetting: "Home" as const,
+      nextSessionDate: "2026-01-15",
+      clientFirstName: "Anthony",
+      blockedClientNames: ["Anthony", "Smith"],
+      narrativeProgramSegmentCount: 1,
+      therapistTrialSummaryForReplacementHour: [{ totalTrials: 5, successfulTrialNumbers: [1] }],
+      reinforcementPreferences: ["social praise", "sensory toys"],
+    };
+    const opening = buildLockedOpening(["Mother"], false, "Home", "Anthony");
+    const closing = buildLockedClosingParagraph(context.reinforcementPreferences);
+    const performance = buildPerformanceSentence(
+      1,
+      context.therapistTrialSummaryForReplacementHour,
+      "Anthony",
+    );
+    const next = buildNextSessionSentence("2026-01-15");
+    const valid = [opening, "", "The client completed a task.", "", closing, "", performance, "", next].join("\n");
+    expect(validateAssembledSessionNote(valid, context).blocking).toEqual([]);
+
+    const invalid = valid
+      .replace("There have been no environmental changes recently.", "Environment changed.")
+      .replace("The client completed a task.", "Anthony completed a task with Mother.")
+      .replace(next, `${next.slice(0, -1)} at home.`);
+    const codes = validateAssembledSessionNote(invalid, context).blocking.map((issue) => issue.code);
+    expect(codes).toEqual(expect.arrayContaining([
+      "LOCKED_OPENING",
+      "LOCKED_ENVIRONMENT",
+      "END_SEQUENCE",
+      "NEXT_SESSION_LOCATION",
+      "CAREGIVER_LEAKAGE",
+      "CLIENT_NAME_LEAKAGE",
+    ]));
   });
 });
