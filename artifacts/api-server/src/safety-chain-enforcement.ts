@@ -160,15 +160,15 @@ function followingDetailForFunctionIntervention(
   primary: ClinicalFunction | null,
 ): string {
   if (isDraOrDriInterventionLabel(label) || primary === "attention") {
-    return "Following this intervention, attention was withheld during the maladaptive response and brief praise was delivered when the client displayed compatible behavior oriented toward the task.";
+    return "Following this intervention, the RBT did not provide attention during the maladaptive response. After the client oriented toward the task, the RBT provided brief attention and continued the instruction.";
   }
   if (primary === "escape") {
-    return "Following this intervention, the RBT re-presented the instruction and reinforced compliance with brief praise when the client completed a prompted step.";
+    return "Following this intervention, the RBT re-presented the instruction. After the client completed a prompted step, the RBT acknowledged the response and continued the task.";
   }
   if (primary === "tangible") {
     return "Following this intervention, access to preferred items was withheld during the topography and was delivered contingent on appropriate requesting or waiting.";
   }
-  return "Following this intervention, the RBT withheld reinforcement during the topography and delivered brief praise when the client displayed compatible replacement behavior.";
+  return "Following this intervention, the RBT did not provide reinforcement during the topography. After the client displayed compatible replacement behavior, the RBT acknowledged the response and continued the activity.";
 }
 
 /** Normalize Response Block spelling in paragraph to exact catalog label. */

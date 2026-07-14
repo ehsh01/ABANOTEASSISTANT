@@ -207,3 +207,57 @@ describe("response block eligibility (Verbal Aggression)", () => {
     expect(isCriticalComplianceIssue("Response Block prohibited: paragraph 1 addresses Verbal Aggression")).toBe(true);
   });
 });
+
+describe("blocking topography enforcement", () => {
+  test("generic 'by' wording does not satisfy Disruptive Behavior topography", () => {
+    const paragraph = `At the table, the RBT presented a card-sorting task. During this activity, the client manifested Disruptive Behavior by engaging in disruptive behavior. The RBT implemented Redirection. Following this intervention, the RBT re-presented the task. The RBT implemented the replacement program "Compliance Training" by presenting one-step instructions; criterion was met on approximately 20% of discrete trials.`;
+    const issues = validateClinicalBodyCompliance(
+      paragraph,
+      sibCtx({
+        maladaptiveBehaviors: ["Disruptive Behavior"],
+        maladaptiveBehaviorForHour: ["Disruptive Behavior"],
+        maladaptiveBehaviorFunctionsForHour: [["escape"]],
+        interventions: ["Redirection"],
+      }),
+    );
+
+    const issue = issues.find((item) => item.startsWith("Behavior topography:"));
+    expect(issue).toBeDefined();
+    expect(issue && isCriticalComplianceIssue(issue)).toBe(true);
+  });
+
+  test("repetitive walking alone does not satisfy Elopement topography", () => {
+    const paragraph = `In the family room, the RBT presented a transition instruction. During this activity, the client manifested Elopement by walking back and forth near the sofa. The RBT implemented Redirection. Following this intervention, the client remained near the RBT. The RBT implemented the replacement program "Compliance Training" by presenting one-step instructions; criterion was met on approximately 20% of discrete trials.`;
+    const issues = validateClinicalBodyCompliance(
+      paragraph,
+      sibCtx({
+        maladaptiveBehaviors: ["Elopement"],
+        maladaptiveBehaviorForHour: ["Elopement"],
+        maladaptiveBehaviorFunctionsForHour: [["escape"]],
+        interventions: ["Redirection"],
+      }),
+    );
+
+    const issue = issues.find((item) => item.startsWith("Elopement topography:"));
+    expect(issue).toBeDefined();
+    expect(issue && isCriticalComplianceIssue(issue)).toBe(true);
+  });
+
+  test("stored BIP topography must appear in the manifested-behavior sentence", () => {
+    const paragraph = `The RBT placed cards on the table after other materials had been pushed away. During this activity, the client manifested Disruptive Behavior by refusing the task. The RBT implemented Redirection. Following this intervention, the RBT re-presented the task. The RBT implemented the replacement program "Compliance Training" by presenting one-step instructions; criterion was met on approximately 20% of discrete trials.`;
+    const issues = validateClinicalBodyCompliance(
+      paragraph,
+      sibCtx({
+        maladaptiveBehaviors: ["Disruptive Behavior"],
+        maladaptiveBehaviorForHour: ["Disruptive Behavior"],
+        maladaptiveBehaviorFunctionsForHour: [["escape"]],
+        maladaptiveBehaviorTopographyForHour: [
+          "The client pushes task materials away and drops cards onto the floor.",
+        ],
+        interventions: ["Redirection"],
+      }),
+    );
+
+    expect(issues.some((item) => item.startsWith("Behavior topography:"))).toBe(true);
+  });
+});

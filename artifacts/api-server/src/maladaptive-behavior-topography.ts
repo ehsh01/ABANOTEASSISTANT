@@ -78,8 +78,10 @@ export function manifestedBehaviorSentenceSpan(paragraph: string): string {
   return dot >= 0 ? after.slice(0, dot + 1) : after;
 }
 
-const ELOPEMENT_TOPOGRAPHY_CUES =
-  /\b(ran|running|run|moved|moving|walked|walking|left|leaving|approached|approaching|hallway|doorway|door|exit|boundary|boundaries|supervised|unsupervised|permission|feet|yard|distance|pathway|hall|bolted|bolting|wandered|wandering|elope|eloped|eloping)\b/i;
+const ELOPEMENT_LEAVING_ACTION_CUES =
+  /\b(ran|running|left|leaving|exited|bolted|bolting|wandered|wandering|eloped|eloping)\b/i;
+const ELOPEMENT_BOUNDARY_CUES =
+  /\b(hallway|doorway|door|exit|boundary|beyond|outside|yard|pathway|supervised area|activity area|arm's reach|permission)\b/i;
 
 export function elopementEpisodeLacksObservableTopography(
   paragraph: string,
@@ -91,5 +93,9 @@ export function elopementEpisodeLacksObservableTopography(
   if (!/\bmanifested\b/i.test(span)) return true;
   const afterManifested = span.replace(/^[\s\S]*?\bmanifested\b/i, "");
   if (afterManifested.trim().length < 20) return true;
-  return !ELOPEMENT_TOPOGRAPHY_CUES.test(span);
+  return !(
+    ELOPEMENT_LEAVING_ACTION_CUES.test(span) ||
+    (/\b(?:moved|moving|walked|walking|approached|approaching|stepped)\b/i.test(span) &&
+      ELOPEMENT_BOUNDARY_CUES.test(span))
+  );
 }

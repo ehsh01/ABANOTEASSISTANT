@@ -64,7 +64,10 @@ import {
   buildPerformanceSentence,
   type TherapySetting,
 } from "./note-assembly";
-import { truncateAssessmentTextForNoteContext } from "./assessment-extract";
+import {
+  enrichMaladaptiveTargetsWithAssessmentTopography,
+  truncateAssessmentTextForNoteContext,
+} from "./assessment-extract";
 import {
   getAssessmentStructuredFromProfile,
   intersectCatalog,
@@ -367,8 +370,11 @@ export async function generateSessionNoteForClient(params: {
       };
     }
   }
-  const maladaptiveBehaviorTargetsForNote = enrichMaladaptiveTargetsWithAssessmentFunctions(
-    maladaptiveBehaviorTargetsForNoteCatalog(behaviorCatalog, profile ?? undefined),
+  const maladaptiveBehaviorTargetsForNote = enrichMaladaptiveTargetsWithAssessmentTopography(
+    enrichMaladaptiveTargetsWithAssessmentFunctions(
+      maladaptiveBehaviorTargetsForNoteCatalog(behaviorCatalog, profile ?? undefined),
+      rawAssessmentSnapshot,
+    ),
     rawAssessmentSnapshot,
   );
   const behaviorRotationSeed = randomUUID();

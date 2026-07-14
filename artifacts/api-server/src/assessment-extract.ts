@@ -697,6 +697,23 @@ export function extractTopographyFromBipText(rawText: string, behaviorName: stri
 }
 
 /**
+ * Fill missing profile topographies from the authoritative assessment snapshot.
+ * Existing therapist/profile values always win; extraction never fabricates a definition.
+ */
+export function enrichMaladaptiveTargetsWithAssessmentTopography<
+  T extends { name: string; topography?: string | null },
+>(targets: T[], rawAssessmentText: string | null | undefined): T[] {
+  const text = rawAssessmentText?.trim() ?? "";
+  if (!text) return targets;
+
+  return targets.map((target) => {
+    if (target.topography?.trim()) return target;
+    const topography = extractTopographyFromBipText(text, target.name);
+    return topography ? { ...target, topography } : target;
+  });
+}
+
+/**
  * Sub-headings that begin the replacement-program list inside one behavior's BIP section.
  */
 const BIP_REPLACEMENT_LIST_HEADINGS = ["Replacement Skills", "Replacement Programs", "Replacement Skill", "Replacement Program"];

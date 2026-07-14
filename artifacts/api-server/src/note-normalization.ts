@@ -65,7 +65,31 @@ export function normalizeClinicalBodyPraiseWording(body: string): string {
     .replace(/\bbrief behavior-specific praise\b/gi, briefPraise)
     .replace(/\bbehavior-specific praise\b/gi, praise)
     .replace(/\bbrief verbal praise\b/gi, briefPraise)
-    .replace(/\bverbal praise\b/gi, praise);
+    .replace(/\bverbal praise\b/gi, praise)
+    .replace(
+      /\b(?:brief )?praise (?:was )?withheld during ([^.;]+)/gi,
+      "The RBT maintained neutral attention during $1",
+    )
+    .replace(
+      /\b(?:brief )?praise (?:was )?delivered (?:after|when) the client ([^.;]+)/gi,
+      "The RBT acknowledged the completed response after the client $1",
+    )
+    .replace(
+      /\bthe RBT (?:delivered|provided) (?:brief )?praise (?:after|when) the client ([^.;]+)/gi,
+      "The RBT acknowledged the completed response after the client $1",
+    )
+    .replace(
+      /\bthe RBT (?:delivered|provided) (?:brief )?praise after ([^.;]+)/gi,
+      "The RBT acknowledged the response after $1",
+    )
+    .replace(
+      /\bthe RBT (?:delivered|provided) (?:brief )?praise and\b/gi,
+      "The RBT acknowledged the response and",
+    )
+    .replace(
+      /\b(?:brief )?praise followed\b/gi,
+      "The RBT acknowledged the response",
+    );
 }
 
 /** Phrases in "Following this intervention" detail that reviewers treat as invented intervention names. */
@@ -94,11 +118,11 @@ export function normalizeClinicalBodyInterventionDetailPhrases(
   const replacements: [RegExp, string][] = [
     [
       /\bverbal praise contingent on each instance of task engagement\b/gi,
-      "brief praise after worksheet responses",
+      "the RBT acknowledged completed worksheet responses",
     ],
     [
       /\breinforced appropriate task engagement with verbal praise\b/gi,
-      "delivered brief praise after worksheet responses",
+      "acknowledged completed worksheet responses and continued the task",
     ],
     [
       /\breinforced appropriate task engagement\b/gi,
@@ -122,7 +146,7 @@ export function normalizeClinicalBodyInterventionDetailPhrases(
     ],
     [
       /\bprovided verbal praise contingent on each completed step\b/gi,
-      "delivered brief praise after completed cleanup steps",
+      "acknowledged completed cleanup steps and continued the activity",
     ],
     [/\bmodeled placing\b/gi, "demonstrated placing"],
   ];

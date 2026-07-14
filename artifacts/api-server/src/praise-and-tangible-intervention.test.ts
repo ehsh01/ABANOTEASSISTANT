@@ -11,14 +11,21 @@ import {
 } from "./note-normalization";
 
 describe("praise wording normalization", () => {
-  test("rewrites compound praise labels to plain praise", () => {
+  test("rewrites praise details as explicit RBT actions rather than title-like labels", () => {
     const out = normalizeClinicalBodyPraiseWording(
       "The RBT delivered verbal praise after the completed response. Brief behavior-specific praise followed.",
     );
-    expect(out).toContain("delivered praise");
-    expect(out).toContain("Brief praise");
-    expect(out).not.toMatch(/\bverbal praise\b/i);
-    expect(out).not.toMatch(/\bbehavior-specific praise\b/i);
+    expect(out).toContain("The RBT acknowledged");
+    expect(out).not.toMatch(/\bpraise\b/i);
+  });
+
+  test("rewrites all external-review warning forms", () => {
+    const out = normalizeClinicalBodyPraiseWording(
+      "Praise withheld during repeated motor pattern. Brief praise delivered after the client placed the card into the bin. The RBT delivered brief praise when the client remained near the RBT.",
+    );
+    expect(out).toContain("The RBT maintained neutral attention during repeated motor pattern");
+    expect(out).toContain("The RBT acknowledged the completed response");
+    expect(out).not.toMatch(/\bpraise\b/i);
   });
 });
 

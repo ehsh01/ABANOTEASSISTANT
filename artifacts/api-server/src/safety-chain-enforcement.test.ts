@@ -44,8 +44,9 @@ describe("safety-chain enforcement (Anthony SIB regression)", () => {
     expect(injected).toMatch(/implemented Response Blocking\./);
     expect(injected).toMatch(/implemented Differential Reinforcement of Alternative Behavior \(DRA\)\./);
     expect(injected).toMatch(
-      /Following this intervention, attention was withheld during the maladaptive response/,
+      /Following this intervention, the RBT did not provide attention during the maladaptive response/,
     );
+    expect(injected).not.toMatch(/\bbrief praise\b/i);
   });
 
   test("injection is a no-op when a function-matched intervention is already named", () => {

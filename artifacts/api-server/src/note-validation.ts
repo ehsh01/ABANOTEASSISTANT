@@ -32,6 +32,7 @@ import {
 import {
   elopementEpisodeLacksObservableTopography,
   isElopementFamilyBehaviorLabel,
+  manifestedBehaviorSentenceSpan,
   paragraphReflectsStoredTopography,
 } from "./maladaptive-behavior-topography";
 import { primaryFunctionForReplacementSelection } from "./behavior-function-replacement-mapping";
@@ -591,13 +592,9 @@ function isSibMaladaptiveBehavior(behaviorName: string): boolean {
 
 /** True when the manifested-behavior sentence names the catalog label without observable topography detail. */
 function manifestedBehaviorLacksObservableTopography(paragraph: string): boolean {
-  const m = /\bthe client manifested\b/i.exec(paragraph);
-  if (!m || m.index === undefined) return false;
-  const after = paragraph.slice(m.index);
-  const dot = after.indexOf(".");
-  const sentence = dot >= 0 ? after.slice(0, dot + 1) : after.slice(0, 280);
-  if (/\sby\s/i.test(sentence)) return false;
-  return !/\b(?:said|turned|pushed|pulled|hit|kicked|grabbed|struck|scratched|ran|left|moved|screamed|cried|threw|leaned|shook|swatted|headbutt|bit|spat|eloped|bolted|wandered)\b/i.test(
+  const sentence = manifestedBehaviorSentenceSpan(paragraph);
+  if (!sentence) return false;
+  return !/\b(?:said|stated|shouted|yelled|vocalized|raised|turned|pushed|pulled|hit|kicked|grabbed|struck|scratched|ran|walked|walking|paced|left|moved|stood|sat|screamed|cried|threw|dropped|swept|tore|ripped|broke|leaned|shook|flapped|swatted|headbutt|bit|spat|eloped|bolted|wandered|reached|opened|closed|covered|placed|removed|refused)\b/i.test(
     sentence,
   );
 }
@@ -843,6 +840,9 @@ const CRITICAL_COMPLIANCE_ISSUE_PATTERNS: RegExp[] = [
   /^Response Block prohibited:/,
   /^Mandatory DRA:/,
   /^Intervention function match:/,
+  /^Behavior topography:/,
+  /^Elopement topography:/,
+  /^Tantrum topography:/,
   /^Therapist trial counts:/,
   /Unauthorized replacement program/i,
   /unauthorized intervention name/i,
@@ -1109,7 +1109,10 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
       }
       if (
         storedTopography.length > 0 &&
-        !paragraphReflectsStoredTopography(p, storedTopography)
+        !paragraphReflectsStoredTopography(
+          manifestedBehaviorSentenceSpan(p),
+          storedTopography,
+        )
       ) {
         issues.push(
           `Behavior topography: paragraph ${i + 1} addresses "${assigned}" but does not reflect the client's stored operational definition (${storedTopography.slice(0, 120)}${storedTopography.length > 120 ? "…" : ""}). Include observable actions from that BIP/profile topography in the manifested-behavior sentence so each ABC matches the same definition used in prior notes for this behavior.`,
