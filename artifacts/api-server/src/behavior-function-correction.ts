@@ -24,10 +24,11 @@ export const FUNCTION_BASED_MATCHING_GUIDE_PROMPT = `FUNCTION-BASED MATCHING GUI
 - **Following this intervention:** re-present the task, prompt through, and use structured follow-through; then **explicitly reinforce task engagement / compliance / task completion** (state the reinforcement delivered for compliant responding) — do not end the segment on the escape intervention without documenting reinforcement for engagement.
 - Replacement: task/compliance skill from behaviorReplacementCandidatesForHour[s] (Request for Break, Follow Instructions, Remaining seated completing the task, Following Non-preferred instructions, On task Behavior—BIP-mapped only).
 
-**TANGIBLE-maintained** (e.g. aggression or SIB for item access):
-- Required chain when the labels are listed: **(1)** withhold/deny access to the preferred item during the maladaptive response (tangible extinction / denial of access — this is mandatory for tangible function, do not deliver the item contingent on the behavior); **(2) DRA for functional communication** so the client requests the item appropriately (Premack or token economy when listed as the contingency).
-- **Following this intervention:** keep preferred access withheld during topography; reinforce appropriate requesting, waiting, or tolerance, then grant access contingent on the appropriate request.
-- Replacement: communication/choice skill from behaviorReplacementCandidatesForHour[s] (Request for Tangible, Accept "No", Accepting alternatives, making choices—BIP-mapped only).`;
+**TANGIBLE-maintained** (e.g. aggression or SIB for item access; gadget / video-game / unauthorized electronics access):
+- Required chain when the labels are listed: **(1) Environmental Manipulation** (when listed) — keep the preferred item/gadget **outside the client's independent reach** and restrict unsupervised access during the episode; **(2) DRA** (when listed) so access is delivered **only after** schedule compliance, task completion, or an appropriate request—never contingent on the maladaptive access response. Premack or token economy may appear when listed as the contingency.
+- **Do NOT** name **Visual Supports** / **Visual Support** as the **primary** catalog intervention for tangible/gadget access when Environmental Manipulation or DRA is listed — Visual Supports is a cueing tool only (and must use the exact plural BIP string **Visual Supports** when referenced).
+- **Following this intervention:** keep preferred access withheld during topography; reinforce appropriate requesting, waiting, schedule compliance, or tolerance, then grant access contingent on the appropriate response.
+- Replacement: communication/choice/waiting skill from behaviorReplacementCandidatesForHour[s] (Request for Tangible, Accept "No", Accepting alternatives, Delay of Reinforcement / waiting—BIP-mapped only). Do **not** present an attention-request program (e.g. Request for Attention) as the intervention that reduced the tangible-access topography—even if that skill is the assigned replacement skill-acquisition target for the segment.`;
 
 export const FUNCTION_BASED_ABC_CORRECTION_PROMPT = `${CORE_CORRECTION_RULES_PROMPT}
 

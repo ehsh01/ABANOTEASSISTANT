@@ -40,8 +40,9 @@ describe("locked opening", () => {
 describe("locked closing and end-of-note sequence", () => {
   test("closing paragraph is verbatim (no caregiver language)", () => {
     expect(LOCKED_CLOSING_PARAGRAPH).toContain(
-      'verbal praise (e.g., "Good job," "Wow," and "Good attention to detail")',
+      'behavior-specific praise (e.g., "Good job," "Wow," and "Good attention to detail")',
     );
+    expect(LOCKED_CLOSING_PARAGRAPH).not.toMatch(/\bverbal praise\b/i);
     expect(LOCKED_CLOSING_PARAGRAPH).toContain("The session was completed as planned.");
     expect(LOCKED_CLOSING_PARAGRAPH).not.toMatch(/caregiver|mother|father/i);
   });

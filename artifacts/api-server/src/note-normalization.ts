@@ -40,7 +40,25 @@ export function normalizeClinicalBodyInterventionLabels(body: string, interventi
     const re = new RegExp(`((?:implemented|applied)\\s+)${escapeRegExp(base)}(\\s*\\.)`, "gi");
     out = out.replace(re, `$1${full}$2`);
   }
+  // Exact BIP string is typically "Visual Supports" (plural); rewrite singular naming sentences.
+  const visualSupportsExact = interventionCatalog.find((n) => /^visual supports$/i.test(n.trim()));
+  if (visualSupportsExact) {
+    out = out.replace(
+      /((?:implemented|applied)\s+)Visual Support(\s*\.)/gi,
+      `$1${visualSupportsExact}$2`,
+    );
+  }
   return out;
+}
+
+/**
+ * Reinforcer wording: never list "verbal praise" (reviewers misread it as a catalog intervention).
+ * Prefer "behavior-specific praise" in the clinical body; locked closing uses the same phrase.
+ */
+export function normalizeClinicalBodyPraiseWording(body: string): string {
+  return body
+    .replace(/\bbrief verbal praise\b/gi, "brief behavior-specific praise")
+    .replace(/\bverbal praise\b/gi, "behavior-specific praise");
 }
 
 /** Phrases in "Following this intervention" detail that reviewers treat as invented intervention names. */

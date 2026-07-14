@@ -35,7 +35,7 @@ export function formatUsDateFromIso(iso: string): string {
 
 /** Verbatim mandatory closing paragraph (do not paraphrase). */
 export const LOCKED_CLOSING_PARAGRAPH =
-  'Throughout the session, the RBT used various reinforcers, including verbal praise (e.g., "Good job," "Wow," and "Good attention to detail") and access to individualized preferred items and activities identified in the client\'s reinforcement system, contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned.';
+  'Throughout the session, the RBT used various reinforcers, including behavior-specific praise (e.g., "Good job," "Wow," and "Good attention to detail") and access to individualized preferred items and activities identified in the client\'s reinforcement system, contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned.';
 
 /** Used when the client profile has no first name for locked opening / location lines. */
 export const SESSION_NOTE_CLIENT_REFERRAL = "the client";

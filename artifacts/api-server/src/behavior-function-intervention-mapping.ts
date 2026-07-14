@@ -13,6 +13,30 @@ export function isEnvironmentalManipulationInterventionLabel(name: string): bool
   return /^environmental manipulation$/i.test(name.trim());
 }
 
+/** Exact BIP label is typically "Visual Supports" (plural). Singular "Visual Support" is a misfit spelling. */
+export function isVisualSupportsInterventionLabel(name: string): boolean {
+  return /^visual supports?$/i.test(name.trim());
+}
+
+/**
+ * Gadget / unauthorized electronics access topographies (tangible-access when function not
+ * documented on profile). Used to prefer Environmental Manipulation + DRA over cueing-only tools.
+ */
+export function isGadgetAccessMaladaptiveBehaviorLabel(behaviorName: string): boolean {
+  const t = behaviorName.trim().toLowerCase();
+  if (!t) return false;
+  return (
+    /\bgadget/.test(t) ||
+    /video\s*games?/.test(t) ||
+    /\bscreen\b/.test(t) ||
+    /\bipad\b/.test(t) ||
+    /\btablet\b/.test(t) ||
+    /electronics/.test(t) ||
+    /unauthorized access/.test(t) ||
+    /persistent access or use of gadgets/.test(t)
+  );
+}
+
 export function interventionMatchesFunctionCategory(
   interventionName: string,
   fn: ClinicalFunction,
@@ -44,6 +68,8 @@ export function interventionMatchesFunctionCategory(
       );
     case "tangible":
       return (
+        // Restricting unsupervised reach / item availability is the primary access-control lever.
+        isEnvironmentalManipulationInterventionLabel(interventionName) ||
         /differential reinforcement of alternative|\(dra\)|\bdra\b/.test(n) ||
         /extinction.*tangible|tangible.*extinction/.test(n) ||
         /token economy/.test(n) ||
@@ -158,10 +184,12 @@ function escapeInterventionRank(name: string): number {
 
 function tangibleInterventionRank(name: string): number {
   const n = name.trim().toLowerCase();
-  if (isDraOrDriInterventionLabel(name)) return 0;
-  if (/premack/.test(n)) return 1;
-  if (/token economy/.test(n)) return 2;
-  if (/tangible.*extinction|extinction.*tangible/.test(n)) return 3;
+  // Restrict access first, then DRA for contingent access after appropriate responding.
+  if (isEnvironmentalManipulationInterventionLabel(name)) return 0;
+  if (isDraOrDriInterventionLabel(name)) return 1;
+  if (/premack/.test(n)) return 2;
+  if (/token economy/.test(n)) return 3;
+  if (/tangible.*extinction|extinction.*tangible/.test(n)) return 4;
   return 10;
 }
 
@@ -170,7 +198,12 @@ export function preferredInterventionCandidatesForBehaviorFunction(
   behaviorFunctions: ClinicalFunction[] | null | undefined,
   maladaptiveBehavior?: string | null | undefined,
 ): string[] {
-  const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
+  let primary = primaryFunctionForReplacementSelection(behaviorFunctions);
+  // When the profile has no documented function but the label is clearly gadget/electronics
+  // access-seeking, treat as tangible for candidate selection (do not invent prose labels).
+  if (!primary && isGadgetAccessMaladaptiveBehaviorLabel(maladaptiveBehavior ?? "")) {
+    primary = "tangible";
+  }
   if (!primary) return [];
   if (primary === "attention") {
     const ordered = orderedAttentionFunctionInterventions(interventions);
@@ -209,6 +242,7 @@ export function isFunctionMisfitIntervention(
   interventionName: string,
   behaviorFunctions: ClinicalFunction[] | null | undefined,
   authorizedInterventions: string[],
+  maladaptiveBehavior?: string | null | undefined,
 ): boolean {
   const intervention = interventionName.trim();
   if (!intervention) return false;
@@ -217,11 +251,29 @@ export function isFunctionMisfitIntervention(
     return false;
   }
 
-  const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
+  let primary = primaryFunctionForReplacementSelection(behaviorFunctions);
+  if (!primary && isGadgetAccessMaladaptiveBehaviorLabel(maladaptiveBehavior ?? "")) {
+    primary = "tangible";
+  }
   if (!primary || primary === "automatic") return false;
 
   const matched = functionMatchedInterventionsFromList(authorizedInterventions, primary);
   if (matched.length === 0) return false;
+
+  // Visual Supports is cueing only — never sufficient as the sole/primary function treatment
+  // when Environmental Manipulation or DRA (etc.) are available for tangible/access topographies.
+  if (
+    isVisualSupportsInterventionLabel(intervention) &&
+    (primary === "tangible" || primary === "escape") &&
+    matched.some(
+      (n) =>
+        isEnvironmentalManipulationInterventionLabel(n) ||
+        isDraOrDriInterventionLabel(n) ||
+        /premack/i.test(n),
+    )
+  ) {
+    return true;
+  }
 
   if (interventionMatchesFunctionCategory(intervention, primary)) {
     return false;
@@ -255,7 +307,7 @@ export function functionInterventionMismatchHint(
     case "escape":
       return `Documented function: escape. Prefer a demand/escape intervention from JSON interventions (for example "${sample}") with re-presentation of the task and structured follow-through in Following this intervention. Pair with a compliance/task-engagement replacement from behaviorReplacementCandidatesForHour[s].`;
     case "tangible":
-      return `Documented function: tangible. Prefer a tangible/access intervention from JSON interventions (for example "${sample}") with withheld access during the maladaptive response. Pair with a requesting/acceptance replacement from behaviorReplacementCandidatesForHour[s].`;
+      return `Documented function: tangible (or gadget/electronics access topography). Prefer **Environmental Manipulation** to keep the preferred item outside independent reach / restrict unsupervised access, then **DRA** (when listed) so access is contingent on schedule compliance or an appropriate request—not Visual Supports alone (cueing tool only). Use exact catalog strings (e.g. "${sample}"). Pair with a requesting/acceptance/waiting replacement from behaviorReplacementCandidatesForHour[s]—do not treat an attention-request skill as the primary behavior-reduction intervention.`;
     default:
       return `Documented function: ${primaryFunction}. Use an intervention from JSON interventions that matches that function (for example "${sample}").`;
   }

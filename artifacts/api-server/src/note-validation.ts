@@ -696,7 +696,7 @@ function findInventedInterventionLikePhraseIssues(
     if (phraseMatchesAuthorizedIntervention(matched, interventionCatalog)) {
       continue;
     }
-    return `Interventions: do not use detail phrasing that resembles an unauthorized intervention name (found "${matched}"). After the single catalog naming sentence, describe RBT actions in plain prose only (e.g. delivered verbal praise, demonstrated placing an item)—do not title reinforcement or modeling with invented intervention-like labels.`;
+    return `Interventions: do not use detail phrasing that resembles an unauthorized intervention name (found "${matched}"). After the single catalog naming sentence, describe RBT actions in plain prose only (e.g. delivered behavior-specific praise, demonstrated placing an item)—do not title reinforcement or modeling with invented intervention-like labels.`;
   }
 
   const reinforcedWithPraise =
@@ -706,10 +706,16 @@ function findInventedInterventionLikePhraseIssues(
     const label = rp[1]!.trim();
     if (label.length < 6) continue;
     if (phraseMatchesAuthorizedIntervention(label, interventionCatalog)) continue;
-    if (phraseMatchesAuthorizedIntervention(`${label} with verbal praise`, interventionCatalog)) {
+    if (
+      phraseMatchesAuthorizedIntervention(`${label} with verbal praise`, interventionCatalog) ||
+      phraseMatchesAuthorizedIntervention(
+        `${label} with behavior-specific praise`,
+        interventionCatalog,
+      )
+    ) {
       continue;
     }
-    return `Interventions: do not write "reinforced ${label} with verbal praise" as if it were a catalog intervention; use plain prose (e.g. delivered verbal praise contingent on …) after the one exact naming sentence for the catalog intervention.`;
+    return `Interventions: do not write "reinforced ${label} with verbal praise" as if it were a catalog intervention; use plain prose (e.g. delivered behavior-specific praise contingent on …) after the one exact naming sentence for the catalog intervention.`;
   }
 
   return null;
@@ -1338,7 +1344,12 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         primaryFunction === "attention" &&
         attentionInterventions.length > 0 &&
         firstNamed &&
-        isFunctionMisfitIntervention(firstNamed, segmentFunctions, interventionList)
+        isFunctionMisfitIntervention(
+          firstNamed,
+          segmentFunctions,
+          interventionList,
+          MALADAPTIVE_BEHAVIOR_SIB_CANONICAL,
+        )
       ) {
         issues.push(
           `SIB function match: paragraph ${i + 1} addresses "${MALADAPTIVE_BEHAVIOR_SIB_CANONICAL}" with documented attention function but names "${firstNamed}" as the catalog intervention. ${functionInterventionMismatchHint("attention", attentionInterventions)} Do not use Environmental Manipulation alone for attention-maintained SIB when attention-matched interventions are on the approved list.`,
@@ -1380,19 +1391,24 @@ export function validateClinicalBodyCompliance(clinicalBody: string, ctx: NoteCo
         paragraphHasResponseBlockFirst(p, responseBlockLabel!, interventionList);
       if (
         firstNamedIntervention &&
-        primaryFunction &&
-        primaryFunction !== "automatic" &&
         !isSibMaladaptiveBehavior(assignedBehavior) &&
         !responseBlockIsFirst &&
-        isFunctionMisfitIntervention(firstNamedIntervention, segmentFunctions, interventionList)
+        isFunctionMisfitIntervention(
+          firstNamedIntervention,
+          segmentFunctions,
+          interventionList,
+          assignedBehavior,
+        )
       ) {
         const candidates = preferredInterventionCandidatesForBehaviorFunction(
           interventionList,
           segmentFunctions,
           assignedBehavior,
         );
+        const mismatchFn =
+          primaryFunction && primaryFunction !== "automatic" ? primaryFunction : "tangible";
         issues.push(
-          `Intervention function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${firstNamedIntervention}". ${functionInterventionMismatchHint(primaryFunction, candidates)} Use one exact catalog intervention from JSON \`interventionCandidatesForHour[${i}]\` when that array is non-empty.`,
+          `Intervention function match: paragraph ${i + 1} pairs "${assignedBehavior}" with "${firstNamedIntervention}". ${functionInterventionMismatchHint(mismatchFn, candidates)} Use one exact catalog intervention from JSON \`interventionCandidatesForHour[${i}]\` when that array is non-empty.`,
         );
       }
       if (

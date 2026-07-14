@@ -12,6 +12,7 @@ import {
   normalizeClinicalBodyInterventionDetailPhrases,
   normalizeClinicalBodyInterventionLabels,
   normalizeClinicalBodyMaladaptiveBehaviorLabels,
+  normalizeClinicalBodyPraiseWording,
   normalizeClinicalBodyReplacementLikePhrases,
   normalizeClinicalBodyEscapedQuotes,
   validateClinicalBodyCompliance,
@@ -234,6 +235,12 @@ OFF-TASK / INATTENTION (catalog strings such as **Off-Task / Inattention**, **Of
 - **Intervention choice:** When JSON \`interventions\` includes **Use of visual timer** / **Use of Visual Timer**, **Visual Supports**, **Redirection**, or **Differential Reinforcement of Alternative Behavior (DRA)** (or the client's exact DRA catalog spelling), those are appropriate for engagement and attention redirection. **Use of visual timer** targets attending to task materials—document timer activation and pointing between timer and task when that label is the named intervention. When **DRA** is listed, you may describe reinforcing on-task responses (completed placements, oriented to materials, sustained engagement) in **Following this intervention,** plain prose.
 - **Replacement program:** Use **only** the verbatim \`replacementProgramForHour[s]\`. When the server assigns an on-task or attention skill (for example **On task Behavior**, programs with **time on task**, **eye contact**, or **attend**), align antecedent and teaching to task materials and sustained engagement. **Respond to safety instructions** / **Stop** / **wait** programs teach compliance/safety awareness—they are **not** the primary replacement for off-task/inattention; the server rebalances auto-assignment away from that mismatch when possible. If that safety program is still assigned, document only observable stop/wait compliance tied to boundaries—not generic puzzle engagement.
 
+GADGET / VIDEO-GAME / UNAUTHORIZED ELECTRONICS ACCESS (tangible-access topographies):
+- When \`maladaptiveBehaviorForHour[s]\` indicates **gadget**, **video game**, **screen**, or **unauthorized electronics access** (or \`maladaptiveBehaviorFunctionsForHour[s]\` includes **tangible**), the **primary** catalog intervention naming sentences must address **access control + contingent access**, not cueing alone.
+- Prefer JSON \`interventionCandidatesForHour[s]\` / \`interventions\` in this order when listed: **(1) Environmental Manipulation** — RBT maintains instructional control by keeping the device **outside the client's independent reach** and restricting unsupervised access during the episode; **(2) Differential Reinforcement of Alternative Behavior (DRA)** (exact BIP spelling) — device access provided **only after** the client complied with the schedule/task or used an appropriate request.
+- **Visual Supports** (exact plural BIP string when listed) may appear only as a **cueing/support** detail in **Following this intervention,** prose—**never** as the sole/primary catalog naming sentence for this topography when Environmental Manipulation or DRA is listed. Never write **Visual Support** (singular).
+- The assigned \`replacementProgramForHour[s]\` (even if it is a skill like **Request for Attention**) is documented in the replacement-program sentence only—do **not** present that skill as the catalog intervention that reduced the gadget-access topography.
+
 TANTRUMS AND OTHER BROAD LABELS (must use assessment-linked topography):
 - When the documented maladaptive behavior is broad (e.g. tantrum, meltdown, emotional dysregulation, crying episode) OR when the narrative would otherwise only say the client "had a tantrum" / "tantrumed," you MUST spell out observable actions in the same episode: what the client did with their body, voice, and materials (e.g. fell to the floor, kicked legs, screamed with tears, threw items, pushed materials away, hit self or surfaces)—aligned with how that behavior is described or implied across the maladaptiveBehaviors strings in JSON.
 - Never end the behavior description on the label alone (e.g. avoid "manifested Tantrum" with no preceding concrete actions). The RBT must be able to see the topography in your text.
@@ -302,7 +309,8 @@ ONE-TO-ONE RBT SERVICE ONLY:
 - The clinical body must document only the RBT working directly with **the client**. Do **not** describe the RBT arranging, leading, joining, or managing a **small group**, **group activity**, **peer activity**, **classmates**, **children**, **kids**, **other students**, or **other children**. In school settings, the teacher may present the lesson/activity/materials, but the note must still describe only the client's participation and the RBT's support (not other students).
 
 REINFORCERS — APPROVED LIST (mandatory):
-- Inside the clinical body (the paragraphs you write), reinforcement should reference **only** items on this approved list (or items explicitly named in JSON \`interventions\` / \`replacementProgramsInOrder\` for this client): **verbal praise**, **music**, **bubbles**, **preferred toys**, **sensory toys**, **balls**, **Disney dolls**, **outdoor play**, **water play**.
+- Inside the clinical body (the paragraphs you write), reinforcement should reference **only** items on this approved list (or items explicitly named in JSON \`interventions\` / \`replacementProgramsInOrder\` for this client): **behavior-specific praise**, **music**, **bubbles**, **preferred toys**, **sensory toys**, **balls**, **Disney dolls**, **outdoor play**, **water play**.
+- Do **not** write **verbal praise** anywhere (reviewers treat it as an unauthorized intervention label)—use **behavior-specific praise** or **brief praise** in following-detail prose. Never name praise in a catalog intervention naming sentence ("The RBT implemented …").
 - Do **not** invent reinforcers (e.g. **stickers**, **candy**, **screen time**, **iPad**, **food rewards**, **snacks**, **edibles**, **tickle**) unless they appear verbatim in JSON.
 - The system's fixed closing paragraph (added separately) already describes session-wide reinforcement in product-locked wording; do not duplicate or contradict it. Use this approved list only when the ABC narrative needs to reference reinforcement contingent on an in-the-moment response or replacement-program teaching step.
 
@@ -451,7 +459,7 @@ export function isOpenAINoteGenerationConfigured(): boolean {
  * Version tag for the note-generation prompt/pipeline, written to `note_generation_audit`.
  * Bump when the system prompt, normalization pipeline, or enforcement rules change materially.
  */
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-04.3";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-14.1";
 
 export type GenerateClinicalBodyResult = {
   body: string;
@@ -557,6 +565,7 @@ function normalizeClinicalBodyPipeline(
   out = normalizeClinicalBodyEscapedQuotes(out);
   out = normalizeClinicalBodyInterventionLabels(out, interventions);
   out = normalizeClinicalBodyInterventionDetailPhrases(out, interventions);
+  out = normalizeClinicalBodyPraiseWording(out);
   out = normalizeClinicalBodyMaladaptiveBehaviorLabels(out, maladaptiveCatalog);
   out = normalizeClinicalBodyReplacementLikePhrases(out, authorizedPrograms);
   return out;
