@@ -1,10 +1,6 @@
 import { ApiError } from "./custom-fetch";
-import {
-  createNoteGenerationJob,
-  getNoteGenerationJob,
-  type GenerateNoteRequest,
-  type GenerateNoteResponse,
-} from "./generated/api";
+import { createNoteGenerationJob, getNoteGenerationJob } from "./generated/api";
+import type { GenerateNoteRequest, GenerateNoteResponse } from "./generated/api.schemas";
 
 /** Poll interval while waiting for OpenAI note generation (async job). */
 const POLL_INTERVAL_MS = 2500;
