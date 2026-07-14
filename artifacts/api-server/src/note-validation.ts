@@ -696,11 +696,11 @@ function findInventedInterventionLikePhraseIssues(
     if (phraseMatchesAuthorizedIntervention(matched, interventionCatalog)) {
       continue;
     }
-    return `Interventions: do not use detail phrasing that resembles an unauthorized intervention name (found "${matched}"). After the single catalog naming sentence, describe RBT actions in plain prose only (e.g. delivered behavior-specific praise, demonstrated placing an item)—do not title reinforcement or modeling with invented intervention-like labels.`;
+    return `Interventions: do not use detail phrasing that resembles an unauthorized intervention name (found "${matched}"). After the single catalog naming sentence, describe RBT actions in plain prose only (e.g. delivered praise, demonstrated placing an item)—do not title reinforcement or modeling with invented intervention-like labels.`;
   }
 
   const reinforcedWithPraise =
-    /\breinforced\s+((?:[a-z]+\s+){1,6}?)\s+with\s+verbal\s+praise\b/gi;
+    /\breinforced\s+((?:[a-z]+\s+){1,6}?)\s+with\s+(?:verbal|behavior-specific)\s+praise\b/gi;
   let rp: RegExpExecArray | null;
   while ((rp = reinforcedWithPraise.exec(paragraph)) !== null) {
     const label = rp[1]!.trim();
@@ -715,7 +715,7 @@ function findInventedInterventionLikePhraseIssues(
     ) {
       continue;
     }
-    return `Interventions: do not write "reinforced ${label} with verbal praise" as if it were a catalog intervention; use plain prose (e.g. delivered behavior-specific praise contingent on …) after the one exact naming sentence for the catalog intervention.`;
+    return `Interventions: do not write "reinforced ${label} with verbal/behavior-specific praise" as if it were a catalog intervention; use plain prose (e.g. delivered praise contingent on …) after the one exact naming sentence for the catalog intervention.`;
   }
 
   return null;

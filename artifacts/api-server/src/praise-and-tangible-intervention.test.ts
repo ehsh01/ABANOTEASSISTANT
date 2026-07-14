@@ -10,14 +10,15 @@ import {
   normalizeClinicalBodyPraiseWording,
 } from "./note-normalization";
 
-describe("behavior-specific praise wording", () => {
-  test("rewrites verbal praise to behavior-specific praise", () => {
+describe("praise wording normalization", () => {
+  test("rewrites compound praise labels to plain praise", () => {
     const out = normalizeClinicalBodyPraiseWording(
-      'The RBT delivered verbal praise after the completed response. Brief verbal praise followed.',
+      "The RBT delivered verbal praise after the completed response. Brief behavior-specific praise followed.",
     );
-    expect(out).toContain("behavior-specific praise");
-    expect(out).toContain("brief behavior-specific praise");
+    expect(out).toContain("delivered praise");
+    expect(out).toContain("Brief praise");
     expect(out).not.toMatch(/\bverbal praise\b/i);
+    expect(out).not.toMatch(/\bbehavior-specific praise\b/i);
   });
 });
 

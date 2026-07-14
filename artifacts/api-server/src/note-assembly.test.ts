@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  buildLockedClosingParagraph,
   buildLockedOpening,
   buildNextSessionSentence,
   buildPerformanceSentence,
@@ -38,13 +39,31 @@ describe("locked opening", () => {
 });
 
 describe("locked closing and end-of-note sequence", () => {
-  test("closing paragraph is verbatim (no caregiver language)", () => {
+  test("fallback closing uses plain praise (not compound labels) and no caregiver language", () => {
     expect(LOCKED_CLOSING_PARAGRAPH).toContain(
-      'behavior-specific praise (e.g., "Good job," "Wow," and "Good attention to detail")',
+      'praise (e.g., "Good job," "Wow," and "Good attention to detail")',
     );
     expect(LOCKED_CLOSING_PARAGRAPH).not.toMatch(/\bverbal praise\b/i);
+    expect(LOCKED_CLOSING_PARAGRAPH).not.toMatch(/\bbehavior-specific praise\b/i);
     expect(LOCKED_CLOSING_PARAGRAPH).toContain("The session was completed as planned.");
     expect(LOCKED_CLOSING_PARAGRAPH).not.toMatch(/caregiver|mother|father/i);
+  });
+
+  test("closing lists concrete reinforcementPreferences and social praise when on file", () => {
+    const closing = buildLockedClosingParagraph([
+      "social praise",
+      "snacks",
+      "yogurt",
+      "sensory toys",
+      "spinning toys",
+      "YouTube videos",
+    ]);
+    expect(closing).toContain("social praise");
+    expect(closing).toContain("snacks");
+    expect(closing).toContain("sensory toys");
+    expect(closing).toContain("documented for this client");
+    expect(closing).not.toMatch(/\bbehavior-specific praise\b/i);
+    expect(closing).not.toMatch(/reinforcement system/);
   });
 
   test("performance sentence uses fixed template when trial data exists", () => {
@@ -77,18 +96,18 @@ describe("locked closing and end-of-note sequence", () => {
 
 describe("assembled note order", () => {
   test("opening → body → locked closing → performance → next session", () => {
-    // Mirrors assembleSessionNote in routes/notes.ts (locked §1 → body → §2 → §3).
     const opening = buildLockedOpening(["Mother"], false, "Home", "Anthony");
     const body = "Clinical body paragraph.";
+    const closing = buildLockedClosingParagraph(["social praise", "sensory toys"]);
     const performance = buildPerformanceSentence(1, [{ totalTrials: 5, successfulTrialNumbers: [1] }], "Anthony");
     const nextSession = buildNextSessionSentence("2026-01-15");
-    const note = [opening, "", body, "", LOCKED_CLOSING_PARAGRAPH, "", performance, "", nextSession].join("\n");
+    const note = [opening, "", body, "", closing, "", performance, "", nextSession].join("\n");
 
     const idx = (s: string) => note.indexOf(s);
     expect(idx(opening)).toBe(0);
     expect(idx(body)).toBeGreaterThan(idx(opening));
-    expect(idx(LOCKED_CLOSING_PARAGRAPH)).toBeGreaterThan(idx(body));
-    expect(idx(performance)).toBeGreaterThan(idx(LOCKED_CLOSING_PARAGRAPH));
+    expect(idx(closing)).toBeGreaterThan(idx(body));
+    expect(idx(performance)).toBeGreaterThan(idx(closing));
     expect(idx(nextSession)).toBeGreaterThan(idx(performance));
     expect(note.startsWith("The RBT met with ")).toBe(true);
   });

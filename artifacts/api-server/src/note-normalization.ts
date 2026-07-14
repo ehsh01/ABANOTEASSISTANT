@@ -52,25 +52,35 @@ export function normalizeClinicalBodyInterventionLabels(body: string, interventi
 }
 
 /**
- * Reinforcer wording: never list "verbal praise" (reviewers misread it as a catalog intervention).
- * Prefer "behavior-specific praise" in the clinical body; locked closing uses the same phrase.
+ * Reinforcer wording: never list "verbal praise" or "behavior-specific praise" (reviewers misread
+ * those compounds as catalog intervention names). Prefer plain "praise" / "brief praise" in the
+ * clinical body; the locked closing uses "social praise" when that BIP preference is on file.
  */
 export function normalizeClinicalBodyPraiseWording(body: string): string {
+  const briefPraise = (match: string) =>
+    match[0] === match[0]?.toUpperCase() ? "Brief praise" : "brief praise";
+  const praise = (match: string) =>
+    match[0] === match[0]?.toUpperCase() ? "Praise" : "praise";
   return body
-    .replace(/\bbrief verbal praise\b/gi, "brief behavior-specific praise")
-    .replace(/\bverbal praise\b/gi, "behavior-specific praise");
+    .replace(/\bbrief behavior-specific praise\b/gi, briefPraise)
+    .replace(/\bbehavior-specific praise\b/gi, praise)
+    .replace(/\bbrief verbal praise\b/gi, briefPraise)
+    .replace(/\bverbal praise\b/gi, praise);
 }
 
 /** Phrases in "Following this intervention" detail that reviewers treat as invented intervention names. */
 export const DEFAULT_UNAUTHORIZED_INTERVENTION_LIKE_PHRASES: RegExp[] = [
   /\bverbal praise contingent on each instance of task engagement\b/i,
+  /\bbehavior-specific praise contingent on each instance of task engagement\b/i,
   /\breinforced appropriate task engagement with verbal praise\b/i,
+  /\breinforced appropriate task engagement with behavior-specific praise\b/i,
   /\breinforced appropriate task engagement\b/i,
   /\bredirected the client(?:'|’)s hands back to the worksheet\b/i,
   /\bredirected hands back to worksheet\b/i,
   /\bguided the client to place one marker at a time into the bin\b/i,
   /\bguided client to place one marker at a time into bin\b/i,
   /\bprovided verbal praise contingent on each completed step\b/i,
+  /\bprovided behavior-specific praise contingent on each completed step\b/i,
   /\bmodeled placing\b/i,
 ];
 

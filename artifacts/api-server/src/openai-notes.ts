@@ -90,6 +90,11 @@ export type NoteGenerationContext = {
   /** Original assessment filename when known (reference only). */
   assessmentReferenceFileName: string | null;
   /**
+   * Preferred reinforcers from assessmentSummary.reinforcementPreferences (BIP Reinforcement Preferences).
+   * Empty when not on file. Use these concrete names for contingent reinforcement detail when non-empty.
+   */
+  reinforcementPreferences: string[];
+  /**
    * Optional ABC Builder: length = `narrativeSegmentCount`. Non-null entries are exact activity/antecedent catalog strings (first non-empty hour in that segment); null = AI chooses antecedent for that segment.
    */
   activityAntecedentForHour: (string | null)[];
@@ -309,9 +314,9 @@ ONE-TO-ONE RBT SERVICE ONLY:
 - The clinical body must document only the RBT working directly with **the client**. Do **not** describe the RBT arranging, leading, joining, or managing a **small group**, **group activity**, **peer activity**, **classmates**, **children**, **kids**, **other students**, or **other children**. In school settings, the teacher may present the lesson/activity/materials, but the note must still describe only the client's participation and the RBT's support (not other students).
 
 REINFORCERS — APPROVED LIST (mandatory):
-- Inside the clinical body (the paragraphs you write), reinforcement should reference **only** items on this approved list (or items explicitly named in JSON \`interventions\` / \`replacementProgramsInOrder\` for this client): **behavior-specific praise**, **music**, **bubbles**, **preferred toys**, **sensory toys**, **balls**, **Disney dolls**, **outdoor play**, **water play**.
-- Do **not** write **verbal praise** anywhere (reviewers treat it as an unauthorized intervention label)—use **behavior-specific praise** or **brief praise** in following-detail prose. Never name praise in a catalog intervention naming sentence ("The RBT implemented …").
-- Do **not** invent reinforcers (e.g. **stickers**, **candy**, **screen time**, **iPad**, **food rewards**, **snacks**, **edibles**, **tickle**) unless they appear verbatim in JSON.
+- Inside the clinical body (the paragraphs you write), reinforcement should reference **only** items on this approved list, items in JSON \`reinforcementPreferences\` (from the client's assessment when present), or items explicitly named in JSON \`interventions\` / \`replacementProgramsInOrder\` for this client: **praise** / **social praise**, **music**, **bubbles**, **preferred toys**, **sensory toys**, **balls**, **Disney dolls**, **outdoor play**, **water play**.
+- Do **not** write **verbal praise** or **behavior-specific praise** anywhere (reviewers treat those as unauthorized intervention labels)—use **praise**, **brief praise**, or **social praise** (when in \`reinforcementPreferences\`) in following-detail prose. Never name praise in a catalog intervention naming sentence ("The RBT implemented …").
+- Prefer concrete reinforcer names from JSON \`reinforcementPreferences\` when that array is non-empty (e.g. sensory toys, spinning toys)—do not invent session reinforcers that are absent from that list and the default approved list above.
 - The system's fixed closing paragraph (added separately) already describes session-wide reinforcement in product-locked wording; do not duplicate or contradict it. Use this approved list only when the ABC narrative needs to reference reinforcement contingent on an in-the-moment response or replacement-program teaching step.
 
 REINFORCEMENT CONTINGENCY (mandatory for maladaptive behavior segments):
@@ -459,7 +464,7 @@ export function isOpenAINoteGenerationConfigured(): boolean {
  * Version tag for the note-generation prompt/pipeline, written to `note_generation_audit`.
  * Bump when the system prompt, normalization pipeline, or enforcement rules change materially.
  */
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-14.1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-14.2";
 
 export type GenerateClinicalBodyResult = {
   body: string;

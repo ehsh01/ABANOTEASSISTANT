@@ -58,10 +58,10 @@ import {
 } from "./note-validation";
 import { repairClinicalBodyReplacementProgramAssignments } from "./replacement-program-repair";
 import {
+  buildLockedClosingParagraph,
   buildLockedOpening,
   buildNextSessionSentence,
   buildPerformanceSentence,
-  LOCKED_CLOSING_PARAGRAPH,
   type TherapySetting,
 } from "./note-assembly";
 import { truncateAssessmentTextForNoteContext } from "./assessment-extract";
@@ -179,8 +179,10 @@ function assembleSessionNote(
   clientFirstName: string | null | undefined,
   narrativeProgramSegmentCount: number,
   therapistTrialSummaryForReplacementHour: TherapistTrialSummaryForHourEntry[] | undefined,
+  reinforcementPreferences?: string[] | null,
 ): string {
   const opening = buildLockedOpening(presentPeople, hasEnvChanges, therapySetting, clientFirstName);
+  const closing = buildLockedClosingParagraph(reinforcementPreferences);
   const performance = buildPerformanceSentence(
     narrativeProgramSegmentCount,
     therapistTrialSummaryForReplacementHour,
@@ -188,7 +190,7 @@ function assembleSessionNote(
   );
   const nextSession = buildNextSessionSentence(nextSessionDate);
 
-  return [opening, "", clinicalBody, "", LOCKED_CLOSING_PARAGRAPH, "", performance, "", nextSession].join("\n");
+  return [opening, "", clinicalBody, "", closing, "", performance, "", nextSession].join("\n");
 }
 
 /**
@@ -677,6 +679,7 @@ export async function generateSessionNoteForClient(params: {
     ageBand: client.ageBand,
     clientAssessmentTextExcerpt,
     assessmentReferenceFileName: profile?.assessmentFileName ?? null,
+    reinforcementPreferences: profile?.assessmentSummary?.reinforcementPreferences ?? [],
     activityAntecedentForHour: narrativeCollapsed.activityAntecedentForHour,
     languageMaladaptiveEpisodeForHour: narrativeCollapsed.languageMaladaptiveEpisodeForHour,
     therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
@@ -827,6 +830,7 @@ export async function generateSessionNoteForClient(params: {
     profile?.firstName,
     narrativeCollapsed.narrativeSegmentCount,
     narrativeCollapsed.therapistTrialSummaryForReplacementHour,
+    profile?.assessmentSummary?.reinforcementPreferences ?? null,
   );
 
   for (const issue of validateCaregiverMentionRule(noteContent, body.presentPeople)) {
