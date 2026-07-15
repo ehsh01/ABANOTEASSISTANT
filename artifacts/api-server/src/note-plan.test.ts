@@ -19,7 +19,10 @@ import {
   sanitizeStoredTopographyForNarrative,
   validateNotePlan,
 } from "./note-plan-validation";
-import { validateClinicalBodyComplianceDetailed } from "./note-validation";
+import {
+  countInterventionImplementationsInParagraph,
+  validateClinicalBodyComplianceDetailed,
+} from "./note-validation";
 
 function generationContext(overrides: Partial<NoteGenerationContext> = {}): NoteGenerationContext {
   return {
@@ -403,6 +406,58 @@ describe("server-owned metrics and deterministic assembly", () => {
     );
     expect(body).toContain("approximately 50% of discrete trials");
     expect(body.split(/\n\s*\n/)).toHaveLength(1);
+  });
+
+  it("documents only the server-locked intervention even when the model lists more (no INTERVENTION_COUNT)", () => {
+    const input = generationContext({
+      interventions: ["Premack principle", "Redirection"],
+      interventionCandidatesForHour: [["Premack principle"]],
+    });
+    const context = buildFrozenSessionContext(input);
+    expect(context.segments[0]?.interventionLabels).toEqual(["Premack principle"]);
+
+    const body = assembleClinicalBodyFromNotePlan(
+      validPlan({
+        interventions: [
+          {
+            label: "Premack principle",
+            application:
+              "The RBT presented the required placement before access to the preferred shape toy",
+          },
+          {
+            label: "Redirection",
+            application: "The RBT guided the client back toward the presented task materials",
+          },
+        ],
+        resultSummary:
+          "The client completed the placement after the RBT implemented Redirection. and remained near the materials",
+      }),
+      context,
+    );
+
+    expect(
+      countInterventionImplementationsInParagraph(body, input.interventions),
+    ).toBe(1);
+    expect(body).toContain("To address this behavior, the RBT implemented Premack principle.");
+    expect(body).not.toMatch(/implemented Redirection\./i);
+
+    const result = validateClinicalBodyComplianceDetailed(body, {
+      sessionHours: 1,
+      narrativeSegmentCount: 1,
+      replacementProgramsInOrder: input.replacementProgramsInOrder,
+      replacementProgramForHour: input.replacementProgramForHour,
+      maladaptiveBehaviors: input.maladaptiveBehaviors,
+      maladaptiveBehaviorForHour: input.maladaptiveBehaviorForHour,
+      interventions: input.interventions,
+      therapistTrialSummaryForReplacementHour: [null],
+      clientAgeYears: input.clientAgeYears,
+      presentPeople: [],
+      acquisitionOnlySegmentForHour: [false],
+      maladaptiveBehaviorFunctionsForHour: input.maladaptiveBehaviorFunctionsForHour,
+      maladaptiveBehaviorTopographyForHour: input.maladaptiveBehaviorTopographyForHour,
+      behaviorToReplacementsMap: input.behaviorToReplacementsMap,
+    });
+    expect(result.blocking.map((issue) => issue.code)).not.toContain("INTERVENTION_COUNT");
   });
 
   it("remains compatible with the existing prose validator for locked labels and trial data", () => {

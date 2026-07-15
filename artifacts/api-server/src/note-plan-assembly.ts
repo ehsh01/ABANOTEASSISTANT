@@ -1,8 +1,33 @@
+import { escapeRegExp } from "./note-normalization";
 import type { NotePlan, SessionContext, TherapistTrialSummary } from "./note-plan-schema";
 
 function sentence(text: string): string {
   const trimmed = text.trim().replace(/\s+/g, " ");
   return /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
+}
+
+/**
+ * The intervention-count validator counts "implemented|applied <exact catalog name>." naming sentences
+ * anywhere in a paragraph. Only the SERVER-authored naming sentences (built from the locked
+ * interventionLabels) may count. If the model embeds a second catalog naming sentence in any prose field
+ * (application/response/teaching/result/topography/antecedent), rewrite that stray "implemented|applied
+ * X." to "used X." so it is not counted — keeping the per-segment count deterministically equal to the
+ * server's assignment and preventing INTERVENTION_COUNT blocks.
+ */
+function neutralizeStrayInterventionNamingSentences(
+  text: string,
+  interventionCatalog: string[],
+): string {
+  if (!text) return text;
+  let out = text;
+  const names = [...new Set(interventionCatalog.map((s) => s.trim()).filter(Boolean))].sort(
+    (a, b) => b.length - a.length,
+  );
+  for (const name of names) {
+    const re = new RegExp(`\\b(?:implemented|applied)\\s+(${escapeRegExp(name)})\\s*\\.`, "gi");
+    out = out.replace(re, "used $1.");
+  }
+  return out;
 }
 
 function followingClause(text: string): string {
@@ -76,33 +101,55 @@ export function assembleClinicalBodyFromNotePlan(
   plan: NotePlan,
   context: SessionContext,
 ): string {
+  const interventionCatalog = context.planCatalogSnapshot.interventions;
+  const neutralize = (text: string): string =>
+    neutralizeStrayInterventionNamingSentences(text, interventionCatalog);
+
   return plan.segments
     .map((segment, index) => {
       const locked = context.segments[index]!;
-      const parts: string[] = [organicAntecedentLead(segment.antecedent, index)];
+      const parts: string[] = [organicAntecedentLead(neutralize(segment.antecedent), index)];
 
       if (locked.acquisitionOnly) {
-        parts.push(sentence(segment.topography));
+        parts.push(sentence(neutralize(segment.topography)));
       } else {
         parts.push(
-          `${manifestedBehaviorBridge(index)} ${locked.behaviorLabel} by ${sentence(segment.topography)}`,
+          `${manifestedBehaviorBridge(index)} ${locked.behaviorLabel} by ${sentence(neutralize(segment.topography))}`,
         );
-        for (const intervention of segment.interventions) {
-          parts.push(`To address this behavior, the RBT implemented ${intervention.label}.`);
-          parts.push(`Following this intervention, ${followingClause(intervention.application)}`);
-        }
-        parts.push(sentence(segment.responseToIntervention));
+        // Naming sentences are driven by the server-locked interventionLabels (the backend is the
+        // authority on how many/which interventions), not the model's free-form list. This keeps the
+        // documented intervention count deterministically equal to the assignment: exactly one for
+        // ordinary segments, and the Response-Block-first chain for safety-priority behaviors.
+        const namingLabels =
+          locked.interventionLabels.length > 0
+            ? locked.interventionLabels
+            : segment.interventions.slice(0, 1).map((intervention) => intervention.label);
+        namingLabels.forEach((label, labelIndex) => {
+          const match =
+            segment.interventions.find(
+              (intervention) =>
+                intervention.label.trim().toLowerCase() === label.trim().toLowerCase(),
+            ) ??
+            segment.interventions[labelIndex] ??
+            segment.interventions[0];
+          parts.push(`To address this behavior, the RBT implemented ${label}.`);
+          const application = neutralize(match?.application?.trim() ?? "");
+          if (application) {
+            parts.push(`Following this intervention, ${followingClause(application)}`);
+          }
+        });
+        parts.push(sentence(neutralize(segment.responseToIntervention)));
       }
 
       const replacementLead = index % 2 === 0 ? "Additionally, the" : "The";
       parts.push(
-        `${replacementLead} RBT implemented the replacement program "${locked.replacementLabel}" by ${sentence(segment.teachingOrPromptingSummary)}`,
+        `${replacementLead} RBT implemented the replacement program "${locked.replacementLabel}" by ${sentence(neutralize(segment.teachingOrPromptingSummary))}`,
       );
       if (
         segment.resultSummary.trim().toLowerCase() !==
         segment.responseToIntervention.trim().toLowerCase()
       ) {
-        parts.push(sentence(segment.resultSummary));
+        parts.push(sentence(neutralize(segment.resultSummary)));
       }
       const trialSentence = buildDeterministicTrialSentence(
         locked.replacementLabel,
