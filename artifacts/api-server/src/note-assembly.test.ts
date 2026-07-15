@@ -27,10 +27,13 @@ describe("locked opening", () => {
     expect(opening).not.toMatch(/\bat home\b|school|community/i);
   });
 
-  test("joins multiple caregivers with natural English", () => {
+  test("joins multiple caregivers with natural English and strips stray closing punctuation", () => {
     expect(formatCaregiverList(["Mother", "Father"])).toBe("Mother and Father");
     expect(formatCaregiverList(["Mother", "Father", "Grandmother"])).toBe(
       "Mother, Father, and Grandmother",
+    );
+    expect(formatCaregiverList(["Mother", "Maternal uncle)"])).toBe(
+      "Mother and Maternal uncle",
     );
   });
 

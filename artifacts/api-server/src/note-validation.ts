@@ -307,7 +307,7 @@ function unsupportedProgressComparison(paragraph: string): boolean {
 }
 
 const CAREGIVER_LEXICON =
-  /\b(caregiver|caregivers|parent|parents|guardian|guardians|mother|father|mom|dad|mommy|daddy|stepmother|stepfather)\b/i;
+  /\b(caregiver|caregivers|parent|parents|guardian|guardians|mother|father|mom|dad|mommy|daddy|stepmother|stepfather|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|sibling|brother|sister|maternal|paternal|relative|family member)\b/i;
 
 const PEER_OR_GROUP_ACTIVITY_LEXICON =
   /\b(small[- ]group|group activity|group play|peer|peers|classmate|classmates|children|kids|other students|other children|student group)\b/i;

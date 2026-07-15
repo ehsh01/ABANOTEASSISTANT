@@ -7,6 +7,8 @@ import {
 import {
   assembleClinicalBodyFromNotePlan,
   buildDeterministicTrialSentence,
+  manifestedBehaviorBridge,
+  organicAntecedentLead,
   roundedTrialPercentage,
 } from "./note-plan-assembly";
 import { NotePlanSchema, type NotePlan } from "./note-plan-schema";
@@ -297,6 +299,36 @@ describe("server-owned metrics and deterministic assembly", () => {
     );
     expect(grounded.segments[0]?.topography).toBe(natural);
     expect(grounded.segments[0]?.topography).not.toMatch(/defined as|movement pattern|including/i);
+  });
+
+  it("varies manifested bridges and strips leading During from antecedents", () => {
+    expect(manifestedBehaviorBridge(0)).not.toMatch(/^During\b/i);
+    expect(manifestedBehaviorBridge(1)).not.toBe(manifestedBehaviorBridge(0));
+    expect(organicAntecedentLead("During table work, the RBT presented cards", 0)).toMatch(
+      /^While table work/i,
+    );
+    expect(organicAntecedentLead("During table work, the RBT presented cards", 1)).toMatch(
+      /^As table work/i,
+    );
+    const context = buildFrozenSessionContext(generationContext());
+    const body = assembleClinicalBodyFromNotePlan(validPlan(), context);
+    expect(body).not.toMatch(/\bDuring this activity\b/i);
+    expect(body).toMatch(/\bthe client manifested Task Refusal by\b/i);
+  });
+
+  it("strips maternal-uncle style presence leaks from narrative fields", () => {
+    const grounded = groundNotePlanWithFrozenContext(
+      validPlan({
+        resultSummary:
+          "The client completed the placement and Maternal uncle) remained near the materials",
+      }),
+      buildFrozenSessionContext(generationContext()),
+      { presentPeople: ["Mother", "Maternal uncle)"] },
+    );
+    expect(grounded.segments[0]?.resultSummary).not.toMatch(/maternal|uncle|\)/i);
+    expect(grounded.segments[0]?.resultSummary).toBe(
+      "The client completed the placement and remained near the materials",
+    );
   });
 
   it("moves an existing observable result into the post-intervention outcome slot", () => {

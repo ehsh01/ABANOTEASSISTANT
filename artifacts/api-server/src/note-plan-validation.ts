@@ -86,31 +86,60 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-const THIRD_PARTY_ROLE_SOURCE =
-  "(?:caregiver|mother|father|mom|dad|parent|guardian|grandmother|grandfather|therapist|peers?)";
+const FAMILY_ROLE_SOURCE =
+  "(?:aunt|uncle|cousin|sibling|brother|sister|(?:maternal|paternal)\\s+(?:uncle|aunt|grandmother|grandfather)|grandma|grandpa|grandmother|grandfather|relative|family member|maternal|paternal)";
+const STAFF_OR_CAREGIVER_ROLE_SOURCE =
+  "(?:caregiver|mother|father|mom|dad|parent|guardian|therapist|peers?)";
+const THIRD_PARTY_ROLE_SOURCE = `(?:${FAMILY_ROLE_SOURCE}|${STAFF_OR_CAREGIVER_ROLE_SOURCE})`;
 
 function replaceBlockedNames(text: string, blockedClientNames: string[]): string {
   let sanitized = text;
   for (const name of [...new Set(blockedClientNames.map((value) => value.trim()).filter(Boolean))]) {
+    const cleaned = name.replace(/[\s,;:()\]]+$/g, "").replace(/^[\s,;:([]+/g, "").trim();
+    if (cleaned.length < 2) continue;
     sanitized = sanitized
-      .replace(new RegExp(`\\b${escapeRegExp(name)}['’]s\\b`, "gi"), "the client's")
-      .replace(new RegExp(`\\b${escapeRegExp(name)}\\b`, "gi"), "the client");
+      .replace(new RegExp(`\\b${escapeRegExp(cleaned)}['’]s\\b`, "gi"), "the client's")
+      .replace(new RegExp(`\\b${escapeRegExp(cleaned)}\\b`, "gi"), "the client");
   }
   return sanitized;
 }
 
-function sanitizeModelNarrativeText(text: string, blockedClientNames: string[]): string {
-  return replaceBlockedNames(text, blockedClientNames)
+function sanitizeModelNarrativeText(
+  text: string,
+  blockedClientNames: string[],
+  presentPeople: string[] = [],
+): string {
+  let sanitized = replaceBlockedNames(text, blockedClientNames);
+  for (const person of presentPeople) {
+    const cleaned = person
+      .trim()
+      .replace(/^[\s,;:([]+/g, "")
+      .replace(/[\s,;:)\]]+$/g, "")
+      .trim();
+    if (cleaned.length < 2) continue;
+    sanitized = sanitized
+      .replace(new RegExp(`\\b${escapeRegExp(cleaned)}['’]s\\b`, "gi"), "another person's")
+      .replace(new RegExp(`\\b${escapeRegExp(cleaned)}\\b`, "gi"), "another person");
+  }
+  return sanitized
     .replace(
-      new RegExp(`\\b(?:the\\s+)?${THIRD_PARTY_ROLE_SOURCE}['’]s\\b`, "gi"),
-      "the RBT's",
+      new RegExp(
+        `\\b(?:toward|towards)\\s+(?:the\\s+)?${THIRD_PARTY_ROLE_SOURCE}(?:\\s*\\/\\s*${THIRD_PARTY_ROLE_SOURCE})*`,
+        "gi",
+      ),
+      "toward another person",
     )
-    .replace(
-      new RegExp(`\\b(?:the\\s+)?${THIRD_PARTY_ROLE_SOURCE}\\b`, "gi"),
-      "the RBT",
-    )
+    .replace(new RegExp(`\\b(?:the\\s+)?${FAMILY_ROLE_SOURCE}['’]s\\b`, "gi"), "another person's")
+    .replace(new RegExp(`\\b(?:the\\s+)?${FAMILY_ROLE_SOURCE}\\b`, "gi"), "another person")
+    .replace(new RegExp(`\\b(?:the\\s+)?${STAFF_OR_CAREGIVER_ROLE_SOURCE}['’]s\\b`, "gi"), "the RBT's")
+    .replace(new RegExp(`\\b(?:the\\s+)?${STAFF_OR_CAREGIVER_ROLE_SOURCE}\\b`, "gi"), "the RBT")
     .replace(/\bthe RBT(?:\s*\/\s*the RBT)+\b/gi, "the RBT")
-    .replace(/\s+/g, " ")
+    .replace(/\banother person(?:\s*\/\s*another person)+\b/gi, "another person")
+    // Presence leaks like "and Maternal uncle) remained" → "and remained"
+    .replace(/\s+and\s+another person\s*\)+/gi, " and")
+    .replace(/\(\s*and\s+another person\s*\)/gi, "")
+    .replace(/\s+\)+/g, "")
+    .replace(/\s{2,}/g, " ")
     .trim();
 }
 
@@ -333,35 +362,51 @@ export function buildFrozenSessionContext(
 export function groundNotePlanWithFrozenContext(
   plan: NotePlan,
   context: SessionContext,
-  options?: { blockedClientNames?: string[] | undefined },
+  options?: {
+    blockedClientNames?: string[] | undefined;
+    presentPeople?: string[] | undefined;
+  },
 ): NotePlan {
   const blockedClientNames = options?.blockedClientNames ?? [];
+  const presentPeople = options?.presentPeople ?? [];
   return {
     segments: plan.segments.map((segment, index) => {
       const locked = context.segments[index];
       if (!locked) return segment;
       const sanitized = {
         ...segment,
-        antecedent: sanitizeModelNarrativeText(segment.antecedent, blockedClientNames),
-        topography: sanitizeModelNarrativeText(segment.topography, blockedClientNames),
+        antecedent: sanitizeModelNarrativeText(
+          segment.antecedent,
+          blockedClientNames,
+          presentPeople,
+        ),
+        topography: sanitizeModelNarrativeText(
+          segment.topography,
+          blockedClientNames,
+          presentPeople,
+        ),
         interventions: segment.interventions.map((intervention) => ({
           ...intervention,
           application: sanitizeModelNarrativeText(
             intervention.application,
             blockedClientNames,
+            presentPeople,
           ),
         })),
         responseToIntervention: sanitizeModelNarrativeText(
           segment.responseToIntervention,
           blockedClientNames,
+          presentPeople,
         ),
         teachingOrPromptingSummary: sanitizeModelNarrativeText(
           segment.teachingOrPromptingSummary,
           blockedClientNames,
+          presentPeople,
         ),
         resultSummary: sanitizeModelNarrativeText(
           segment.resultSummary,
           blockedClientNames,
+          presentPeople,
         ),
       };
       const topography =
@@ -387,7 +432,8 @@ export function groundNotePlanWithFrozenContext(
 
 const SUBJECTIVE_RE =
   /\b(upset|frustrated|happy|angry|sad|moody|stubborn|non-?compliant|defiant|rude|lazy|uncooperative|fair performance|bad day|good day|did well|did poorly|appeared|seemed|wanted|felt)\b/i;
-const CAREGIVER_RE = /\b(caregiver|mother|father|mom|dad|parent|guardian|grandmother|grandfather)\b/i;
+const CAREGIVER_RE =
+  /\b(caregiver|mother|father|mom|dad|parent|guardian|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|sibling|brother|sister|maternal|paternal|relative)\b/i;
 const METRIC_RE = /\b\d+\s*%|\b\d+\s*\/\s*\d+\b|\b\d+\s+(?:of\s+\d+\s+)?(?:trials?|opportunities?|responses?|intervals?)\b/i;
 
 function segmentText(segment: NotePlan["segments"][number]): string {

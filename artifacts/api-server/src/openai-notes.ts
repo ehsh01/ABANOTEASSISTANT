@@ -72,7 +72,8 @@ The server-provided SessionContext is frozen and authoritative:
 - Copy acquisitionOnly, behaviorLabel, replacementLabel, and intervention labels exactly. Never add, remove, reorder, rename, or paraphrase labels.
 - Acquisition-only segments must use an empty behaviorLabel and empty interventions array.
 - Write only bounded, observable details in antecedent, topography, intervention application, response, teaching/prompting, and result fields.
-- Do not use learner names, initials, caregivers, parents, guardians, subjective/emotional language, diagnoses, inferred intent, or unsupported clinical facts.
+- Do not use learner names, initials, caregivers, parents, guardians, aunts, uncles, siblings, or other relatives, subjective/emotional language, diagnoses, inferred intent, or unsupported clinical facts. Present people belong only in the server opening sentence.
+- Do not begin antecedent (or any narrative field) with the word "During". Vary openings so hour paragraphs sound organic (e.g. "The RBT presented…", "Later, the RBT arranged…", "Next, materials were set out…").
 - When behaviorTopography is present, treat it as an assessment action bank only: paraphrase those observable actions into natural session-episode topography (what the client did in this hour). Never paste BIP/VIP/assessment definition text, scoring language, "defined as," "any instance," or catalog labels alone. Never return only the behavior label or a generic phrase such as "motor behavior" or "elopement."
 - Keep all narrative fields sounding like a written session note: concise, concrete client/RBT actions—not copied plan language.
 - If activityAntecedent is non-null, include that exact text in antecedent.
@@ -381,6 +382,7 @@ export async function generateClinicalBodyOpenAI(
       const groundedCandidate = parsedPlan.success
         ? groundNotePlanWithFrozenContext(parsedPlan.data, frozen, {
             blockedClientNames: validationOptions?.blockedClientNames,
+            presentPeople: ctx.presentPeople,
           })
         : parsed.value;
       const result = validateNotePlan(groundedCandidate, frozen, {

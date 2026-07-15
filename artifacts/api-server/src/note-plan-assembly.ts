@@ -10,6 +10,44 @@ function followingClause(text: string): string {
   return sentence(normalized);
 }
 
+/** Varied openings so ABC paragraphs do not all start with "During". */
+const ANTECEDENT_DURING_REPLACEMENTS = [
+  "While",
+  "As",
+  "When",
+  "Once",
+  "After",
+  "With",
+] as const;
+
+/**
+ * Rewrite a leading "During …" so multi-hour notes do not open every paragraph the same way.
+ * Non-"During" antecedents are left unchanged.
+ */
+export function organicAntecedentLead(antecedent: string, segmentIndex: number): string {
+  const trimmed = antecedent.trim().replace(/\s+/g, " ");
+  if (!/^During\b/i.test(trimmed)) {
+    return sentence(trimmed);
+  }
+  const replacement =
+    ANTECEDENT_DURING_REPLACEMENTS[segmentIndex % ANTECEDENT_DURING_REPLACEMENTS.length]!;
+  return sentence(trimmed.replace(/^During\b/i, replacement));
+}
+
+/** Manifested-behavior bridges — none begin with "During"; keep "the client manifested" contiguous for validators. */
+const MANIFESTED_BRIDGES = [
+  "While this work was underway, the client manifested",
+  "At that point, the client manifested",
+  "As the activity continued, the client manifested",
+  "When the demand was present, the client manifested",
+  "Soon after, the client manifested",
+  "Then, the client manifested",
+] as const;
+
+export function manifestedBehaviorBridge(segmentIndex: number): string {
+  return MANIFESTED_BRIDGES[segmentIndex % MANIFESTED_BRIDGES.length]!;
+}
+
 export function roundedTrialPercentage(summary: TherapistTrialSummary): number {
   const successful = new Set(
     summary.successfulTrialNumbers.filter(
@@ -41,13 +79,13 @@ export function assembleClinicalBodyFromNotePlan(
   return plan.segments
     .map((segment, index) => {
       const locked = context.segments[index]!;
-      const parts: string[] = [sentence(segment.antecedent)];
+      const parts: string[] = [organicAntecedentLead(segment.antecedent, index)];
 
       if (locked.acquisitionOnly) {
         parts.push(sentence(segment.topography));
       } else {
         parts.push(
-          `During this activity, the client manifested ${locked.behaviorLabel} by ${sentence(segment.topography)}`,
+          `${manifestedBehaviorBridge(index)} ${locked.behaviorLabel} by ${sentence(segment.topography)}`,
         );
         for (const intervention of segment.interventions) {
           parts.push(`To address this behavior, the RBT implemented ${intervention.label}.`);

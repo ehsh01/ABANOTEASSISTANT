@@ -10,8 +10,24 @@ import { therapySettingLocationPhrase } from "@workspace/therapy-settings";
 export type { TherapySetting };
 export { therapySettingLocationPhrase };
 
+/** Trim stray punctuation from intake present-people labels (e.g. "Maternal uncle)"). */
+export function normalizePresentPersonLabel(raw: string): string {
+  return raw
+    .trim()
+    .replace(/^[\s,;:([]+/g, "")
+    .replace(/[\s,;:)\]]+$/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function formatCaregiverList(presentPeople: string[]): string {
-  const p = presentPeople.map((s) => s.trim()).filter(Boolean);
+  const p = [
+    ...new Set(
+      presentPeople
+        .map((s) => normalizePresentPersonLabel(s))
+        .filter((s) => s.length > 0),
+    ),
+  ];
   if (p.length === 0) return "the caregiver";
   if (p.length === 1) return p[0]!;
   if (p.length === 2) return `${p[0]} and ${p[1]}`;

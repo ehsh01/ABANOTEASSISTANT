@@ -71,7 +71,7 @@ export function paragraphReflectsStoredTopography(
 
 /** Text from "manifested …" through the end of that sentence (behavior topography locus). */
 export function manifestedBehaviorSentenceSpan(paragraph: string): string {
-  const m = /\bthe client manifested\b/i.exec(paragraph);
+  const m = /\bthe client(?:\s+\w+){0,2}\s+manifested\b/i.exec(paragraph);
   if (!m || m.index === undefined) return "";
   const after = paragraph.slice(m.index);
   const dot = after.indexOf(".");
