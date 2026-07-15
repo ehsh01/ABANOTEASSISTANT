@@ -35,6 +35,26 @@ function followingClause(text: string): string {
   return sentence(normalized);
 }
 
+function clauseAfterBy(text: string): string {
+  const normalized = text
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/^The RBT\b/, "the RBT")
+    .replace(/^The client\b/, "the client");
+  return sentence(normalized);
+}
+
+/** True when "Following this intervention, …" would only restate the catalog name (after neutralize). */
+function isRedundantInterventionApplication(application: string, label: string): boolean {
+  const normalized = application.trim().replace(/\s+/g, " ").replace(/\.$/, "");
+  if (!normalized) return true;
+  const re = new RegExp(
+    `^(?:the RBT\\s+)?(?:used|implemented|applied)\\s+${escapeRegExp(label.trim())}$`,
+    "i",
+  );
+  return re.test(normalized) || normalized.toLowerCase() === label.trim().toLowerCase();
+}
+
 /** Varied openings so ABC paragraphs do not all start with "During". */
 const ANTECEDENT_DURING_REPLACEMENTS = [
   "While",
@@ -114,7 +134,7 @@ export function assembleClinicalBodyFromNotePlan(
         parts.push(sentence(neutralize(segment.topography)));
       } else {
         parts.push(
-          `${manifestedBehaviorBridge(index)} ${locked.behaviorLabel} by ${sentence(neutralize(segment.topography))}`,
+          `${manifestedBehaviorBridge(index)} ${locked.behaviorLabel} by ${clauseAfterBy(neutralize(segment.topography))}`,
         );
         // Naming sentences are driven by the server-locked interventionLabels (the backend is the
         // authority on how many/which interventions), not the model's free-form list. This keeps the
@@ -134,7 +154,7 @@ export function assembleClinicalBodyFromNotePlan(
             segment.interventions[0];
           parts.push(`To address this behavior, the RBT implemented ${label}.`);
           const application = neutralize(match?.application?.trim() ?? "");
-          if (application) {
+          if (application && !isRedundantInterventionApplication(application, label)) {
             parts.push(`Following this intervention, ${followingClause(application)}`);
           }
         });
@@ -143,7 +163,7 @@ export function assembleClinicalBodyFromNotePlan(
 
       const replacementLead = index % 2 === 0 ? "Additionally, the" : "The";
       parts.push(
-        `${replacementLead} RBT implemented the replacement program "${locked.replacementLabel}" by ${sentence(neutralize(segment.teachingOrPromptingSummary))}`,
+        `${replacementLead} RBT implemented the replacement program "${locked.replacementLabel}" by ${clauseAfterBy(neutralize(segment.teachingOrPromptingSummary))}`,
       );
       if (
         segment.resultSummary.trim().toLowerCase() !==

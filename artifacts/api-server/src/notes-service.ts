@@ -75,6 +75,7 @@ import {
   filterReinforcementPreferencesForNote,
   sanitizeReinforcerNarrativeText,
 } from "./reinforcer-preferences";
+import { normalizeClinicalBodyPraiseWording } from "./note-normalization";
 import { assessmentGenerationGate } from "./note-readiness";
 import {
   enrichMaladaptiveTargetsWithAssessmentTopography,
@@ -878,6 +879,20 @@ export async function generateSessionNoteForClient(params: {
     finalClinicalBody = caregiverScrubbedBody;
     warnings.push(
       "Removed caregiver/family language from the clinical body so presence stays only in the opening sentence.",
+    );
+    complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, {
+      ...buildComplianceContext(),
+      replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
+      rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
+    });
+    complianceIssues = complianceResult.issues;
+  }
+
+  const praiseNormalizedBody = normalizeClinicalBodyPraiseWording(finalClinicalBody);
+  if (praiseNormalizedBody !== finalClinicalBody) {
+    finalClinicalBody = praiseNormalizedBody;
+    warnings.push(
+      'Normalized reinforcer wording to plain "praise" (never "social praise"/compound praise labels that reviewers treat as interventions).',
     );
     complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, {
       ...buildComplianceContext(),

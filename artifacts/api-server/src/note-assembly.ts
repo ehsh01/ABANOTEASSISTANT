@@ -88,9 +88,26 @@ function isPraiseLikePreference(name: string): boolean {
 export function isCaregiverOrPersonRolePreference(name: string): boolean {
   const n = normalizePresentPersonLabel(name).toLowerCase();
   if (!n) return false;
-  return /^(?:the\s+)?(?:caregiver|caregivers|parents?|guardians?|mother|father|mom|dad|mommy|daddy|stepmother|stepfather|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|siblings?|brother|sister|(?:maternal|paternal)\s+(?:uncle|aunt|grandmother|grandfather)|family members?)$/i.test(
-    n,
-  );
+  // Exact role labels (e.g. Mother, Maternal uncle).
+  if (
+    /^(?:the\s+)?(?:caregiver|caregivers|parents?|guardians?|mother|father|mom|dad|mommy|daddy|stepmother|stepfather|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|siblings?|brother|sister|(?:maternal|paternal)\s+(?:uncle|aunt|grandmother|grandfather)|family members?)$/i.test(
+      n,
+    )
+  ) {
+    return true;
+  }
+  // Compound presence labels from intake / BIP dumps (e.g. "Mother / Caregiver").
+  if (
+    /^(?:mother|father|mom|dad|caregiver|parent|guardian)(?:\s*\/\s*(?:mother|father|mom|dad|caregiver|parent|guardian))+$/i.test(
+      n,
+    )
+  ) {
+    return true;
+  }
+  // Person-contact / person-owned gadgets are not usable closing reinforcers.
+  if (/^(?:hugs?|kisses?)\b/i.test(n)) return true;
+  if (/\b(?:mother'?s|father'?s|mom'?s|dad'?s|caregiver'?s)\s+phone\b/i.test(n)) return true;
+  return false;
 }
 
 function formatReinforcerPreferenceList(items: string[]): string {
@@ -102,12 +119,12 @@ function formatReinforcerPreferenceList(items: string[]): string {
 
 /**
  * Mandatory closing paragraph. When the assessment summary includes reinforcementPreferences,
- * lists those concrete BIP items (minus praise-like tokens) and uses "social praise" when that
- * preference is documented—so the note does not invent a praise/intervention label or a generic
- * "reinforcement system" without named reinforcers.
+ * lists those concrete BIP items (minus praise-like tokens). Always uses plain **praise** in the
+ * praise clause — never "social praise", "verbal praise", or "behavior-specific praise" (external
+ * reviewers misread those compounds as catalog intervention names).
  *
- * Filters YouTube when the client is under 14 and omits umbrella "Preferred toys" when more
- * specific toy preferences are on file.
+ * Filters YouTube when the client is under 14, omits umbrella "Preferred toys" when more
+ * specific toy preferences are on file, and drops caregiver/person roles and BIP dump lines.
  */
 export function buildLockedClosingParagraph(
   reinforcementPreferences?: string[] | null,
@@ -120,7 +137,6 @@ export function buildLockedClosingParagraph(
     return LOCKED_CLOSING_PARAGRAPH;
   }
 
-  const hasSocialPraise = prefs.some((p) => /^social praise$/i.test(p.trim()));
   const tangibleItems = prefs
     .filter(
       (p) =>
@@ -131,17 +147,12 @@ export function buildLockedClosingParagraph(
     )
     .slice(0, MAX_REINFORCER_ITEMS_IN_CLOSING);
 
-  // Prefer BIP wording "social praise" when on file; otherwise plain "praise" (not compound labels).
-  const praiseClause = hasSocialPraise
-    ? 'social praise (e.g., "Good job," "Wow," and "Good attention to detail")'
-    : PRAISE_EXAMPLE;
-
   const itemsClause =
     tangibleItems.length > 0
       ? `access to preferred items and activities documented for this client (e.g., ${formatReinforcerPreferenceList(tangibleItems)})`
       : "access to individualized preferred items and activities identified in the client's reinforcement system";
 
-  return `Throughout the session, the RBT used various reinforcers, including ${praiseClause} and ${itemsClause}, contingent on task completion and appropriate behavior. ${LOCKED_CLOSING_TAIL}`;
+  return `Throughout the session, the RBT used various reinforcers, including ${PRAISE_EXAMPLE} and ${itemsClause}, contingent on task completion and appropriate behavior. ${LOCKED_CLOSING_TAIL}`;
 }
 
 /** Used when the client profile has no first name for locked opening lines. */

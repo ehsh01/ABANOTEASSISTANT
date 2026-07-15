@@ -54,7 +54,7 @@ describe("locked closing and end-of-note sequence", () => {
     expect(LOCKED_CLOSING_PARAGRAPH).not.toMatch(/caregiver|mother|father/i);
   });
 
-  test("closing lists concrete reinforcementPreferences and social praise when on file", () => {
+  test("closing lists concrete reinforcementPreferences with plain praise only", () => {
     const closing = buildLockedClosingParagraph([
       "social praise",
       "snacks",
@@ -63,7 +63,8 @@ describe("locked closing and end-of-note sequence", () => {
       "spinning toys",
       "YouTube videos",
     ]);
-    expect(closing).toContain("social praise");
+    expect(closing).toContain('praise (e.g., "Good job," "Wow," and "Good attention to detail")');
+    expect(closing).not.toMatch(/\bsocial praise\b/i);
     expect(closing).toContain("snacks");
     expect(closing).toContain("sensory toys");
     expect(closing).toContain("documented for this client");
@@ -86,6 +87,23 @@ describe("locked closing and end-of-note sequence", () => {
     expect(closing).toContain("Video games");
     expect(closing).toContain("Preferred activities");
     expect(closing).not.toMatch(/maternal|uncle|mother|father|caregiver/i);
+  });
+
+  test("closing expands BIP dump lines and drops Mother/Caregiver and hugs", () => {
+    const closing = buildLockedClosingParagraph([
+      "social praise",
+      "Mother / Caregiver",
+      "Food: snacks, yogurt, cereal, pop start; he doesn’t like sweets.",
+      "Tangibles: electronics such as tablet and mother’s phone; toys such as animals, sensory toys, or any spinning toy.",
+      "Playing with his tablet",
+      "Watching TV",
+      "Playing with toys",
+      "Hugs",
+    ]);
+    expect(closing).not.toMatch(/\bsocial praise\b/i);
+    expect(closing).not.toMatch(/Mother|Caregiver|Hugs|mother.?s phone|doesn.|like sweets/i);
+    expect(closing).toContain("snacks");
+    expect(closing).toMatch(/tablet|sensory toys|spinning toy/i);
   });
 
   test("closing omits YouTube for clients under 14 and Preferred toys when concrete toys exist", () => {

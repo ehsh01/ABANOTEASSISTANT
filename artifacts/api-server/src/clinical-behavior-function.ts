@@ -1,4 +1,5 @@
 import type { ClinicalFunction } from "@workspace/db/schema";
+import { isUnusableStoredTopography } from "./maladaptive-behavior-topography";
 import { sanitizeTextForJsonStorage } from "./sanitize-text-for-json";
 
 export const CLINICAL_FUNCTIONS: readonly ClinicalFunction[] = [
@@ -219,6 +220,7 @@ export function maladaptiveBehaviorTopographyForHourLabels(
     if (!b) return null;
     const hit = targets.find((t) => labelsEquivalent(t.name, b));
     const topo = hit?.topography?.trim();
-    return topo && topo.length > 0 ? topo : null;
+    if (!topo || isUnusableStoredTopography(topo)) return null;
+    return topo;
   });
 }

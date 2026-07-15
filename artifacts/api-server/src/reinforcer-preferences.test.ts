@@ -23,6 +23,25 @@ describe("reinforcer preferences helpers", () => {
     expect(filtered).not.toContain("Preferred toys");
   });
 
+  test("expands BIP dump lines and drops Mother / Caregiver and hugs", () => {
+    const filtered = filterReinforcementPreferencesForNote(
+      [
+        "Mother / Caregiver",
+        "Food: snacks, yogurt, cereal, pop start; he doesn’t like sweets.",
+        "Tangibles: electronics such as tablet and mother’s phone; toys such as animals, sensory toys, or any spinning toy.",
+        "Hugs",
+        "Watching TV",
+      ],
+      { clientAgeYears: 9 },
+    );
+    expect(filtered.some((p) => /mother|caregiver|hugs|phone|doesn|pop start/i.test(p))).toBe(
+      false,
+    );
+    expect(filtered).toEqual(
+      expect.arrayContaining(["snacks", "yogurt", "cereal", "tablet", "sensory toys", "Watching TV"]),
+    );
+  });
+
   test("keeps Preferred toys when no concrete toy preference exists", () => {
     const filtered = filterReinforcementPreferencesForNote(
       ["Preferred toys", "Tablet", "YouTube videos"],

@@ -222,6 +222,27 @@ describe("server-owned metrics and deterministic assembly", () => {
     expect(sanitized).not.toContain("Anthony");
   });
 
+  it("rejects BIP status placeholders as unusable topography", () => {
+    expect(sanitizeStoredTopographyForNarrative("Status: To be initiated.")).toBe("");
+    expect(sanitizeStoredTopographyForNarrative("To be initiated")).toBe("");
+    const grounded = groundNotePlanWithFrozenContext(
+      validPlan({
+        behaviorLabel: "Property Destruction",
+        topography: "Status: To be initiated.",
+      }),
+      buildFrozenSessionContext(
+        generationContext({
+          maladaptiveBehaviors: ["Property Destruction"],
+          maladaptiveBehaviorForHour: ["Property Destruction"],
+          maladaptiveBehaviorTopographyForHour: ["Status: To be initiated."],
+          behaviorToReplacementsMap: { "Property Destruction": ["Request for Break"] },
+          behaviorReplacementCandidatesForHour: [["Request for Break"]],
+        }),
+      ),
+    );
+    expect(grounded.segments[0]?.topography).not.toMatch(/status|to be initiated/i);
+  });
+
   it("removes forbidden third-party roles from stored behavior definitions", () => {
     const sanitized = sanitizeStoredTopographyForNarrative(
       "Defined as when Anthony uses threats towards caregiver/therapist/peers, vocalizes words, and screams above conversational level.",

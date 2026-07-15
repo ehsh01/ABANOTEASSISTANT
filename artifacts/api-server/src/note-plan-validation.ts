@@ -20,6 +20,7 @@ import {
 import {
   elopementEpisodeLacksObservableTopography,
   isElopementFamilyBehaviorLabel,
+  isUnusableStoredTopography,
   paragraphReflectsStoredTopography,
 } from "./maladaptive-behavior-topography";
 import { filterReinforcementPreferencesForNote } from "./reinforcer-preferences";
@@ -154,6 +155,9 @@ export function sanitizeStoredTopographyForNarrative(
   rawTopography: string,
   blockedClientNames: string[] = [],
 ): string {
+  if (isUnusableStoredTopography(rawTopography)) {
+    return "";
+  }
   let text = replaceBlockedNames(
     rawTopography.trim().replace(/\s+/g, " "),
     blockedClientNames,
@@ -209,6 +213,9 @@ export function sanitizeStoredTopographyForNarrative(
     .replace(/\s+/g, " ")
     .trim();
 
+  if (isUnusableStoredTopography(text) || !containsObservableClinicalAction(text)) {
+    return "";
+  }
   return text;
 }
 
@@ -223,10 +230,16 @@ export function shouldPreferStoredTopographyOverModel(
   behaviorLabel: string,
 ): boolean {
   const stored = storedTopography?.trim() ?? "";
-  if (!stored || !containsObservableClinicalAction(stored)) return false;
+  if (
+    !stored ||
+    isUnusableStoredTopography(stored) ||
+    !containsObservableClinicalAction(stored)
+  ) {
+    return false;
+  }
 
   const model = modelTopography.trim();
-  if (!model) return true;
+  if (!model || isUnusableStoredTopography(model)) return true;
   if (model.toLowerCase() === behaviorLabel.trim().toLowerCase()) return true;
   if (!containsObservableClinicalAction(model)) return true;
 
@@ -338,12 +351,12 @@ export function buildFrozenSessionContext(
         functionCandidates: ctx.interventionCandidatesForHour[segmentIndex],
       }),
       activityAntecedent: ctx.activityAntecedentForHour[segmentIndex] ?? null,
-      behaviorTopography: ctx.maladaptiveBehaviorTopographyForHour[segmentIndex]
-        ? sanitizeStoredTopographyForNarrative(
-            ctx.maladaptiveBehaviorTopographyForHour[segmentIndex]!,
-            blockedClientNames,
-          )
-        : null,
+      behaviorTopography: (() => {
+        const raw = ctx.maladaptiveBehaviorTopographyForHour[segmentIndex];
+        if (!raw || isUnusableStoredTopography(raw)) return null;
+        const cleaned = sanitizeStoredTopographyForNarrative(raw, blockedClientNames);
+        return cleaned.length > 0 ? cleaned : null;
+      })(),
       behaviorFunctions: ctx.maladaptiveBehaviorFunctionsForHour[segmentIndex] ?? null,
       trialSummary: ctx.therapistTrialSummaryForReplacementHour[segmentIndex] ?? null,
       rbtActionsOnlyOutcome: ctx.rbtActionsOnlyOutcomeForHour[segmentIndex] === true,
@@ -432,16 +445,27 @@ export function groundNotePlanWithFrozenContext(
           presentPeople,
         ),
       };
-      const topography =
-        !locked.acquisitionOnly &&
-        shouldPreferStoredTopographyOverModel(
-          sanitized.topography,
-          locked.behaviorTopography,
-          locked.behaviorLabel,
-        ) &&
-        locked.behaviorTopography
-          ? locked.behaviorTopography
-          : sanitized.topography;
+      let topography = sanitized.topography;
+      if (!locked.acquisitionOnly) {
+        if (
+          shouldPreferStoredTopographyOverModel(
+            topography,
+            locked.behaviorTopography,
+            locked.behaviorLabel,
+          ) &&
+          locked.behaviorTopography
+        ) {
+          topography = locked.behaviorTopography;
+        } else if (isUnusableStoredTopography(topography)) {
+          // Never keep BIP status placeholders ("Status: To be initiated") in the manifested-behavior
+          // slot. Prefer a usable stored definition when one exists; otherwise clear so repair / prompt
+          // guidance can supply observable actions for this episode.
+          topography =
+            locked.behaviorTopography && !isUnusableStoredTopography(locked.behaviorTopography)
+              ? locked.behaviorTopography
+              : "";
+        }
+      }
       const responseToIntervention =
         !locked.acquisitionOnly &&
         !containsObservableClientOutcome(sanitized.responseToIntervention) &&

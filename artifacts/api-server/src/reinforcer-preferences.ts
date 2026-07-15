@@ -36,9 +36,98 @@ function normalizePreferenceLabel(raw: string): string {
 function isPersonRolePreference(name: string): boolean {
   const n = normalizePreferenceLabel(name).toLowerCase();
   if (!n) return false;
-  return /^(?:the\s+)?(?:caregiver|caregivers|parents?|guardians?|mother|father|mom|dad|mommy|daddy|stepmother|stepfather|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|siblings?|brother|sister|(?:maternal|paternal)\s+(?:uncle|aunt|grandmother|grandfather)|family members?)$/i.test(
-    n,
-  );
+  if (
+    /^(?:the\s+)?(?:caregiver|caregivers|parents?|guardians?|mother|father|mom|dad|mommy|daddy|stepmother|stepfather|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|siblings?|brother|sister|(?:maternal|paternal)\s+(?:uncle|aunt|grandmother|grandfather)|family members?)$/i.test(
+      n,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /^(?:mother|father|mom|dad|caregiver|parent|guardian)(?:\s*\/\s*(?:mother|father|mom|dad|caregiver|parent|guardian))+$/i.test(
+      n,
+    )
+  ) {
+    return true;
+  }
+  if (/^(?:hugs?|kisses?)\b/i.test(n)) return true;
+  if (/\b(?:mother'?s|father'?s|mom'?s|dad'?s|caregiver'?s)\s+phone\b/i.test(n)) return true;
+  return false;
+}
+
+/**
+ * Raw BIP section dumps ("Food: snacks…", "Tangibles: electronics such as tablet and mother's phone…")
+ * must not be pasted verbatim into the locked closing. When possible, expand into short concrete items.
+ */
+function isBipReinforcerDumpLine(name: string): boolean {
+  const n = name.trim();
+  if (!n) return false;
+  if (/^(?:food|edibles?|tangibles?|items?|activities?|attention|social|toys?)\s*:/i.test(n)) {
+    return true;
+  }
+  // Long narrative preference sentences (e.g. "…; he doesn't like sweets.")
+  if (
+    n.length > 80 ||
+    /\bdoesn[''\u2019]?t\s+like\b/i.test(n) ||
+    /;\s*he\b/i.test(n) ||
+    /^he\s+doesn/i.test(n)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Expand BIP dump lines into short concrete reinforcer labels when possible.
+ * Returns [] when nothing concrete can be recovered.
+ */
+function expandBipReinforcerDump(name: string): string[] {
+  const n = name.trim();
+  if (!n) return [];
+
+  // "Food: snacks, yogurt, cereal, pop start; he doesn't like sweets."
+  const foodMatch = n.match(/^food\s*:\s*(.+)$/i);
+  if (foodMatch?.[1]) {
+    return foodMatch[1]
+      .split(/[,;]/)
+      .map((part) =>
+        part
+          .replace(/\bhe\s+doesn[''\u2019]?t\s+like\b.*$/i, "")
+          .replace(/\bdoesn[''\u2019]?t\s+like\b.*$/i, "")
+          .trim(),
+      )
+      .filter(
+        (part) =>
+          part.length >= 2 &&
+          part.length <= 40 &&
+          !/^he\b/i.test(part) &&
+          !/\bdoesn[''\u2019]?t\s+like\b/i.test(part) &&
+          // Drop OCR/garbled tokens (e.g. "pop start") rather than inventing a brand name.
+          !/\bpop\s+start\b/i.test(part),
+      );
+  }
+
+  // "Tangibles: electronics such as tablet and mother's phone; toys such as animals, sensory toys, or any spinning toy."
+  const tangibleMatch = n.match(/^tangibles?\s*:\s*(.+)$/i);
+  if (tangibleMatch?.[1]) {
+    const body = tangibleMatch[1];
+    const found: string[] = [];
+    for (const candidate of [
+      "tablet",
+      "sensory toys",
+      "spinning toy",
+      "spinning toys",
+      "animals",
+      "animal toys",
+    ]) {
+      if (new RegExp(`\\b${candidate.replace(/\s+/g, "\\s+")}\\b`, "i").test(body)) {
+        found.push(candidate === "animals" ? "animal toys" : candidate);
+      }
+    }
+    return found;
+  }
+
+  return [];
 }
 
 const GENERIC_PREFERRED_TOYS_RE = /^preferred\s+toys?$/i;
@@ -88,9 +177,22 @@ export function filterReinforcementPreferencesForNote(
 ): string[] {
   const age = options?.clientAgeYears ?? null;
   const youtubeBanned = isYouTubeBannedForAge(age);
-  const cleaned = [...new Set((prefs ?? []).map((s) => s.trim()).filter(Boolean))].filter((p) => {
+  const expanded: string[] = [];
+  for (const raw of prefs ?? []) {
+    const p = raw.trim();
+    if (!p) continue;
+    if (isPersonRolePreference(p)) continue;
+    if (youtubeBanned && isYouTubePreference(p)) continue;
+    if (isBipReinforcerDumpLine(p)) {
+      expanded.push(...expandBipReinforcerDump(p));
+      continue;
+    }
+    expanded.push(p);
+  }
+  const cleaned = [...new Set(expanded.map((s) => s.trim()).filter(Boolean))].filter((p) => {
     if (isPersonRolePreference(p)) return false;
     if (youtubeBanned && isYouTubePreference(p)) return false;
+    if (isBipReinforcerDumpLine(p)) return false;
     return true;
   });
   const concreteToys = concreteToyPreferences(cleaned);

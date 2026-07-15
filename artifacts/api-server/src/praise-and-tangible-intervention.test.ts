@@ -19,6 +19,14 @@ describe("praise wording normalization", () => {
     expect(out).not.toMatch(/\bpraise\b/i);
   });
 
+  test("rewrites social praise so reviewers do not treat it as an intervention", () => {
+    const out = normalizeClinicalBodyPraiseWording(
+      "The RBT delivered social praise and access to sensory toys when the client used the transition response.",
+    );
+    expect(out).not.toMatch(/\bsocial praise\b/i);
+    expect(out).toMatch(/acknowledged the response and access to sensory toys/i);
+  });
+
   test("rewrites all external-review warning forms", () => {
     const out = normalizeClinicalBodyPraiseWording(
       "Praise withheld during repeated motor pattern. Brief praise delivered after the client placed the card into the bin. The RBT delivered brief praise when the client remained near the RBT.",

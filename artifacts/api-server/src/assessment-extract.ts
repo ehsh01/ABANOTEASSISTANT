@@ -15,6 +15,7 @@ import {
   resolveBehaviorFunctionsForName,
   sanitizeClinicalFunctionsInput,
 } from "./clinical-behavior-function";
+import { isUnusableStoredTopography } from "./maladaptive-behavior-topography";
 import type { ClinicalFunction } from "@workspace/db/schema";
 
 const ClinicalFunctionExtractEnum = z.enum(["escape", "attention", "tangible", "automatic"]);
@@ -707,9 +708,17 @@ export function enrichMaladaptiveTargetsWithAssessmentTopography<
   if (!text) return targets;
 
   return targets.map((target) => {
-    if (target.topography?.trim()) return target;
+    const existing = target.topography?.trim() ?? "";
+    // Treat BIP status placeholders ("Status: To be initiated") as missing so we can recover the
+    // real operational definition from the assessment text when the profile field is unusable.
+    if (existing && !isUnusableStoredTopography(existing)) return target;
     const topography = extractTopographyFromBipText(text, target.name);
-    return topography ? { ...target, topography } : target;
+    if (!topography) {
+      return existing && isUnusableStoredTopography(existing)
+        ? { ...target, topography: null }
+        : target;
+    }
+    return { ...target, topography };
   });
 }
 

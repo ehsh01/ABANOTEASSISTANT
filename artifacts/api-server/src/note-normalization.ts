@@ -52,9 +52,9 @@ export function normalizeClinicalBodyInterventionLabels(body: string, interventi
 }
 
 /**
- * Reinforcer wording: never list "verbal praise" or "behavior-specific praise" (reviewers misread
- * those compounds as catalog intervention names). Prefer plain "praise" / "brief praise" in the
- * clinical body; the locked closing uses "social praise" when that BIP preference is on file.
+ * Reinforcer wording: never list "social praise", "verbal praise", or "behavior-specific praise"
+ * (reviewers misread those compounds as catalog intervention names). Prefer plain "praise" /
+ * "brief praise" in the clinical body. Locked closing always uses plain "praise" as well.
  */
 export function normalizeClinicalBodyPraiseWording(body: string): string {
   const briefPraise = (match: string) =>
@@ -62,6 +62,8 @@ export function normalizeClinicalBodyPraiseWording(body: string): string {
   const praise = (match: string) =>
     match[0] === match[0]?.toUpperCase() ? "Praise" : "praise";
   return body
+    .replace(/\bbrief social praise\b/gi, briefPraise)
+    .replace(/\bsocial praise\b/gi, praise)
     .replace(/\bbrief behavior-specific praise\b/gi, briefPraise)
     .replace(/\bbehavior-specific praise\b/gi, praise)
     .replace(/\bbrief verbal praise\b/gi, briefPraise)

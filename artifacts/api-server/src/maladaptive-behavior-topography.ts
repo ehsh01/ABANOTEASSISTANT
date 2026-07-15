@@ -9,6 +9,30 @@ export function isElopementFamilyBehaviorLabel(behaviorName: string): boolean {
   );
 }
 
+/**
+ * BIP program-tracking / status lines and empty placeholders must never be used as topography.
+ * Profile fields sometimes store "Status: To be initiated" which is not an observable form of the
+ * behavior — and the word "initiated" falsely matches the observable-action lexicon.
+ */
+export function isUnusableStoredTopography(text: string | null | undefined): boolean {
+  const t = (text ?? "").trim().replace(/\s+/g, " ");
+  if (!t) return true;
+  if (/^\s*status\s*:/i.test(t)) return true;
+  if (/^(?:n\/a|na|none|tbd|pending|mastered|discontinued|unknown)\.?$/i.test(t)) return true;
+  if (/\b(?:to be|not yet|not)\s+initiated\b/i.test(t)) {
+    // Status phrases with no destruction/aggressive action words are unusable.
+    if (!/\b(?:throw|threw|throwing|rip|ripped|ripping|tear|tearing|break|broke|breaking|kick|kicked|hit|hitting|slam|knock|destroy|destroying|push|pushed)\b/i.test(t)) {
+      return true;
+    }
+  }
+  if (/^\s*(?:to be\s+)?initiated\.?\s*$/i.test(t)) return true;
+  // Very short admin labels ("Initiated", "Maintenance")
+  if (t.length < 12 && !/\b(?:hit|kick|throw|rip|bite|scream|elope|grab|slap)\b/i.test(t)) {
+    return true;
+  }
+  return false;
+}
+
 const TOPOGRAPHY_STOP_WORDS = new Set([
   "that",
   "this",
