@@ -299,7 +299,7 @@ Rules:
   - recommendations: bullet strings under **Recommendations** (data collection, caregiver training, hours, generalization, etc.).
   - medicalHistory: prose under **Medical History** (medications, sleep, eating, health concerns).
   - behaviorProfiles: short behavior names under **Behavior Profiles** / target behavior list when distinct from detailed BIP behavior sections (e.g. "Elopement", "Tantrum").
-  - reinforcementPreferences: people, items, activities, praise phrases under **Reinforcement Preferences**.
+  - reinforcementPreferences: preferred items, activities, and praise phrases under **Reinforcement Preferences**. Do **not** include people or caregiver/family role labels (e.g. Mother, Father, Maternal uncle, grandma)—only tangible or activity reinforcers and praise.
   - precursorBehaviors: items under **Precursor Behaviors** when listed.
   - crisisProtocol: prose under **Crisis Protocol** / crisis plan (prevention, de-escalation, post-incident steps).
   - parentTrainingGoals: caregiver training goal bullets under **Parent Training Goals**.

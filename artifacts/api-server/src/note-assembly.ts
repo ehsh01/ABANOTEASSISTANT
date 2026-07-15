@@ -76,6 +76,19 @@ function isPraiseLikePreference(name: string): boolean {
   );
 }
 
+/**
+ * True when a reinforcement-preference string is itself a caregiver/family role label
+ * (e.g. "Maternal uncle", "Mother") rather than an item/activity that merely mentions
+ * family wording (e.g. "Mom's music videos"). People are never reinforcers in locked closing.
+ */
+export function isCaregiverOrPersonRolePreference(name: string): boolean {
+  const n = normalizePresentPersonLabel(name).toLowerCase();
+  if (!n) return false;
+  return /^(?:the\s+)?(?:caregiver|caregivers|parents?|guardians?|mother|father|mom|dad|mommy|daddy|stepmother|stepfather|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|siblings?|brother|sister|(?:maternal|paternal)\s+(?:uncle|aunt|grandmother|grandfather)|family members?)$/i.test(
+    n,
+  );
+}
+
 function formatReinforcerPreferenceList(items: string[]): string {
   if (items.length === 0) return "";
   if (items.length === 1) return items[0]!;
@@ -99,7 +112,7 @@ export function buildLockedClosingParagraph(
 
   const hasSocialPraise = prefs.some((p) => /^social praise$/i.test(p.trim()));
   const tangibleItems = prefs
-    .filter((p) => !isPraiseLikePreference(p))
+    .filter((p) => !isPraiseLikePreference(p) && !isCaregiverOrPersonRolePreference(p))
     .slice(0, MAX_REINFORCER_ITEMS_IN_CLOSING);
 
   // Prefer BIP wording "social praise" when on file; otherwise plain "praise" (not compound labels).

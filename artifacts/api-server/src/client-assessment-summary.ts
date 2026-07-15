@@ -1,4 +1,5 @@
 import type { ClientAssessmentSummaryRow } from "@workspace/db/schema";
+import { isCaregiverOrPersonRolePreference } from "./note-assembly";
 import { sanitizeTextForJsonStorage } from "./sanitize-text-for-json";
 
 /** Partial summary from API requests, PDF extract, or legacy profile rows. */
@@ -78,7 +79,9 @@ export function sanitizeClientAssessmentSummary(
     recommendations: dedupeTrimmedStrings(raw.recommendations),
     medicalHistory: trimOrNull(raw.medicalHistory),
     behaviorProfiles: dedupeTrimmedStrings(raw.behaviorProfiles),
-    reinforcementPreferences: dedupeTrimmedStrings(raw.reinforcementPreferences),
+    reinforcementPreferences: dedupeTrimmedStrings(raw.reinforcementPreferences).filter(
+      (p) => !isCaregiverOrPersonRolePreference(p),
+    ),
     precursorBehaviors: dedupeTrimmedStrings(raw.precursorBehaviors),
     crisisProtocol: trimOrNull(raw.crisisProtocol),
     parentTrainingGoals: dedupeTrimmedStrings(raw.parentTrainingGoals),

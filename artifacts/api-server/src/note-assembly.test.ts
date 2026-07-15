@@ -71,6 +71,23 @@ describe("locked closing and end-of-note sequence", () => {
     expect(closing).not.toMatch(/reinforcement system/);
   });
 
+  test("closing never lists caregiver/family role labels as preferred items", () => {
+    const closing = buildLockedClosingParagraph([
+      "social praise",
+      "Video games",
+      "Tablet",
+      "Electronic devices",
+      "Preferred toys",
+      "Preferred activities",
+      "Maternal uncle",
+      "Mother",
+      "Maternal uncle)",
+    ]);
+    expect(closing).toContain("Video games");
+    expect(closing).toContain("Preferred activities");
+    expect(closing).not.toMatch(/maternal|uncle|mother|father|caregiver/i);
+  });
+
   test("performance sentence uses fixed template when trial data exists", () => {
     const sentence = buildPerformanceSentence(2, [{ totalTrials: 5, successfulTrialNumbers: [1, 3] }], "Anthony");
     expect(sentence).toBe(
