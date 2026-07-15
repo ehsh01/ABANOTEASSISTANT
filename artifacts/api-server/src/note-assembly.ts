@@ -6,6 +6,10 @@
 import type { TherapistTrialSummaryForHourEntry } from "./note-validation";
 import type { TherapySetting } from "@workspace/therapy-settings";
 import { therapySettingLocationPhrase } from "@workspace/therapy-settings";
+import {
+  filterReinforcementPreferencesForNote,
+  isGenericPreferredToysLabel,
+} from "./reinforcer-preferences";
 
 export type { TherapySetting };
 export { therapySettingLocationPhrase };
@@ -101,18 +105,30 @@ function formatReinforcerPreferenceList(items: string[]): string {
  * lists those concrete BIP items (minus praise-like tokens) and uses "social praise" when that
  * preference is documented—so the note does not invent a praise/intervention label or a generic
  * "reinforcement system" without named reinforcers.
+ *
+ * Filters YouTube when the client is under 14 and omits umbrella "Preferred toys" when more
+ * specific toy preferences are on file.
  */
 export function buildLockedClosingParagraph(
   reinforcementPreferences?: string[] | null,
+  options?: { clientAgeYears?: number | null },
 ): string {
-  const prefs = [...new Set((reinforcementPreferences ?? []).map((s) => s.trim()).filter(Boolean))];
+  const prefs = filterReinforcementPreferencesForNote(reinforcementPreferences, {
+    clientAgeYears: options?.clientAgeYears,
+  });
   if (prefs.length === 0) {
     return LOCKED_CLOSING_PARAGRAPH;
   }
 
   const hasSocialPraise = prefs.some((p) => /^social praise$/i.test(p.trim()));
   const tangibleItems = prefs
-    .filter((p) => !isPraiseLikePreference(p) && !isCaregiverOrPersonRolePreference(p))
+    .filter(
+      (p) =>
+        !isPraiseLikePreference(p) &&
+        !isCaregiverOrPersonRolePreference(p) &&
+        // Alone, the umbrella label is not a usable closing example — fall back to generic wording.
+        !isGenericPreferredToysLabel(p),
+    )
     .slice(0, MAX_REINFORCER_ITEMS_IN_CLOSING);
 
   // Prefer BIP wording "social praise" when on file; otherwise plain "praise" (not compound labels).

@@ -61,6 +61,15 @@ import {
   buildPerformanceSentence,
   type TherapySetting,
 } from "./note-assembly";
+import {
+  clinicalBodyHasUnspecifiedToyDelivery,
+  clinicalBodyNamesConcreteToy,
+  concreteToyPreferences,
+  filterReinforcementPreferencesForNote,
+  isYouTubeBannedForAge,
+  mentionsYouTube,
+  YOUTUBE_MIN_AGE_YEARS,
+} from "./reinforcer-preferences";
 
 export * from "./note-scheduling";
 export * from "./note-normalization";
@@ -124,6 +133,8 @@ export type NoteComplianceContext = {
   presentPeople: string[];
   /** Profile/assessment-derived learner names forbidden in the AI clinical body. */
   blockedClientNames?: string[] | undefined;
+  /** BIP reinforcement preferences used for toy specificity and age-gated reinforcer checks. */
+  reinforcementPreferences?: string[] | undefined;
 };
 
 export type NoteValidationSeverity = "blocking" | "warning";
@@ -132,6 +143,7 @@ export type NoteValidationIssueCode =
   | "FORMAT_QUOTATION"
   | "LANGUAGE_OBJECTIVITY"
   | "AGE_APPROPRIATENESS"
+  | "REINFORCER_SPECIFICITY"
   | "SCHOOL_ACTIVITY_OWNERSHIP"
   | "PARAGRAPH_COUNT"
   | "CLIENT_NAME_LEAKAGE"
@@ -1058,6 +1070,26 @@ function validateClinicalBodyComplianceInternal(
     }
   }
 
+  if (isYouTubeBannedForAge(ctx.clientAgeYears) && mentionsYouTube(clinicalBody)) {
+    add("AGE_APPROPRIATENESS", "warning",
+      `Age gate: clients under ${YOUTUBE_MIN_AGE_YEARS} must not receive YouTube as a reinforcer, reward, or activity. Use another preference from reinforcementPreferences.`,
+    );
+  }
+
+  const reinforcerPrefs = filterReinforcementPreferencesForNote(ctx.reinforcementPreferences ?? [], {
+    clientAgeYears: ctx.clientAgeYears,
+  });
+  const concreteToys = concreteToyPreferences(reinforcerPrefs);
+  if (
+    concreteToys.length > 0 &&
+    clinicalBodyHasUnspecifiedToyDelivery(clinicalBody) &&
+    !clinicalBodyNamesConcreteToy(clinicalBody, concreteToys)
+  ) {
+    add("REINFORCER_SPECIFICITY", "warning",
+      `Toy reinforcers must name a specific preferred toy from the client's list (e.g. ${concreteToys.slice(0, 3).join(", ")}), not bare "preferred toys" / unspecified "toys".`,
+    );
+  }
+
   const paragraphs = clinicalBody
     .trim()
     .split(/\n\n+/)
@@ -1822,6 +1854,7 @@ export type AssembledSessionNoteValidationContext = {
   narrativeProgramSegmentCount: number;
   therapistTrialSummaryForReplacementHour?: TherapistTrialSummaryForHourEntry[] | undefined;
   reinforcementPreferences?: string[] | null | undefined;
+  clientAgeYears?: number | null | undefined;
 };
 
 /** Final deterministic gate for locked prose and end-of-note ordering. */
@@ -1839,7 +1872,9 @@ export function validateAssembledSessionNote(
     ctx.therapySetting,
     ctx.clientFirstName,
   );
-  const closing = buildLockedClosingParagraph(ctx.reinforcementPreferences);
+  const closing = buildLockedClosingParagraph(ctx.reinforcementPreferences, {
+    clientAgeYears: ctx.clientAgeYears,
+  });
   const performance = buildPerformanceSentence(
     ctx.narrativeProgramSegmentCount,
     ctx.therapistTrialSummaryForReplacementHour,

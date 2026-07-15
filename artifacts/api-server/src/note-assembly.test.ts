@@ -88,6 +88,24 @@ describe("locked closing and end-of-note sequence", () => {
     expect(closing).not.toMatch(/maternal|uncle|mother|father|caregiver/i);
   });
 
+  test("closing omits YouTube for clients under 14 and Preferred toys when concrete toys exist", () => {
+    const closing = buildLockedClosingParagraph(
+      ["social praise", "YouTube videos", "Preferred toys", "sensory toys", "Tablet"],
+      { clientAgeYears: 9 },
+    );
+    expect(closing).toContain("sensory toys");
+    expect(closing).toContain("Tablet");
+    expect(closing).not.toMatch(/youtube/i);
+    expect(closing).not.toMatch(/Preferred toys/i);
+  });
+
+  test("closing keeps YouTube when client is 14+", () => {
+    const closing = buildLockedClosingParagraph(["YouTube videos", "Tablet"], {
+      clientAgeYears: 14,
+    });
+    expect(closing).toContain("YouTube videos");
+  });
+
   test("performance sentence uses fixed template when trial data exists", () => {
     const sentence = buildPerformanceSentence(2, [{ totalTrials: 5, successfulTrialNumbers: [1, 3] }], "Anthony");
     expect(sentence).toBe(

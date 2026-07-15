@@ -21,6 +21,7 @@ import {
   isElopementFamilyBehaviorLabel,
   paragraphReflectsStoredTopography,
 } from "./maladaptive-behavior-topography";
+import { filterReinforcementPreferencesForNote } from "./reinforcer-preferences";
 
 export type NotePlanIssueCode =
   | "SCHEMA_INVALID"
@@ -341,7 +342,9 @@ export function buildFrozenSessionContext(
     // forbidden in the clinical body; the authoritative assessment still grounds this context.
     clientAssessmentTextExcerpt: "",
     assessmentReferenceFileName: ctx.assessmentReferenceFileName,
-    reinforcementPreferences: ctx.reinforcementPreferences,
+    reinforcementPreferences: filterReinforcementPreferencesForNote(ctx.reinforcementPreferences, {
+      clientAgeYears: ctx.clientAgeYears,
+    }),
     segments,
     planCatalogSnapshot: {
       behaviors: uniqueLabels(ctx.maladaptiveBehaviors),

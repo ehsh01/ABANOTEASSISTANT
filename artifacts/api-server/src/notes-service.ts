@@ -71,6 +71,10 @@ import {
   buildPerformanceSentence,
   type TherapySetting,
 } from "./note-assembly";
+import {
+  filterReinforcementPreferencesForNote,
+  sanitizeReinforcerNarrativeText,
+} from "./reinforcer-preferences";
 import { assessmentGenerationGate } from "./note-readiness";
 import {
   enrichMaladaptiveTargetsWithAssessmentTopography,
@@ -191,9 +195,10 @@ function assembleSessionNote(
   narrativeProgramSegmentCount: number,
   therapistTrialSummaryForReplacementHour: TherapistTrialSummaryForHourEntry[] | undefined,
   reinforcementPreferences?: string[] | null,
+  clientAgeYears?: number | null,
 ): string {
   const opening = buildLockedOpening(presentPeople, hasEnvChanges, therapySetting, clientFirstName);
-  const closing = buildLockedClosingParagraph(reinforcementPreferences);
+  const closing = buildLockedClosingParagraph(reinforcementPreferences, { clientAgeYears });
   const performance = buildPerformanceSentence(
     narrativeProgramSegmentCount,
     therapistTrialSummaryForReplacementHour,
@@ -597,6 +602,10 @@ export async function generateSessionNoteForClient(params: {
     therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
     clientAgeYears,
     presentPeople: body.presentPeople,
+    reinforcementPreferences: filterReinforcementPreferencesForNote(
+      profile?.assessmentSummary?.reinforcementPreferences ?? [],
+      { clientAgeYears },
+    ),
   };
 
   const warnings: string[] = [];
@@ -703,7 +712,10 @@ export async function generateSessionNoteForClient(params: {
     ageBand: client.ageBand,
     clientAssessmentTextExcerpt,
     assessmentReferenceFileName: profile?.assessmentFileName ?? null,
-    reinforcementPreferences: profile?.assessmentSummary?.reinforcementPreferences ?? [],
+    reinforcementPreferences: filterReinforcementPreferencesForNote(
+      profile?.assessmentSummary?.reinforcementPreferences ?? [],
+      { clientAgeYears },
+    ),
     activityAntecedentForHour: narrativeCollapsed.activityAntecedentForHour,
     languageMaladaptiveEpisodeForHour: narrativeCollapsed.languageMaladaptiveEpisodeForHour,
     therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
@@ -875,6 +887,28 @@ export async function generateSessionNoteForClient(params: {
     complianceIssues = complianceResult.issues;
   }
 
+  const reinforcerPrefsForNote = filterReinforcementPreferencesForNote(
+    profile?.assessmentSummary?.reinforcementPreferences ?? [],
+    { clientAgeYears },
+  );
+  const reinforcerScrubbedBody = sanitizeReinforcerNarrativeText(
+    finalClinicalBody,
+    reinforcerPrefsForNote,
+    clientAgeYears,
+  );
+  if (reinforcerScrubbedBody !== finalClinicalBody) {
+    finalClinicalBody = reinforcerScrubbedBody;
+    warnings.push(
+      "Normalized reinforcer wording (concrete preferred toys; no YouTube for clients under 14).",
+    );
+    complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, {
+      ...buildComplianceContext(),
+      replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
+      rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
+    });
+    complianceIssues = complianceResult.issues;
+  }
+
   const effectiveIssueMap = new Map(
     complianceResult.issues.map((issue) => [`${issue.code}\u0000${issue.message}`, issue]),
   );
@@ -953,7 +987,8 @@ export async function generateSessionNoteForClient(params: {
     profile?.firstName,
     narrativeCollapsed.narrativeSegmentCount,
     narrativeCollapsed.therapistTrialSummaryForReplacementHour,
-    profile?.assessmentSummary?.reinforcementPreferences ?? null,
+    reinforcerPrefsForNote,
+    clientAgeYears,
   );
 
   const assembledContext = {
@@ -965,7 +1000,8 @@ export async function generateSessionNoteForClient(params: {
     blockedClientNames,
     narrativeProgramSegmentCount: narrativeCollapsed.narrativeSegmentCount,
     therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
-    reinforcementPreferences: profile?.assessmentSummary?.reinforcementPreferences ?? null,
+    reinforcementPreferences: reinforcerPrefsForNote,
+    clientAgeYears,
   };
   let assembledValidation = validateAssembledSessionNote(noteContent, assembledContext);
 
@@ -992,7 +1028,8 @@ export async function generateSessionNoteForClient(params: {
       profile?.firstName,
       narrativeCollapsed.narrativeSegmentCount,
       narrativeCollapsed.therapistTrialSummaryForReplacementHour,
-      profile?.assessmentSummary?.reinforcementPreferences ?? null,
+      reinforcerPrefsForNote,
+      clientAgeYears,
     );
     assembledValidation = validateAssembledSessionNote(noteContent, assembledContext);
   }
