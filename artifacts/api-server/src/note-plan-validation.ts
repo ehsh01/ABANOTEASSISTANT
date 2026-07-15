@@ -1,5 +1,6 @@
 import {
   findNonContingentReinforcementInterventionLabel,
+  isEnvironmentalManipulationInterventionLabel,
   isResponseBlockInterventionLabel,
   isSibMaladaptiveBehaviorLabel,
   preferredInterventionCandidatesForBehaviorFunction,
@@ -279,6 +280,36 @@ export function assignInterventionsForSegment(params: {
       : null;
     if (ncr && !assigned.includes(ncr)) assigned.push(ncr);
     return assigned;
+  }
+
+  // SIB with NO approved Response Block/Response Blocking: the safety validator requires Environmental
+  // Manipulation to be named first (protective set-up), then protective blocking in plain prose before
+  // any DRA/Redirection/Premack naming sentence. Assign Environmental Manipulation first so the
+  // generated prose leads with it (mirrors the SAFETY_CHAIN fallback in note-validation.ts).
+  if (safetyEligible && isSibMaladaptiveBehaviorLabel(params.behaviorLabel)) {
+    const environmentalManipulation = approved.find((label) =>
+      isEnvironmentalManipulationInterventionLabel(label),
+    );
+    if (environmentalManipulation) {
+      const assigned = [environmentalManipulation];
+      const second =
+        candidates.find(
+          (label) =>
+            !isEnvironmentalManipulationInterventionLabel(label) &&
+            !isResponseBlockInterventionLabel(label),
+        ) ??
+        preferredInterventionCandidatesForBehaviorFunction(
+          approved,
+          params.behaviorFunctions,
+          params.behaviorLabel,
+        ).find(
+          (label) =>
+            !isEnvironmentalManipulationInterventionLabel(label) &&
+            !isResponseBlockInterventionLabel(label),
+        );
+      if (second && !assigned.includes(second)) assigned.push(second);
+      return assigned;
+    }
   }
 
   const preferred =

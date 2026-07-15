@@ -457,6 +457,30 @@ export function isSafetyStopWaitReplacementProgramName(name: string): boolean {
   );
 }
 
+/**
+ * Normalize a replacement/intervention program name for equivalence comparison only.
+ *
+ * BIP-extracted `behavior_to_replacements_map` values frequently differ from the assigned/authorized
+ * catalog strings by **casing** (e.g. "Request for Break" vs "Request for break") and by **quote glyph**
+ * (curly “No” vs straight 'No'). Those are the same clinical program, so misfit/candidate matching must
+ * compare on a normalized key. This is used for comparison ONLY — never for the assembled prose, which
+ * must still contain the exact assigned program string.
+ */
+export function normalizeReplacementProgramKey(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[\u2018\u2019\u201A\u201B\u201C\u201D\u201E\u201F'"`]/g, "'")
+    .replace(/\s+/g, " ");
+}
+
+/** True when `name` matches any entry in `list` under normalized (case/quote-insensitive) comparison. */
+export function replacementProgramListIncludes(list: string[], name: string): boolean {
+  const key = normalizeReplacementProgramKey(name);
+  if (!key) return false;
+  return list.some((p) => normalizeReplacementProgramKey(p) === key);
+}
+
 /** BIP map lookup with case-insensitive key fallback. */
 function mappedReplacementsForBehaviorKey(
   behaviorName: string,
@@ -538,11 +562,18 @@ export function behaviorReplacementCandidatesForMaladaptiveBehavior(
   const authorized = [...new Set(authorizedProgramNames.map((s) => s.trim()).filter((s) => s.length > 0))];
   const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
   const mapped = mappedReplacementsForBehaviorKey(behaviorName, behaviorToReplacementsMap);
-  let mappedViable = mapped.filter(
-    (p) =>
-      authorized.includes(p) &&
-      !isHardMisfitReplacementForMaladaptiveBehavior(behaviorName, p, behaviorFunctions),
-  );
+  // Resolve each mapped program (BIP spelling: may differ in case/quote glyph) to its authorized
+  // catalog spelling so downstream assignment uses a real catalog string that resolves to a program id
+  // and matches the assembled prose verbatim.
+  const canonicalizeToAuthorized = (p: string): string | null => {
+    const key = normalizeReplacementProgramKey(p);
+    return authorized.find((a) => normalizeReplacementProgramKey(a) === key) ?? null;
+  };
+  let mappedViable = mapped
+    .map(canonicalizeToAuthorized)
+    .filter((p): p is string => p !== null)
+    .filter((p) => !isHardMisfitReplacementForMaladaptiveBehavior(behaviorName, p, behaviorFunctions));
+  mappedViable = [...new Set(mappedViable)];
   if (mappedViable.length > 0) {
     if (primary) {
       const functionMatched = mappedViable.filter((p) =>
@@ -577,18 +608,18 @@ export function behaviorReplacementCandidatesForMaladaptiveBehavior(
 /**
  * Definitive function mismatches that override an incorrect BIP behavior→replacement map.
  */
-export function isHardMisfitReplacementForMaladaptiveBehavior(
+/**
+ * Genuine SAFETY-only replacement misfits (independent of function-category alignment). These are the
+ * pairings we block even when the BIP maps them, because they create a safety problem (e.g. a
+ * "leave the area" program for a non-elopement behavior).
+ */
+export function isSafetyHardMisfitReplacementForMaladaptiveBehavior(
   behaviorName: string,
   replacementProgramName: string,
-  behaviorFunctions?: import("@workspace/db/schema").ClinicalFunction[] | null,
 ): boolean {
   const behavior = behaviorName.trim();
   const program = replacementProgramName.trim();
   if (!behavior || !program) return false;
-
-  if (isFunctionMisfitReplacement(behavior, program, behaviorFunctions)) {
-    return true;
-  }
 
   if (isOffTaskInattentionMaladaptiveBehavior(behavior) && isSafetyStopWaitReplacementProgramName(program)) {
     return true;
@@ -608,6 +639,22 @@ export function isHardMisfitReplacementForMaladaptiveBehavior(
   return false;
 }
 
+export function isHardMisfitReplacementForMaladaptiveBehavior(
+  behaviorName: string,
+  replacementProgramName: string,
+  behaviorFunctions?: import("@workspace/db/schema").ClinicalFunction[] | null,
+): boolean {
+  const behavior = behaviorName.trim();
+  const program = replacementProgramName.trim();
+  if (!behavior || !program) return false;
+
+  if (isFunctionMisfitReplacement(behavior, program, behaviorFunctions)) {
+    return true;
+  }
+
+  return isSafetyHardMisfitReplacementForMaladaptiveBehavior(behavior, program);
+}
+
 /**
  * True when auto-assigned replacement program is a poor function match for the maladaptive behavior.
  */
@@ -621,28 +668,28 @@ export function isMisfitReplacementForMaladaptiveBehavior(
   const program = replacementProgramName.trim();
   if (!behavior || !program) return false;
 
+  const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
+  const mapped = mappedReplacementsForBehaviorKey(behavior, behaviorToReplacementsMap);
+
+  // BIP authority: when the client's BIP maps replacement programs to this behavior, any mapped program
+  // that is not a genuine SAFETY misfit is authorized for it. Function-category alignment guides which
+  // mapped program auto-assignment *prefers* (see behaviorReplacementCandidatesForMaladaptiveBehavior),
+  // but it must NOT block a program the BIP explicitly maps to this behavior — doing so produced false
+  // "Documented function" mismatches for programs (e.g. "Accept 'No' as an answer") that are on the map
+  // with different casing/quote glyphs than the assigned catalog string.
+  const mappedSafe = mapped.filter(
+    (p) => !isSafetyHardMisfitReplacementForMaladaptiveBehavior(behavior, p),
+  );
+  if (replacementProgramListIncludes(mappedSafe, program)) {
+    return false;
+  }
+
   if (isHardMisfitReplacementForMaladaptiveBehavior(behavior, program, behaviorFunctions)) {
     return true;
   }
 
-  const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
-  const mapped = mappedReplacementsForBehaviorKey(behavior, behaviorToReplacementsMap);
-  if (primary && primary !== "automatic") {
-    const functionAlignedMapped = mapped.filter(
-      (p) =>
-        replacementProgramMatchesFunctionCategory(p, primary) &&
-        !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p, behaviorFunctions),
-    );
-    if (functionAlignedMapped.length > 0) {
-      return !functionAlignedMapped.includes(program);
-    }
-  }
-
-  const mappedNonHard = mapped.filter(
-    (p) => !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p, behaviorFunctions),
-  );
-  if (mappedNonHard.length > 0) {
-    return !mappedNonHard.includes(program);
+  if (mappedSafe.length > 0) {
+    return !replacementProgramListIncludes(mappedSafe, program);
   }
 
   if (primary && !replacementProgramMatchesFunctionCategory(program, primary)) {
@@ -988,6 +1035,10 @@ export function pickBestReplacementProgramForBehavior(
   behaviorFunctions?: import("@workspace/db/schema").ClinicalFunction[] | null,
   excludeNames?: ReadonlySet<string>,
 ): string | null {
+  const excludedKeys = new Set(
+    [...(excludeNames ?? [])].map((n) => normalizeReplacementProgramKey(n)),
+  );
+  const isExcluded = (name: string): boolean => excludedKeys.has(normalizeReplacementProgramKey(name));
   const candidates = behaviorReplacementCandidatesForMaladaptiveBehavior(
     behavior,
     behaviorToReplacementsMap,
@@ -995,12 +1046,12 @@ export function pickBestReplacementProgramForBehavior(
     behaviorFunctions,
   );
   for (const c of candidates) {
-    if (!excludeNames?.has(c)) return c;
+    if (!isExcluded(c)) return c;
   }
   const primary = primaryFunctionForReplacementSelection(behaviorFunctions);
   if (primary) {
     for (const p of authorizedProgramNames) {
-      if (excludeNames?.has(p)) continue;
+      if (isExcluded(p)) continue;
       if (
         replacementProgramMatchesFunctionCategory(p, primary) &&
         !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p, behaviorFunctions)
@@ -1010,7 +1061,7 @@ export function pickBestReplacementProgramForBehavior(
     }
   }
   for (const p of authorizedProgramNames) {
-    if (excludeNames?.has(p)) continue;
+    if (isExcluded(p)) continue;
     if (!isHardMisfitReplacementForMaladaptiveBehavior(behavior, p, behaviorFunctions)) {
       return p;
     }

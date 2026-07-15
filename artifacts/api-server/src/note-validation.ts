@@ -44,6 +44,7 @@ import {
   MALADAPTIVE_BEHAVIOR_SIB_CANONICAL,
   isMisfitReplacementForMaladaptiveBehavior,
   maladaptiveBehaviorLabelsEquivalent,
+  normalizeReplacementProgramKey,
   type TherapistTrialSummaryForHourEntry,
 } from "./note-scheduling";
 import {
@@ -951,17 +952,34 @@ function findMaladaptiveBehaviorAbbreviationIssue(
   return null;
 }
 
-function findUnauthorizedQuotedReplacementProgramIssue(
+export function findUnauthorizedQuotedReplacementProgramIssue(
   paragraph: string,
   assignedProgram: string,
   authorizedPrograms: string[],
 ): string | null {
-  const authorized = new Set(authorizedPrograms.map((s) => s.trim()).filter(Boolean));
+  // Program names can themselves contain quotes (e.g. Accept 'No' as an answer). Mask the assigned and
+  // authorized program strings out of the paragraph first so the quoted-span scanner does not split
+  // "Accept 'No' as an answer" into a bogus "Accept" token and flag it as unauthorized.
+  const namesToMask = [assignedProgram, ...authorizedPrograms]
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .sort((a, b) => b.length - a.length);
+  let masked = paragraph;
+  for (const name of namesToMask) {
+    masked = masked.split(name).join(" \u0000PROGRAM\u0000 ");
+  }
+
+  const authorizedKeys = new Set(
+    authorizedPrograms.map((s) => normalizeReplacementProgramKey(s)).filter(Boolean),
+  );
+  const assignedKey = normalizeReplacementProgramKey(assignedProgram);
   const re = /replacement program\s+["']([^"']+)["']/gi;
   let m: RegExpExecArray | null;
-  while ((m = re.exec(paragraph)) !== null) {
+  while ((m = re.exec(masked)) !== null) {
     const quoted = m[1]!.trim();
-    if (quoted !== assignedProgram.trim() && !authorized.has(quoted)) {
+    if (quoted.includes("\u0000")) continue;
+    const quotedKey = normalizeReplacementProgramKey(quoted);
+    if (quotedKey && quotedKey !== assignedKey && !authorizedKeys.has(quotedKey)) {
       return `Unauthorized replacement program "${quoted}" — use only the verbatim assigned program "${assignedProgram}" in the replacement-program sentence.`;
     }
   }
