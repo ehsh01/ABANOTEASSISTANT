@@ -355,10 +355,14 @@ export function stripUnauthorizedCaregiverLanguage(
       "another person",
     )
     .replace(/\banother person(?:\s*\/\s*another person)+\b/gi, "another person")
-    .replace(/\s+and\s+another person\s*\)+/gi, " and")
-    .replace(/\(\s*and\s+another person\s*\)/gi, "")
-    .replace(/\s+\)+/g, "")
-    .replace(/\s{2,}/g, " ")
+    .replace(/[^\S\n]+and[^\S\n]+another person[^\S\n]*\)+/gi, " and")
+    .replace(/\([^\S\n]*and[^\S\n]+another person[^\S\n]*\)/gi, "")
+    // Only strip trailing parens preceded by horizontal whitespace; never touch newlines so
+    // the assembled body keeps its blank-line paragraph separators (one paragraph per ABC).
+    .replace(/[^\S\n]+\)+/g, "")
+    .replace(/[^\S\n]{2,}/g, " ")
+    .replace(/[^\S\n]*\n[^\S\n]*/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 
   return sanitized.replace(/\u0000Q(\d+)\u0000/g, (_, index) => protectedSpans[Number(index)] ?? "");

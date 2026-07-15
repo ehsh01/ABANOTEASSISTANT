@@ -111,6 +111,26 @@ describe("caregiver language strip", () => {
     expect(stripped).toContain('"Parent Training"');
     expect(stripped).toContain("completed the placement and remained");
   });
+
+  test("preserves blank-line paragraph separators (one paragraph per ABC)", () => {
+    const body = [
+      "The RBT presented cards. The client manifested Task Refusal by pushing materials away.",
+      "Later, the RBT arranged a sorting task. The client manifested Task Refusal by turning away.",
+      "Next, the RBT set out a matching task and the Mother sat nearby to observe.",
+    ].join("\n\n");
+    const stripped = stripUnauthorizedCaregiverLanguage(body, ["Mother"]);
+    expect(stripped.split(/\n\s*\n/)).toHaveLength(3);
+    expect(stripped).not.toMatch(/\bMother\b/);
+  });
+
+  test("does not collapse a five-segment body into one paragraph", () => {
+    const body = Array.from(
+      { length: 5 },
+      (_, i) => `Paragraph ${i + 1}. The client completed the presented task.`,
+    ).join("\n\n");
+    const stripped = stripUnauthorizedCaregiverLanguage(body, []);
+    expect(stripped.split(/\n\s*\n/)).toHaveLength(5);
+  });
 });
 
 describe("assembled note order", () => {
