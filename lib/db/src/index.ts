@@ -40,6 +40,16 @@ const useTls =
   parsed.host !== "127.0.0.1" &&
   parsed.host !== "helium";
 
+/**
+ * The managed Postgres cluster caps total connections (e.g. DigitalOcean's smallest
+ * tier allows 25, with 3 reserved for superuser) and is shared by several apps.
+ * Keep this process's pool small and release idle connections quickly so we do not
+ * exhaust the server-wide slots ("remaining connection slots are reserved..." 53300).
+ */
+const parsedPoolMax = Number(process.env.PG_POOL_MAX ?? "");
+const poolMax =
+  Number.isFinite(parsedPoolMax) && parsedPoolMax >= 1 ? Math.floor(parsedPoolMax) : 4;
+
 export const pool = new Pool({
   host: parsed.host,
   port,
@@ -47,6 +57,9 @@ export const pool = new Pool({
   password: parsed.password,
   database: parsed.database,
   ssl: useTls ? { rejectUnauthorized: false } : undefined,
+  max: poolMax,
+  idleTimeoutMillis: 10_000,
+  connectionTimeoutMillis: 15_000,
 });
 export const db = drizzle(pool, { schema });
 

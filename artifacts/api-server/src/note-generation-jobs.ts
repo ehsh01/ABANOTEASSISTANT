@@ -10,6 +10,7 @@ import {
   type NoteGenerationJobResultData,
 } from "@workspace/db/schema";
 import { normalizeLegacyTherapySetting } from "@workspace/therapy-settings";
+import { withTransientDbRetry } from "./db-transient-retry";
 import { evaluateBilling } from "./billing/service";
 import {
   draftCapMessage,
@@ -110,11 +111,15 @@ export async function prepareNoteGeneration(params: {
     };
   }
 
-  const [client] = await db
-    .select()
-    .from(clientsTable)
-    .where(and(eq(clientsTable.id, body.clientId), eq(clientsTable.companyId, companyId)))
-    .limit(1);
+  const [client] = await withTransientDbRetry(
+    () =>
+      db
+        .select()
+        .from(clientsTable)
+        .where(and(eq(clientsTable.id, body.clientId), eq(clientsTable.companyId, companyId)))
+        .limit(1),
+    { label: "load client" },
+  );
 
   if (!client) {
     return { ok: false, status: 404, error: "Client not found", messages: [] };
@@ -127,11 +132,15 @@ export async function prepareNoteGeneration(params: {
   });
   if (!assessmentGate.ok) return assessmentGate;
 
-  const [companyForCap] = await db
-    .select()
-    .from(companiesTable)
-    .where(eq(companiesTable.id, companyId))
-    .limit(1);
+  const [companyForCap] = await withTransientDbRetry(
+    () =>
+      db
+        .select()
+        .from(companiesTable)
+        .where(eq(companiesTable.id, companyId))
+        .limit(1),
+    { label: "load company for draft cap" },
+  );
   const maxUnsavedDrafts = getMaxUnsavedDraftsForCompany(companyForCap ?? null);
   const slot = await tryConsumeDraftSlot(userId, maxUnsavedDrafts);
   if (!slot.ok) {
@@ -161,42 +170,58 @@ async function markJobFailed(
   messages: string[],
 ): Promise<void> {
   const now = new Date();
-  await db
-    .update(noteGenerationJobsTable)
-    .set({
-      status: "failed",
-      errorMessage: error,
-      errorStatus: status,
-      errorMessages: messages.length > 0 ? messages : null,
-      updatedAt: now,
-      completedAt: now,
-    })
-    .where(eq(noteGenerationJobsTable.id, jobId));
+  await withTransientDbRetry(
+    () =>
+      db
+        .update(noteGenerationJobsTable)
+        .set({
+          status: "failed",
+          errorMessage: error,
+          errorStatus: status,
+          errorMessages: messages.length > 0 ? messages : null,
+          updatedAt: now,
+          completedAt: now,
+        })
+        .where(eq(noteGenerationJobsTable.id, jobId)),
+    { label: "mark job failed" },
+  );
 }
 
 /** Runs OpenAI generation for a pending job (fire-and-forget from the HTTP handler). */
 export async function runNoteGenerationJob(jobId: string): Promise<void> {
-  const [job] = await db
-    .select()
-    .from(noteGenerationJobsTable)
-    .where(eq(noteGenerationJobsTable.id, jobId))
-    .limit(1);
+  const [job] = await withTransientDbRetry(
+    () =>
+      db
+        .select()
+        .from(noteGenerationJobsTable)
+        .where(eq(noteGenerationJobsTable.id, jobId))
+        .limit(1),
+    { label: "load job" },
+  );
 
   if (!job || job.status !== "pending") {
     return;
   }
 
   const now = new Date();
-  await db
-    .update(noteGenerationJobsTable)
-    .set({ status: "running", updatedAt: now })
-    .where(eq(noteGenerationJobsTable.id, jobId));
+  await withTransientDbRetry(
+    () =>
+      db
+        .update(noteGenerationJobsTable)
+        .set({ status: "running", updatedAt: now })
+        .where(eq(noteGenerationJobsTable.id, jobId)),
+    { label: "mark job running" },
+  );
 
-  const [client] = await db
-    .select()
-    .from(clientsTable)
-    .where(and(eq(clientsTable.id, job.clientId), eq(clientsTable.companyId, job.companyId)))
-    .limit(1);
+  const [client] = await withTransientDbRetry(
+    () =>
+      db
+        .select()
+        .from(clientsTable)
+        .where(and(eq(clientsTable.id, job.clientId), eq(clientsTable.companyId, job.companyId)))
+        .limit(1),
+    { label: "load client for job" },
+  );
 
   if (!client) {
     await markJobFailed(jobId, 404, "Client not found", []);
@@ -251,16 +276,20 @@ export async function runNoteGenerationJob(jobId: string): Promise<void> {
   };
 
   const completedAt = new Date();
-  await db
-    .update(noteGenerationJobsTable)
-    .set({
-      status: "completed",
-      resultData,
-      warnings: result.warnings.length > 0 ? result.warnings : null,
-      updatedAt: completedAt,
-      completedAt,
-    })
-    .where(eq(noteGenerationJobsTable.id, jobId));
+  await withTransientDbRetry(
+    () =>
+      db
+        .update(noteGenerationJobsTable)
+        .set({
+          status: "completed",
+          resultData,
+          warnings: result.warnings.length > 0 ? result.warnings : null,
+          updatedAt: completedAt,
+          completedAt,
+        })
+        .where(eq(noteGenerationJobsTable.id, jobId)),
+    { label: "mark job completed" },
+  );
 }
 
 export async function createNoteGenerationJobRecord(params: {
@@ -272,24 +301,28 @@ export async function createNoteGenerationJobRecord(params: {
 }): Promise<string> {
   const jobId = randomUUID();
   const now = new Date();
-  await db.insert(noteGenerationJobsTable).values({
-    id: jobId,
-    companyId: params.companyId,
-    userId: params.userId,
-    clientId: params.clientId,
-    status: "pending",
-    requestBody: params.body as unknown as Record<string, unknown>,
-    draftSlotUsed: params.draftQuota.used,
-    draftSlotMax: params.draftQuota.max,
-    resultData: null,
-    warnings: null,
-    errorMessage: null,
-    errorStatus: null,
-    errorMessages: null,
-    createdAt: now,
-    updatedAt: now,
-    completedAt: null,
-  });
+  await withTransientDbRetry(
+    () =>
+      db.insert(noteGenerationJobsTable).values({
+        id: jobId,
+        companyId: params.companyId,
+        userId: params.userId,
+        clientId: params.clientId,
+        status: "pending",
+        requestBody: params.body as unknown as Record<string, unknown>,
+        draftSlotUsed: params.draftQuota.used,
+        draftSlotMax: params.draftQuota.max,
+        resultData: null,
+        warnings: null,
+        errorMessage: null,
+        errorStatus: null,
+        errorMessages: null,
+        createdAt: now,
+        updatedAt: now,
+        completedAt: null,
+      }),
+    { label: "create job" },
+  );
   return jobId;
 }
 

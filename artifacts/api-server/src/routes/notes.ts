@@ -28,6 +28,7 @@ import {
   enqueueNoteGenerationJob,
   prepareNoteGeneration,
 } from "../note-generation-jobs";
+import { isTransientDbConnectionError, withTransientDbRetry } from "../db-transient-retry";
 import { ABC_ACTIVITY_ANTECEDENT_CATALOG } from "../abc-activity-antecedent-catalog";
 
 const router: IRouter = Router();
@@ -271,17 +272,41 @@ router.get("/notes/generate/jobs/:jobId", async (req, res) => {
   }
 
   const params = GetNoteGenerationJobParams.parse(req.params);
-  const [job] = await db
-    .select()
-    .from(noteGenerationJobsTable)
-    .where(
-      and(
-        eq(noteGenerationJobsTable.id, params.jobId),
-        eq(noteGenerationJobsTable.companyId, companyId),
-        eq(noteGenerationJobsTable.userId, userId),
-      ),
-    )
-    .limit(1);
+  let job: typeof noteGenerationJobsTable.$inferSelect | undefined;
+  try {
+    [job] = await withTransientDbRetry(
+      () =>
+        db
+          .select()
+          .from(noteGenerationJobsTable)
+          .where(
+            and(
+              eq(noteGenerationJobsTable.id, params.jobId),
+              eq(noteGenerationJobsTable.companyId, companyId),
+              eq(noteGenerationJobsTable.userId, userId),
+            ),
+          )
+          .limit(1),
+      { label: "poll job" },
+    );
+  } catch (err) {
+    if (isTransientDbConnectionError(err)) {
+      // The DB is momentarily out of connection slots. The job itself is still
+      // running server-side, so report "running" and let the client keep polling
+      // rather than surfacing a fatal 500 for a transient condition.
+      console.warn("[notes/generate/jobs] transient DB error while polling; reporting running", {
+        jobId: params.jobId,
+      });
+      const payload = GetNoteGenerationJobResponse.parse({
+        success: true,
+        data: { jobId: params.jobId, status: "running" },
+        error: null,
+      });
+      res.json(payload);
+      return;
+    }
+    throw err;
+  }
 
   if (!job) {
     res.status(404).json({ success: false, error: "Job not found", messages: [] });
