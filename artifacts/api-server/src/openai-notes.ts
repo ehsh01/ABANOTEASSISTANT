@@ -202,7 +202,13 @@ const defaultModelCall: NotePlanModelCall = async ({ messages }) => {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
   const model = resolvedOpenAIModel();
-  const client = new OpenAI({ apiKey });
+  // Bound each model call so a single slow/hung completion cannot run for the SDK default (10 min).
+  // Keep retries low so one call's worst case stays well under the overall generation time budget.
+  const client = new OpenAI({
+    apiKey,
+    timeout: resolveOpenAIRequestTimeoutMs(),
+    maxRetries: 1,
+  });
   const common = {
     model,
     messages,
@@ -299,6 +305,25 @@ function mapPlanIssuesToCompatibilityIssues(issues: NotePlanIssue[]): NoteValida
 
 const MAX_NOTE_PLAN_REPAIR_ATTEMPTS = 4;
 
+/** Per-request OpenAI timeout (ms). Keeps a single hung completion from consuming the whole budget. */
+function resolveOpenAIRequestTimeoutMs(): number {
+  const raw = Number(process.env.OPENAI_REQUEST_TIMEOUT_MS ?? "");
+  return Number.isFinite(raw) && raw >= 5_000 ? Math.floor(raw) : 60_000;
+}
+
+/**
+ * Overall wall-clock budget for the generate + repair loop (ms). The synchronous `POST /notes/generate`
+ * endpoint sits behind Cloudflare, which returns a raw HTML **524** if the origin takes longer than
+ * ~100s. When repairs cannot converge, stop issuing further model calls once this budget is spent and
+ * return the current best-effort result so the client receives a clean JSON compliance error (which it
+ * can surface and retry) instead of an opaque 524. Additional calls only resume when there is enough
+ * budget left for another bounded call.
+ */
+function resolveNoteGenerationTimeBudgetMs(): number {
+  const raw = Number(process.env.NOTE_GENERATION_TIME_BUDGET_MS ?? "");
+  return Number.isFinite(raw) && raw >= 15_000 ? Math.floor(raw) : 80_000;
+}
+
 export async function generateClinicalBodyOpenAI(
   ctx: NoteGenerationContext,
   validationOptions?: {
@@ -314,6 +339,8 @@ export async function generateClinicalBodyOpenAI(
   const warnings: string[] = [];
   const attemptHistory: NoteGenerationAttemptTelemetry[] = [];
   const repairActions: string[] = [];
+  const generationStartedAt = Date.now();
+  const timeBudgetMs = resolveNoteGenerationTimeBudgetMs();
 
   const callModel = async (
     params: Parameters<NotePlanModelCall>[0],
@@ -422,11 +449,20 @@ export async function generateClinicalBodyOpenAI(
     attemptHistory.push(currentTelemetry);
     if (currentTelemetry.passed) break;
 
-    if (repairAttempts >= MAX_NOTE_PLAN_REPAIR_ATTEMPTS) {
+    // Stop issuing further model calls when we are out of repair attempts OR when there is not enough
+    // wall-clock budget left for another bounded call. The latter keeps the synchronous endpoint from
+    // exceeding Cloudflare's ~100s origin timeout (raw 524); the client instead gets a clean JSON error.
+    const elapsedMs = Date.now() - generationStartedAt;
+    const observedMaxLatencyMs = attemptHistory.reduce((max, a) => Math.max(max, a.latencyMs), 0);
+    const estimatedNextCallMs = observedMaxLatencyMs > 0 ? observedMaxLatencyMs : 30_000;
+    const outOfTimeBudget = elapsedMs + estimatedNextCallMs >= timeBudgetMs;
+    if (repairAttempts >= MAX_NOTE_PLAN_REPAIR_ATTEMPTS || outOfTimeBudget) {
       warnings.push(
-        blockingProseIssues.length > 0
-          ? "Deterministically assembled clinical body remained noncompliant after bounded JSON repair."
-          : "Structured NotePlan remained invalid after bounded JSON repair.",
+        outOfTimeBudget
+          ? `Stopped after ${repairAttempts} repair attempt(s): note generation time budget (${timeBudgetMs}ms) reached before compliance converged.`
+          : blockingProseIssues.length > 0
+            ? "Deterministically assembled clinical body remained noncompliant after bounded JSON repair."
+            : "Structured NotePlan remained invalid after bounded JSON repair.",
       );
       return {
         body,
