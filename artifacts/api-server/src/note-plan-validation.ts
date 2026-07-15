@@ -238,8 +238,12 @@ export function shouldPreferStoredTopographyOverModel(
     return true;
   }
 
-  // Model prose may paraphrase; require only that key assessment action tokens appear.
-  return !paragraphReflectsStoredTopography(manifested, stored, 1);
+  // Model prose may paraphrase, but must reflect the stored observable actions strongly enough to pass
+  // the FINAL BEHAVIOR_TOPOGRAPHY gate (>=2 stored action tokens in the manifested-behavior sentence).
+  // Using the same threshold here means: keep the model's natural wording when it genuinely describes
+  // the stored actions, otherwise fall back to the sanitized stored topography (which is derived from
+  // the operational definition and therefore always satisfies the gate) so generation is not blocked.
+  return !paragraphReflectsStoredTopography(manifested, stored, 2);
 }
 
 /**
@@ -283,32 +287,17 @@ export function assignInterventionsForSegment(params: {
   }
 
   // SIB with NO approved Response Block/Response Blocking: the safety validator requires Environmental
-  // Manipulation to be named first (protective set-up), then protective blocking in plain prose before
-  // any DRA/Redirection/Premack naming sentence. Assign Environmental Manipulation first so the
-  // generated prose leads with it (mirrors the SAFETY_CHAIN fallback in note-validation.ts).
+  // Manipulation to be the FIRST (and, without a response-blocking label, the ONLY) catalog intervention
+  // naming sentence for the segment; protective blocking is then described in plain prose. Because the
+  // safety chain is not "allowed" without a Response Block label, INTERVENTION_COUNT permits exactly one
+  // catalog naming sentence — so assign only Environmental Manipulation here (a second catalog
+  // intervention would trip INTERVENTION_COUNT). See SAFETY_CHAIN + INTERVENTION_COUNT in note-validation.ts.
   if (safetyEligible && isSibMaladaptiveBehaviorLabel(params.behaviorLabel)) {
     const environmentalManipulation = approved.find((label) =>
       isEnvironmentalManipulationInterventionLabel(label),
     );
     if (environmentalManipulation) {
-      const assigned = [environmentalManipulation];
-      const second =
-        candidates.find(
-          (label) =>
-            !isEnvironmentalManipulationInterventionLabel(label) &&
-            !isResponseBlockInterventionLabel(label),
-        ) ??
-        preferredInterventionCandidatesForBehaviorFunction(
-          approved,
-          params.behaviorFunctions,
-          params.behaviorLabel,
-        ).find(
-          (label) =>
-            !isEnvironmentalManipulationInterventionLabel(label) &&
-            !isResponseBlockInterventionLabel(label),
-        );
-      if (second && !assigned.includes(second)) assigned.push(second);
-      return assigned;
+      return [environmentalManipulation];
     }
   }
 

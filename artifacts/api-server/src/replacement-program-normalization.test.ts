@@ -4,7 +4,10 @@ import {
   normalizeReplacementProgramKey,
   pickBestReplacementProgramForBehavior,
 } from "./note-scheduling";
-import { assignInterventionsForSegment } from "./note-plan-validation";
+import {
+  assignInterventionsForSegment,
+  shouldPreferStoredTopographyOverModel,
+} from "./note-plan-validation";
 import { findUnauthorizedQuotedReplacementProgramIssue } from "./note-validation";
 
 /**
@@ -121,14 +124,43 @@ describe("SIB intervention assignment without approved Response Block", () => {
     "Premack principle",
   ];
 
-  it("names Environmental Manipulation first for SIB when Response Block is unavailable", () => {
+  it("assigns ONLY Environmental Manipulation for SIB when Response Block is unavailable", () => {
+    // Without an approved Response Block label, INTERVENTION_COUNT permits exactly one catalog naming
+    // sentence for the SIB segment, so assignment must return a single intervention (protective blocking
+    // is described in plain prose, not as a second catalog intervention).
     const assigned = assignInterventionsForSegment({
       acquisitionOnly: false,
       behaviorLabel: "Self-Injurious Behavior (SIB)",
       approvedInterventions: approved,
       behaviorFunctions: ["automatic"],
     });
-    expect(assigned[0]).toBe("Environmental Manipulation");
-    expect(assigned.length).toBeGreaterThanOrEqual(1);
+    expect(assigned).toEqual(["Environmental Manipulation"]);
+  });
+});
+
+describe("SIB behavior topography grounding threshold", () => {
+  const storedSib =
+    "hurts himself by slapping himself in the face and pulling his hair";
+
+  it("prefers stored topography when the model omits the observable actions", () => {
+    // Model wrote a generic, non-reflective topography -> fall back to stored so the final
+    // BEHAVIOR_TOPOGRAPHY gate (>=2 stored action tokens) passes deterministically.
+    expect(
+      shouldPreferStoredTopographyOverModel(
+        "engaged in unsafe behavior directed at himself",
+        storedSib,
+        "Self-Injurious Behavior (SIB)",
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps natural model topography when it reflects the stored actions", () => {
+    expect(
+      shouldPreferStoredTopographyOverModel(
+        "slapping his face and pulling his hair",
+        storedSib,
+        "Self-Injurious Behavior (SIB)",
+      ),
+    ).toBe(false);
   });
 });
