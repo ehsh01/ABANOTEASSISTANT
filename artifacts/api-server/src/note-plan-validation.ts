@@ -433,7 +433,7 @@ export function groundNotePlanWithFrozenContext(
 const SUBJECTIVE_RE =
   /\b(upset|frustrated|happy|angry|sad|moody|stubborn|non-?compliant|defiant|rude|lazy|uncooperative|fair performance|bad day|good day|did well|did poorly|appeared|seemed|wanted|felt)\b/i;
 const CAREGIVER_RE =
-  /\b(caregiver|mother|father|mom|dad|parent|guardian|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|sibling|brother|sister|maternal|paternal|relative)\b/i;
+  /\b(caregiver|parents?|guardians?|mother|father|mom|dad|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|siblings?|brother|sister|(?:maternal|paternal)\s+(?:uncle|aunt)|family members?)\b/i;
 const METRIC_RE = /\b\d+\s*%|\b\d+\s*\/\s*\d+\b|\b\d+\s+(?:of\s+\d+\s+)?(?:trials?|opportunities?|responses?|intervals?)\b/i;
 
 function segmentText(segment: NotePlan["segments"][number]): string {

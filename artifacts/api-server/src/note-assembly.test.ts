@@ -8,7 +8,7 @@ import {
   formatCaregiverList,
   LOCKED_CLOSING_PARAGRAPH,
 } from "./note-assembly";
-import { validateAssembledSessionNote } from "./note-validation";
+import { validateAssembledSessionNote, stripUnauthorizedCaregiverLanguage } from "./note-validation";
 
 describe("locked opening", () => {
   test("uses first name and caregivers without stating a meeting place", () => {
@@ -102,6 +102,17 @@ describe("locked closing and end-of-note sequence", () => {
   });
 });
 
+describe("caregiver language strip", () => {
+  test("removes maternal-uncle leaks while preserving quoted Parent Training labels", () => {
+    const text =
+      'The client completed the placement and Maternal uncle) remained near the materials. The RBT implemented the replacement program "Parent Training" by modeling a gesture.';
+    const stripped = stripUnauthorizedCaregiverLanguage(text, ["Mother", "Maternal uncle)"]);
+    expect(stripped).not.toMatch(/maternal|uncle/i);
+    expect(stripped).toContain('"Parent Training"');
+    expect(stripped).toContain("completed the placement and remained");
+  });
+});
+
 describe("assembled note order", () => {
   test("opening → body → locked closing → performance → next session", () => {
     const opening = buildLockedOpening(["Mother"], false, "Home", "Anthony");
@@ -156,5 +167,32 @@ describe("assembled note order", () => {
       "CAREGIVER_LEAKAGE",
       "CLIENT_NAME_LEAKAGE",
     ]));
+  });
+
+  test("allows Parent Training catalog labels and BIP reinforcers with family words in locked closing", () => {
+    const context = {
+      presentPeople: ["Mother"],
+      hasEnvironmentalChanges: false,
+      therapySetting: "Home" as const,
+      nextSessionDate: "2026-01-15",
+      clientFirstName: "Anthony",
+      blockedClientNames: ["Anthony"],
+      narrativeProgramSegmentCount: 1,
+      therapistTrialSummaryForReplacementHour: [{ totalTrials: 5, successfulTrialNumbers: [1] }],
+      reinforcementPreferences: ["social praise", "Mom's music videos"],
+    };
+    const opening = buildLockedOpening(["Mother"], false, "Home", "Anthony");
+    const closing = buildLockedClosingParagraph(context.reinforcementPreferences);
+    const performance = buildPerformanceSentence(
+      1,
+      context.therapistTrialSummaryForReplacementHour,
+      "Anthony",
+    );
+    const next = buildNextSessionSentence("2026-01-15");
+    const body =
+      'The RBT presented cards. Then, the client manifested Task Refusal by pushing materials away. Additionally, the RBT implemented the replacement program "Parent Training" by modeling a request gesture.';
+    const note = [opening, "", body, "", closing, "", performance, "", next].join("\n");
+    expect(closing).toMatch(/Mom's music videos/);
+    expect(validateAssembledSessionNote(note, context).blocking).toEqual([]);
   });
 });

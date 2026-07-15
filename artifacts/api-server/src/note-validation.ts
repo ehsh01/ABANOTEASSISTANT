@@ -307,7 +307,107 @@ function unsupportedProgressComparison(paragraph: string): boolean {
 }
 
 const CAREGIVER_LEXICON =
-  /\b(caregiver|caregivers|parent|parents|guardian|guardians|mother|father|mom|dad|mommy|daddy|stepmother|stepfather|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|sibling|brother|sister|maternal|paternal|relative|family member)\b/i;
+  /\b(caregiver|caregivers|parents?|guardians?|mother|father|mom|dad|mommy|daddy|stepmother|stepfather|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|siblings?|brother|sister|(?:maternal|paternal)\s+(?:uncle|aunt|grandmother|grandfather)|family members?)\b/i;
+
+/** Mask quoted catalog labels so exact program names like "Parent Training" do not false-trigger caregiver checks. */
+export function maskQuotedCatalogSpans(text: string): string {
+  return text.replace(/"[^"]*"/g, '""').replace(/'[^']*'/g, "''");
+}
+
+/**
+ * Remove unauthorized caregiver/family presence wording from clinical body prose.
+ * Quoted catalog labels (replacement program names) are preserved exactly.
+ */
+export function stripUnauthorizedCaregiverLanguage(
+  text: string,
+  presentPeople: string[] = [],
+): string {
+  const protectedSpans: string[] = [];
+  const withPlaceholders = text.replace(/"[^"]*"|'[^']*'/g, (match) => {
+    protectedSpans.push(match);
+    return `\u0000Q${protectedSpans.length - 1}\u0000`;
+  });
+
+  let sanitized = withPlaceholders;
+  for (const person of presentPeople) {
+    const cleaned = person
+      .trim()
+      .replace(/^[\s,;:([]+/g, "")
+      .replace(/[\s,;:)\]]+$/g, "")
+      .trim();
+    if (cleaned.length < 2) continue;
+    sanitized = sanitized
+      .replace(new RegExp(`\\b${escapeRegExp(cleaned)}['’]s\\b`, "gi"), "another person's")
+      .replace(new RegExp(`\\b${escapeRegExp(cleaned)}\\b`, "gi"), "another person");
+  }
+
+  sanitized = sanitized
+    .replace(
+      /\b(?:toward|towards)\s+(?:the\s+)?(?:caregiver|caregivers|parents?|guardians?|mother|father|mom|dad|mommy|daddy|stepmother|stepfather|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|siblings?|brother|sister|(?:maternal|paternal)\s+(?:uncle|aunt|grandmother|grandfather)|family members?)\b/gi,
+      "toward another person",
+    )
+    .replace(
+      /\b(?:the\s+)?(?:caregiver|caregivers|parents?|guardians?|mother|father|mom|dad|mommy|daddy|stepmother|stepfather|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|siblings?|brother|sister|(?:maternal|paternal)\s+(?:uncle|aunt|grandmother|grandfather)|family members?)['’]s\b/gi,
+      "another person's",
+    )
+    .replace(
+      /\b(?:the\s+)?(?:caregiver|caregivers|parents?|guardians?|mother|father|mom|dad|mommy|daddy|stepmother|stepfather|grandmother|grandfather|grandma|grandpa|aunt|uncle|cousin|siblings?|brother|sister|(?:maternal|paternal)\s+(?:uncle|aunt|grandmother|grandfather)|family members?)\b/gi,
+      "another person",
+    )
+    .replace(/\banother person(?:\s*\/\s*another person)+\b/gi, "another person")
+    .replace(/\s+and\s+another person\s*\)+/gi, " and")
+    .replace(/\(\s*and\s+another person\s*\)/gi, "")
+    .replace(/\s+\)+/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+
+  return sanitized.replace(/\u0000Q(\d+)\u0000/g, (_, index) => protectedSpans[Number(index)] ?? "");
+}
+
+/**
+ * Caregiver / family roles and anyone listed as present must not appear after the note's first sentence.
+ * Deterministic locked closing / performance / next-session spans are ignored (server-authored).
+ * Quoted catalog labels are masked so approved program names containing "Parent" are allowed.
+ */
+export function validateCaregiverMentionRule(
+  fullNote: string,
+  presentPeople: string[],
+  options?: { ignoreSpans?: string[] | undefined },
+): string[] {
+  const issues: string[] = [];
+  const { rest } = splitFirstSentence(fullNote);
+  if (!rest.trim()) {
+    return issues;
+  }
+
+  let scanTarget = rest;
+  for (const span of options?.ignoreSpans ?? []) {
+    const trimmed = span.trim();
+    if (trimmed.length > 0) {
+      scanTarget = scanTarget.split(trimmed).join(" ");
+    }
+  }
+  scanTarget = maskQuotedCatalogSpans(scanTarget);
+
+  if (CAREGIVER_LEXICON.test(scanTarget)) {
+    issues.push(
+      "Caregiver/family role language appears after the first sentence; it must appear only in the opening sentence.",
+    );
+  }
+
+  for (const name of presentPeople) {
+    const n = name.trim().replace(/^[\s,;:([]+/g, "").replace(/[\s,;:)\]]+$/g, "");
+    if (n.length < 2) continue;
+    const re = new RegExp(`\\b${escapeRegExp(n)}\\b`, "i");
+    if (re.test(scanTarget)) {
+      issues.push(
+        `A listed present person ("${n}") appears after the first sentence; caregivers/present people must only appear in the first sentence.`,
+      );
+    }
+  }
+
+  return issues;
+}
 
 const PEER_OR_GROUP_ACTIVITY_LEXICON =
   /\b(small[- ]group|group activity|group play|peer|peers|classmate|classmates|children|kids|other students|other children|student group)\b/i;
@@ -860,36 +960,6 @@ export function splitFirstSentence(fullNote: string): { first: string; rest: str
     return { first: t, rest: "" };
   }
   return { first: t.slice(0, idx + 1), rest: t.slice(idx + 2) };
-}
-
-/**
- * Caregiver / family roles and anyone listed as present must not appear after the note's first sentence.
- */
-export function validateCaregiverMentionRule(fullNote: string, presentPeople: string[]): string[] {
-  const issues: string[] = [];
-  const { first, rest } = splitFirstSentence(fullNote);
-  if (!rest.trim()) {
-    return issues;
-  }
-
-  if (CAREGIVER_LEXICON.test(rest)) {
-    issues.push(
-      "Caregiver/family role language appears after the first sentence; it must appear only in the opening sentence.",
-    );
-  }
-
-  for (const name of presentPeople) {
-    const n = name.trim();
-    if (n.length < 2) continue;
-    const re = new RegExp(`\\b${escapeRegExp(n)}\\b`, "i");
-    if (re.test(rest)) {
-      issues.push(
-        `A listed present person ("${n}") appears after the first sentence; caregivers/present people must only appear in the first sentence.`,
-      );
-    }
-  }
-
-  return issues;
 }
 
 const issuedMessageMetadata = new Map<string, Pick<NoteValidationIssue, "code" | "severity">>();
@@ -1682,7 +1752,7 @@ function validateClinicalBodyComplianceInternal(
     }
   }
 
-  if (CAREGIVER_LEXICON.test(clinicalBody)) {
+  if (CAREGIVER_LEXICON.test(maskQuotedCatalogSpans(clinicalBody))) {
     add("CAREGIVER_LEAKAGE", "blocking",
       "Clinical body must not mention caregivers, parents, or guardians; the fixed opening already covers presence once.",
     );
@@ -1793,7 +1863,9 @@ export function validateAssembledSessionNote(
   if (/\bnext session\b[^\n]*(?:home|school|community|clinic|center)\b/i.test(fullNote)) {
     add("NEXT_SESSION_LOCATION", "Next-session sentence must contain only the date and no session location.");
   }
-  for (const message of validateCaregiverMentionRule(fullNote, ctx.presentPeople)) {
+  for (const message of validateCaregiverMentionRule(fullNote, ctx.presentPeople, {
+    ignoreSpans: [closing, performance, nextSession],
+  })) {
     add("CAREGIVER_LEAKAGE", message);
   }
 

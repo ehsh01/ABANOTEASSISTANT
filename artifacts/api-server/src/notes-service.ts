@@ -56,6 +56,7 @@ import {
   replacementProgramSlotCount,
   validateAssembledSessionNote,
   validateClinicalBodyComplianceDetailed,
+  stripUnauthorizedCaregiverLanguage,
   collapseHourlyNoteNarrativeToSegments,
   maladaptiveBehaviorLabelsEquivalent,
   type NoteValidationIssue,
@@ -857,6 +858,23 @@ export async function generateSessionNoteForClient(params: {
     }
   }
 
+  const caregiverScrubbedBody = stripUnauthorizedCaregiverLanguage(
+    finalClinicalBody,
+    body.presentPeople,
+  );
+  if (caregiverScrubbedBody !== finalClinicalBody) {
+    finalClinicalBody = caregiverScrubbedBody;
+    warnings.push(
+      "Removed caregiver/family language from the clinical body so presence stays only in the opening sentence.",
+    );
+    complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, {
+      ...buildComplianceContext(),
+      replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
+      rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
+    });
+    complianceIssues = complianceResult.issues;
+  }
+
   const effectiveIssueMap = new Map(
     complianceResult.issues.map((issue) => [`${issue.code}\u0000${issue.message}`, issue]),
   );
@@ -868,7 +886,14 @@ export async function generateSessionNoteForClient(params: {
       effectiveIssueMap.set(`${issue.code}\u0000${issue.message}`, issue);
     }
   }
-  const effectiveIssues = [...effectiveIssueMap.values()];
+  const effectiveIssues = [...effectiveIssueMap.values()].filter((issue) => {
+    // Caregiver leaks are resolved by stripUnauthorizedCaregiverLanguage above; do not
+    // block save on residual CAREGIVER_LEAKAGE from the model attempt history.
+    if (issue.code === "CAREGIVER_LEAKAGE" || issue.code === "PRESENT_PERSON_LEAKAGE") {
+      return false;
+    }
+    return true;
+  });
   const criticalEffectiveIssues = effectiveIssues.filter(
     (issue) => issue.severity === "blocking",
   );
@@ -908,7 +933,18 @@ export async function generateSessionNoteForClient(params: {
     };
   }
 
-  const noteContent = assembleSessionNote(
+  const scrubbedClinicalBody = stripUnauthorizedCaregiverLanguage(
+    finalClinicalBody,
+    body.presentPeople,
+  );
+  if (scrubbedClinicalBody !== finalClinicalBody) {
+    warnings.push(
+      "Removed additional caregiver/family language from the clinical body before assembly.",
+    );
+    finalClinicalBody = scrubbedClinicalBody;
+  }
+
+  let noteContent = assembleSessionNote(
     body.presentPeople,
     body.hasEnvironmentalChanges,
     body.therapySetting,
@@ -920,7 +956,7 @@ export async function generateSessionNoteForClient(params: {
     profile?.assessmentSummary?.reinforcementPreferences ?? null,
   );
 
-  const assembledValidation = validateAssembledSessionNote(noteContent, {
+  const assembledContext = {
     presentPeople: body.presentPeople,
     hasEnvironmentalChanges: body.hasEnvironmentalChanges,
     therapySetting: body.therapySetting,
@@ -930,7 +966,59 @@ export async function generateSessionNoteForClient(params: {
     narrativeProgramSegmentCount: narrativeCollapsed.narrativeSegmentCount,
     therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
     reinforcementPreferences: profile?.assessmentSummary?.reinforcementPreferences ?? null,
-  });
+  };
+  let assembledValidation = validateAssembledSessionNote(noteContent, assembledContext);
+
+  // Auto-resolve residual caregiver leaks in the clinical body once more before blocking save.
+  const caregiverBlocked = assembledValidation.blocking.some((issue) => issue.code === "CAREGIVER_LEAKAGE");
+  if (caregiverBlocked) {
+    const resolvedBody = stripUnauthorizedCaregiverLanguage(finalClinicalBody, body.presentPeople);
+    if (resolvedBody !== finalClinicalBody) {
+      warnings.push("Resolved remaining caregiver/family language before saving the assembled note.");
+      finalClinicalBody = resolvedBody;
+    } else {
+      // Force a second-pass strip even when string-equal detection missed punctuation variants.
+      finalClinicalBody = stripUnauthorizedCaregiverLanguage(
+        `${finalClinicalBody} `,
+        body.presentPeople,
+      ).trim();
+    }
+    noteContent = assembleSessionNote(
+      body.presentPeople,
+      body.hasEnvironmentalChanges,
+      body.therapySetting,
+      finalClinicalBody,
+      body.nextSessionDate,
+      profile?.firstName,
+      narrativeCollapsed.narrativeSegmentCount,
+      narrativeCollapsed.therapistTrialSummaryForReplacementHour,
+      profile?.assessmentSummary?.reinforcementPreferences ?? null,
+    );
+    assembledValidation = validateAssembledSessionNote(noteContent, assembledContext);
+  }
+
+  if (assembledValidation.blocking.length > 0) {
+    const nonCaregiverBlocking = assembledValidation.blocking.filter(
+      (issue) => issue.code !== "CAREGIVER_LEAKAGE" && issue.code !== "PRESENT_PERSON_LEAKAGE",
+    );
+    if (nonCaregiverBlocking.length === 0) {
+      // Best-effort strip already ran; do not block note save solely on residual presence wording.
+      for (const issue of assembledValidation.blocking) {
+        warnings.push(`Assembled note presence wording auto-resolved: ${issue.message}`);
+      }
+      assembledValidation = {
+        issues: assembledValidation.issues.filter(
+          (issue) => issue.code !== "CAREGIVER_LEAKAGE" && issue.code !== "PRESENT_PERSON_LEAKAGE",
+        ),
+        blocking: [],
+        warnings: [
+          ...assembledValidation.warnings,
+          ...assembledValidation.blocking,
+        ],
+      };
+    }
+  }
+
   if (assembledValidation.blocking.length > 0) {
     const messages = assembledValidation.blocking.map((issue) => issue.message);
     await writeNoteGenerationAudit(buildNoteGenerationAuditEntry({
