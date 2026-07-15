@@ -60,8 +60,8 @@ export function isTherapySetting(value: string): value is TherapySetting {
 }
 
 /**
- * Phrase inserted in the locked opening after caregivers (`... and Mother **at school** to implement...`).
- * Do not paraphrase outside this map for assembly.
+ * Catalog phrase for a therapy setting (e.g. `at school`). Not inserted into the locked opening;
+ * opening omits meeting place. Kept for metadata and any non-opening callers.
  */
 const OPENING_PHRASE: Record<TherapySetting, string> = {
   "Seasonal Residence": "at a seasonal residence",

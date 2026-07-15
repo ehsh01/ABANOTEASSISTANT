@@ -11,19 +11,20 @@ import {
 import { validateAssembledSessionNote } from "./note-validation";
 
 describe("locked opening", () => {
-  test("uses first name and possessive home wording when profile has a name", () => {
+  test("uses first name and caregivers without stating a meeting place", () => {
     const opening = buildLockedOpening(["Mother"], false, "Home", "Anthony");
-    expect(opening).toMatch(/^The RBT met with Anthony and Mother /);
-    expect(opening).toContain("Anthony's home");
-    expect(opening).toContain("to implement program targets.");
-    expect(opening.endsWith("There have been no environmental changes recently.")).toBe(true);
+    expect(opening).toBe(
+      "The RBT met with Anthony and Mother to implement program targets. There have been no environmental changes recently.",
+    );
+    expect(opening).not.toMatch(/\bat home\b|Anthony's home|school|community/i);
   });
 
   test("falls back to 'the client' and generic caregiver when data is missing", () => {
     const opening = buildLockedOpening([], true, "Home", null);
-    expect(opening).toMatch(/^The RBT met with the client and the caregiver /);
-    expect(opening).not.toContain("'s home");
-    expect(opening.endsWith("There have been environmental changes recently.")).toBe(true);
+    expect(opening).toBe(
+      "The RBT met with the client and the caregiver to implement program targets. There have been environmental changes recently.",
+    );
+    expect(opening).not.toMatch(/\bat home\b|school|community/i);
   });
 
   test("joins multiple caregivers with natural English", () => {
@@ -79,9 +80,12 @@ describe("locked closing and end-of-note sequence", () => {
     expect(sentence).toMatch(/^The client participated in session activities/);
   });
 
-  test("performance fallback states program count when no trial rows", () => {
-    expect(buildPerformanceSentence(1, [null], "Anthony")).toMatch(/^The client completed 1 program\./);
-    expect(buildPerformanceSentence(3, undefined, "Anthony")).toMatch(/^The client completed 3 programs\./);
+  test("performance fallback states program count only when no trial rows", () => {
+    expect(buildPerformanceSentence(1, [null], "Anthony")).toBe("The client completed 1 program.");
+    expect(buildPerformanceSentence(3, undefined, "Anthony")).toBe("The client completed 3 programs.");
+    expect(buildPerformanceSentence(2, undefined, "Anthony")).not.toMatch(
+      /not entered|cannot be computed|percentage/i,
+    );
   });
 
   test("next-session sentence is date-only (no location)", () => {

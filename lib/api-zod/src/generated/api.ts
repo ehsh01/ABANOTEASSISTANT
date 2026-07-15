@@ -2049,7 +2049,7 @@ export const GenerateNoteBody = zod.object({
       "Community/School",
     ])
     .describe(
-      "Where therapy was delivered. Must be one of the approved location labels; drives the locked opening location phrase assembled server-side (do not paraphrase the stored label when interpreting setting for the clinical body).\n",
+      "Where therapy was delivered. Must be one of the approved location labels (session metadata). The locked opening does not name the meeting place; do not paraphrase the stored label when interpreting setting for the clinical body.\n",
     ),
   presentPeople: zod.array(zod.string()),
   hasEnvironmentalChanges: zod.boolean(),
@@ -2236,7 +2236,7 @@ export const CreateNoteGenerationJobBody = zod.object({
       "Community/School",
     ])
     .describe(
-      "Where therapy was delivered. Must be one of the approved location labels; drives the locked opening location phrase assembled server-side (do not paraphrase the stored label when interpreting setting for the clinical body).\n",
+      "Where therapy was delivered. Must be one of the approved location labels (session metadata). The locked opening does not name the meeting place; do not paraphrase the stored label when interpreting setting for the clinical body.\n",
     ),
   presentPeople: zod.array(zod.string()),
   hasEnvironmentalChanges: zod.boolean(),

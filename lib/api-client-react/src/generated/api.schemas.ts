@@ -633,7 +633,7 @@ export interface PutBehaviorApprovedProgramsResponse {
 }
 
 /**
- * Where therapy was delivered. Must be one of the approved location labels; drives the locked opening location phrase assembled server-side (do not paraphrase the stored label when interpreting setting for the clinical body).
+ * Where therapy was delivered. Must be one of the approved location labels (session metadata). The locked opening does not name the meeting place; do not paraphrase the stored label when interpreting setting for the clinical body.
 
  */
 export type GenerateNoteRequestTherapySetting =
@@ -712,7 +712,7 @@ export interface GenerateNoteRequest {
    */
   sessionHours: number;
   sessionDate: string;
-  /** Where therapy was delivered. Must be one of the approved location labels; drives the locked opening location phrase assembled server-side (do not paraphrase the stored label when interpreting setting for the clinical body).
+  /** Where therapy was delivered. Must be one of the approved location labels (session metadata). The locked opening does not name the meeting place; do not paraphrase the stored label when interpreting setting for the clinical body.
    */
   therapySetting: GenerateNoteRequestTherapySetting;
   presentPeople: string[];

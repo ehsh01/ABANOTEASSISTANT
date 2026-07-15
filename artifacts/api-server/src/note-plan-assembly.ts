@@ -19,12 +19,16 @@ export function roundedTrialPercentage(summary: TherapistTrialSummary): number {
   return Math.round((successful / summary.totalTrials) * 100);
 }
 
+/**
+ * When therapist-entered trial data exists, emit the locked percentage sentence.
+ * When missing, return empty — do not invent a % and do not apologize for missing RBT input.
+ */
 export function buildDeterministicTrialSentence(
   replacementLabel: string,
   summary: TherapistTrialSummary | null,
 ): string {
   if (!summary) {
-    return `The RBT documented implementation of "${replacementLabel}" without a discrete-trial percentage because no therapist-entered trial summary was available.`;
+    return "";
   }
   const percentage = roundedTrialPercentage(summary);
   return `For "${replacementLabel}", criterion was met on approximately ${percentage}% of discrete trials.`;
@@ -62,7 +66,13 @@ export function assembleClinicalBodyFromNotePlan(
       ) {
         parts.push(sentence(segment.resultSummary));
       }
-      parts.push(buildDeterministicTrialSentence(locked.replacementLabel, locked.trialSummary));
+      const trialSentence = buildDeterministicTrialSentence(
+        locked.replacementLabel,
+        locked.trialSummary,
+      );
+      if (trialSentence) {
+        parts.push(trialSentence);
+      }
       return parts.join(" ");
     })
     .join("\n\n");

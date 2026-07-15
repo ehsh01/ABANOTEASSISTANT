@@ -99,7 +99,7 @@ export function buildLockedClosingParagraph(
   return `Throughout the session, the RBT used various reinforcers, including ${praiseClause} and ${itemsClause}, contingent on task completion and appropriate behavior. ${LOCKED_CLOSING_TAIL}`;
 }
 
-/** Used when the client profile has no first name for locked opening / location lines. */
+/** Used when the client profile has no first name for locked opening lines. */
 export const SESSION_NOTE_CLIENT_REFERRAL = "the client";
 
 /** English possessive for first name in locked prose (e.g. Alex → Alex's, James → James'). */
@@ -112,6 +112,7 @@ export function englishPossessiveFirstName(firstName: string): string {
 /**
  * Applies the client's first name to catalog location phrases that refer to the learner's home
  * (e.g. "at home" → "at Sam's home"). Non-home phrases are unchanged.
+ * Kept for callers that still need setting phrases; locked opening no longer inserts a meeting place.
  */
 export function personalizeTherapyLocationPhrase(
   therapySetting: TherapySetting,
@@ -133,21 +134,21 @@ export function personalizeTherapyLocationPhrase(
   return s;
 }
 
+/**
+ * Locked opening: client + caregivers + "to implement program targets" — no session meeting place.
+ * `therapySetting` is retained for call-site compatibility; it is not written into the opening.
+ */
 export function buildLockedOpening(
   presentPeople: string[],
   hasEnvironmentalChanges: boolean,
-  therapySetting: TherapySetting,
+  _therapySetting: TherapySetting,
   clientFirstName?: string | null,
 ): string {
   const caregivers = formatCaregiverList(presentPeople);
   const env = environmentalOpeningSentence(hasEnvironmentalChanges);
   const trimmed = clientFirstName?.trim() ?? "";
   const who = trimmed.length > 0 ? trimmed : SESSION_NOTE_CLIENT_REFERRAL;
-  const where =
-    trimmed.length > 0
-      ? personalizeTherapyLocationPhrase(therapySetting, trimmed)
-      : therapySettingLocationPhrase(therapySetting);
-  return `The RBT met with ${who} and ${caregivers} ${where} to implement program targets. ${env}`;
+  return `The RBT met with ${who} and ${caregivers} to implement program targets. ${env}`;
 }
 
 /**
@@ -177,7 +178,8 @@ export function aggregateTherapistTrialSummariesForPerformanceLine(
 function buildPerformanceSentenceWithoutTrialAggregate(programSlotCount: number): string {
   const n = Math.max(1, Math.floor(programSlotCount));
   const programsWord = n === 1 ? "program" : "programs";
-  return `The client completed ${n} ${programsWord}. Discrete-trial success counts were not entered for enough narrative segments to compute a session-wide percentage from intake data; continue acquisition and behavior-reduction documentation per the Behavior Plan and session-specific data collection.`;
+  // Do not state that trial data was missing or that a percentage could not be computed.
+  return `The client completed ${n} ${programsWord}.`;
 }
 
 /**
@@ -187,7 +189,7 @@ function buildPerformanceSentenceWithoutTrialAggregate(programSlotCount: number)
  *
  * When therapist-entered discrete trials exist for at least one narrative segment, emits one fixed qualitative
  * sentence (no session-wide percent on this line). Per-hour ABC text still carries trial percentages where required
- * by validation. When no trial rows qualify, uses the program-count fallback (see `buildPerformanceSentenceWithoutTrialAggregate`).
+ * by validation. When no trial rows qualify, uses the program-count fallback only (no missing-data apology).
  *
  * Learner reference matches the locked opening: client profile **first name** when non-empty after trim; otherwise
  * **The client** (sentence-initial capitalization for the generic referral).

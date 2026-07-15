@@ -331,7 +331,8 @@ describe("server-owned metrics and deterministic assembly", () => {
 
   it("uses truthful no-data wording without inventing metrics", () => {
     const text = buildDeterministicTrialSentence("Request for Break", null);
-    expect(text).toContain("no therapist-entered trial summary was available");
+    expect(text).toBe("");
+    expect(text).not.toMatch(/therapist-entered|percentage|available/i);
     expect(text).not.toMatch(/\d+%|\d+\/\d+/);
   });
 
