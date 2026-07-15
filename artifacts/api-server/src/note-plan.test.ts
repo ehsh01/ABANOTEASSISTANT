@@ -211,10 +211,10 @@ describe("server-owned metrics and deterministic assembly", () => {
       "Defined as any instance in which Anthony repeats a specific movement pattern, including frequently flapping his hands and walking back and forth repetitively. Episodes are scored after 30 seconds.",
       ["Anthony"],
     );
-    expect(sanitized).toContain("repeats a specific movement pattern");
     expect(sanitized).toContain("flapping his hands");
+    expect(sanitized).toContain("walking back and forth");
+    expect(sanitized).not.toMatch(/defined as|any instance|movement pattern|scored|30 seconds/i);
     expect(sanitized).not.toContain("Anthony");
-    expect(sanitized).not.toContain("30 seconds");
   });
 
   it("removes forbidden third-party roles from stored behavior definitions", () => {
@@ -276,7 +276,27 @@ describe("server-owned metrics and deterministic assembly", () => {
     );
     expect(grounded.segments[0]?.topography).toMatch(/flapping|walking/);
     expect(grounded.segments[1]?.topography).toMatch(/leaves|sprints/);
+    expect(grounded.segments[0]?.topography).not.toMatch(/defined as|any instance/i);
     expect(JSON.stringify(grounded)).not.toContain("Anthony");
+  });
+
+  it("keeps natural model topography when it already matches the assessment actions", () => {
+    const input = generationContext({
+      maladaptiveBehaviorTopographyForHour: [
+        "Defined as any instance in which Anthony repeats a movement pattern, including flapping his hands and walking back and forth.",
+      ],
+    });
+    const context = buildFrozenSessionContext(input, {
+      blockedClientNames: ["Anthony"],
+    });
+    const natural =
+      "flapping both hands near the work materials and walking back and forth beside the table";
+    const grounded = groundNotePlanWithFrozenContext(
+      validPlan({ topography: natural }),
+      context,
+    );
+    expect(grounded.segments[0]?.topography).toBe(natural);
+    expect(grounded.segments[0]?.topography).not.toMatch(/defined as|movement pattern|including/i);
   });
 
   it("moves an existing observable result into the post-intervention outcome slot", () => {

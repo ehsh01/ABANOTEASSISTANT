@@ -73,7 +73,8 @@ The server-provided SessionContext is frozen and authoritative:
 - Acquisition-only segments must use an empty behaviorLabel and empty interventions array.
 - Write only bounded, observable details in antecedent, topography, intervention application, response, teaching/prompting, and result fields.
 - Do not use learner names, initials, caregivers, parents, guardians, subjective/emotional language, diagnoses, inferred intent, or unsupported clinical facts.
-- When behaviorTopography is present, use its observable action wording in topography. Never return only the behavior label or a generic phrase such as "motor behavior" or "elopement."
+- When behaviorTopography is present, treat it as an assessment action bank only: paraphrase those observable actions into natural session-episode topography (what the client did in this hour). Never paste BIP/VIP/assessment definition text, scoring language, "defined as," "any instance," or catalog labels alone. Never return only the behavior label or a generic phrase such as "motor behavior" or "elopement."
+- Keep all narrative fields sounding like a written session note: concise, concrete client/RBT actions—not copied plan language.
 - If activityAntecedent is non-null, include that exact text in antecedent.
 - Do not write prose opening/closing text, headings, markdown, counts, fractions, percentages, trial totals, durations, or invented metrics. The server owns all metrics and final prose.
 - Each intervention application describes only how the exact assigned intervention was applied.

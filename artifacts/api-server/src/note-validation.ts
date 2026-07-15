@@ -1189,7 +1189,7 @@ function validateClinicalBodyComplianceInternal(
         )
       ) {
         add("BEHAVIOR_TOPOGRAPHY", "blocking",
-          `Behavior topography: paragraph ${i + 1} addresses "${assigned}" but does not reflect the client's stored operational definition (${storedTopography.slice(0, 120)}${storedTopography.length > 120 ? "…" : ""}). Include observable actions from that BIP/profile topography in the manifested-behavior sentence so each ABC matches the same definition used in prior notes for this behavior.`,
+          `Behavior topography: paragraph ${i + 1} addresses "${assigned}" but does not reflect observable actions from the client's stored operational definition (${storedTopography.slice(0, 120)}${storedTopography.length > 120 ? "…" : ""}). Describe those same actions in natural session wording in the manifested-behavior sentence—do not paste the BIP/VIP definition verbatim.`,
           i,
         );
       }

@@ -19,6 +19,7 @@ import {
 import {
   elopementEpisodeLacksObservableTopography,
   isElopementFamilyBehaviorLabel,
+  paragraphReflectsStoredTopography,
 } from "./maladaptive-behavior-topography";
 
 export type NotePlanIssueCode =
@@ -114,7 +115,8 @@ function sanitizeModelNarrativeText(text: string, blockedClientNames: string[]):
 }
 
 /**
- * Convert an authoritative assessment definition into a bounded narrative clause.
+ * Convert an authoritative assessment definition into a bounded narrative clause for
+ * "manifested … by …" — session-episode wording, not pasted BIP/VIP legalese.
  * Scoring/timing text and learner names are metadata, not observable episode prose.
  */
 export function sanitizeStoredTopographyForNarrative(
@@ -146,7 +148,10 @@ export function sanitizeStoredTopographyForNarrative(
   text = descriptiveSentence
     .replace(/[.!?]+$/, "")
     .replace(/\s+(?:for|lasting)\s+(?:at least\s+)?\d+\s*(?:seconds?|minutes?)\b[\s\S]*$/i, "")
-    .replace(/^(?:characterized by|defined as)\s+/i, "")
+    .replace(
+      /^(?:operationally\s+)?(?:characterized by|defined as|definition(?:\s+is)?)\s+/i,
+      "",
+    )
     .replace(
       /^any\s+(?:instance|episode|incidence|occurrence)\s+(?:in which|when|where|of)\s+/i,
       "",
@@ -155,7 +160,55 @@ export function sanitizeStoredTopographyForNarrative(
     .replace(/^the client(?!['’]s)\s+/i, "")
     .trim();
 
+  // Prefer concrete action examples after "including …" over abstract definition frames.
+  const includingMatch = text.match(/\bincluding\s+(.+)$/i);
+  if (
+    includingMatch?.[1] &&
+    /(?:movement pattern|motor (?:behavior|response)|specific (?:actions?|behaviors?|movements?)|the following)\b/i.test(
+      text,
+    )
+  ) {
+    text = includingMatch[1].trim();
+  }
+
+  text = text
+    .replace(/^(?:frequently|consistently|repeatedly)\s+/i, "")
+    .replace(/\s+,?\s*repetitively\b/gi, "")
+    .replace(/\bhis\/her\/their\b/gi, "the client's")
+    .replace(/\s+/g, " ")
+    .trim();
+
   return text;
+}
+
+/**
+ * Keep model-authored topography when it already describes a natural, observable episode
+ * consistent with the stored definition. Only fall back to sanitized BIP wording when the
+ * model output is label-only, non-observable, or inconsistent with the assessment.
+ */
+export function shouldPreferStoredTopographyOverModel(
+  modelTopography: string,
+  storedTopography: string | null | undefined,
+  behaviorLabel: string,
+): boolean {
+  const stored = storedTopography?.trim() ?? "";
+  if (!stored || !containsObservableClinicalAction(stored)) return false;
+
+  const model = modelTopography.trim();
+  if (!model) return true;
+  if (model.toLowerCase() === behaviorLabel.trim().toLowerCase()) return true;
+  if (!containsObservableClinicalAction(model)) return true;
+
+  const manifested = `The client manifested ${behaviorLabel} by ${model}.`;
+  if (
+    isElopementFamilyBehaviorLabel(behaviorLabel) &&
+    elopementEpisodeLacksObservableTopography(manifested, behaviorLabel)
+  ) {
+    return true;
+  }
+
+  // Model prose may paraphrase; require only that key assessment action tokens appear.
+  return !paragraphReflectsStoredTopography(manifested, stored, 1);
 }
 
 /**
@@ -272,7 +325,8 @@ export function buildFrozenSessionContext(
 
 /**
  * Apply only source-preserving corrections before validation:
- * - authoritative stored topography replaces a weaker model restatement;
+ * - when model topography is weak or assessment-inconsistent, use the sanitized BIP clause;
+ *   otherwise keep the model's natural session wording (do not paste VIP/BIP definitions);
  * - an observable client result already present in resultSummary is reused when the model
  *   accidentally placed only RBT actions in responseToIntervention.
  */
@@ -312,8 +366,12 @@ export function groundNotePlanWithFrozenContext(
       };
       const topography =
         !locked.acquisitionOnly &&
-        locked.behaviorTopography &&
-        containsObservableClinicalAction(locked.behaviorTopography)
+        shouldPreferStoredTopographyOverModel(
+          sanitized.topography,
+          locked.behaviorTopography,
+          locked.behaviorLabel,
+        ) &&
+        locked.behaviorTopography
           ? locked.behaviorTopography
           : sanitized.topography;
       const responseToIntervention =
@@ -440,7 +498,7 @@ export function validateNotePlan(
     ) {
       add(
         "TOPOGRAPHY_REQUIRED",
-        "topography must describe a specific observable client action. Use the frozen behaviorTopography wording when provided; do not repeat only the behavior label or write a generic movement category.",
+        "topography must describe a specific observable client action for this session episode. Ground details in frozen behaviorTopography actions when provided, but write natural session prose—do not repeat only the behavior label or paste assessment definition wording.",
         index,
       );
     } else if (
@@ -452,7 +510,7 @@ export function validateNotePlan(
     ) {
       add(
         "TOPOGRAPHY_REQUIRED",
-        "Elopement topography must state the observable leaving action or movement toward/beyond a supervised boundary. Use the frozen behaviorTopography wording.",
+        "Elopement topography must state the observable leaving action or movement toward/beyond a supervised boundary in natural session wording consistent with frozen behaviorTopography.",
         index,
       );
     }
@@ -474,7 +532,7 @@ export function validateNotePlan(
       if (expectedTokens.length > 0 && !expectedTokens.some((token) => actual.includes(token))) {
         add(
           "TOPOGRAPHY_ASSESSMENT_MISMATCH",
-          "Topography does not reflect the stored operational definition.",
+          "Topography must use observable actions consistent with the stored operational definition, written as natural session prose (not a pasted assessment quotation).",
           index,
         );
       }
