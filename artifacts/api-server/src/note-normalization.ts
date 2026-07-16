@@ -31,6 +31,167 @@ export function phraseMatchesAuthorizedIntervention(phrase: string, intervention
   });
 }
 
+/** Common finite verbs → gerunds for "… by [clause]" assembly slots. */
+const CLAUSE_AFTER_BY_GERUNDS: Record<string, string> = {
+  made: "making",
+  make: "making",
+  makes: "making",
+  swore: "swearing",
+  swear: "swearing",
+  swears: "swearing",
+  spun: "spinning",
+  spin: "spinning",
+  spins: "spinning",
+  ran: "running",
+  run: "running",
+  runs: "running",
+  hit: "hitting",
+  hits: "hitting",
+  put: "putting",
+  puts: "putting",
+  set: "setting",
+  sets: "setting",
+  kept: "keeping",
+  keep: "keeping",
+  keeps: "keeping",
+  left: "leaving",
+  leave: "leaving",
+  leaves: "leaving",
+  took: "taking",
+  take: "taking",
+  takes: "taking",
+  gave: "giving",
+  give: "giving",
+  gives: "giving",
+  said: "saying",
+  say: "saying",
+  says: "saying",
+  did: "doing",
+  do: "doing",
+  does: "doing",
+  got: "getting",
+  get: "getting",
+  gets: "getting",
+  sat: "sitting",
+  sit: "sitting",
+  sits: "sitting",
+  stood: "standing",
+  stand: "standing",
+  stands: "standing",
+  began: "beginning",
+  begin: "beginning",
+  begins: "beginning",
+  held: "holding",
+  hold: "holding",
+  holds: "holding",
+  went: "going",
+  go: "going",
+  goes: "going",
+  came: "coming",
+  come: "coming",
+  comes: "coming",
+  cried: "crying",
+  cry: "crying",
+  cries: "crying",
+  tried: "trying",
+  try: "trying",
+  tries: "trying",
+  used: "using",
+  use: "using",
+  uses: "using",
+  placed: "placing",
+  place: "placing",
+  places: "placing",
+  pointed: "pointing",
+  point: "pointing",
+  points: "pointing",
+  prompted: "prompting",
+  prompt: "prompting",
+  prompts: "prompting",
+  repeated: "repeating",
+  repeat: "repeating",
+  repeats: "repeating",
+  restated: "restating",
+  restate: "restating",
+  restates: "restating",
+  gestured: "gesturing",
+  gesture: "gesturing",
+  gestures: "gesturing",
+  modeled: "modeling",
+  model: "modeling",
+  models: "modeling",
+  presented: "presenting",
+  present: "presenting",
+  presents: "presenting",
+  delivered: "delivering",
+  deliver: "delivering",
+  delivers: "delivering",
+  provided: "providing",
+  provide: "providing",
+  provides: "providing",
+  blocked: "blocking",
+  block: "blocking",
+  blocks: "blocking",
+  redirected: "redirecting",
+  redirect: "redirecting",
+  redirects: "redirecting",
+  arranged: "arranging",
+  arrange: "arranging",
+  arranges: "arranging",
+  sprinted: "sprinting",
+  sprint: "sprinting",
+  sprints: "sprinting",
+  contacting: "contacting",
+  contacts: "contacting",
+  contacted: "contacting",
+  kicking: "kicking",
+  kicks: "kicking",
+  kicked: "kicking",
+  pushing: "pushing",
+  pushes: "pushing",
+  pushed: "pushing",
+  hitting: "hitting",
+  throwing: "throwing",
+  throws: "throwing",
+  threw: "throwing",
+  grabbing: "grabbing",
+  grabs: "grabbing",
+  grabbed: "grabbing",
+  scratching: "scratching",
+  scratches: "scratching",
+  scratched: "scratching",
+};
+
+function finiteVerbToGerund(verb: string): string {
+  const lower = verb.toLowerCase();
+  if (CLAUSE_AFTER_BY_GERUNDS[lower]) return CLAUSE_AFTER_BY_GERUNDS[lower]!;
+  if (/ing$/i.test(verb)) return lower;
+  if (/ied$/i.test(verb)) return `${verb.slice(0, -3).toLowerCase()}ying`;
+  if (/ies$/i.test(verb)) return `${verb.slice(0, -3).toLowerCase()}ying`;
+  if (/ues$/i.test(verb)) return `${verb.slice(0, -1).toLowerCase()}ing`;
+  if (/[^aeiou]es$/i.test(verb)) return `${verb.slice(0, -2).toLowerCase()}ing`;
+  if (/s$/i.test(verb) && !/ss$/i.test(verb)) return `${verb.slice(0, -1).toLowerCase()}ing`;
+  if (/ied$/i.test(verb)) return `${verb.slice(0, -3).toLowerCase()}ying`;
+  if (/([^aeiou])\1ed$/i.test(verb)) return `${verb.slice(0, -2).toLowerCase()}ing`;
+  if (/e$/i.test(verb)) return `${verb.slice(0, -1).toLowerCase()}ing`;
+  if (/ed$/i.test(verb)) return `${verb.slice(0, -2).toLowerCase()}ing`;
+  return lower;
+}
+
+/**
+ * Normalize text that follows "… by" in manifested-behavior / replacement sentences.
+ * Strips leading "the RBT"/"the client" subjects and converts the lead verb to a gerund so
+ * assembly never emits "by the RBT repeated…" or "by the client swore…".
+ */
+export function normalizeClauseAfterBy(text: string): string {
+  let t = text.trim().replace(/\s+/g, " ");
+  if (!t) return t;
+  t = t.replace(/^(?:the\s+)?(?:RBT|client)\s+/i, "");
+  t = t.replace(/^([A-Za-z']+)(?=\s|$)/, (verb) => finiteVerbToGerund(verb));
+  if (!/[.!?]$/.test(t)) t = `${t}.`;
+  return t;
+}
+
 /** Fix partial intervention labels (e.g. DRI without parenthetical) before validation. */
 export function normalizeClinicalBodyInterventionLabels(body: string, interventionCatalog: string[]): string {
   let out = body;
@@ -56,14 +217,21 @@ export function normalizeClinicalBodyInterventionLabels(body: string, interventi
  * or BIP status-placeholder topography in saved note text.
  */
 export function scrubAssembledNoteQcHotspots(noteText: string): string {
-  return noteText
-    .replace(/\bsocial praise\b/gi, "praise")
-    .replace(/\bby\s+Status\s*:\s*To be initiated\.?/gi, "by engaging in the targeted motor actions for this episode.")
-    .replace(/\bStatus\s*:\s*To be initiated\.?/gi, "")
-    .replace(/\bTo be initiated\.?/gi, "")
-    .replace(/[ \t]{2,}/g, " ")
-    .replace(/ \./g, ".")
-    .trim();
+  return collapseDuplicateAdjacentWords(
+    scrubFirstThenProcedureLabels(
+      noteText
+        .replace(/\bsocial praise\b/gi, "praise")
+        .replace(
+          /\bby\s+Status\s*:\s*To be initiated\.?/gi,
+          "by engaging in the targeted motor actions for this episode.",
+        )
+        .replace(/\bStatus\s*:\s*To be initiated\.?/gi, "")
+        .replace(/\bTo be initiated\.?/gi, "")
+        .replace(/\bPlaying with (?:his|her|their)\s+/gi, "Playing with the ")
+        .replace(/[ \t]{2,}/g, " ")
+        .replace(/ \./g, "."),
+    ),
+  ).trim();
 }
 
 /**
@@ -111,6 +279,7 @@ export function normalizeClinicalBodyPraiseWording(body: string): string {
 
 /** Phrases in "Following this intervention" detail that reviewers treat as invented intervention names. */
 export const DEFAULT_UNAUTHORIZED_INTERVENTION_LIKE_PHRASES: RegExp[] = [
+  /\bfirst[\s\-\/]*then(?:\s+(?:statement|board|visual|contingency|cue))?\b/i,
   /\bverbal praise contingent on each instance of task engagement\b/i,
   /\bbehavior-specific praise contingent on each instance of task engagement\b/i,
   /\breinforced appropriate task engagement with verbal praise\b/i,
@@ -124,6 +293,32 @@ export const DEFAULT_UNAUTHORIZED_INTERVENTION_LIKE_PHRASES: RegExp[] = [
   /\bprovided behavior-specific praise contingent on each completed step\b/i,
   /\bmodeled placing\b/i,
 ];
+
+/**
+ * Rewrite Premack application prose that names "first-then" as if it were a catalog intervention.
+ * Keep only the contingency description (demand before preferred access).
+ */
+export function scrubFirstThenProcedureLabels(text: string): string {
+  return text
+    .replace(
+      /\b(?:the RBT\s+)?(?:used|delivered|presented|stated|provided)\s+a\s+first[\s\-\/]*then\s+(?:statement|board|visual|contingency|cue)?\s*(?:linking|pairing|connecting)\s+(.+?)\s+with\s+(?:access to\s+)?([^.;]+)([.;])/gi,
+      "the RBT required $1 before access to $2$3",
+    )
+    .replace(
+      /\b(?:the RBT\s+)?(?:used|delivered|presented|stated|provided)\s+a\s+first[\s\-\/]*then\s+(?:statement|board|visual|contingency|cue)\b/gi,
+      "the RBT required completion of the presented demand before access to the preferred item",
+    )
+    .replace(
+      /\ba\s+first[\s\-\/]*then\s+(?:statement|board|visual|contingency|cue)\b/gi,
+      "a contingency requiring the demand before the preferred item",
+    )
+    .replace(/\bfirst[\s\-\/]*then\b/gi, "demand-before-reinforcer");
+}
+
+/** Collapse accidental repeated tokens (e.g. "sensory sensory toys"). */
+export function collapseDuplicateAdjacentWords(text: string): string {
+  return text.replace(/\b([A-Za-z][A-Za-z'-]{1,})\s+\1\b/gi, "$1");
+}
 
 /**
  * Rewrite intervention-detail prose that external review misreads as catalog intervention names.
@@ -168,8 +363,9 @@ export function normalizeClinicalBodyInterventionDetailPhrases(
     [/\bmodeled placing\b/gi, "demonstrated placing"],
   ];
 
-  let out = body;
+  let out = scrubFirstThenProcedureLabels(body);
   for (const [pat, substitute] of replacements) {
+    pat.lastIndex = 0;
     const m = pat.exec(out);
     if (!m) continue;
     if (phraseMatchesAuthorizedIntervention(m[0], interventionCatalog)) {
@@ -177,7 +373,7 @@ export function normalizeClinicalBodyInterventionDetailPhrases(
     }
     out = out.replace(pat, substitute);
   }
-  return out;
+  return collapseDuplicateAdjacentWords(out);
 }
 
 /** Teaching phrases reviewers treat as unauthorized replacement program names (case-insensitive). */

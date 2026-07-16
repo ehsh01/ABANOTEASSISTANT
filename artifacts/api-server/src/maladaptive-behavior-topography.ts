@@ -418,6 +418,37 @@ export function storedTopographyMatchTokens(topography: string): string[] {
   return [...new Set(words.filter((w) => !TOPOGRAPHY_STOP_WORDS.has(w)))];
 }
 
+/** Verb-form variants so BIP "uses"/"sprints" still match assembled "using"/"sprinting". */
+function topographyTokenMatchVariants(token: string): string[] {
+  const t = token.toLowerCase();
+  const out = new Set<string>([t]);
+  if (t.endsWith("ing") && t.length > 5) {
+    const stem = t.slice(0, -3);
+    out.add(stem);
+    out.add(`${stem}e`);
+    out.add(`${stem}es`);
+    out.add(`${stem}s`);
+    out.add(`${stem}ed`);
+  } else if (t.endsWith("ies") && t.length > 5) {
+    out.add(`${t.slice(0, -3)}y`);
+    out.add(`${t.slice(0, -3)}ying`);
+  } else if (t.endsWith("es") && t.length >= 4) {
+    out.add(t.slice(0, -2));
+    out.add(t.slice(0, -1));
+    out.add(`${t.slice(0, -2)}ing`);
+    out.add(`${t.slice(0, -1)}ing`);
+  } else if (t.endsWith("ed") && t.length > 4) {
+    out.add(t.slice(0, -2));
+    out.add(`${t.slice(0, -2)}ing`);
+    out.add(t.slice(0, -1));
+  } else if (t.endsWith("s") && !t.endsWith("ss") && t.length > 3) {
+    out.add(t.slice(0, -1));
+    out.add(`${t.slice(0, -1)}ing`);
+    out.add(`${t.slice(0, -1)}ed`);
+  }
+  return [...out].filter((v) => v.length >= 3);
+}
+
 export function paragraphReflectsStoredTopography(
   paragraph: string,
   storedTopography: string,
@@ -426,7 +457,9 @@ export function paragraphReflectsStoredTopography(
   const tokens = storedTopographyMatchTokens(storedTopography);
   if (tokens.length === 0) return true;
   const p = paragraph.toLowerCase();
-  const hits = tokens.filter((t) => p.includes(t));
+  const hits = tokens.filter((t) =>
+    topographyTokenMatchVariants(t).some((variant) => p.includes(variant)),
+  );
   const required = Math.min(minimumMatches, tokens.length);
   return hits.length >= required;
 }

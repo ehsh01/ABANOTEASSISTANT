@@ -3,7 +3,7 @@ import {
   isUnusableStoredTopography,
   lastResortObservableTopographyForBehavior,
 } from "./maladaptive-behavior-topography";
-import { escapeRegExp } from "./note-normalization";
+import { escapeRegExp, normalizeClauseAfterBy } from "./note-normalization";
 import type { NotePlan, SessionContext, TherapistTrialSummary } from "./note-plan-schema";
 
 function sentence(text: string): string {
@@ -41,12 +41,7 @@ function followingClause(text: string): string {
 }
 
 function clauseAfterBy(text: string): string {
-  const normalized = text
-    .trim()
-    .replace(/\s+/g, " ")
-    .replace(/^The RBT\b/, "the RBT")
-    .replace(/^The client\b/, "the client");
-  return sentence(normalized);
+  return normalizeClauseAfterBy(text);
 }
 
 /** True when "Following this intervention, …" would only restate the catalog name (after neutralize). */

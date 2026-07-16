@@ -76,6 +76,7 @@ import {
   sanitizeReinforcerNarrativeText,
 } from "./reinforcer-preferences";
 import {
+  normalizeClinicalBodyInterventionDetailPhrases,
   normalizeClinicalBodyPraiseWording,
   scrubAssembledNoteQcHotspots,
 } from "./note-normalization";
@@ -938,6 +939,13 @@ export async function generateSessionNoteForClient(params: {
   applyBodyRewrite(
     normalizeClinicalBodyPraiseWording(finalClinicalBody),
     'Normalized reinforcer wording to plain "praise" (never "social praise"/compound praise labels that reviewers treat as interventions).',
+  );
+  applyBodyRewrite(
+    normalizeClinicalBodyInterventionDetailPhrases(
+      finalClinicalBody,
+      frozenForAssembly.planCatalogSnapshot.interventions,
+    ),
+    'Removed unauthorized intervention-like procedure labels (e.g. "first-then statement") from Premack/application detail; collapsed duplicate wording.',
   );
 
   const reinforcerPrefsForNote = filterReinforcementPreferencesForNote(

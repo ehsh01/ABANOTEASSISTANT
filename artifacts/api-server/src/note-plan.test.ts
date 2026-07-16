@@ -756,7 +756,7 @@ describe("JSON-only repair orchestration", () => {
     expect(result.finalIssues.filter((issue) => issue.severity === "blocking")).toEqual([]);
     expect(result.body.split(/\n\s*\n/)).toHaveLength(6);
     expect(result.body.split(/\n\s*\n/)[2]).toMatch(/flapping|walking/);
-    expect(result.body.split(/\n\s*\n/)[5]).toMatch(/leaves|sprints/);
+    expect(result.body.split(/\n\s*\n/)[5]).toMatch(/leaves|sprints|sprinting|leaving/);
     expect(result.body).not.toContain("Anthony");
     expect(result.body).not.toMatch(/\b(?:caregiver|peers?)\b/i);
   });

@@ -15,9 +15,9 @@ const OBSERVABLE_ACTION_SOURCE =
   "shake|shook|shaking|shout(?:ed|ing|s)?|sit|sitting|spat|spin|spinning|spun|" +
   "sprint(?:ed|ing|s)?|sit|sits|sitting|stand|standing|stood|stomp(?:ed|ing|s)?|strike|struck|" +
   "sweep|swept|sweeping|swat(?:ted|ting|s)?|tear|tearing|threw|throw(?:ing|s)?|" +
-  "touch(?:ed|es|ing)?|turn(?:ed|ing|s)?|unlock(?:ed|ing|s)?|use(?:d|s|ing)?|" +
+  "touch(?:ed|es|ing)?|turn(?:ed|ing|s)?|unlock(?:ed|ing|s)?|use(?:d|s)?|using|" +
   "vocalize(?:d|s|ing)?|walk(?:ed|ing|s)?|wander(?:ed|ing|s)?|wave|waved|waving|" +
-  "yell(?:ed|ing|s)?)";
+  "yell(?:ed|ing|s)?|threat(?:s|en(?:ed|ing|s)?)?)";
 
 const observableAction = new RegExp(`\\b${OBSERVABLE_ACTION_SOURCE}\\b`, "i");
 const observableClientOutcome = new RegExp(
