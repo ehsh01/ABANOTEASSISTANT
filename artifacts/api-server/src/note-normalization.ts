@@ -192,6 +192,123 @@ function baseFormVerbToGerund(base: string): string {
   return `${w}ing`;
 }
 
+/** Irregular gerund → simple-past forms that the spelling heuristic cannot derive. */
+const GERUND_TO_PAST_IRREGULAR: Record<string, string> = {
+  withholding: "withheld",
+  keeping: "kept",
+  holding: "held",
+  setting: "set",
+  putting: "put",
+  letting: "let",
+  leading: "led",
+  giving: "gave",
+  making: "made",
+  taking: "took",
+  bringing: "brought",
+  telling: "told",
+  meeting: "met",
+  standing: "stood",
+  sitting: "sat",
+};
+
+/** Apply the leading-capitalization of `sample` to `word`. */
+function matchLeadingCase(sample: string, word: string): string {
+  return sample[0] === sample[0]?.toUpperCase()
+    ? word.charAt(0).toUpperCase() + word.slice(1)
+    : word;
+}
+
+/**
+ * Convert a gerund action verb ("moving", "requiring", "placing") to its simple past tense
+ * ("moved", "required", "placed"). Returns null when the token is not a usable gerund. Handles
+ * silent-e verbs, consonant doubling, and consonant+y automatically; irregulars use a small map.
+ */
+export function gerundActionToPast(word: string): string | null {
+  const lower = word.toLowerCase();
+  if (!/^[a-z][a-z-]{1,}ing$/.test(lower)) return null;
+  const irregular = GERUND_TO_PAST_IRREGULAR[lower];
+  if (irregular) return matchLeadingCase(word, irregular);
+  const stem = lower.slice(0, -3);
+  if (stem.length < 2) return null;
+  let past: string;
+  if (/[bcdfghjklmnpqrstvwxz]y$/.test(stem)) {
+    // consonant + y → -ied (e.g. "trying" → "tried")
+    past = `${stem.slice(0, -1)}ied`;
+  } else if (/e$/.test(stem)) {
+    // stem still ends in e (e.g. "cueing" → "cue" → "cued", "freeing" → "freed")
+    past = `${stem}d`;
+  } else {
+    // Silent-e verbs ("mov" → "moved"), consonant doubling ("stopp" → "stopped"), and plain
+    // regular verbs ("block" → "blocked") are all correct as stem + "ed".
+    past = `${stem}ed`;
+  }
+  return matchLeadingCase(word, past);
+}
+
+// Subordinating conjunctions / prepositions that end the leading RBT-action list and begin
+// contextual detail (often client behavior) that must NOT be reattributed to the RBT.
+const ACTION_CLAUSE_BOUNDARY =
+  /\b(?:when|while|after|before|until|once|because|since|although|though|if|unless|as|for|without|with|by|to|contingent|upon|so)\b/i;
+
+/**
+ * Ensure an intervention-application clause clearly attributes the action to the RBT.
+ *
+ * The clause is the text that follows "Following this intervention, …". When it begins with a
+ * subjectless gerund action ("requiring cleanup …", "moving materials …, placing …"), prepend
+ * "the RBT" and convert the leading action verb(s) to simple past. Only the leading action list is
+ * reattributed — gerunds inside a following subordinate clause ("… when the client transitioned …
+ * without engaging …") are left untouched so client behavior is never mislabeled as an RBT action.
+ * Clauses that already have a subject (start with "the RBT", "attention was …", etc.) are unchanged.
+ */
+export function attributeActionClauseToRbt(clause: string): string {
+  const trimmed = clause.trim().replace(/\s+/g, " ");
+  if (!trimmed) return trimmed;
+  const firstWordMatch = trimmed.match(/^([A-Za-z][A-Za-z-]*)/);
+  if (!firstWordMatch) return trimmed;
+  const firstWord = firstWordMatch[1]!;
+  if (!/ing$/i.test(firstWord)) return trimmed;
+  const firstPast = gerundActionToPast(firstWord);
+  if (!firstPast) return trimmed;
+
+  // Split the leading action list from any trailing subordinate/contextual clause.
+  const afterFirstWord = trimmed.slice(firstWord.length);
+  const boundary = ACTION_CLAUSE_BOUNDARY.exec(afterFirstWord);
+  let head: string;
+  let rest: string;
+  if (boundary && boundary.index >= 0) {
+    const cut = firstWord.length + boundary.index;
+    head = trimmed.slice(0, cut).trimEnd();
+    rest = trimmed.slice(cut);
+  } else {
+    head = trimmed;
+    rest = "";
+  }
+
+  // Convert the leading gerund and any gerunds that head coordinated list items in the head.
+  let newHead = head.replace(/^[A-Za-z][A-Za-z-]*/, firstPast);
+  newHead = newHead.replace(
+    /(,\s+(?:and\s+)?|\s+and\s+)([A-Za-z][A-Za-z-]*ing)\b/gi,
+    (_m, sep: string, gerund: string) => {
+      const past = gerundActionToPast(gerund);
+      return `${sep}${past ?? gerund}`;
+    },
+  );
+
+  const rebuilt = `${newHead}${rest ? ` ${rest}` : ""}`.replace(/\s+/g, " ").trim();
+  return `the RBT ${rebuilt}`;
+}
+
+/**
+ * Body-level guard: for every "Following this intervention[s], …" sentence whose action clause is a
+ * subjectless gerund, insert "the RBT" as the implementing subject (see attributeActionClauseToRbt).
+ */
+export function normalizeClinicalBodyInterventionActionAttribution(body: string): string {
+  return body.replace(
+    /(Following (?:this intervention|these interventions),\s+)([^.?!]*)/g,
+    (_m, lead: string, clause: string) => `${lead}${attributeActionClauseToRbt(clause)}`,
+  );
+}
+
 /**
  * Normalize text that follows "… by" in manifested-behavior / replacement sentences.
  * Strips leading "the RBT"/"the client" subjects and converts the lead verb to a gerund so

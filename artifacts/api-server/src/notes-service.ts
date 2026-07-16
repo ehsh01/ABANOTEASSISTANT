@@ -77,6 +77,7 @@ import {
 } from "./reinforcer-preferences";
 import {
   normalizeClinicalBodyEscapedQuotes,
+  normalizeClinicalBodyInterventionActionAttribution,
   normalizeClinicalBodyInterventionDetailPhrases,
   normalizeClinicalBodyInterventionLabels,
   normalizeClinicalBodyMaladaptiveBehaviorLabels,
@@ -996,6 +997,10 @@ export async function generateSessionNoteForClient(params: {
   applyBodyRewrite(
     normalizeClinicalBodyReplacementLikePhrases(finalClinicalBody, replacementProgramsCatalogForNote),
     "Rewrote invented replacement-like teaching labels that are not authorized replacement programs.",
+  );
+  applyBodyRewrite(
+    normalizeClinicalBodyInterventionActionAttribution(finalClinicalBody),
+    'Attributed subjectless intervention-action detail to the RBT (e.g. "Following this intervention, requiring cleanup" \u2192 "the RBT required cleanup").',
   );
 
   const reinforcerPrefsForNote = filterReinforcementPreferencesForNote(

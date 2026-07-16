@@ -3,7 +3,11 @@ import {
   isUnusableStoredTopography,
   lastResortObservableTopographyForBehavior,
 } from "./maladaptive-behavior-topography";
-import { escapeRegExp, normalizeClauseAfterBy } from "./note-normalization";
+import {
+  attributeActionClauseToRbt,
+  escapeRegExp,
+  normalizeClauseAfterBy,
+} from "./note-normalization";
 import type { NotePlan, SessionContext, TherapistTrialSummary } from "./note-plan-schema";
 
 function sentence(text: string): string {
@@ -37,7 +41,9 @@ function neutralizeStrayInterventionNamingSentences(
 
 function followingClause(text: string): string {
   const normalized = text.trim().replace(/\s+/g, " ").replace(/^The RBT\b/, "the RBT");
-  return sentence(normalized);
+  // Subjectless gerund action detail ("requiring cleanup …", "moving materials …") gets "the RBT"
+  // as the implementing subject with the action verb(s) in simple past.
+  return sentence(attributeActionClauseToRbt(normalized));
 }
 
 function clauseAfterBy(text: string): string {
