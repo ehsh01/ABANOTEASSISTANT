@@ -8,6 +8,7 @@ import {
 import {
   normalizeClinicalBodyInterventionLabels,
   normalizeClinicalBodyPraiseWording,
+  scrubAssembledNoteQcHotspots,
 } from "./note-normalization";
 
 describe("praise wording normalization", () => {
@@ -25,6 +26,16 @@ describe("praise wording normalization", () => {
     );
     expect(out).not.toMatch(/\bsocial praise\b/i);
     expect(out).toMatch(/acknowledged the response and access to sensory toys/i);
+  });
+
+  test("scrubs social praise and status topography from assembled notes", () => {
+    const out = scrubAssembledNoteQcHotspots(
+      'Throughout the session, the RBT used various reinforcers, including social praise (e.g., "Good job"). The client manifested Climbing by Status: To be initiated.',
+    );
+    expect(out).not.toMatch(/\bsocial praise\b/i);
+    expect(out).toContain("praise");
+    expect(out).not.toMatch(/Status:\s*To be initiated/i);
+    expect(out).toMatch(/Climbing by engaging in the targeted motor actions/i);
   });
 
   test("rewrites all external-review warning forms", () => {

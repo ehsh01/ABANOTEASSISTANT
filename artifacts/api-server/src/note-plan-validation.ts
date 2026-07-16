@@ -21,7 +21,9 @@ import {
   elopementEpisodeLacksObservableTopography,
   isElopementFamilyBehaviorLabel,
   isUnusableStoredTopography,
+  lastResortObservableTopographyForBehavior,
   paragraphReflectsStoredTopography,
+  recoverTopographyFromSegmentProse,
 } from "./maladaptive-behavior-topography";
 import { filterReinforcementPreferencesForNote } from "./reinforcer-preferences";
 
@@ -458,12 +460,26 @@ export function groundNotePlanWithFrozenContext(
           topography = locked.behaviorTopography;
         } else if (isUnusableStoredTopography(topography)) {
           // Never keep BIP status placeholders ("Status: To be initiated") in the manifested-behavior
-          // slot. Prefer a usable stored definition when one exists; otherwise clear so repair / prompt
-          // guidance can supply observable actions for this episode.
-          topography =
+          // slot. Prefer stored definition → cues already in other segment fields → last-resort
+          // observable phrase for that behavior family. (BIP extract already ran upstream in
+          // enrichMaladaptiveTargetsWithAssessmentTopography before the context was frozen.)
+          const fromStored =
             locked.behaviorTopography && !isUnusableStoredTopography(locked.behaviorTopography)
               ? locked.behaviorTopography
               : "";
+          const fromProse =
+            !fromStored
+              ? recoverTopographyFromSegmentProse(locked.behaviorLabel, [
+                  sanitized.responseToIntervention,
+                  sanitized.resultSummary,
+                  ...sanitized.interventions.map((item) => item.application),
+                ])
+              : null;
+          const fromLastResort =
+            !fromStored && !fromProse
+              ? lastResortObservableTopographyForBehavior(locked.behaviorLabel)
+              : null;
+          topography = fromStored || fromProse || fromLastResort || "";
         }
       }
       const responseToIntervention =
@@ -587,11 +603,12 @@ export function validateNotePlan(
       }
     } else if (
       !segment.topography.trim() ||
+      isUnusableStoredTopography(segment.topography) ||
       !containsObservableClinicalAction(segment.topography)
     ) {
       add(
         "TOPOGRAPHY_REQUIRED",
-        "topography must describe a specific observable client action for this session episode. Ground details in frozen behaviorTopography actions when provided, but write natural session prose—do not repeat only the behavior label or paste assessment definition wording.",
+        'topography must describe a specific observable client action for this session episode. Never use BIP status lines such as "Status: To be initiated." Ground details in frozen behaviorTopography actions when provided, but write natural session prose—do not repeat only the behavior label or paste assessment definition wording.',
         index,
       );
     } else if (

@@ -241,6 +241,36 @@ describe("server-owned metrics and deterministic assembly", () => {
       ),
     );
     expect(grounded.segments[0]?.topography).not.toMatch(/status|to be initiated/i);
+    expect(grounded.segments[0]?.topography).toMatch(/throwing|knocking|materials/i);
+  });
+
+  it("recovers Climbing topography from application prose when status placeholder was copied", () => {
+    const grounded = groundNotePlanWithFrozenContext(
+      validPlan({
+        behaviorLabel: "Climbing",
+        topography: "Status: To be initiated.",
+        interventions: [
+          {
+            label: "Premack principle",
+            application:
+              "The RBT withheld access while the client had one foot on the couch, then delivered access after the client stepped down",
+          },
+        ],
+      }),
+      buildFrozenSessionContext(
+        generationContext({
+          maladaptiveBehaviors: ["Climbing"],
+          maladaptiveBehaviorForHour: ["Climbing"],
+          maladaptiveBehaviorTopographyForHour: ["Status: To be initiated."],
+          interventions: ["Premack principle"],
+          interventionCandidatesForHour: [["Premack principle"]],
+          behaviorToReplacementsMap: { Climbing: ["Request for Break"] },
+          behaviorReplacementCandidatesForHour: [["Request for Break"]],
+        }),
+      ),
+    );
+    expect(grounded.segments[0]?.topography).toMatch(/foot on the couch/i);
+    expect(grounded.segments[0]?.topography).not.toMatch(/status|to be initiated/i);
   });
 
   it("removes forbidden third-party roles from stored behavior definitions", () => {

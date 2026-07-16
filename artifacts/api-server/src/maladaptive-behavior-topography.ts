@@ -33,6 +33,60 @@ export function isUnusableStoredTopography(text: string | null | undefined): boo
   return false;
 }
 
+/**
+ * Last-resort observable topography when the profile/BIP has only a status placeholder and the model
+ * copied that status. Prefer assessment extract / model prose when available; these phrases exist so
+ * notes never ship "Status: To be initiated" as the manifested-behavior form.
+ */
+export function lastResortObservableTopographyForBehavior(behaviorLabel: string): string | null {
+  const b = behaviorLabel.trim().toLowerCase();
+  if (!b) return null;
+  if (/\bclimb/.test(b)) {
+    return "placing a foot or knees on furniture or elevated surfaces to reach preferred items";
+  }
+  if (/\bstereotyp/.test(b) || /\bstereotypy\b/.test(b) || /\brepetitive\s+motor\b/.test(b)) {
+    return "engaging in repetitive motor movements with the hands or body unrelated to the presented task";
+  }
+  if (/\bproperty\s+destruction\b/.test(b)) {
+    return "throwing or knocking session materials from the work surface";
+  }
+  if (/\bexcessive\s+motor\b/.test(b)) {
+    return "flapping hands, rocking, or pacing near the work materials";
+  }
+  return null;
+}
+
+/**
+ * Prefer concrete episode cues already present in other segment fields (application/response) when
+ * the topography slot is only a BIP status placeholder.
+ */
+export function recoverTopographyFromSegmentProse(
+  behaviorLabel: string,
+  fields: string[],
+): string | null {
+  const pool = fields.join(" ").replace(/\s+/g, " ").trim();
+  if (!pool) return null;
+  const b = behaviorLabel.trim().toLowerCase();
+
+  if (/\bclimb/.test(b)) {
+    if (/\bone foot on the couch\b/i.test(pool)) {
+      return "placing one foot on the couch to reach preferred items";
+    }
+    if (/\b(?:foot|feet|knee|knees)\b.*\b(?:couch|chair|shelf|furniture|table)\b/i.test(pool) ||
+        /\b(?:couch|chair|shelf|furniture)\b.*\b(?:foot|feet|knee|knees|climb)\b/i.test(pool)) {
+      return "placing a foot or knees onto furniture to reach preferred items";
+    }
+  }
+
+  if (/\bstereotyp/.test(b) || /\bstereotypy\b/.test(b)) {
+    if (/\b(?:flap|rock|spin|pace|hand(?:s)?\s+near\s+(?:the\s+)?(?:face|eyes)|finger)\b/i.test(pool)) {
+      return "engaging in repetitive motor movements with the hands or body away from the presented task materials";
+    }
+  }
+
+  return null;
+}
+
 const TOPOGRAPHY_STOP_WORDS = new Set([
   "that",
   "this",

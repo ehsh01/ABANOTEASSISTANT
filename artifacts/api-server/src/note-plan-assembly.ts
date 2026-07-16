@@ -1,3 +1,7 @@
+import {
+  isUnusableStoredTopography,
+  lastResortObservableTopographyForBehavior,
+} from "./maladaptive-behavior-topography";
 import { escapeRegExp } from "./note-normalization";
 import type { NotePlan, SessionContext, TherapistTrialSummary } from "./note-plan-schema";
 
@@ -133,8 +137,16 @@ export function assembleClinicalBodyFromNotePlan(
       if (locked.acquisitionOnly) {
         parts.push(sentence(neutralize(segment.topography)));
       } else {
+        // Belt-and-suspenders: never assemble BIP status placeholders into the manifested-behavior line.
+        const rawTopo = neutralize(segment.topography);
+        const usableTopo = !isUnusableStoredTopography(rawTopo)
+          ? rawTopo
+          : !isUnusableStoredTopography(locked.behaviorTopography)
+            ? (locked.behaviorTopography ?? "")
+            : (lastResortObservableTopographyForBehavior(locked.behaviorLabel) ??
+              "engaging in the targeted motor actions for this episode");
         parts.push(
-          `${manifestedBehaviorBridge(index)} ${locked.behaviorLabel} by ${clauseAfterBy(neutralize(segment.topography))}`,
+          `${manifestedBehaviorBridge(index)} ${locked.behaviorLabel} by ${clauseAfterBy(usableTopo)}`,
         );
         // Naming sentences are driven by the server-locked interventionLabels (the backend is the
         // authority on how many/which interventions), not the model's free-form list. This keeps the

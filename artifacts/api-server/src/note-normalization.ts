@@ -52,6 +52,21 @@ export function normalizeClinicalBodyInterventionLabels(body: string, interventi
 }
 
 /**
+ * Final scrub for full assembled notes (clinical body + locked closing): never leave "social praise"
+ * or BIP status-placeholder topography in saved note text.
+ */
+export function scrubAssembledNoteQcHotspots(noteText: string): string {
+  return noteText
+    .replace(/\bsocial praise\b/gi, "praise")
+    .replace(/\bby\s+Status\s*:\s*To be initiated\.?/gi, "by engaging in the targeted motor actions for this episode.")
+    .replace(/\bStatus\s*:\s*To be initiated\.?/gi, "")
+    .replace(/\bTo be initiated\.?/gi, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/ \./g, ".")
+    .trim();
+}
+
+/**
  * Reinforcer wording: never list "social praise", "verbal praise", or "behavior-specific praise"
  * (reviewers misread those compounds as catalog intervention names). Prefer plain "praise" /
  * "brief praise" in the clinical body. Locked closing always uses plain "praise" as well.

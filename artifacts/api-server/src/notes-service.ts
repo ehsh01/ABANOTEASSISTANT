@@ -75,7 +75,10 @@ import {
   filterReinforcementPreferencesForNote,
   sanitizeReinforcerNarrativeText,
 } from "./reinforcer-preferences";
-import { normalizeClinicalBodyPraiseWording } from "./note-normalization";
+import {
+  normalizeClinicalBodyPraiseWording,
+  scrubAssembledNoteQcHotspots,
+} from "./note-normalization";
 import { assessmentGenerationGate } from "./note-readiness";
 import {
   enrichMaladaptiveTargetsWithAssessmentTopography,
@@ -1005,6 +1008,13 @@ export async function generateSessionNoteForClient(params: {
     reinforcerPrefsForNote,
     clientAgeYears,
   );
+  const qcScrubbedNote = scrubAssembledNoteQcHotspots(noteContent);
+  if (qcScrubbedNote !== noteContent) {
+    noteContent = qcScrubbedNote;
+    warnings.push(
+      'Removed QC hotspot wording ("social praise" / BIP status topography placeholders) from the assembled note before save.',
+    );
+  }
 
   const assembledContext = {
     presentPeople: body.presentPeople,
@@ -1034,17 +1044,19 @@ export async function generateSessionNoteForClient(params: {
         body.presentPeople,
       ).trim();
     }
-    noteContent = assembleSessionNote(
-      body.presentPeople,
-      body.hasEnvironmentalChanges,
-      body.therapySetting,
-      finalClinicalBody,
-      body.nextSessionDate,
-      profile?.firstName,
-      narrativeCollapsed.narrativeSegmentCount,
-      narrativeCollapsed.therapistTrialSummaryForReplacementHour,
-      reinforcerPrefsForNote,
-      clientAgeYears,
+    noteContent = scrubAssembledNoteQcHotspots(
+      assembleSessionNote(
+        body.presentPeople,
+        body.hasEnvironmentalChanges,
+        body.therapySetting,
+        finalClinicalBody,
+        body.nextSessionDate,
+        profile?.firstName,
+        narrativeCollapsed.narrativeSegmentCount,
+        narrativeCollapsed.therapistTrialSummaryForReplacementHour,
+        reinforcerPrefsForNote,
+        clientAgeYears,
+      ),
     );
     assembledValidation = validateAssembledSessionNote(noteContent, assembledContext);
   }
