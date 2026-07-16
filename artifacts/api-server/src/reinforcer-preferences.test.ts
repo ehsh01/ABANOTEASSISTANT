@@ -79,4 +79,19 @@ describe("reinforcer preferences helpers", () => {
     expect(out).toContain("spinning toys");
     expect(out).not.toMatch(/preferred toys?/i);
   });
+
+  test("sanitize preserves blank-line ABC paragraph separators", () => {
+    const body = [
+      "The RBT presented cleanup. The client manifested Elopement by moving toward the door. The RBT provided a preferred toy after the client returned.",
+      "At the table, the client manifested Verbal Aggression by talking back. The RBT delivered access to toys after the task.",
+    ].join("\n\n");
+    const out = sanitizeReinforcerNarrativeText(
+      body,
+      ["Preferred toys", "spinning toys", "YouTube videos"],
+      9,
+    );
+    expect(out.split(/\n\n+/)).toHaveLength(2);
+    expect(out).toContain("spinning toys");
+    expect(out).not.toMatch(/preferred toys?/i);
+  });
 });

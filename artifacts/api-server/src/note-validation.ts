@@ -34,6 +34,7 @@ import {
   isElopementFamilyBehaviorLabel,
   manifestedBehaviorSentenceSpan,
   paragraphReflectsStoredTopography,
+  pickStoredTopographyActionForSegment,
 } from "./maladaptive-behavior-topography";
 import {
   containsObservableClinicalAction,
@@ -1309,7 +1310,9 @@ function validateClinicalBodyComplianceInternal(
         storedTopography.length > 0 &&
         !paragraphReflectsStoredTopography(
           manifestedBehaviorSentenceSpan(p),
-          storedTopography,
+          // Match against the same single action used for this ABC hour (not the full BIP
+          // alternative list), so one-action topography policy does not fail validation.
+          pickStoredTopographyActionForSegment(storedTopography, i),
         )
       ) {
         add("BEHAVIOR_TOPOGRAPHY", "blocking",

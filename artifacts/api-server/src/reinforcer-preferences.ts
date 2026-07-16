@@ -257,7 +257,8 @@ export function sanitizeReinforcerNarrativeText(
       .replace(/\baccess to\s+YouTube(?:\s+videos?)?\b/gi, `access to ${replacement}`)
       .replace(/\bwatching\s+YouTube(?:\s+videos?)?\b/gi, `engaging with ${replacement}`)
       .replace(/\bYouTube(?:\s+videos?)?\b/gi, replacement)
-      .replace(/\s{2,}/g, " ")
+      // Preserve blank-line ABC paragraph separators (\n\n); only collapse horizontal whitespace.
+      .replace(/[^\S\n]{2,}/g, " ")
       .trim();
   }
 
@@ -265,11 +266,11 @@ export function sanitizeReinforcerNarrativeText(
     out = out
       .replace(GENERIC_PREFERRED_TOY_IN_PROSE_RE, fallbackToy)
       .replace(
-        /\b((?:delivered|provided|gave|giving|offered|presented|returned|earned)\b[^.!?]{0,80}?)\s+(?:a\s+|the\s+)?toys?\b/gi,
+        /\b((?:delivered|provided|gave|giving|offered|presented|returned|earned)\b[^.!?\n]{0,80}?)\s+(?:a\s+|the\s+)?toys?\b/gi,
         `$1 ${fallbackToy}`,
       )
       .replace(/\baccess to\s+(?:a\s+|the\s+)?toys?\b/gi, `access to ${fallbackToy}`)
-      .replace(/\s{2,}/g, " ")
+      .replace(/[^\S\n]{2,}/g, " ")
       .trim();
   }
 

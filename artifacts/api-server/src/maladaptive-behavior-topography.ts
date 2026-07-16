@@ -124,6 +124,49 @@ export function pickSingleTopographyActionForSegment(
 }
 
 /**
+ * Same single-action selection used for frozen SessionContext / assembly, but starting from the raw
+ * stored operational definition (including "Defined as … including A, B, or C" frames). Keeps prose
+ * validation aligned with what the assembler was allowed to write for that hour.
+ */
+export function pickStoredTopographyActionForSegment(
+  rawTopography: string,
+  segmentIndex: number,
+): string {
+  let text = rawTopography.trim().replace(/\s+/g, " ");
+  if (!text || isUnusableStoredTopography(text)) return "";
+
+  const includingMatch = text.match(/\bincluding\s+(.+)$/i);
+  if (
+    includingMatch?.[1] &&
+    /(?:movement pattern|motor (?:behavior|response)|specific (?:actions?|behaviors?|movements?)|the following)\b/i.test(
+      text,
+    )
+  ) {
+    text = includingMatch[1].trim();
+  }
+
+  text = text
+    .replace(/[.!?]+$/, "")
+    .replace(
+      /^(?:operationally\s+)?(?:characterized by|defined as|definition(?:\s+is)?)\s+/i,
+      "",
+    )
+    .replace(
+      /^any\s+(?:instance|episode|incidence|occurrence)\s+(?:in which|when|where|of)\s+/i,
+      "",
+    )
+    .replace(/^when\s+/i, "")
+    .replace(/^the client(?!['’]s)\s+/i, "")
+    .replace(/^(?:frequently|consistently|repeatedly)\s+/i, "")
+    .replace(/\s+,?\s*repetitively\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!text) return "";
+  return pickSingleTopographyActionForSegment(text, segmentIndex);
+}
+
+/**
  * Prefer concrete episode cues already present in other segment fields (application/response) when
  * the topography slot is only a BIP status placeholder.
  */

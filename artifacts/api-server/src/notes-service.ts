@@ -919,24 +919,26 @@ export async function generateSessionNoteForClient(params: {
     warnings.push(
       "Normalized reinforcer wording (concrete preferred toys; no YouTube for clients under 14).",
     );
-    complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, {
-      ...buildComplianceContext(),
-      replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
-      rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
-    });
-    complianceIssues = complianceResult.issues;
   }
+
+  // Re-validate the post-processed body once. This result is authoritative for blocking —
+  // do not re-merge historical OpenAI-attempt blocking issues (those can describe an older
+  // body shape, e.g. topography failures before grounding, and would block after repairs).
+  complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, {
+    ...buildComplianceContext(),
+    replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
+    rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
+  });
+  complianceIssues = complianceResult.issues;
 
   const effectiveIssueMap = new Map(
     complianceResult.issues.map((issue) => [`${issue.code}\u0000${issue.message}`, issue]),
   );
   for (const issue of generationFinalIssues) {
-    const repairedReplacementMismatch =
-      issue.code === "PROGRAM_FUNCTION_MISMATCH" &&
-      !complianceResult.issues.some((current) => current.code === "PROGRAM_FUNCTION_MISMATCH");
-    if (!repairedReplacementMismatch) {
-      effectiveIssueMap.set(`${issue.code}\u0000${issue.message}`, issue);
+    if (issue.severity === "blocking") {
+      continue;
     }
+    effectiveIssueMap.set(`${issue.code}\u0000${issue.message}`, issue);
   }
   const effectiveIssues = [...effectiveIssueMap.values()].filter((issue) => {
     // Caregiver leaks are resolved by stripUnauthorizedCaregiverLanguage above; do not
