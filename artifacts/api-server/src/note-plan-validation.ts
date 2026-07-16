@@ -23,7 +23,9 @@ import {
   isUnusableStoredTopography,
   lastResortObservableTopographyForBehavior,
   paragraphReflectsStoredTopography,
+  pickSingleTopographyActionForSegment,
   recoverTopographyFromSegmentProse,
+  splitTopographyActionAlternatives,
 } from "./maladaptive-behavior-topography";
 import { filterReinforcementPreferencesForNote } from "./reinforcer-preferences";
 
@@ -357,7 +359,10 @@ export function buildFrozenSessionContext(
         const raw = ctx.maladaptiveBehaviorTopographyForHour[segmentIndex];
         if (!raw || isUnusableStoredTopography(raw)) return null;
         const cleaned = sanitizeStoredTopographyForNarrative(raw, blockedClientNames);
-        return cleaned.length > 0 ? cleaned : null;
+        if (!cleaned) return null;
+        // One observable action per ABC hour — do not freeze the full BIP alternative list.
+        const single = pickSingleTopographyActionForSegment(cleaned, segmentIndex);
+        return single.length > 0 ? single : null;
       })(),
       behaviorFunctions: ctx.maladaptiveBehaviorFunctionsForHour[segmentIndex] ?? null,
       trialSummary: ctx.therapistTrialSummaryForReplacementHour[segmentIndex] ?? null,
@@ -480,6 +485,23 @@ export function groundNotePlanWithFrozenContext(
               ? lastResortObservableTopographyForBehavior(locked.behaviorLabel)
               : null;
           topography = fromStored || fromProse || fromLastResort || "";
+        }
+
+        // One observable action per ABC — never dump the full BIP "including A, B, or C" list.
+        if (topography.trim()) {
+          const actions = splitTopographyActionAlternatives(topography);
+          if (actions.length > 1) {
+            const lockedSingle = locked.behaviorTopography?.trim() ?? "";
+            const lockedMatches = lockedSingle
+              ? actions.find(
+                  (action) =>
+                    action.toLowerCase() === lockedSingle.toLowerCase() ||
+                    lockedSingle.toLowerCase().includes(action.toLowerCase()) ||
+                    action.toLowerCase().includes(lockedSingle.toLowerCase()),
+                )
+              : undefined;
+            topography = lockedMatches ?? pickSingleTopographyActionForSegment(topography, index);
+          }
         }
       }
       const responseToIntervention =

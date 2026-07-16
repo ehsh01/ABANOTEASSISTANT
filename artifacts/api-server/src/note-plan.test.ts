@@ -222,6 +222,65 @@ describe("server-owned metrics and deterministic assembly", () => {
     expect(sanitized).not.toContain("Anthony");
   });
 
+  it("uses one Excessive Motor topography action per ABC (not the full BIP list)", () => {
+    const full =
+      "frequently flapping his hands, continuous side-to-side head movement without interruption, walking back and forth repetitively, or engaging in the same activity repeatedly";
+    const context = buildFrozenSessionContext(
+      generationContext({
+        sessionHours: 2,
+        narrativeSegmentCount: 2,
+        maladaptiveBehaviors: ["Excessive Motor Behavior"],
+        maladaptiveBehaviorForHour: ["Excessive Motor Behavior", "Excessive Motor Behavior"],
+        replacementProgramForHour: ["Request for Break", "Request for Break"],
+        rbtActionsOnlyOutcomeForHour: [false, false],
+        activityAntecedentForHour: [null, null],
+        languageMaladaptiveEpisodeForHour: [false, false],
+        therapistTrialSummaryForReplacementHour: [null, null],
+        acquisitionOnlySegmentForHour: [false, false],
+        maladaptiveBehaviorFunctionsForHour: [["automatic"], ["automatic"]],
+        maladaptiveBehaviorTopographyForHour: [full, full],
+        behaviorReplacementCandidatesForHour: [["Request for Break"], ["Request for Break"]],
+        interventionCandidatesForHour: [["Premack principle"], ["Premack principle"]],
+        behaviorToReplacementsMap: { "Excessive Motor Behavior": ["Request for Break"] },
+      }),
+    );
+    const topo0 = context.segments[0]?.behaviorTopography ?? "";
+    const topo1 = context.segments[1]?.behaviorTopography ?? "";
+    expect(topo0).toBeTruthy();
+    expect(topo1).toBeTruthy();
+    // Each frozen hour is a single action — not the comma/or dump.
+    expect(topo0).not.toMatch(/,/);
+    expect(topo0).not.toMatch(/\bor\b/i);
+    expect(topo1).not.toMatch(/,/);
+    // Multi-hour notes rotate through distinct actions when several are listed.
+    expect(topo0.toLowerCase()).not.toBe(topo1.toLowerCase());
+
+    const grounded = groundNotePlanWithFrozenContext(
+      {
+        segments: [
+          {
+            ...validPlan({
+              behaviorLabel: "Excessive Motor Behavior",
+              topography: full,
+            }).segments[0]!,
+            segmentIndex: 0,
+          },
+          {
+            ...validPlan({
+              behaviorLabel: "Excessive Motor Behavior",
+              topography: full,
+            }).segments[0]!,
+            segmentIndex: 1,
+          },
+        ],
+      },
+      context,
+    );
+    expect(grounded.segments[0]?.topography).not.toMatch(/,/);
+    expect(grounded.segments[0]?.topography).not.toMatch(/flapping.*walking|head movement.*flapping/i);
+    expect(grounded.segments[0]?.topography).toBe(topo0);
+  });
+
   it("rejects BIP status placeholders as unusable topography", () => {
     expect(sanitizeStoredTopographyForNarrative("Status: To be initiated.")).toBe("");
     expect(sanitizeStoredTopographyForNarrative("To be initiated")).toBe("");
@@ -345,14 +404,14 @@ describe("server-owned metrics and deterministic assembly", () => {
     const context = buildFrozenSessionContext(input, {
       blockedClientNames: ["Anthony"],
     });
-    const natural =
-      "flapping both hands near the work materials and walking back and forth beside the table";
+    // Model already used a single action that reflects the assessment — keep that natural wording.
+    const natural = "flapping both hands near the work materials";
     const grounded = groundNotePlanWithFrozenContext(
       validPlan({ topography: natural }),
       context,
     );
     expect(grounded.segments[0]?.topography).toBe(natural);
-    expect(grounded.segments[0]?.topography).not.toMatch(/defined as|movement pattern|including/i);
+    expect(grounded.segments[0]?.topography).not.toMatch(/defined as|movement pattern|including|,/i);
   });
 
   it("varies manifested bridges and strips leading During from antecedents", () => {

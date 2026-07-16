@@ -37,6 +37,7 @@ export function isUnusableStoredTopography(text: string | null | undefined): boo
  * Last-resort observable topography when the profile/BIP has only a status placeholder and the model
  * copied that status. Prefer assessment extract / model prose when available; these phrases exist so
  * notes never ship "Status: To be initiated" as the manifested-behavior form.
+ * Keep these to a **single** action (not a comma/or list) so ABC paragraphs stay natural.
  */
 export function lastResortObservableTopographyForBehavior(behaviorLabel: string): string | null {
   const b = behaviorLabel.trim().toLowerCase();
@@ -45,15 +46,81 @@ export function lastResortObservableTopographyForBehavior(behaviorLabel: string)
     return "placing a foot or knees on furniture or elevated surfaces to reach preferred items";
   }
   if (/\bstereotyp/.test(b) || /\bstereotypy\b/.test(b) || /\brepetitive\s+motor\b/.test(b)) {
-    return "engaging in repetitive motor movements with the hands or body unrelated to the presented task";
+    return "engaging in repetitive motor movements with the hands unrelated to the presented task";
   }
   if (/\bproperty\s+destruction\b/.test(b)) {
     return "throwing or knocking session materials from the work surface";
   }
   if (/\bexcessive\s+motor\b/.test(b)) {
-    return "flapping hands, rocking, or pacing near the work materials";
+    return "flapping hands near the work materials";
   }
   return null;
+}
+
+/**
+ * Split a BIP/assessment topography clause that lists several alternative observable actions
+ * (e.g. "flapping his hands, side-to-side head movement, walking back and forth, or engaging
+ * in the same activity repeatedly") into individual action phrases.
+ * Does not split idioms like "back and forth".
+ */
+export function splitTopographyActionAlternatives(text: string): string[] {
+  const cleaned = text.trim().replace(/\s+/g, " ");
+  if (!cleaned) return [];
+
+  const primary = cleaned
+    .split(/\s*,\s*(?:or\s+|and\/or\s+|and\s+)?|\s+and\/or\s+|\s+or\s+/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  const ACTION_LEAD =
+    "(?:flapping|walking|moving|rocking|spinning|pacing|engaging|repeating|waving|clapping|bouncing|jumping|shaking|stomping|crying|screaming|yelling|hitting|kicking|throwing|ripping|pulling|pushing|leaving|sprinting|running|placing|putting|reaching)";
+
+  const expanded: string[] = [];
+  for (const part of primary) {
+    const andSplit = part.split(
+      new RegExp(`\\s+and\\s+(?=${ACTION_LEAD}\\b)`, "i"),
+    );
+    if (andSplit.length > 1) {
+      expanded.push(...andSplit.map((s) => s.trim()).filter(Boolean));
+    } else {
+      expanded.push(part);
+    }
+  }
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of expanded) {
+    const action = raw
+      .replace(/^(?:or|and|and\/or)\s+/i, "")
+      .replace(/[.]+$/, "")
+      .replace(/^(?:frequently|consistently|repeatedly|continuous(?:ly)?)\s+/i, "")
+      .replace(/\s+without\s+interruption\b/gi, "")
+      .replace(/\s+,?\s*repetitively\b/gi, "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (action.length < 8) continue;
+    const key = action.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(action);
+  }
+  return out;
+}
+
+/**
+ * For ABC narrative, use **one** topography action per segment — not the full BIP alternative list.
+ * Multi-hour notes rotate through the listed actions so consecutive hours do not all cite the same one.
+ */
+export function pickSingleTopographyActionForSegment(
+  topography: string,
+  segmentIndex: number,
+): string {
+  const actions = splitTopographyActionAlternatives(topography);
+  if (actions.length <= 1) {
+    return topography.trim().replace(/\s+/g, " ");
+  }
+  const idx = ((segmentIndex % actions.length) + actions.length) % actions.length;
+  return actions[idx]!;
 }
 
 /**
