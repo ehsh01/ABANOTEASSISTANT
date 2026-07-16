@@ -76,8 +76,12 @@ import {
   sanitizeReinforcerNarrativeText,
 } from "./reinforcer-preferences";
 import {
+  normalizeClinicalBodyEscapedQuotes,
   normalizeClinicalBodyInterventionDetailPhrases,
+  normalizeClinicalBodyInterventionLabels,
+  normalizeClinicalBodyMaladaptiveBehaviorLabels,
   normalizeClinicalBodyPraiseWording,
+  normalizeClinicalBodyReplacementLikePhrases,
   scrubAssembledNoteQcHotspots,
 } from "./note-normalization";
 import {
@@ -230,8 +234,18 @@ export async function generateSessionNoteForClient(params: {
   companyId: number;
   client: ClientRow;
   body: GenerateNoteInput;
+  /**
+   * Optional generation-tuning overrides. Background (async job) callers pass a larger per-request
+   * timeout and overall budget so repairs can converge; the synchronous endpoint omits these and
+   * keeps the conservative Cloudflare-safe defaults.
+   */
+  generation?: {
+    requestTimeoutMs?: number | undefined;
+    timeBudgetMs?: number | undefined;
+    fallbackModel?: string | null | undefined;
+  };
 }): Promise<GenerateSessionNoteResult> {
-  const { companyId, client, body } = params;
+  const { companyId, client, body, generation } = params;
 
   const profile = (client.profile as ClientProfileRow | null | undefined) ?? null;
   const rawAssessmentSnapshot = profile?.assessmentTextSnapshot?.trim() ?? "";
@@ -254,18 +268,30 @@ export async function generateSessionNoteForClient(params: {
   }
 
   let programNames: string[] = [];
-  const programRows = await db
-    .select()
-    .from(programsTable)
-    .where(and(eq(programsTable.companyId, companyId), inArray(programsTable.id, body.selectedReplacements)));
+  // These two reads are independent; run them concurrently to shave a round-trip off generation.
+  const [programRows, linkedProgramRows] = await Promise.all([
+    db
+      .select()
+      .from(programsTable)
+      .where(
+        and(
+          eq(programsTable.companyId, companyId),
+          inArray(programsTable.id, body.selectedReplacements),
+        ),
+      ),
+    db
+      .select({ id: programsTable.id, name: programsTable.name })
+      .from(clientProgramsTable)
+      .innerJoin(programsTable, eq(clientProgramsTable.programId, programsTable.id))
+      .where(
+        and(
+          eq(clientProgramsTable.clientId, body.clientId),
+          eq(programsTable.companyId, companyId),
+        ),
+      ),
+  ]);
   const nameById = new Map(programRows.map((p) => [p.id, p.name]));
   programNames = body.selectedReplacements.map((id) => nameById.get(id) ?? `Program ${id}`);
-
-  const linkedProgramRows = await db
-    .select({ id: programsTable.id, name: programsTable.name })
-    .from(clientProgramsTable)
-    .innerJoin(programsTable, eq(clientProgramsTable.programId, programsTable.id))
-    .where(and(eq(clientProgramsTable.clientId, body.clientId), eq(programsTable.companyId, companyId)));
 
   const selectedIdSet = new Set(body.selectedReplacements);
   const assessmentReplacementNameSet = new Set(
@@ -764,12 +790,17 @@ export async function generateSessionNoteForClient(params: {
   };
 
   try {
-    const oaResult = await generateClinicalBodyOpenAI(oaCtx, { blockedClientNames });
+    const oaResult = await generateClinicalBodyOpenAI(oaCtx, {
+      blockedClientNames,
+      requestTimeoutMs: generation?.requestTimeoutMs,
+      timeBudgetMs: generation?.timeBudgetMs,
+      fallbackModel: generation?.fallbackModel,
+    });
     clinicalBody = oaResult.body;
     generationNotePlan = oaResult.notePlan;
     warnings.push(`Clinical narrative generated via ${openaiNoteGenerationLabel()}.`);
     warnings.push(...oaResult.warnings);
-    generationModel = resolvedOpenAIModel();
+    generationModel = oaResult.modelUsed ?? resolvedOpenAIModel();
     generationRepairAttempts = oaResult.repairAttempts;
     generationFinalIssues = oaResult.finalIssues;
     generationAttemptHistory = oaResult.attemptHistory;
@@ -947,6 +978,25 @@ export async function generateSessionNoteForClient(params: {
     ),
     'Removed unauthorized intervention-like procedure labels (e.g. "first-then statement") from Premack/application detail; collapsed duplicate wording.',
   );
+  applyBodyRewrite(
+    normalizeClinicalBodyEscapedQuotes(finalClinicalBody),
+    "Normalized escaped quotes in the clinical body so reviewers see clean punctuation.",
+  );
+  applyBodyRewrite(
+    normalizeClinicalBodyInterventionLabels(
+      finalClinicalBody,
+      frozenForAssembly.planCatalogSnapshot.interventions,
+    ),
+    "Completed partial intervention labels to their exact authorized catalog strings (e.g. DRI parenthetical, Visual Supports plural).",
+  );
+  applyBodyRewrite(
+    normalizeClinicalBodyMaladaptiveBehaviorLabels(finalClinicalBody, behaviorCatalog),
+    "Expanded bare maladaptive-behavior abbreviations (e.g. SIB) to the exact authorized catalog label.",
+  );
+  applyBodyRewrite(
+    normalizeClinicalBodyReplacementLikePhrases(finalClinicalBody, replacementProgramsCatalogForNote),
+    "Rewrote invented replacement-like teaching labels that are not authorized replacement programs.",
+  );
 
   const reinforcerPrefsForNote = filterReinforcementPreferencesForNote(
     profile?.assessmentSummary?.reinforcementPreferences ?? [],
@@ -1121,6 +1171,7 @@ export async function generateSessionNoteForClient(params: {
   );
   await writeNoteGenerationAudit(buildNoteGenerationAuditEntry({
     ...auditBase,
+    model: generationModel,
     noteId: inserted.id,
     repairAttempts: generationRepairAttempts,
     validatorIssues: effectiveIssues.map((issue) => issue.message),

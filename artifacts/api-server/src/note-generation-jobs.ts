@@ -17,7 +17,11 @@ import {
   getMaxUnsavedDraftsForCompany,
   tryConsumeDraftSlot,
 } from "./draft-quota";
-import { isOpenAINoteGenerationConfigured } from "./openai-notes";
+import {
+  isOpenAINoteGenerationConfigured,
+  resolveBackgroundNoteGenerationTimeBudgetMs,
+  resolveBackgroundOpenAIRequestTimeoutMs,
+} from "./openai-notes";
 import { generateSessionNoteForClient } from "./notes-service";
 import { assessmentGenerationGate } from "./note-readiness";
 
@@ -254,6 +258,12 @@ export async function runNoteGenerationJob(jobId: string): Promise<void> {
     companyId: job.companyId,
     client,
     body,
+    // Background jobs are polled (not behind Cloudflare), so give the generate+repair loop a larger
+    // per-request timeout and overall budget to let repairs converge into a more compliant note.
+    generation: {
+      requestTimeoutMs: resolveBackgroundOpenAIRequestTimeoutMs(),
+      timeBudgetMs: resolveBackgroundNoteGenerationTimeBudgetMs(),
+    },
   });
 
   if (!result.ok) {

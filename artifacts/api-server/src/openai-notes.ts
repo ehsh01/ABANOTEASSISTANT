@@ -69,7 +69,8 @@ const SYSTEM_PROMPT = `You draft a structured ABA NotePlan. Return JSON only.
 
 The server-provided SessionContext is frozen and authoritative:
 - Return exactly one segment for every context segment, in the same order and with the same segmentIndex.
-- Copy acquisitionOnly, behaviorLabel, replacementLabel, and intervention labels exactly. Never add, remove, reorder, rename, or paraphrase labels.
+- Copy acquisitionOnly, behaviorLabel, replacementLabel, and intervention labels exactly. Never add, remove, reorder, rename, or paraphrase labels. The server may assign a distinct replacement program per hour; write the teaching/prompting detail for the program actually given in that segment and do not merge programs across hours.
+- Use straight quotes only. Never emit escaped quotes (\\" or \\') inside string values.
 - Acquisition-only segments must use an empty behaviorLabel and empty interventions array.
 - Write only bounded, observable details in antecedent, topography, intervention application, response, teaching/prompting, and result fields.
 - Do not use learner names, initials, caregivers, parents, guardians, aunts, uncles, siblings, or other relatives, subjective/emotional language, diagnoses, inferred intent, or unsupported clinical facts. Present people belong only in the server opening sentence.
@@ -112,27 +113,81 @@ const NOTE_PLAN_JSON_SCHEMA = {
             "resultSummary",
           ],
           properties: {
-            segmentIndex: { type: "integer", minimum: 0 },
-            acquisitionOnly: { type: "boolean" },
-            behaviorLabel: { type: "string" },
-            antecedent: { type: "string", minLength: 1 },
-            topography: { type: "string", minLength: 1 },
+            segmentIndex: {
+              type: "integer",
+              minimum: 0,
+              description:
+                "Zero-based index of the context segment; return one segment per context segment in the same order.",
+            },
+            acquisitionOnly: {
+              type: "boolean",
+              description:
+                "Copy from context. When true, this is a skill-acquisition segment: behaviorLabel must be empty and interventions must be an empty array.",
+            },
+            behaviorLabel: {
+              type: "string",
+              description:
+                "Exact maladaptive behavior label from context for this segment (empty string for acquisition-only segments). Never rename or paraphrase.",
+            },
+            antecedent: {
+              type: "string",
+              minLength: 1,
+              description:
+                "One concise observable setup/context sentence. Do not begin with 'During'; vary openings. If activityAntecedent is provided, include that exact text.",
+            },
+            topography: {
+              type: "string",
+              minLength: 1,
+              description:
+                "Exactly ONE concrete observable action the client did this hour (e.g. 'making open-hand contact with the RBT's arm'). Never paste the full BIP list, definition/scoring text, 'Status:', 'To be initiated', or the bare behavior label.",
+            },
             interventions: {
               type: "array",
+              description:
+                "The exact assigned intervention(s) for this segment, copied verbatim from context. Do not add, drop, or reorder. Empty for acquisition-only segments.",
               items: {
                 type: "object",
                 additionalProperties: false,
                 required: ["label", "application"],
                 properties: {
-                  label: { type: "string", minLength: 1 },
-                  application: { type: "string", minLength: 1 },
+                  label: {
+                    type: "string",
+                    minLength: 1,
+                    description: "Exact intervention label from context (verbatim, no paraphrase).",
+                  },
+                  application: {
+                    type: "string",
+                    minLength: 1,
+                    description:
+                      "Gerund phrase describing only how this exact intervention was applied. For Premack, describe only the demand-before-reinforcer contingency; never write 'first-then'.",
+                  },
                 },
               },
             },
-            responseToIntervention: { type: "string", minLength: 1 },
-            replacementLabel: { type: "string", minLength: 1 },
-            teachingOrPromptingSummary: { type: "string", minLength: 1 },
-            resultSummary: { type: "string", minLength: 1 },
+            responseToIntervention: {
+              type: "string",
+              minLength: 1,
+              description:
+                "Must begin with 'The client' and state at least one observable client action after the intervention. RBT actions alone are not an outcome. No subjective/emotional words, no metrics.",
+            },
+            replacementLabel: {
+              type: "string",
+              minLength: 1,
+              description:
+                "Exact replacement program label from context for this segment, verbatim. Each ABC should use a distinct replacement program where the context provides distinct ones.",
+            },
+            teachingOrPromptingSummary: {
+              type: "string",
+              minLength: 1,
+              description:
+                "Gerund phrase (suitable after 'by') describing how the replacement program was taught/prompted this hour. Do not start with 'the RBT' or 'the client'.",
+            },
+            resultSummary: {
+              type: "string",
+              minLength: 1,
+              description:
+                "One observable closing result for this segment. No mastery/progress claims beyond supplied facts, no invented metrics, no subjective language.",
+            },
           },
         },
       },
@@ -150,6 +205,8 @@ export type NotePlanModelCallOutput = {
   output: string;
   completionId?: string | undefined;
   usage?: NoteModelUsage | undefined;
+  /** Model that actually produced this output (may differ from the primary when fallback engaged). */
+  model?: string | undefined;
 };
 
 /** String return remains supported for existing tests/custom adapters. */
@@ -166,7 +223,7 @@ export function isOpenAINoteGenerationConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-16.no-first-then-premack-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-16.schema-descriptions-distinct-program-v2";
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
   .update("\u0000")
@@ -178,6 +235,8 @@ export type NoteGenerationAttemptTelemetry = {
   latencyMs: number;
   completionId: string | null;
   usage: NoteModelUsage | null;
+  /** Model that produced this attempt (records fallback engagement). */
+  model?: string | null;
   planIssues: NotePlanIssue[];
   proseIssues: NoteValidationIssue[];
   passed: boolean;
@@ -194,45 +253,159 @@ export type GenerateClinicalBodyResult = {
   planIssues: NotePlanIssue[];
   attemptHistory: NoteGenerationAttemptTelemetry[];
   repairActions: string[];
+  /** Model that produced the final (passed or best-effort) attempt; reflects fallback engagement. */
+  modelUsed: string | null;
 };
 
 function isGpt5FamilyNoteModel(modelId: string): boolean {
   return modelId.toLowerCase().includes("gpt-5");
 }
 
-const defaultModelCall: NotePlanModelCall = async ({ messages }) => {
-  const apiKey = process.env.OPENAI_API_KEY?.trim();
-  if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
-  const model = resolvedOpenAIModel();
-  // Bound each model call so a single slow/hung completion cannot run for the SDK default (10 min).
-  // Keep retries low so one call's worst case stays well under the overall generation time budget.
-  const client = new OpenAI({
-    apiKey,
-    timeout: resolveOpenAIRequestTimeoutMs(),
-    maxRetries: 1,
-  });
-  const common = {
+/**
+ * Reasoning effort for the gpt-5 family (env `OPENAI_REASONING_EFFORT`, default `low`). Lower effort
+ * cuts latency sharply for reasoning models with negligible quality loss on this bounded JSON task.
+ * `none`/`off`/`default` omit the parameter (falls back to the model default).
+ */
+function resolveReasoningEffort(): "low" | "medium" | "high" | null {
+  const raw = process.env.OPENAI_REASONING_EFFORT?.trim().toLowerCase();
+  if (raw === undefined || raw === "") return "low";
+  if (raw === "low" || raw === "medium" || raw === "high") return raw;
+  return null;
+}
+
+/**
+ * Faster/cheaper model used only when the primary times out or errors (env `OPENAI_FALLBACK_MODEL`,
+ * default `gpt-4.1`). Set to `none`/`off`/`disabled` to turn fallback off.
+ */
+export function resolvedFallbackOpenAIModel(): string | null {
+  const raw = process.env.OPENAI_FALLBACK_MODEL?.trim();
+  if (raw === undefined) return "gpt-4.1";
+  if (raw === "" || /^(?:none|off|disabled)$/i.test(raw)) return null;
+  return raw;
+}
+
+/** gpt-5 reasoning output needs headroom (reasoning tokens count); non-reasoning JSON is compact. */
+const GPT5_MAX_COMPLETION_TOKENS = 8000;
+const FALLBACK_MAX_TOKENS = 4000;
+
+/** A 400 that names an unsupported sampling/reasoning parameter → safe to retry without those params. */
+function isUnsupportedParamError(error: unknown): boolean {
+  if (error instanceof OpenAI.APIError && error.status === 400) {
+    const msg = (error.message ?? "").toLowerCase();
+    return /reasoning_effort|temperature|unsupported|unrecognized|not supported|invalid.*param/.test(
+      msg,
+    );
+  }
+  return false;
+}
+
+/** Transient failures (timeout, connection, 429, 5xx, empty content) are eligible for model fallback. */
+function isFallbackEligibleError(error: unknown): boolean {
+  if (error instanceof OpenAI.APIConnectionTimeoutError) return true;
+  if (error instanceof OpenAI.APIConnectionError) return true;
+  if (error instanceof OpenAI.APIError) {
+    const status = error.status ?? 0;
+    return status === 429 || status >= 500;
+  }
+  if (error instanceof Error && /timed out|timeout|empty message content/i.test(error.message)) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * One tuned chat completion. gpt-5 family gets `reasoning_effort` (latency) + a completion-token cap;
+ * non-reasoning fallback models get `temperature: 0.2` (determinism) + a token cap. If the API rejects
+ * the tuned params, retry once with only the required base params so tuning can never break generation.
+ */
+async function createTunedChatCompletion(
+  client: OpenAI,
+  model: string,
+  messages: ChatCompletionMessageParam[],
+): Promise<OpenAI.Chat.Completions.ChatCompletion> {
+  const base = {
     model,
     messages,
     response_format: { type: "json_schema" as const, json_schema: NOTE_PLAN_JSON_SCHEMA },
   };
-  const completion = isGpt5FamilyNoteModel(model)
-    ? await client.chat.completions.create({ ...common, max_completion_tokens: 12000 })
-    : await client.chat.completions.create({ ...common, max_tokens: 12000 });
-  const text = completion.choices[0]?.message?.content?.trim();
-  if (!text) throw new Error("OpenAI returned empty message content");
-  return {
-    output: text,
-    completionId: completion.id,
-    usage: completion.usage
-      ? {
-          promptTokens: completion.usage.prompt_tokens,
-          completionTokens: completion.usage.completion_tokens,
-          totalTokens: completion.usage.total_tokens,
-        }
-      : undefined,
+  const isGpt5 = isGpt5FamilyNoteModel(model);
+  const baseWithCap = isGpt5
+    ? { ...base, max_completion_tokens: GPT5_MAX_COMPLETION_TOKENS }
+    : { ...base, max_tokens: FALLBACK_MAX_TOKENS };
+  const reasoningEffort = resolveReasoningEffort();
+  const tuned = isGpt5
+    ? { ...baseWithCap, ...(reasoningEffort ? { reasoning_effort: reasoningEffort } : {}) }
+    : { ...baseWithCap, temperature: 0.2 };
+  try {
+    return await client.chat.completions.create(tuned);
+  } catch (error) {
+    if (isUnsupportedParamError(error)) {
+      return await client.chat.completions.create(baseWithCap);
+    }
+    throw error;
+  }
+}
+
+/**
+ * Build the production model call. Bounds each completion with a per-request timeout so one hung call
+ * cannot consume the whole budget, and (when configured) retries a transient failure once on the
+ * fallback model before rethrowing. Records which model produced the output for telemetry/audit.
+ */
+export function createDefaultModelCall(config?: {
+  requestTimeoutMs?: number | undefined;
+  primaryModel?: string | undefined;
+  fallbackModel?: string | null | undefined;
+}): NotePlanModelCall {
+  return async ({ messages }) => {
+    const apiKey = process.env.OPENAI_API_KEY?.trim();
+    if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
+    const primaryModel = config?.primaryModel ?? resolvedOpenAIModel();
+    const fallbackModel =
+      config?.fallbackModel === undefined ? resolvedFallbackOpenAIModel() : config.fallbackModel;
+    const client = new OpenAI({
+      apiKey,
+      timeout: config?.requestTimeoutMs ?? resolveOpenAIRequestTimeoutMs(),
+      maxRetries: 1,
+    });
+
+    const attemptOnModel = async (model: string) => {
+      const completion = await createTunedChatCompletion(client, model, messages);
+      const text = completion.choices[0]?.message?.content?.trim();
+      if (!text) throw new Error("OpenAI returned empty message content");
+      return { completion, text, model };
+    };
+
+    let result: { completion: OpenAI.Chat.Completions.ChatCompletion; text: string; model: string };
+    try {
+      result = await attemptOnModel(primaryModel);
+    } catch (primaryError) {
+      if (
+        fallbackModel &&
+        fallbackModel !== primaryModel &&
+        isFallbackEligibleError(primaryError)
+      ) {
+        result = await attemptOnModel(fallbackModel);
+      } else {
+        throw primaryError;
+      }
+    }
+
+    return {
+      output: result.text,
+      model: result.model,
+      completionId: result.completion.id,
+      usage: result.completion.usage
+        ? {
+            promptTokens: result.completion.usage.prompt_tokens,
+            completionTokens: result.completion.usage.completion_tokens,
+            totalTokens: result.completion.usage.total_tokens,
+          }
+        : undefined,
+    };
   };
-};
+}
+
+const defaultModelCall: NotePlanModelCall = createDefaultModelCall();
 
 function toComplianceCtx(
   ctx: NoteGenerationContext,
@@ -326,23 +499,50 @@ function resolveNoteGenerationTimeBudgetMs(): number {
   return Number.isFinite(raw) && raw >= 15_000 ? Math.floor(raw) : 80_000;
 }
 
+/**
+ * Background (async job) generation runs behind the job poller (up to ~20 min), not Cloudflare, so it
+ * gets a larger per-request timeout and overall budget to let repairs converge into a more compliant
+ * note. Configurable via env; safe defaults of 180s per call / 240s overall.
+ */
+export function resolveBackgroundOpenAIRequestTimeoutMs(): number {
+  const raw = Number(process.env.OPENAI_BACKGROUND_REQUEST_TIMEOUT_MS ?? "");
+  return Number.isFinite(raw) && raw >= 5_000 ? Math.floor(raw) : 180_000;
+}
+
+export function resolveBackgroundNoteGenerationTimeBudgetMs(): number {
+  const raw = Number(process.env.NOTE_GENERATION_BACKGROUND_TIME_BUDGET_MS ?? "");
+  return Number.isFinite(raw) && raw >= 15_000 ? Math.floor(raw) : 240_000;
+}
+
 export async function generateClinicalBodyOpenAI(
   ctx: NoteGenerationContext,
   validationOptions?: {
     blockedClientNames?: string[] | undefined;
     modelCall?: NotePlanModelCall | undefined;
+    /** Larger per-request timeout for background jobs (sync endpoint keeps the conservative default). */
+    requestTimeoutMs?: number | undefined;
+    /** Larger overall generate+repair budget for background jobs (sync endpoint stays under Cloudflare). */
+    timeBudgetMs?: number | undefined;
+    /** Explicit fallback model override; `null` disables fallback. Falls back to env when undefined. */
+    fallbackModel?: string | null | undefined;
   },
 ): Promise<GenerateClinicalBodyResult> {
   const frozen = buildFrozenSessionContext(ctx, {
     blockedClientNames: validationOptions?.blockedClientNames,
   });
-  const modelCall = validationOptions?.modelCall ?? defaultModelCall;
+  const modelCall =
+    validationOptions?.modelCall ??
+    createDefaultModelCall({
+      requestTimeoutMs: validationOptions?.requestTimeoutMs,
+      fallbackModel: validationOptions?.fallbackModel,
+    });
   const rawModelOutputs: string[] = [];
   const warnings: string[] = [];
   const attemptHistory: NoteGenerationAttemptTelemetry[] = [];
   const repairActions: string[] = [];
   const generationStartedAt = Date.now();
-  const timeBudgetMs = resolveNoteGenerationTimeBudgetMs();
+  const timeBudgetMs = validationOptions?.timeBudgetMs ?? resolveNoteGenerationTimeBudgetMs();
+  let lastModelUsed: string | null = null;
 
   const callModel = async (
     params: Parameters<NotePlanModelCall>[0],
@@ -351,6 +551,7 @@ export async function generateClinicalBodyOpenAI(
     try {
       const result = await modelCall(params);
       const normalized = typeof result === "string" ? { output: result } : result;
+      lastModelUsed = normalized.model ?? lastModelUsed;
       return {
         raw: normalized.output,
         telemetry: {
@@ -358,6 +559,7 @@ export async function generateClinicalBodyOpenAI(
           latencyMs: Math.max(0, Date.now() - started),
           completionId: normalized.completionId ?? null,
           usage: normalized.usage ?? null,
+          model: normalized.model ?? null,
           planIssues: [],
           proseIssues: [],
           passed: false,
@@ -369,6 +571,7 @@ export async function generateClinicalBodyOpenAI(
         latencyMs: Math.max(0, Date.now() - started),
         completionId: null,
         usage: null,
+        model: null,
         planIssues: [],
         proseIssues: [],
         passed: false,
@@ -479,6 +682,7 @@ export async function generateClinicalBodyOpenAI(
         planIssues,
         attemptHistory,
         repairActions,
+        modelUsed: lastModelUsed,
       };
     }
 
@@ -521,6 +725,7 @@ ${raw}`;
     planIssues: [],
     attemptHistory,
     repairActions,
+    modelUsed: lastModelUsed,
   };
 }
 

@@ -9,7 +9,9 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "test:safety-chain": "vitest run src/safety-chain-enforcement.test.ts",
-    "reset-password": "node ./scripts/reset-user-password.mjs"
+    "reset-password": "node ./scripts/reset-user-password.mjs",
+    "eval:models": "tsx ./scripts/model-eval.mts",
+    "audit:summary": "tsx ./scripts/model-audit-summary.mts"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",

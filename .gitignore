@@ -37,6 +37,9 @@ artifacts/api-server/.env
 # Cursor local project folder (not tracked)
 /cursor/
 
+# Model eval output artifacts (local diagnostics only)
+artifacts/api-server/model-eval-out/
+
 # misc
 /.sass-cache
 /connect.lock
