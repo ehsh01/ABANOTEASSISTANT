@@ -3,6 +3,7 @@ import {
   ensureReplacementProgramAlignmentForSegments,
   rebalanceBehaviorMappedReplacementProgramsHourly,
   rebalanceDistinctReplacementProgramsByFunction,
+  rebalanceRepeatedReplacementProgramsAcrossSegments,
 } from "./note-validation";
 
 const PROGRAM_A = "Request attention appropriately";
@@ -118,6 +119,107 @@ describe("rebalanceDistinctReplacementProgramsByFunction", () => {
       maladaptiveBehaviorFunctionsForHour: [["attention"], ["attention"]],
     });
     expect(names).toEqual([PROGRAM_A, PROGRAM_A]);
+    expect(swaps).toEqual([]);
+  });
+});
+
+describe("rebalanceRepeatedReplacementProgramsAcrossSegments", () => {
+  const REQUEST_BREAK = "Request for break";
+  const ACCEPT_NO = "Accept 'No' as an answer";
+  const ACCEPT_ALT = "Accept alternatives when being redirected to more appropriate behavior";
+
+  function distinctFixture() {
+    const idToName = new Map<number, string>([
+      [1, REQUEST_BREAK],
+      [2, ACCEPT_NO],
+      [3, ACCEPT_ALT],
+    ]);
+    const behaviors = [
+      "Verbal Aggression",
+      "Physical Aggression",
+      "Self-Injurious Behavior (SIB)",
+    ];
+    const map = Object.fromEntries(
+      behaviors.map((b) => [b, [REQUEST_BREAK, ACCEPT_NO, ACCEPT_ALT]]),
+    );
+    return {
+      idToName,
+      behaviors,
+      map,
+      poolIds: [1, 2, 3],
+      selectedIdSet: new Set<number>([1, 2, 3]),
+      authorizedProgramNames: [REQUEST_BREAK, ACCEPT_NO, ACCEPT_ALT],
+    };
+  }
+
+  test("diversifies a program repeated across same-function behaviors", () => {
+    const fx = distinctFixture();
+    const names = [REQUEST_BREAK, REQUEST_BREAK, REQUEST_BREAK];
+    const pids: (number | null)[] = [1, 1, 1];
+    const rbt = [false, false, false];
+    const swaps = rebalanceRepeatedReplacementProgramsAcrossSegments({
+      segmentCount: 3,
+      maladaptiveBehaviorForHour: fx.behaviors,
+      names,
+      rbtActionsOnlyOutcomeForHour: rbt,
+      programIdForHour: pids,
+      explicitProgramIdByHour: [undefined, undefined, undefined],
+      poolIds: fx.poolIds,
+      idToName: fx.idToName,
+      selectedIdSet: fx.selectedIdSet,
+      behaviorToReplacementsMap: fx.map,
+      authorizedProgramNames: fx.authorizedProgramNames,
+      maladaptiveBehaviorFunctionsForHour: [["escape"], ["escape"], ["escape"]],
+    });
+    expect(names[0]).toBe(REQUEST_BREAK);
+    expect(new Set(names).size).toBe(3);
+    expect(swaps.length).toBe(2);
+  });
+
+  test("honors an explicit pin even if it repeats", () => {
+    const fx = distinctFixture();
+    const names = [REQUEST_BREAK, REQUEST_BREAK];
+    const pids: (number | null)[] = [1, 1];
+    const rbt = [false, false];
+    rebalanceRepeatedReplacementProgramsAcrossSegments({
+      segmentCount: 2,
+      maladaptiveBehaviorForHour: [fx.behaviors[0]!, fx.behaviors[1]!],
+      names,
+      rbtActionsOnlyOutcomeForHour: rbt,
+      programIdForHour: pids,
+      explicitProgramIdByHour: [undefined, 1],
+      poolIds: fx.poolIds,
+      idToName: fx.idToName,
+      selectedIdSet: fx.selectedIdSet,
+      behaviorToReplacementsMap: fx.map,
+      authorizedProgramNames: fx.authorizedProgramNames,
+      maladaptiveBehaviorFunctionsForHour: [["escape"], ["escape"]],
+    });
+    expect(names).toEqual([REQUEST_BREAK, REQUEST_BREAK]);
+  });
+
+  test("leaves a legitimate repeat when no distinct authorized alternative exists", () => {
+    const idToName = new Map<number, string>([[1, REQUEST_BREAK]]);
+    const names = [REQUEST_BREAK, REQUEST_BREAK];
+    const pids: (number | null)[] = [1, 1];
+    const swaps = rebalanceRepeatedReplacementProgramsAcrossSegments({
+      segmentCount: 2,
+      maladaptiveBehaviorForHour: ["Verbal Aggression", "Physical Aggression"],
+      names,
+      rbtActionsOnlyOutcomeForHour: [false, false],
+      programIdForHour: pids,
+      explicitProgramIdByHour: [undefined, undefined],
+      poolIds: [1],
+      idToName,
+      selectedIdSet: new Set<number>([1]),
+      behaviorToReplacementsMap: {
+        "Verbal Aggression": [REQUEST_BREAK],
+        "Physical Aggression": [REQUEST_BREAK],
+      },
+      authorizedProgramNames: [REQUEST_BREAK],
+      maladaptiveBehaviorFunctionsForHour: [["escape"], ["escape"]],
+    });
+    expect(names).toEqual([REQUEST_BREAK, REQUEST_BREAK]);
     expect(swaps).toEqual([]);
   });
 });

@@ -1027,6 +1027,131 @@ export function rebalanceDistinctReplacementProgramsByFunction(params: {
   return swapped;
 }
 
+/**
+ * Enforce **distinct replacement programs across the ABC segments of one note**. Even when two hours
+ * share the same documented function (so `rebalanceDistinctReplacementProgramsByFunction` leaves them
+ * alone), reviewers do not want the same program repeated across ABCs. This pass keeps the first use of
+ * each program and, for every later duplicate, swaps to a still-unused program that is authorized/
+ * function-appropriate for that segment's behavior (BIP-mapped candidates first, then any non-misfit
+ * pool program). If no unused authorized alternative exists (small catalog), the repeat is left in place
+ * rather than introducing an unauthorized or mismatched program.
+ *
+ * Explicit ABC pins are honored (never swapped) unless `swapExplicitDuplicates` is true.
+ */
+export function rebalanceRepeatedReplacementProgramsAcrossSegments(params: {
+  segmentCount: number;
+  maladaptiveBehaviorForHour: string[];
+  names: string[];
+  rbtActionsOnlyOutcomeForHour: boolean[];
+  programIdForHour: (number | null)[];
+  explicitProgramIdByHour: (number | null | undefined)[];
+  poolIds: number[];
+  idToName: Map<number, string>;
+  selectedIdSet: Set<number>;
+  behaviorToReplacementsMap: Record<string, string[]>;
+  authorizedProgramNames: string[];
+  maladaptiveBehaviorFunctionsForHour?: (import("@workspace/db/schema").ClinicalFunction[] | null)[] | undefined;
+  swapExplicitDuplicates?: boolean;
+  slotLabel?: string;
+}): string[] {
+  const {
+    segmentCount: S,
+    maladaptiveBehaviorForHour: beh,
+    names,
+    rbtActionsOnlyOutcomeForHour: rbt,
+    programIdForHour: pids,
+    explicitProgramIdByHour: explicit,
+    poolIds,
+    idToName,
+    selectedIdSet,
+    behaviorToReplacementsMap,
+    authorizedProgramNames,
+    maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
+    swapExplicitDuplicates = false,
+    slotLabel = "Segment",
+  } = params;
+
+  const swapped: string[] = [];
+  const usedKeys = new Set<string>();
+
+  for (let s = 0; s < S; s++) {
+    const behavior = beh[s]?.trim() ?? "";
+    const currentName = names[s]?.trim() ?? "";
+    if (!currentName) continue;
+    const currentKey = normalizeReplacementProgramKey(currentName);
+
+    // First use of this program: keep and record.
+    if (!usedKeys.has(currentKey)) {
+      usedKeys.add(currentKey);
+      continue;
+    }
+
+    // Duplicate program name. Try to swap to a distinct authorized alternative for this behavior.
+    if (!behavior) continue;
+    if (typeof explicit[s] === "number" && !swapExplicitDuplicates) {
+      // Honor the RBT's explicit pin even though it repeats.
+      continue;
+    }
+    const hourFunctions = behaviorFunctions?.[s];
+
+    const candidates = behaviorReplacementCandidatesForMaladaptiveBehavior(
+      behavior,
+      behaviorToReplacementsMap,
+      authorizedProgramNames,
+      hourFunctions,
+    ).filter((n) => normalizeReplacementProgramKey(n) !== currentKey);
+
+    const isUsable = (id: number): boolean => {
+      const n = idToName.get(id)?.trim();
+      if (!n) return false;
+      const key = normalizeReplacementProgramKey(n);
+      if (key === currentKey || usedKeys.has(key)) return false;
+      return !isMisfitReplacementForMaladaptiveBehavior(
+        behavior,
+        n,
+        behaviorToReplacementsMap,
+        hourFunctions,
+      );
+    };
+
+    // Prefer BIP/function-aligned candidate order, then any non-misfit pool program (selected first).
+    let pick: number | undefined;
+    for (const prefName of candidates) {
+      const prefKey = normalizeReplacementProgramKey(prefName);
+      if (usedKeys.has(prefKey)) continue;
+      const found = poolIds.find(
+        (id) => isUsable(id) && normalizeReplacementProgramKey(idToName.get(id) ?? "") === prefKey,
+      );
+      if (found !== undefined) {
+        pick = found;
+        break;
+      }
+    }
+    if (pick === undefined) {
+      const sorted = poolIds
+        .filter((id) => isUsable(id))
+        .sort((a, b) => (selectedIdSet.has(a) ? 0 : 1) - (selectedIdSet.has(b) ? 0 : 1));
+      pick = sorted[0];
+    }
+
+    if (pick === undefined) {
+      // No distinct authorized alternative available; leave the (legitimate) repeat in place.
+      continue;
+    }
+
+    const newName = idToName.get(pick)!;
+    names[s] = newName;
+    pids[s] = pick;
+    rbt[s] = !selectedIdSet.has(pick);
+    usedKeys.add(normalizeReplacementProgramKey(newName));
+    swapped.push(
+      `${slotLabel} ${s + 1} (${behavior}): replacement program rebalanced from "${currentName}" to "${newName}" so each ABC uses a distinct replacement program.`,
+    );
+  }
+
+  return swapped;
+}
+
 /** Best BIP/function-aligned replacement program name for a behavior when auto-assignment misfires. */
 export function pickBestReplacementProgramForBehavior(
   behavior: string,
@@ -1192,6 +1317,26 @@ export function ensureReplacementProgramAlignmentForSegments(params: {
       `${slotLabel} ${s + 1} (${behavior}): replacement program auto-corrected from "${currentName}" to "${fallback}" for BIP function alignment.`,
     );
   }
+
+  // Final pass: ensure no replacement program repeats across the note's ABC segments when a distinct
+  // authorized alternative is available for the duplicated segment's behavior.
+  swapped.push(
+    ...rebalanceRepeatedReplacementProgramsAcrossSegments({
+      segmentCount: S,
+      maladaptiveBehaviorForHour: beh,
+      names,
+      rbtActionsOnlyOutcomeForHour: rbt,
+      programIdForHour: pids,
+      explicitProgramIdByHour: explicit,
+      poolIds: rebalancePoolIds,
+      idToName,
+      selectedIdSet,
+      behaviorToReplacementsMap,
+      authorizedProgramNames,
+      maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
+      slotLabel,
+    }),
+  );
 
   return swapped;
 }
