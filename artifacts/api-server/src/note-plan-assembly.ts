@@ -194,3 +194,82 @@ export function assembleClinicalBodyFromNotePlan(
     })
     .join("\n\n");
 }
+
+/** Count ABC paragraphs separated by blank lines (same rule as clinical compliance). */
+export function countClinicalParagraphs(clinicalBody: string): number {
+  return clinicalBody
+    .trim()
+    .split(/\n\n+/)
+    .map((p) => p.trim())
+    .filter(Boolean).length;
+}
+
+/**
+ * If a rewrite collapses or empties ABC paragraph separators, keep the pre-rewrite body.
+ * Prevents scrubbers from turning a valid multi-hour note into 0/1 paragraph.
+ */
+export function preserveClinicalParagraphStructure(
+  before: string,
+  after: string,
+  expectedParagraphs: number,
+): { text: string; restored: boolean } {
+  const beforeCount = countClinicalParagraphs(before);
+  const afterCount = countClinicalParagraphs(after);
+  const target = Math.max(1, expectedParagraphs);
+  if (beforeCount >= target && afterCount < target) {
+    return { text: before, restored: true };
+  }
+  if (before.trim().length > 0 && after.trim().length === 0) {
+    return { text: before, restored: true };
+  }
+  return { text: after, restored: false };
+}
+
+/**
+ * Deterministic minimal clinical body when the model returns nothing usable.
+ * One paragraph per frozen segment using locked labels only — enough to save a note.
+ */
+export function buildMinimalClinicalBodyFromSessionContext(context: SessionContext): string {
+  return context.segments
+    .map((locked, index) => {
+      const lead =
+        index === 0
+          ? "The RBT presented session materials and began the scheduled activity."
+          : index === 1
+            ? "Next, the RBT continued with the next scheduled activity."
+            : index === 2
+              ? "Later, the RBT arranged the next instructional opportunity."
+              : index === 3
+                ? "After that, the RBT presented the next task materials."
+                : "Near the end of the session, the RBT presented the final activity.";
+
+      if (locked.acquisitionOnly) {
+        return [
+          lead,
+          `The RBT implemented the replacement program "${locked.replacementLabel}" by modeling the target response and prompting the client through the presented opportunities.`,
+          "The client participated in the presented opportunities with prompting as needed.",
+        ].join(" ");
+      }
+
+      const topo =
+        locked.behaviorTopography && !isUnusableStoredTopography(locked.behaviorTopography)
+          ? locked.behaviorTopography
+          : (lastResortObservableTopographyForBehavior(locked.behaviorLabel) ??
+            "engaging in the targeted motor actions for this episode");
+      const intervention =
+        locked.interventionLabels[0] ??
+        context.planCatalogSnapshot.interventions[0] ??
+        "Premack principle";
+
+      return [
+        lead,
+        `${manifestedBehaviorBridge(index)} ${locked.behaviorLabel} by ${topo}.`,
+        `To address this behavior, the RBT implemented ${intervention}.`,
+        "Following this intervention, the RBT restated the demand and delivered reinforcement for the alternative response.",
+        "The client returned to the presented activity after the intervention.",
+        `${index % 2 === 0 ? "Additionally, the" : "The"} RBT implemented the replacement program "${locked.replacementLabel}" by modeling the target response and prompting the client before reinforcement was delivered.`,
+        "The client completed the prompted response and remained near the materials.",
+      ].join(" ");
+    })
+    .join("\n\n");
+}

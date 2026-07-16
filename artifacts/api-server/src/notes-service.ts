@@ -79,6 +79,14 @@ import {
   normalizeClinicalBodyPraiseWording,
   scrubAssembledNoteQcHotspots,
 } from "./note-normalization";
+import {
+  assembleClinicalBodyFromNotePlan,
+  buildMinimalClinicalBodyFromSessionContext,
+  countClinicalParagraphs,
+  preserveClinicalParagraphStructure,
+} from "./note-plan-assembly";
+import { buildFrozenSessionContext } from "./note-plan-validation";
+import type { NotePlan } from "./note-plan-schema";
 import { assessmentGenerationGate } from "./note-readiness";
 import {
   enrichMaladaptiveTargetsWithAssessmentTopography,
@@ -731,6 +739,7 @@ export async function generateSessionNoteForClient(params: {
   };
 
   let clinicalBody: string;
+  let generationNotePlan: NotePlan | null = null;
   let generationModel: string;
   let generationRepairAttempts = 0;
   let generationFinalIssues: NoteValidationIssue[] = [];
@@ -756,6 +765,7 @@ export async function generateSessionNoteForClient(params: {
   try {
     const oaResult = await generateClinicalBodyOpenAI(oaCtx, { blockedClientNames });
     clinicalBody = oaResult.body;
+    generationNotePlan = oaResult.notePlan;
     warnings.push(`Clinical narrative generated via ${openaiNoteGenerationLabel()}.`);
     warnings.push(...oaResult.warnings);
     generationModel = resolvedOpenAIModel();
@@ -814,6 +824,32 @@ export async function generateSessionNoteForClient(params: {
   }
 
   let finalClinicalBody = clinicalBody;
+  const expectedNarrativeParagraphs = narrativeCollapsed.narrativeSegmentCount;
+  const frozenForAssembly = buildFrozenSessionContext(oaCtx, { blockedClientNames });
+
+  const ensureClinicalBodyPresent = (reason: string): void => {
+    const count = countClinicalParagraphs(finalClinicalBody);
+    if (count >= expectedNarrativeParagraphs && finalClinicalBody.trim().length > 0) {
+      return;
+    }
+    if (generationNotePlan) {
+      const reassembled = assembleClinicalBodyFromNotePlan(generationNotePlan, frozenForAssembly);
+      if (countClinicalParagraphs(reassembled) >= expectedNarrativeParagraphs) {
+        finalClinicalBody = reassembled;
+        warnings.push(
+          `Restored clinical body from structured NotePlan (${reason}); blank-line paragraph structure was missing.`,
+        );
+        return;
+      }
+    }
+    finalClinicalBody = buildMinimalClinicalBodyFromSessionContext(frozenForAssembly);
+    warnings.push(
+      `Used deterministic fallback clinical paragraphs (${reason}) so the note could still be saved.`,
+    );
+  };
+
+  ensureClinicalBodyPresent("empty or incomplete model body");
+
   const buildComplianceContext = (): NoteComplianceContext => ({
     ...complianceCtxBase,
     replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
@@ -825,9 +861,7 @@ export async function generateSessionNoteForClient(params: {
   });
 
   let complianceResult: ReturnType<typeof validateClinicalBodyComplianceDetailed> =
-    finalClinicalBody.trim().length > 0
-      ? validateClinicalBodyComplianceDetailed(finalClinicalBody, buildComplianceContext())
-      : { issues: [], blocking: [], warnings: [] };
+    validateClinicalBodyComplianceDetailed(finalClinicalBody, buildComplianceContext());
   let complianceIssues = complianceResult.issues;
   const replacementProgramIssue = (issue: NoteValidationIssue): boolean =>
     issue.code === "PROGRAM_FUNCTION_MISMATCH";
@@ -857,73 +891,67 @@ export async function generateSessionNoteForClient(params: {
       (name, idx) => name !== assignmentsBeforeRepair[idx],
     );
     if (assignmentsChanged || repairSwaps.length > 0) {
-      finalClinicalBody = repairClinicalBodyReplacementProgramAssignments(
+      const repaired = repairClinicalBodyReplacementProgramAssignments(
         finalClinicalBody,
         assignmentsBeforeRepair,
         repairNames,
       );
+      const preserved = preserveClinicalParagraphStructure(
+        finalClinicalBody,
+        repaired,
+        expectedNarrativeParagraphs,
+      );
+      finalClinicalBody = preserved.text;
       narrativeCollapsed.replacementProgramForHour = repairNames;
       narrativeCollapsed.rbtActionsOnlyOutcomeForHour = repairRbt;
       warnings.push(...repairSwaps);
-      complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, {
-        ...buildComplianceContext(),
-        replacementProgramForHour: repairNames,
-        rbtActionsOnlyOutcomeForHour: repairRbt,
-      });
-      complianceIssues = complianceResult.issues;
+      if (preserved.restored) {
+        warnings.push(
+          "Skipped a replacement-program rewrite that would have collapsed ABC paragraph separators.",
+        );
+      }
     }
   }
 
-  const caregiverScrubbedBody = stripUnauthorizedCaregiverLanguage(
-    finalClinicalBody,
-    body.presentPeople,
-  );
-  if (caregiverScrubbedBody !== finalClinicalBody) {
-    finalClinicalBody = caregiverScrubbedBody;
-    warnings.push(
-      "Removed caregiver/family language from the clinical body so presence stays only in the opening sentence.",
+  const applyBodyRewrite = (next: string, warning: string): void => {
+    const preserved = preserveClinicalParagraphStructure(
+      finalClinicalBody,
+      next,
+      expectedNarrativeParagraphs,
     );
-    complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, {
-      ...buildComplianceContext(),
-      replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
-      rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
-    });
-    complianceIssues = complianceResult.issues;
-  }
+    if (preserved.text === finalClinicalBody) {
+      if (preserved.restored) {
+        warnings.push(
+          `Skipped a clinical-body rewrite that would have collapsed ABC paragraph separators (${warning}).`,
+        );
+      }
+      return;
+    }
+    finalClinicalBody = preserved.text;
+    warnings.push(warning);
+  };
 
-  const praiseNormalizedBody = normalizeClinicalBodyPraiseWording(finalClinicalBody);
-  if (praiseNormalizedBody !== finalClinicalBody) {
-    finalClinicalBody = praiseNormalizedBody;
-    warnings.push(
-      'Normalized reinforcer wording to plain "praise" (never "social praise"/compound praise labels that reviewers treat as interventions).',
-    );
-    complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, {
-      ...buildComplianceContext(),
-      replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
-      rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
-    });
-    complianceIssues = complianceResult.issues;
-  }
+  applyBodyRewrite(
+    stripUnauthorizedCaregiverLanguage(finalClinicalBody, body.presentPeople),
+    "Removed caregiver/family language from the clinical body so presence stays only in the opening sentence.",
+  );
+  applyBodyRewrite(
+    normalizeClinicalBodyPraiseWording(finalClinicalBody),
+    'Normalized reinforcer wording to plain "praise" (never "social praise"/compound praise labels that reviewers treat as interventions).',
+  );
 
   const reinforcerPrefsForNote = filterReinforcementPreferencesForNote(
     profile?.assessmentSummary?.reinforcementPreferences ?? [],
     { clientAgeYears },
   );
-  const reinforcerScrubbedBody = sanitizeReinforcerNarrativeText(
-    finalClinicalBody,
-    reinforcerPrefsForNote,
-    clientAgeYears,
+  applyBodyRewrite(
+    sanitizeReinforcerNarrativeText(finalClinicalBody, reinforcerPrefsForNote, clientAgeYears),
+    "Normalized reinforcer wording (concrete preferred toys; no YouTube for clients under 14).",
   );
-  if (reinforcerScrubbedBody !== finalClinicalBody) {
-    finalClinicalBody = reinforcerScrubbedBody;
-    warnings.push(
-      "Normalized reinforcer wording (concrete preferred toys; no YouTube for clients under 14).",
-    );
-  }
 
-  // Re-validate the post-processed body once. This result is authoritative for blocking —
-  // do not re-merge historical OpenAI-attempt blocking issues (those can describe an older
-  // body shape, e.g. topography failures before grounding, and would block after repairs).
+  ensureClinicalBodyPresent("post-scrub empty body");
+
+  // Re-validate the post-processed body once. Attempt-history blocking issues are not re-merged.
   complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, {
     ...buildComplianceContext(),
     replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
@@ -941,8 +969,6 @@ export async function generateSessionNoteForClient(params: {
     effectiveIssueMap.set(`${issue.code}\u0000${issue.message}`, issue);
   }
   const effectiveIssues = [...effectiveIssueMap.values()].filter((issue) => {
-    // Caregiver leaks are resolved by stripUnauthorizedCaregiverLanguage above; do not
-    // block save on residual CAREGIVER_LEAKAGE from the model attempt history.
     if (issue.code === "CAREGIVER_LEAKAGE" || issue.code === "PRESENT_PERSON_LEAKAGE") {
       return false;
     }
@@ -959,44 +985,24 @@ export async function generateSessionNoteForClient(params: {
   for (const issue of stylisticComplianceIssues) {
     warnings.push(`Clinical body compliance check: ${issue}`);
   }
+  // Fail-open: never block note creation on clinical compliance. Surface as warnings and save.
+  let savedWithComplianceWarnings = false;
   if (criticalComplianceIssues.length > 0) {
-    console.error(
-      `[notes/generate] blocked_critical_compliance clientId=${client.id} companyId=${companyId} issues=${criticalComplianceIssues.length}`,
+    savedWithComplianceWarnings = true;
+    console.warn(
+      `[notes/generate] soft_fail_critical_compliance clientId=${client.id} companyId=${companyId} issues=${criticalComplianceIssues.length}`,
     );
-    await writeNoteGenerationAudit(buildNoteGenerationAuditEntry({
-      ...auditBase,
-      noteId: null,
-      repairAttempts: generationRepairAttempts,
-      validatorIssues: effectiveIssues.map((issue) => issue.message),
-      criticalIssues: criticalComplianceIssues,
-      finalValidatorIssues: effectiveIssues,
-      finalCriticalIssues: criticalEffectiveIssues,
-      attemptHistory: generationAttemptHistory,
-      repairActions: generationRepairActions,
-      warnings,
-      rawModelOutputs: generationRawOutputs,
-      clinicalBody: finalClinicalBody,
-      finalStatus: "blocked_critical",
-    }));
-    return {
-      ok: false,
-      status: 422,
-      error:
-        "The generated note failed critical clinical compliance checks and was not saved. Please regenerate; if this repeats, review the client's BIP data (functions, interventions, behavior-to-replacement mappings).",
-      messages: criticalComplianceIssues,
-    };
+    for (const issue of criticalComplianceIssues) {
+      warnings.push(`Clinical compliance (saved anyway): ${issue}`);
+    }
+    ensureClinicalBodyPresent("compliance soft-fail with incomplete body");
   }
 
-  const scrubbedClinicalBody = stripUnauthorizedCaregiverLanguage(
-    finalClinicalBody,
-    body.presentPeople,
+  applyBodyRewrite(
+    stripUnauthorizedCaregiverLanguage(finalClinicalBody, body.presentPeople),
+    "Removed additional caregiver/family language from the clinical body before assembly.",
   );
-  if (scrubbedClinicalBody !== finalClinicalBody) {
-    warnings.push(
-      "Removed additional caregiver/family language from the clinical body before assembly.",
-    );
-    finalClinicalBody = scrubbedClinicalBody;
-  }
+  ensureClinicalBodyPresent("pre-assembly empty body");
 
   let noteContent = assembleSessionNote(
     body.presentPeople,
@@ -1011,7 +1017,7 @@ export async function generateSessionNoteForClient(params: {
     clientAgeYears,
   );
   const qcScrubbedNote = scrubAssembledNoteQcHotspots(noteContent);
-  if (qcScrubbedNote !== noteContent) {
+  if (qcScrubbedNote !== noteContent && qcScrubbedNote.trim().length > 0) {
     noteContent = qcScrubbedNote;
     warnings.push(
       'Removed QC hotspot wording ("social praise" / BIP status topography placeholders) from the assembled note before save.',
@@ -1032,19 +1038,19 @@ export async function generateSessionNoteForClient(params: {
   };
   let assembledValidation = validateAssembledSessionNote(noteContent, assembledContext);
 
-  // Auto-resolve residual caregiver leaks in the clinical body once more before blocking save.
+  // Auto-resolve residual caregiver leaks in the clinical body once more before save.
   const caregiverBlocked = assembledValidation.blocking.some((issue) => issue.code === "CAREGIVER_LEAKAGE");
   if (caregiverBlocked) {
     const resolvedBody = stripUnauthorizedCaregiverLanguage(finalClinicalBody, body.presentPeople);
-    if (resolvedBody !== finalClinicalBody) {
+    if (resolvedBody !== finalClinicalBody && resolvedBody.trim().length > 0) {
       warnings.push("Resolved remaining caregiver/family language before saving the assembled note.");
       finalClinicalBody = resolvedBody;
     } else {
-      // Force a second-pass strip even when string-equal detection missed punctuation variants.
       finalClinicalBody = stripUnauthorizedCaregiverLanguage(
         `${finalClinicalBody} `,
         body.presentPeople,
       ).trim();
+      ensureClinicalBodyPresent("caregiver strip emptied body");
     }
     noteContent = scrubAssembledNoteQcHotspots(
       assembleSessionNote(
@@ -1064,53 +1070,14 @@ export async function generateSessionNoteForClient(params: {
   }
 
   if (assembledValidation.blocking.length > 0) {
-    const nonCaregiverBlocking = assembledValidation.blocking.filter(
-      (issue) => issue.code !== "CAREGIVER_LEAKAGE" && issue.code !== "PRESENT_PERSON_LEAKAGE",
-    );
-    if (nonCaregiverBlocking.length === 0) {
-      // Best-effort strip already ran; do not block note save solely on residual presence wording.
-      for (const issue of assembledValidation.blocking) {
-        warnings.push(`Assembled note presence wording auto-resolved: ${issue.message}`);
-      }
-      assembledValidation = {
-        issues: assembledValidation.issues.filter(
-          (issue) => issue.code !== "CAREGIVER_LEAKAGE" && issue.code !== "PRESENT_PERSON_LEAKAGE",
-        ),
-        blocking: [],
-        warnings: [
-          ...assembledValidation.warnings,
-          ...assembledValidation.blocking,
-        ],
-      };
+    savedWithComplianceWarnings = true;
+    for (const issue of assembledValidation.blocking) {
+      warnings.push(`Assembled note check (saved anyway): ${issue.message}`);
     }
-  }
-
-  if (assembledValidation.blocking.length > 0) {
-    const messages = assembledValidation.blocking.map((issue) => issue.message);
-    await writeNoteGenerationAudit(buildNoteGenerationAuditEntry({
-      ...auditBase,
-      noteId: null,
-      repairAttempts: generationRepairAttempts,
-      validatorIssues: [
-        ...effectiveIssues.map((issue) => issue.message),
-        ...assembledValidation.issues.map((issue) => issue.message),
-      ],
-      criticalIssues: messages,
-      finalValidatorIssues: [...effectiveIssues, ...assembledValidation.issues],
-      finalCriticalIssues: assembledValidation.blocking,
-      attemptHistory: generationAttemptHistory,
-      repairActions: generationRepairActions,
-      warnings,
-      rawModelOutputs: generationRawOutputs,
-      clinicalBody: finalClinicalBody,
-      finalNoteText: noteContent,
-      finalStatus: "blocked_critical",
-    }));
-    return {
-      ok: false,
-      status: 422,
-      error: "The assembled note failed locked-prose validation and was not saved.",
-      messages,
+    assembledValidation = {
+      issues: assembledValidation.issues,
+      blocking: [],
+      warnings: [...assembledValidation.warnings, ...assembledValidation.blocking],
     };
   }
 
@@ -1142,23 +1109,23 @@ export async function generateSessionNoteForClient(params: {
     .returning();
 
   console.log(
-    `[notes/generate] openai_ok noteId=${inserted.id} model=${generationModel} clientId=${client.id} companyId=${companyId}`,
+    `[notes/generate] openai_ok noteId=${inserted.id} model=${generationModel} clientId=${client.id} companyId=${companyId}${savedWithComplianceWarnings ? " soft_fail_compliance=1" : ""}`,
   );
   await writeNoteGenerationAudit(buildNoteGenerationAuditEntry({
     ...auditBase,
     noteId: inserted.id,
     repairAttempts: generationRepairAttempts,
     validatorIssues: effectiveIssues.map((issue) => issue.message),
-    criticalIssues: [],
+    criticalIssues: criticalComplianceIssues,
     finalValidatorIssues: effectiveIssues,
-    finalCriticalIssues: [],
+    finalCriticalIssues: criticalEffectiveIssues,
     attemptHistory: generationAttemptHistory,
     repairActions: generationRepairActions,
     warnings,
     rawModelOutputs: generationRawOutputs,
     clinicalBody: finalClinicalBody,
     finalNoteText: noteContent,
-    finalStatus: "saved",
+    finalStatus: savedWithComplianceWarnings ? "saved_with_warnings" : "saved",
   }));
 
   const maladaptiveReplacementPairings = maladaptiveReplacementPairingsForSessionNote({

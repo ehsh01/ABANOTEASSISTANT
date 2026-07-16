@@ -7,8 +7,11 @@ import {
 import {
   assembleClinicalBodyFromNotePlan,
   buildDeterministicTrialSentence,
+  buildMinimalClinicalBodyFromSessionContext,
+  countClinicalParagraphs,
   manifestedBehaviorBridge,
   organicAntecedentLead,
+  preserveClinicalParagraphStructure,
   roundedTrialPercentage,
 } from "./note-plan-assembly";
 import { NotePlanSchema, type NotePlan } from "./note-plan-schema";
@@ -211,6 +214,50 @@ describe("deterministic intervention assignment", () => {
 });
 
 describe("server-owned metrics and deterministic assembly", () => {
+  it("preserves ABC paragraph separators when a rewrite would collapse them", () => {
+    const before = ["Paragraph one with content.", "Paragraph two with content."].join("\n\n");
+    const collapsed = before.replace(/\s+/g, " ");
+    const preserved = preserveClinicalParagraphStructure(before, collapsed, 2);
+    expect(preserved.restored).toBe(true);
+    expect(countClinicalParagraphs(preserved.text)).toBe(2);
+  });
+
+  it("builds a minimal multi-paragraph clinical body when the model returns nothing", () => {
+    const context = buildFrozenSessionContext(
+      generationContext({
+        sessionHours: 5,
+        narrativeSegmentCount: 5,
+        maladaptiveBehaviors: ["Task Refusal", "Tantrum", "Elopement"],
+        maladaptiveBehaviorForHour: [
+          "Task Refusal",
+          "Tantrum",
+          "Elopement",
+          "Task Refusal",
+          "Tantrum",
+        ],
+        replacementProgramForHour: Array.from({ length: 5 }, () => "Request for Break"),
+        rbtActionsOnlyOutcomeForHour: Array.from({ length: 5 }, () => false),
+        activityAntecedentForHour: Array.from({ length: 5 }, () => null),
+        languageMaladaptiveEpisodeForHour: Array.from({ length: 5 }, () => false),
+        therapistTrialSummaryForReplacementHour: Array.from({ length: 5 }, () => null),
+        acquisitionOnlySegmentForHour: Array.from({ length: 5 }, () => false),
+        maladaptiveBehaviorFunctionsForHour: Array.from({ length: 5 }, () => ["escape"] as const),
+        maladaptiveBehaviorTopographyForHour: Array.from({ length: 5 }, () => null),
+        behaviorReplacementCandidatesForHour: Array.from({ length: 5 }, () => ["Request for Break"]),
+        interventionCandidatesForHour: Array.from({ length: 5 }, () => ["Premack principle"]),
+        behaviorToReplacementsMap: {
+          "Task Refusal": ["Request for Break"],
+          Tantrum: ["Request for Break"],
+          Elopement: ["Request for Break"],
+        },
+      }),
+    );
+    const body = buildMinimalClinicalBodyFromSessionContext(context);
+    expect(countClinicalParagraphs(body)).toBe(5);
+    expect(body).toContain("Task Refusal");
+    expect(body).toContain("Premack principle");
+  });
+
   it("sanitizes assessment definitions into name-free observable topography", () => {
     const sanitized = sanitizeStoredTopographyForNarrative(
       "Defined as any instance in which Anthony repeats a specific movement pattern, including frequently flapping his hands and walking back and forth repetitively. Episodes are scored after 30 seconds.",
