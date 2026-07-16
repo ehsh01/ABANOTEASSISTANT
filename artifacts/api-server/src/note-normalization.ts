@@ -179,6 +179,20 @@ function finiteVerbToGerund(verb: string): string {
 }
 
 /**
+ * Gerund for a KNOWN base-form verb (safe only after "not", where "does/did not <base>" guarantees
+ * a base form — never an irregular past like "swept"). Applies standard "-ing" spelling rules.
+ */
+function baseFormVerbToGerund(base: string): string {
+  const w = base.toLowerCase();
+  if (!w) return w;
+  const mapped = finiteVerbToGerund(base);
+  if (mapped.toLowerCase() !== w) return mapped;
+  if (/ing$/.test(w)) return w;
+  if (/[^aeiou]e$/.test(w)) return `${w.slice(0, -1)}ing`;
+  return `${w}ing`;
+}
+
+/**
  * Normalize text that follows "… by" in manifested-behavior / replacement sentences.
  * Strips leading "the RBT"/"the client" subjects and converts the lead verb to a gerund so
  * assembly never emits "by the RBT repeated…" or "by the client swore…".
@@ -187,7 +201,17 @@ export function normalizeClauseAfterBy(text: string): string {
   let t = text.trim().replace(/\s+/g, " ");
   if (!t) return t;
   t = t.replace(/^(?:the\s+)?(?:RBT|client)\s+/i, "");
-  t = t.replace(/^([A-Za-z']+)(?=\s|$)/, (verb) => finiteVerbToGerund(verb));
+  // Negative/stative BIP definitions ("Does not initiate the demand…", "did not respond…")
+  // must read as "not initiating the demand…", never "doing not initiate…".
+  const negative = t.match(
+    /^(?:do|does|did|is|was|are|were|has|have|had)\s+not\s+([A-Za-z']+)\b([\s\S]*)$/i,
+  );
+  if (negative) {
+    const gerund = baseFormVerbToGerund(negative[1]!);
+    t = `not ${gerund}${negative[2] ?? ""}`.replace(/\s+/g, " ").trim();
+  } else {
+    t = t.replace(/^([A-Za-z']+)(?=\s|$)/, (verb) => finiteVerbToGerund(verb));
+  }
   if (!/[.!?]$/.test(t)) t = `${t}.`;
   return t;
 }
@@ -244,6 +268,15 @@ export function normalizeClinicalBodyPraiseWording(body: string): string {
     match[0] === match[0]?.toUpperCase() ? "Brief praise" : "brief praise";
   const praise = (match: string) =>
     match[0] === match[0]?.toUpperCase() ? "Praise" : "praise";
+  // Compound praise labels ("social/verbal/behavior-specific praise") are treated by external
+  // reviewers as unauthorized intervention names, so collapse them to plain "praise". Plain
+  // "praise" is allowed everywhere, so we do NOT rewrite grammatical "delivered praise …"
+  // sentences (earlier rewrites here dropped governing verbs and injected mid-sentence capitals,
+  // producing "acknowledged the response and brief access to sensory toys").
+  const withheld = (match: string) =>
+    match[0] === match[0]?.toUpperCase()
+      ? "The RBT maintained neutral attention during"
+      : "the RBT maintained neutral attention during";
   return body
     .replace(/\bbrief social praise\b/gi, briefPraise)
     .replace(/\bsocial praise\b/gi, praise)
@@ -252,28 +285,8 @@ export function normalizeClinicalBodyPraiseWording(body: string): string {
     .replace(/\bbrief verbal praise\b/gi, briefPraise)
     .replace(/\bverbal praise\b/gi, praise)
     .replace(
-      /\b(?:brief )?praise (?:was )?withheld during ([^.;]+)/gi,
-      "The RBT maintained neutral attention during $1",
-    )
-    .replace(
-      /\b(?:brief )?praise (?:was )?delivered (?:after|when) the client ([^.;]+)/gi,
-      "The RBT acknowledged the completed response after the client $1",
-    )
-    .replace(
-      /\bthe RBT (?:delivered|provided) (?:brief )?praise (?:after|when) the client ([^.;]+)/gi,
-      "The RBT acknowledged the completed response after the client $1",
-    )
-    .replace(
-      /\bthe RBT (?:delivered|provided) (?:brief )?praise after ([^.;]+)/gi,
-      "The RBT acknowledged the response after $1",
-    )
-    .replace(
-      /\bthe RBT (?:delivered|provided) (?:brief )?praise and\b/gi,
-      "The RBT acknowledged the response and",
-    )
-    .replace(
-      /\b(?:brief )?praise followed\b/gi,
-      "The RBT acknowledged the response",
+      /\b((?:brief )?praise) (?:was )?withheld during\b/gi,
+      (m) => withheld(m),
     );
 }
 

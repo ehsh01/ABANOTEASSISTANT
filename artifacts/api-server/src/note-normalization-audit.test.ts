@@ -60,6 +60,17 @@ describe("clause-after-by grammar", () => {
     );
   });
 
+  it("converts negative/stative BIP definitions instead of 'doing not initiate'", () => {
+    expect(
+      normalizeClauseAfterBy(
+        "does not initiate the demand after 10 seconds of being delivered",
+      ),
+    ).toBe("not initiating the demand after 10 seconds of being delivered.");
+    expect(normalizeClauseAfterBy("did not respond to the instruction")).toBe(
+      "not responding to the instruction.",
+    );
+  });
+
   it("assembles manifested/replacement lines without 'by the RBT/client' subjects", () => {
     const context = {
       narrativeSegmentCount: 1,

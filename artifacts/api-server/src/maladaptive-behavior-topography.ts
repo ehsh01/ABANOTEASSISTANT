@@ -107,6 +107,119 @@ function normalizeContactMeans(raw: string): string {
   return m;
 }
 
+/** Add a missing article to a bare "with <means>" clause: "with foot" → "with a foot". */
+function normalizeBareMeansInPhrase(action: string): string {
+  return action.replace(
+    /\bwith\s+(foot|hand|fist|palm|knuckle|object|elbow|knee|shoulder|head)\b/gi,
+    (_m, noun: string) => {
+      const key = noun.toLowerCase();
+      const article = /^[aeiou]/.test(key) ? "an" : "a";
+      return `with ${article} ${key}`;
+    },
+  );
+}
+
+/** Aggression/contact verb forms → gerund, for semicolon action lists. */
+const AGGRESSION_GERUND: Record<string, string> = {
+  headbutt: "headbutting",
+  headbutts: "headbutting",
+  headbutted: "headbutting",
+  headbutting: "headbutting",
+  scratch: "scratching",
+  scratches: "scratching",
+  scratched: "scratching",
+  scratching: "scratching",
+  pinch: "pinching",
+  pinches: "pinching",
+  pinched: "pinching",
+  pinching: "pinching",
+  bite: "biting",
+  bites: "biting",
+  bit: "biting",
+  biting: "biting",
+  kick: "kicking",
+  kicks: "kicking",
+  kicked: "kicking",
+  kicking: "kicking",
+  hit: "hitting",
+  hits: "hitting",
+  hitting: "hitting",
+  slap: "slapping",
+  slaps: "slapping",
+  slapped: "slapping",
+  slapping: "slapping",
+  push: "pushing",
+  pushes: "pushing",
+  pushed: "pushing",
+  pushing: "pushing",
+  grab: "grabbing",
+  grabs: "grabbing",
+  grabbed: "grabbing",
+  grabbing: "grabbing",
+  throw: "throwing",
+  throws: "throwing",
+  threw: "throwing",
+  throwing: "throwing",
+  spit: "spitting",
+  spits: "spitting",
+  spat: "spitting",
+  spitting: "spitting",
+  pull: "pulling",
+  pulls: "pulling",
+  pulled: "pulling",
+  pulling: "pulling",
+  contact: "contacting",
+  contacts: "contacting",
+  contacted: "contacting",
+  contacting: "contacting",
+};
+
+function aggressionVerbToGerund(word: string): string {
+  const w = word.toLowerCase().replace(/[^a-z]/g, "");
+  if (AGGRESSION_GERUND[w]) return AGGRESSION_GERUND[w]!;
+  if (/ing$/.test(w)) return w;
+  return w;
+}
+
+/**
+ * BIP topographies are frequently written as semicolon-delimited alternative forms, e.g.
+ * "contacting any part of another person's body with foot; headbutts; scratching; pinching;
+ * throwing items at a person;". Split those into individual, grammatical single actions so ABC
+ * paragraphs cite exactly one observable action (never the whole dump with a trailing semicolon).
+ */
+function expandSemicolonTopographyList(text: string): string[] | null {
+  if (!/;/.test(text)) return null;
+  const fragments = text
+    .split(/\s*;\s*/)
+    .map((f) => f.trim().replace(/[.;]+$/, "").trim())
+    .filter(Boolean);
+  if (fragments.length < 2) return null;
+
+  const personDirected =
+    /\b(?:another person|person['’]s body|the RBT|a person|adult)\b/i.test(text);
+
+  const out: string[] = [];
+  for (const raw of fragments) {
+    let frag = normalizeBareMeansInPhrase(raw).replace(/\s+/g, " ").trim();
+    const words = frag.split(/\s+/);
+    const hasTarget =
+      /\b(?:person|persons|people|body|rbt|adult|adults|item|items|object|objects|surface|floor|table|wall|material|materials|head|face|arm|arms|leg|legs|hand|hands|hair|another)\b/i.test(
+        frag,
+      );
+    if (words.length <= 2 && !hasTarget) {
+      // Bare verb fragment ("headbutts", "scratching") → complete person-directed action.
+      const gerund = aggressionVerbToGerund(words[0] ?? "");
+      frag = personDirected ? `${gerund} another person` : gerund;
+    } else {
+      // Ensure the leading verb reads as a gerund ("headbutts another person" → "headbutting …").
+      frag = frag.replace(/^([A-Za-z]+)/, (lead) => aggressionVerbToGerund(lead));
+    }
+    frag = frag.replace(/\s+/g, " ").trim();
+    if (frag.length >= 6 && !isIncompleteTopographyAction(frag)) out.push(frag);
+  }
+  return out.length > 0 ? out : null;
+}
+
 /**
  * "contacting … with an open hand, fist, foot, or object" → complete stem+means phrases.
  * Also handles "with an open or closed hand or with an object".
@@ -201,6 +314,11 @@ export function splitTopographyActionAlternatives(text: string): string[] {
   const cleaned = text.trim().replace(/\s+/g, " ");
   if (!cleaned) return [];
 
+  const semicolonList = expandSemicolonTopographyList(cleaned);
+  if (semicolonList) {
+    return finalizeActionList(semicolonList);
+  }
+
   const withMeans = expandWithMeansAlternatives(cleaned);
   if (withMeans) {
     return finalizeActionList(
@@ -268,7 +386,7 @@ function finalizeActionList(actions: string[]): string[] {
   const out: string[] = [];
   const seen = new Set<string>();
   for (const raw of actions) {
-    const action = raw.replace(/\s+/g, " ").trim();
+    const action = normalizeBareMeansInPhrase(raw.replace(/\s+/g, " ").trim()).trim();
     if (action.length < 8) continue;
     if (isIncompleteTopographyAction(action)) continue;
     const key = action.toLowerCase();
@@ -290,8 +408,9 @@ export function pickSingleTopographyActionForSegment(
   const cleaned = topography.trim().replace(/\s+/g, " ");
   const actions = splitTopographyActionAlternatives(cleaned);
   if (actions.length === 0) {
-    // Last resort: never return a known-incomplete fragment.
-    return isIncompleteTopographyAction(cleaned) ? "" : cleaned;
+    // Last resort: never return a known-incomplete fragment; fix bare "with foot" grammar.
+    const single = normalizeBareMeansInPhrase(cleaned).trim();
+    return isIncompleteTopographyAction(single) ? "" : single;
   }
   const idx = ((segmentIndex % actions.length) + actions.length) % actions.length;
   return actions[idx]!;

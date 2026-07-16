@@ -37,6 +37,15 @@ describe("locked opening", () => {
     );
   });
 
+  test("normalizes a generic 'Caregiver' label to 'the caregiver'", () => {
+    expect(formatCaregiverList(["Caregiver"])).toBe("the caregiver");
+    expect(formatCaregiverList(["Caregivers"])).toBe("the caregiver");
+    expect(formatCaregiverList(["Parent"])).toBe("the caregiver");
+    expect(formatCaregiverList(["Mother", "Caregiver"])).toBe(
+      "Mother and the caregiver",
+    );
+  });
+
   test("possessive handles trailing s", () => {
     expect(englishPossessiveFirstName("Alex")).toBe("Alex's");
     expect(englishPossessiveFirstName("James")).toBe("James'");

@@ -24,11 +24,19 @@ export function normalizePresentPersonLabel(raw: string): string {
     .trim();
 }
 
+/** Generic role labels get lowercased to "the caregiver"; specific roles (Mother, Father) stay. */
+function normalizeCaregiverLabel(label: string): string {
+  if (/^(?:caregivers?|parents?|guardians?)$/i.test(label.trim())) {
+    return "the caregiver";
+  }
+  return label;
+}
+
 export function formatCaregiverList(presentPeople: string[]): string {
   const p = [
     ...new Set(
       presentPeople
-        .map((s) => normalizePresentPersonLabel(s))
+        .map((s) => normalizeCaregiverLabel(normalizePresentPersonLabel(s)))
         .filter((s) => s.length > 0),
     ),
   ];

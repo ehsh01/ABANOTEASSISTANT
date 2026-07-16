@@ -5,7 +5,10 @@ import {
   isSibMaladaptiveBehaviorLabel,
   preferredInterventionCandidatesForBehaviorFunction,
 } from "./behavior-function-intervention-mapping";
-import { assignedBehaviorAllowsResponseBlockSafetyChain } from "./response-block-eligibility";
+import {
+  assignedBehaviorAllowsResponseBlockSafetyChain,
+  isPhysicalAggressionBehaviorLabel,
+} from "./response-block-eligibility";
 import { findResponseBlockInterventionLabel, selectSecondSafetyChainIntervention } from "./safety-chain-enforcement";
 import {
   NotePlanSchema,
@@ -229,6 +232,16 @@ export function sanitizeStoredTopographyForNarrative(
  * consistent with the stored definition. Only fall back to sanitized BIP wording when the
  * model output is label-only, non-observable, or inconsistent with the assessment.
  */
+/** True when model topography names a person-directed contact action with an explicit target. */
+function modelDescribesPersonDirectedContact(model: string): boolean {
+  const m = model.toLowerCase();
+  const contactAction =
+    /\b(?:contact(?:ed|ing|s)?|hit|hitting|struck|strik(?:e|ing)|slap(?:ped|ping|s)?|kick(?:ed|ing|s)?|push(?:ed|es|ing)?|scratch(?:ed|es|ing)?|pinch(?:ed|es|ing)?|bit|bite|biting|headbutt(?:ed|ing|s)?|grab(?:bed|bing|s)?|threw|throw(?:ing|s)?|pull(?:ed|ing|s)?)\b/i;
+  const target =
+    /\b(?:the rbt|another person|a person|adult|arm|arms|hand|hands|leg|legs|head|face|shoulder|shoulders|back|chest|hair|body|torso)\b/i;
+  return contactAction.test(m) && target.test(m);
+}
+
 export function shouldPreferStoredTopographyOverModel(
   modelTopography: string,
   storedTopography: string | null | undefined,
@@ -247,6 +260,16 @@ export function shouldPreferStoredTopographyOverModel(
   if (!model || isUnusableStoredTopography(model)) return true;
   if (model.toLowerCase() === behaviorLabel.trim().toLowerCase()) return true;
   if (!containsObservableClinicalAction(model)) return true;
+
+  // Physical Aggression BIP definitions are usually vague ("any part of another person's body …").
+  // When the model names a specific person-directed contact action with a body part/target, keep it
+  // so the note documents exactly what the client did (e.g. "made contact with the RBT's arm").
+  if (
+    isPhysicalAggressionBehaviorLabel(behaviorLabel) &&
+    modelDescribesPersonDirectedContact(model)
+  ) {
+    return false;
+  }
 
   const manifested = `The client manifested ${behaviorLabel} by ${model}.`;
   if (

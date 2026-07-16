@@ -74,3 +74,37 @@ describe("Physical Aggression topography single-action selection", () => {
     expect(pickSingleTopographyActionForSegment(full, 0)).not.toMatch(/,/);
   });
 });
+
+describe("semicolon-delimited BIP topography lists", () => {
+  const bip =
+    "contacting any part of another person's body with foot; headbutts; scratching; pinching; throwing items at a person;";
+
+  it("splits the semicolon dump into complete single actions (no trailing semicolon, no 'with foot')", () => {
+    const actions = splitTopographyActionAlternatives(bip);
+    expect(actions.length).toBeGreaterThanOrEqual(4);
+    expect(actions.every((a) => !/;/.test(a))).toBe(true);
+    expect(actions.every((a) => !/\bwith foot\b/i.test(a))).toBe(true);
+    expect(actions).toContain("contacting any part of another person's body with a foot");
+    expect(actions).toContain("headbutting another person");
+    expect(actions).toContain("scratching another person");
+    expect(actions).toContain("pinching another person");
+    expect(actions).toContain("throwing items at a person");
+  });
+
+  it("picks exactly one action per hour and rotates across hours", () => {
+    const hour0 = pickSingleTopographyActionForSegment(bip, 0);
+    const hour1 = pickSingleTopographyActionForSegment(bip, 1);
+    expect(hour0).not.toMatch(/;/);
+    expect(hour1).not.toMatch(/;/);
+    expect(hour0.toLowerCase()).not.toBe(hour1.toLowerCase());
+  });
+
+  it("fixes a bare 'with foot' means even without a list", () => {
+    expect(
+      pickSingleTopographyActionForSegment(
+        "contacting any part of another person's body with foot",
+        0,
+      ),
+    ).toBe("contacting any part of another person's body with a foot");
+  });
+});

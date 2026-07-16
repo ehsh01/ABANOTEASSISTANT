@@ -12,20 +12,24 @@ import {
 } from "./note-normalization";
 
 describe("praise wording normalization", () => {
-  test("rewrites praise details as explicit RBT actions rather than title-like labels", () => {
+  test("collapses compound praise labels to plain praise but keeps the sentence grammatical", () => {
     const out = normalizeClinicalBodyPraiseWording(
       "The RBT delivered verbal praise after the completed response. Brief behavior-specific praise followed.",
     );
-    expect(out).toContain("The RBT acknowledged");
-    expect(out).not.toMatch(/\bpraise\b/i);
+    expect(out).not.toMatch(/\b(?:social|verbal|behavior-specific) praise\b/i);
+    expect(out).toContain("The RBT delivered praise after the completed response.");
+    expect(out).toContain("Brief praise followed.");
   });
 
-  test("rewrites social praise so reviewers do not treat it as an intervention", () => {
+  test("keeps a conjoined praise+access clause grammatical (no dropped verb)", () => {
     const out = normalizeClinicalBodyPraiseWording(
-      "The RBT delivered social praise and access to sensory toys when the client used the transition response.",
+      "the RBT delivered social praise and access to sensory toys when the client used the transition response.",
     );
     expect(out).not.toMatch(/\bsocial praise\b/i);
-    expect(out).toMatch(/acknowledged the response and access to sensory toys/i);
+    // Verb "delivered" still governs both objects; no capital "The" injected mid-sentence.
+    expect(out).toBe(
+      "the RBT delivered praise and access to sensory toys when the client used the transition response.",
+    );
   });
 
   test("scrubs social praise and status topography from assembled notes", () => {
@@ -38,13 +42,12 @@ describe("praise wording normalization", () => {
     expect(out).toMatch(/Climbing by engaging in the targeted motor actions/i);
   });
 
-  test("rewrites all external-review warning forms", () => {
+  test("rewrites praise-withheld phrasing into an observable RBT action", () => {
     const out = normalizeClinicalBodyPraiseWording(
-      "Praise withheld during repeated motor pattern. Brief praise delivered after the client placed the card into the bin. The RBT delivered brief praise when the client remained near the RBT.",
+      "Praise withheld during the repeated motor pattern.",
     );
-    expect(out).toContain("The RBT maintained neutral attention during repeated motor pattern");
-    expect(out).toContain("The RBT acknowledged the completed response");
-    expect(out).not.toMatch(/\bpraise\b/i);
+    expect(out).toContain("The RBT maintained neutral attention during the repeated motor pattern");
+    expect(out).not.toMatch(/praise withheld/i);
   });
 });
 
