@@ -20,6 +20,7 @@ import {
 import {
   elopementEpisodeLacksObservableTopography,
   isElopementFamilyBehaviorLabel,
+  isIncompleteTopographyAction,
   isUnusableStoredTopography,
   lastResortObservableTopographyForBehavior,
   paragraphReflectsStoredTopography,
@@ -501,7 +502,23 @@ export function groundNotePlanWithFrozenContext(
                 )
               : undefined;
             topography = lockedMatches ?? pickSingleTopographyActionForSegment(topography, index);
+          } else if (actions.length === 1) {
+            topography = actions[0]!;
           }
+        }
+        if (
+          !topography.trim() ||
+          isUnusableStoredTopography(topography) ||
+          isIncompleteTopographyAction(topography)
+        ) {
+          topography =
+            (locked.behaviorTopography &&
+            !isUnusableStoredTopography(locked.behaviorTopography) &&
+            !isIncompleteTopographyAction(locked.behaviorTopography)
+              ? locked.behaviorTopography
+              : null) ||
+            lastResortObservableTopographyForBehavior(locked.behaviorLabel) ||
+            topography;
         }
       }
       const responseToIntervention =

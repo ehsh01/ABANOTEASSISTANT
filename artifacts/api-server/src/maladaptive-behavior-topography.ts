@@ -54,26 +54,187 @@ export function lastResortObservableTopographyForBehavior(behaviorLabel: string)
   if (/\bexcessive\s+motor\b/.test(b)) {
     return "flapping hands near the work materials";
   }
+  if (/\bphysical\s+aggression\b/.test(b)) {
+    return "contacting another person's body with an open hand";
+  }
   return null;
+}
+
+/** Incomplete fragments like "with an open" must never ship in ABC topography. */
+export function isIncompleteTopographyAction(action: string): boolean {
+  const t = action.trim().replace(/\s+/g, " ");
+  if (!t) return true;
+  if (/\b(?:with\s+)?(?:an?|the)\s+(?:open|closed)$/i.test(t)) return true;
+  if (/\bwith\s+(?:an?|the)?$/i.test(t)) return true;
+  if (/\b(?:an?|the|or|and|and\/or)$/i.test(t)) return true;
+  if (/\bopen or closed$/i.test(t)) return true;
+  return false;
+}
+
+/**
+ * Expand "open or closed hand/fist" into concrete single-means alternatives so ABC text
+ * names how contact occurred without the BIP hedge (and without truncating mid-phrase).
+ */
+function expandOpenClosedMeans(action: string): string[] {
+  const m = action.match(
+    /^(.*?\bwith\s+)(?:an?\s+)?open or closed\s+(hand|fist)(\b.*)?$/i,
+  );
+  if (!m) return [action];
+  const stem = m[1]!;
+  const noun = m[2]!.toLowerCase();
+  const tail = m[3] ?? "";
+  return [
+    `${stem}an open ${noun}${tail}`.replace(/\s+/g, " ").trim(),
+    `${stem}a closed ${noun}${tail}`.replace(/\s+/g, " ").trim(),
+  ];
+}
+
+function normalizeContactMeans(raw: string): string {
+  let m = raw
+    .trim()
+    .replace(/^(?:or|and|and\/or)\s+/i, "")
+    .replace(/[.]+$/, "")
+    .replace(/\s+/g, " ");
+  if (!m) return "";
+  if (/^(?:an?\s+)?open\s+hand$/i.test(m)) return "an open hand";
+  if (/^(?:an?\s+)?closed\s+hand$/i.test(m)) return "a closed hand";
+  if (/^(?:an?\s+)?open\s+fist$/i.test(m)) return "an open fist";
+  if (/^(?:an?\s+)?closed\s+fist$/i.test(m)) return "a closed fist";
+  if (/^fist$/i.test(m)) return "a fist";
+  if (/^foot$/i.test(m)) return "a foot";
+  if (/^object$/i.test(m)) return "an object";
+  if (/^hand$/i.test(m)) return "a hand";
+  return m;
+}
+
+/**
+ * "contacting … with an open hand, fist, foot, or object" → complete stem+means phrases.
+ * Also handles "with an open or closed hand or with an object".
+ */
+function expandWithMeansAlternatives(text: string): string[] | null {
+  const m = text.match(/^(.*?)\bwith\s+(.+)$/i);
+  if (!m?.[1] || !m[2]) return null;
+  const stem = m[1].trim();
+  const meansBlob = m[2].trim();
+  if (!/,|(?:\s+or\s+)/i.test(meansBlob)) return null;
+  // Require a means-style list (hand/fist/foot/object), not arbitrary "with" clauses.
+  if (!/\b(?:hand|fist|foot|object|palm|knuckle)\b/i.test(meansBlob)) return null;
+
+  // "… or with an object" is a second complete with-clause, not a bare means token.
+  const withClauses = meansBlob.split(/\s+or\s+with\s+/i);
+  const meansParts: string[] = [];
+  for (const clause of withClauses) {
+    const pairPlaceholders: string[] = [];
+    const protectedClause = clause.replace(
+      /\b(open|closed|left|right|soft|hard)\s+or\s+(open|closed|left|right|soft|hard)\b/gi,
+      (match) => {
+        const idx = pairPlaceholders.length;
+        pairPlaceholders.push(match);
+        return `__ORPAIR${idx}__`;
+      },
+    );
+    const parts = protectedClause
+      .split(/\s*,\s*(?:or\s+|and\/or\s+|and\s+)?|\s+and\/or\s+|\s+or\s+/i)
+      .map((part) =>
+        part
+          .replace(/__ORPAIR(\d+)__/g, (_, i) => pairPlaceholders[Number(i)] ?? "")
+          .trim(),
+      )
+      .filter(Boolean);
+
+    for (const part of parts) {
+      // Expand "open or closed hand" into concrete means before normalizing.
+      const openClosed = part.match(/^(?:an?\s+)?open or closed\s+(hand|fist)$/i);
+      if (openClosed) {
+        const noun = openClosed[1]!.toLowerCase();
+        meansParts.push(`an open ${noun}`, `a closed ${noun}`);
+        continue;
+      }
+      const normalized = normalizeContactMeans(part);
+      if (normalized.length >= 4 && !isIncompleteTopographyAction(normalized)) {
+        meansParts.push(normalized);
+      }
+    }
+  }
+
+  if (meansParts.length < 2) return null;
+  return meansParts.map((means) => `${stem} with ${means}`.replace(/\s+/g, " ").trim());
+}
+
+/**
+ * "hitting, kicking, pushing, or scratching another person" → one complete action each.
+ */
+function expandSharedComplementVerbList(text: string): string[] | null {
+  const m = text.match(
+    /^((?:[A-Za-z][A-Za-z'-]{2,}\s*,\s*)+)(?:or\s+|and\/or\s+|and\s+)?([A-Za-z][A-Za-z'-]{2,})\s+(.+)$/,
+  );
+  if (!m) return null;
+  const head = m[1]!;
+  const lastVerb = m[2]!;
+  const complement = m[3]!.trim();
+  if (!complement || complement.length < 4) return null;
+  // Shared complement should look like a target/context, not another action lead.
+  if (
+    /^(?:flapping|walking|moving|rocking|spinning|pacing|engaging|hitting|kicking)\b/i.test(
+      complement,
+    )
+  ) {
+    return null;
+  }
+
+  const verbs = [
+    ...head.split(/\s*,\s*/).map((v) => v.trim()).filter(Boolean),
+    lastVerb.trim(),
+  ].filter((v) => /^[A-Za-z][A-Za-z'-]{2,}$/.test(v));
+
+  if (verbs.length < 2) return null;
+  return verbs.map((verb) => `${verb} ${complement}`.replace(/\s+/g, " ").trim());
 }
 
 /**
  * Split a BIP/assessment topography clause that lists several alternative observable actions
  * (e.g. "flapping his hands, side-to-side head movement, walking back and forth, or engaging
  * in the same activity repeatedly") into individual action phrases.
- * Does not split idioms like "back and forth".
+ * Does not split idioms like "back and forth", and does not truncate "open or closed hand".
  */
 export function splitTopographyActionAlternatives(text: string): string[] {
   const cleaned = text.trim().replace(/\s+/g, " ");
   if (!cleaned) return [];
 
-  const primary = cleaned
+  const withMeans = expandWithMeansAlternatives(cleaned);
+  if (withMeans) {
+    return finalizeActionList(
+      withMeans.flatMap((action) => expandOpenClosedMeans(action)),
+    );
+  }
+
+  const verbList = expandSharedComplementVerbList(cleaned);
+  if (verbList) {
+    return finalizeActionList(verbList);
+  }
+
+  // Protect modifier pairs that are not alternative actions ("open or closed hand").
+  const pairPlaceholders: string[] = [];
+  const protectedText = cleaned.replace(
+    /\b(open|closed|left|right|soft|hard)\s+or\s+(open|closed|left|right|soft|hard)\b/gi,
+    (match) => {
+      const idx = pairPlaceholders.length;
+      pairPlaceholders.push(match);
+      return `__ORPAIR${idx}__`;
+    },
+  );
+
+  const primary = protectedText
     .split(/\s*,\s*(?:or\s+|and\/or\s+|and\s+)?|\s+and\/or\s+|\s+or\s+/i)
-    .map((part) => part.trim())
+    .map((part) =>
+      part
+        .replace(/__ORPAIR(\d+)__/g, (_, i) => pairPlaceholders[Number(i)] ?? "")
+        .trim(),
+    )
     .filter(Boolean);
 
   const ACTION_LEAD =
-    "(?:flapping|walking|moving|rocking|spinning|pacing|engaging|repeating|waving|clapping|bouncing|jumping|shaking|stomping|crying|screaming|yelling|hitting|kicking|throwing|ripping|pulling|pushing|leaving|sprinting|running|placing|putting|reaching)";
+    "(?:flapping|walking|moving|rocking|spinning|pacing|engaging|repeating|waving|clapping|bouncing|jumping|shaking|stomping|crying|screaming|yelling|hitting|kicking|throwing|ripping|pulling|pushing|leaving|sprinting|running|placing|putting|reaching|contacting|contacts|striking|slapping|scratching|pinching)";
 
   const expanded: string[] = [];
   for (const part of primary) {
@@ -87,9 +248,7 @@ export function splitTopographyActionAlternatives(text: string): string[] {
     }
   }
 
-  const out: string[] = [];
-  const seen = new Set<string>();
-  for (const raw of expanded) {
+  const normalized = expanded.flatMap((raw) => {
     const action = raw
       .replace(/^(?:or|and|and\/or)\s+/i, "")
       .replace(/[.]+$/, "")
@@ -98,7 +257,20 @@ export function splitTopographyActionAlternatives(text: string): string[] {
       .replace(/\s+,?\s*repetitively\b/gi, "")
       .replace(/\s+/g, " ")
       .trim();
+    if (!action) return [];
+    return expandOpenClosedMeans(action);
+  });
+
+  return finalizeActionList(normalized);
+}
+
+function finalizeActionList(actions: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of actions) {
+    const action = raw.replace(/\s+/g, " ").trim();
     if (action.length < 8) continue;
+    if (isIncompleteTopographyAction(action)) continue;
     const key = action.toLowerCase();
     if (seen.has(key)) continue;
     seen.add(key);
@@ -115,9 +287,11 @@ export function pickSingleTopographyActionForSegment(
   topography: string,
   segmentIndex: number,
 ): string {
-  const actions = splitTopographyActionAlternatives(topography);
-  if (actions.length <= 1) {
-    return topography.trim().replace(/\s+/g, " ");
+  const cleaned = topography.trim().replace(/\s+/g, " ");
+  const actions = splitTopographyActionAlternatives(cleaned);
+  if (actions.length === 0) {
+    // Last resort: never return a known-incomplete fragment.
+    return isIncompleteTopographyAction(cleaned) ? "" : cleaned;
   }
   const idx = ((segmentIndex % actions.length) + actions.length) % actions.length;
   return actions[idx]!;

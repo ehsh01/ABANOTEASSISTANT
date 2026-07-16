@@ -1,4 +1,5 @@
 import {
+  isIncompleteTopographyAction,
   isUnusableStoredTopography,
   lastResortObservableTopographyForBehavior,
 } from "./maladaptive-behavior-topography";
@@ -139,12 +140,14 @@ export function assembleClinicalBodyFromNotePlan(
       } else {
         // Belt-and-suspenders: never assemble BIP status placeholders into the manifested-behavior line.
         const rawTopo = neutralize(segment.topography);
-        const usableTopo = !isUnusableStoredTopography(rawTopo)
-          ? rawTopo
-          : !isUnusableStoredTopography(locked.behaviorTopography)
-            ? (locked.behaviorTopography ?? "")
-            : (lastResortObservableTopographyForBehavior(locked.behaviorLabel) ??
-              "engaging in the targeted motor actions for this episode");
+        const lockedTopo = locked.behaviorTopography ?? "";
+        const usableTopo =
+          !isUnusableStoredTopography(rawTopo) && !isIncompleteTopographyAction(rawTopo)
+            ? rawTopo
+            : !isUnusableStoredTopography(lockedTopo) && !isIncompleteTopographyAction(lockedTopo)
+              ? lockedTopo
+              : (lastResortObservableTopographyForBehavior(locked.behaviorLabel) ??
+                "engaging in the targeted motor actions for this episode");
         parts.push(
           `${manifestedBehaviorBridge(index)} ${locked.behaviorLabel} by ${clauseAfterBy(usableTopo)}`,
         );
