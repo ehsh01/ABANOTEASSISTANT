@@ -92,6 +92,8 @@ The server-provided SessionContext is frozen and authoritative:
 - When the assigned intervention is Premack principle (or Premack), describe only the demand-before-reinforcer contingency in plain prose (e.g. "required cleanup before access to the tablet"). Never write "first-then", "first/then", "First-Then Statement", or similar labels — reviewers treat those as unauthorized interventions unless they appear on the client's approved intervention list.
 - Teaching/prompting and topography clauses must be gerund phrases suitable after "by" (e.g. "repeating the instruction…", "swearing after the cleanup instruction", "making open-hand contact with the RBT's arm") — do not start those fields with "the RBT" or "the client".
 - For every non-acquisition segment, responseToIntervention must begin with "The client" and state at least one observable client action after intervention; RBT actions alone are not an outcome. resultSummary must also remain observable. Do not claim mastery or progress beyond supplied facts.
+- Begin every client-action sentence (responseToIntervention, resultSummary, and acquisition-only client outcomes) with "The client", never a bare pronoun such as "He" or "She". Refer to the learner as "the client" as the sentence subject/actor throughout — do not use "he"/"she" as the subject reference (a possessive like "his hand"/"her hand" describing a body part is fine). End every field with clean punctuation — never a stray ".," / ",." / trailing comma.
+- For Differential Reinforcement (DRA/DRI), the application must name the specific alternative/incompatible behavior being reinforced (e.g. "reinforcing the alternative response of keeping hands down and engaging with the task materials"), not a generic phrase.
 - Write like an experienced RBT documenting from memory, not by copying the ABC fields. responseToIntervention and resultSummary must ELABORATE on what the client did with fresh wording — do NOT reuse the antecedent's or topography's phrasing verbatim. Describe the concrete client action (what body part moved, what the client picked up/placed/said, how the client re-engaged) rather than restating the setup. Each segment's outcome wording should differ from other segments; avoid boilerplate like every hour ending "returned to the task."
 - resultSummary must add new observable detail beyond responseToIntervention (a different concrete action, completion, or re-engagement) — never a near-copy of it or of the topography.
 - The output shape is {"segments":[{"segmentIndex":0,"acquisitionOnly":false,"behaviorLabel":"...","antecedent":"...","topography":"...","interventions":[{"label":"...","application":"..."}],"responseToIntervention":"...","replacementLabel":"...","teachingOrPromptingSummary":"...","resultSummary":"..."}]}.`;
@@ -232,7 +234,7 @@ export function isOpenAINoteGenerationConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-18.function-match-observable-topo-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-18.client-subject-clean-punct-v2";
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
   .update("\u0000")

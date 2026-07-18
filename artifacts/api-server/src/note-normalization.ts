@@ -540,13 +540,51 @@ export function scrubInventedEnvironmentDetails(text: string): string {
 }
 
 /**
+ * Remove stray punctuation clusters like ".,.", ",.", ". ," that leak in when a segment field is empty
+ * or ends with a dangling separator. A run of two or more of {. ,} (optionally spaced) collapses to the
+ * strongest mark (period if any period is present) plus a single space. Single punctuation ("e.g.",
+ * decimals, ordinary commas) is untouched because each mark is isolated by non-punctuation.
+ */
+export function scrubStrayPunctuationClusters(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(/\.[ \t]*,[ \t]*\.[ \t]*/g, ". ") // ".,." → ". "
+    .replace(/,[ \t]*\.[ \t]*/g, ". ") // ",." → ". " (comma before a period is always stray)
+    .replace(/\.{2,}/g, ".")
+    .replace(/,{2,}/g, ",")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+([.,;:])/g, "$1")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/[ \t]+$/g, "");
+}
+
+/**
+ * Client-action sentences should read "The client …", not a bare sentence-initial pronoun ("He …").
+ * Rewrite sentence-initial He/She (at a paragraph start or after ./!/?) to "The client". "They" is
+ * intentionally excluded (it frequently refers to plural objects — "They were placed on the table" —
+ * where "The client" would break agreement). Mid-sentence pronouns and possessives are left intact.
+ */
+export function normalizeClinicalBodySentenceInitialPronouns(body: string): string {
+  if (!body) return body;
+  return body.replace(
+    /(^|[.!?]["')\]]?\s+|\n\s*)(?:He|She)\b/g,
+    (_m, lead: string) => `${lead}The client`,
+  );
+}
+
+/**
  * Final scrub for full assembled notes (clinical body + locked closing): never leave "social praise",
- * BIP status-placeholder topography, medication references, or invented environmental details.
+ * BIP status-placeholder topography, medication references, invented environmental details, stray
+ * punctuation clusters, or bare sentence-initial client pronouns.
  */
 export function scrubAssembledNoteQcHotspots(noteText: string): string {
   return collapseDuplicateAdjacentWords(
     scrubFirstThenProcedureLabels(
-      scrubInventedEnvironmentDetails(scrubMedicationReferences(noteText))
+      normalizeClinicalBodySentenceInitialPronouns(
+        scrubStrayPunctuationClusters(
+          scrubInventedEnvironmentDetails(scrubMedicationReferences(noteText)),
+        ),
+      )
         .replace(/\bsocial praise\b/gi, "praise")
         .replace(
           /\bby\s+Status\s*:\s*To be initiated\.?/gi,

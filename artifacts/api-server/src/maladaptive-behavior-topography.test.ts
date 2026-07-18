@@ -177,6 +177,33 @@ describe("Task Refusal / Wandering topography audit guards", () => {
     ).toBe(false);
   });
 
+  it("detects BIP duration-metric language in elopement topography (reported William note)", () => {
+    expect(
+      looksLikePastedBipDefinitionTopography(
+        "wandering off from another person by being more than 2 feet away from another person in the community for any duration of time and refusing to hold hands",
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps observable elopement topography that uses a bare distance (approved example notes)", () => {
+    // Both approved example notes use "more than N feet away" as valid observable topography.
+    expect(
+      looksLikePastedBipDefinitionTopography(
+        "moving more than 2 feet away from the supervising adult and refusing to hold hands when prompted",
+      ),
+    ).toBe(false);
+    expect(
+      looksLikePastedBipDefinitionTopography(
+        "walking more than three feet away from the designated activity area toward the hallway without permission",
+      ),
+    ).toBe(false);
+    expect(
+      looksLikePastedBipDefinitionTopography(
+        "moving away from the designated activity area and increasing distance from the supervising adult without permission",
+      ),
+    ).toBe(false);
+  });
+
   it("provides last-resort topography for Task Refusal and Wandering Away", () => {
     expect(lastResortObservableTopographyForBehavior("Task Refusal")).toMatch(/not initiating/i);
     expect(lastResortObservableTopographyForBehavior("Wandering Away")).toMatch(

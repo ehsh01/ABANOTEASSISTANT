@@ -3,9 +3,11 @@ import {
   collapseDuplicateAdjacentWords,
   normalizeClauseAfterBy,
   normalizeClinicalBodyInterventionDetailPhrases,
+  normalizeClinicalBodySentenceInitialPronouns,
   scrubAssembledNoteQcHotspots,
   scrubFirstThenProcedureLabels,
   scrubMedicationReferences,
+  scrubStrayPunctuationClusters,
 } from "./note-normalization";
 import { assembleClinicalBodyFromNotePlan } from "./note-plan-assembly";
 import type { NotePlan, SessionContext } from "./note-plan-schema";
@@ -182,6 +184,79 @@ describe("clause-after-by grammar", () => {
     );
     expect(body).not.toMatch(/by the client swore/i);
     expect(body).not.toMatch(/by the RBT repeated/i);
+  });
+});
+
+describe("stray punctuation clusters", () => {
+  it("collapses '.,.' and ',.' artifacts to a single period (reported William note)", () => {
+    expect(
+      scrubStrayPunctuationClusters(
+        "presented simple sound models with sensory toys available after responding.,. Additionally, the RBT implemented",
+      ),
+    ).toBe(
+      "presented simple sound models with sensory toys available after responding. Additionally, the RBT implemented",
+    );
+    expect(scrubStrayPunctuationClusters("to set up requesting opportunities.,.")).toBe(
+      "to set up requesting opportunities.",
+    );
+  });
+
+  it("leaves 'e.g.', decimals, and ordinary commas intact", () => {
+    expect(scrubStrayPunctuationClusters('praise (e.g., "Good job")')).toBe(
+      'praise (e.g., "Good job")',
+    );
+    expect(scrubStrayPunctuationClusters("more than 2.5 feet, then stopped")).toBe(
+      "more than 2.5 feet, then stopped",
+    );
+  });
+
+  it("removes stray clusters from a full assembled note", () => {
+    const out = scrubAssembledNoteQcHotspots(
+      "The RBT set up materials near the table.,. The RBT implemented the replacement program.",
+    );
+    expect(out).not.toMatch(/\.\s*,\s*\./);
+  });
+});
+
+describe("sentence-initial client pronouns", () => {
+  it("rewrites sentence-initial He/She to 'The client'", () => {
+    expect(
+      normalizeClinicalBodySentenceInitialPronouns(
+        "He accepted praise and briefly handled a sensory toy. She placed both hands on the table.",
+      ),
+    ).toBe(
+      "The client accepted praise and briefly handled a sensory toy. The client placed both hands on the table.",
+    );
+  });
+
+  it("rewrites a paragraph-initial pronoun", () => {
+    expect(
+      normalizeClinicalBodySentenceInitialPronouns(
+        "The RBT prompted the client.\n\nHe placed one item into the bin.",
+      ),
+    ).toBe("The RBT prompted the client.\n\nThe client placed one item into the bin.");
+  });
+
+  it("leaves mid-sentence pronouns and possessives intact", () => {
+    expect(
+      normalizeClinicalBodySentenceInitialPronouns(
+        "The client lowered his hand and he touched the materials.",
+      ),
+    ).toBe("The client lowered his hand and he touched the materials.");
+  });
+
+  it("does not convert plural 'They' (may refer to objects)", () => {
+    expect(
+      normalizeClinicalBodySentenceInitialPronouns("The materials were ready. They were within reach."),
+    ).toBe("The materials were ready. They were within reach.");
+  });
+
+  it("applies within a full assembled note", () => {
+    const out = scrubAssembledNoteQcHotspots(
+      "The RBT implemented the replacement program. He took the snack from the table.",
+    );
+    expect(out).toContain("The client took the snack from the table.");
+    expect(out).not.toMatch(/\.\s+He\b/);
   });
 });
 

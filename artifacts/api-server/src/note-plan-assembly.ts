@@ -105,13 +105,15 @@ export function manifestedBehaviorBridge(segmentIndex: number): string {
  * only the human-sounding lead varies. Index 0 keeps the canonical "To address this behavior," opener
  * so single-segment fixtures/tests stay stable.
  */
+// Naming leads observed across the approved example notes. "Addressing this behavior," is
+// intentionally excluded (dangling participle the user corrected away); "In response," /
+// "To reduce this behavior," / "To manage this behavior," are all present in the approved notes.
 const INTERVENTION_NAMING_LEADS = [
   "To address this behavior, the RBT implemented",
+  "In response to this behavior, the RBT implemented",
   "In response, the RBT implemented",
   "To reduce this behavior, the RBT implemented",
   "To manage this behavior, the RBT implemented",
-  "In response to this behavior, the RBT implemented",
-  "Addressing this behavior, the RBT implemented",
 ] as const;
 
 /** Connectives for a 2nd+ intervention naming sentence within one (safety-chain) segment. */

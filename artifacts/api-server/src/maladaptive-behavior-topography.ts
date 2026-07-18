@@ -58,6 +58,18 @@ export function looksLikePastedBipDefinitionTopography(topography: string): bool
   ) {
     return true;
   }
+  // BIP measurement/criteria language leaking into topography. "for any duration of time" /
+  // "for any length of time" is definition-metric wording, not an observed session action.
+  // NOTE: a bare distance like "more than 2 feet away from the adult" is acceptable observable
+  // topography (both approved example notes use it), so distance alone is NOT flagged here — only the
+  // open-ended duration/generalization phrasing that signals a pasted BIP definition.
+  if (
+    /\bfor any (?:duration|length|period|amount)(?:\s+of\s+time)?\b/i.test(t) ||
+    /\bany duration of time\b/i.test(t) ||
+    /\bfor any duration\b/i.test(t)
+  ) {
+    return true;
+  }
   // Long multi-clause definition style without a concrete single session action.
   if (
     t.length > 140 &&
