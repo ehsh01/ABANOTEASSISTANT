@@ -525,11 +525,12 @@ function preferencePredicatesForBehaviorPattern(behaviorName: string): ((n: stri
   }
   if (/\belope/.test(b) || /\bwandering\b/.test(b) || /\bbolting\b/.test(b) || /\brunning\s+away\b/.test(b)) {
     return [
+      // Prefer proximity/safety skills over generic task-engagement programs for wandering/elopement.
+      (n) => /walk within close|close distance|safety skills/i.test(n),
       (n) => /functional communication|\bfct\b/i.test(n),
       (n) => n.toLowerCase().includes("accepting no"),
       (n) => /visual schedule|3-element/i.test(n),
       (n) => /follow.*non-preferred|following non-preferred/i.test(n),
-      (n) => /walk within close|close distance|safety skills/i.test(n),
     ];
   }
   if (
@@ -574,12 +575,30 @@ export function behaviorReplacementCandidatesForMaladaptiveBehavior(
     .filter((p): p is string => p !== null)
     .filter((p) => !isHardMisfitReplacementForMaladaptiveBehavior(behaviorName, p, behaviorFunctions));
   mappedViable = [...new Set(mappedViable)];
+  const preferProximityForWandering =
+    /\belope/.test(behaviorName.toLowerCase()) ||
+    /\bwandering\b/.test(behaviorName.toLowerCase()) ||
+    /\bbolting\b/.test(behaviorName.toLowerCase()) ||
+    /\brunning\s+away\b/.test(behaviorName.toLowerCase());
+  const rankWanderingProgram = (n: string) =>
+    /walk within close|close distance|safety skills/i.test(n)
+      ? 0
+      : /time on task|^on[- ]?task/i.test(n)
+        ? 2
+        : 1;
   if (mappedViable.length > 0) {
+    // For wandering/elopement, prefer proximity/safety skills over time-on-task even when both are mapped.
+    if (preferProximityForWandering) {
+      mappedViable.sort((a, b) => rankWanderingProgram(a) - rankWanderingProgram(b));
+    }
     if (primary) {
       const functionMatched = mappedViable.filter((p) =>
         replacementProgramMatchesFunctionCategory(p, primary),
       );
       if (functionMatched.length > 0) {
+        if (preferProximityForWandering) {
+          functionMatched.sort((a, b) => rankWanderingProgram(a) - rankWanderingProgram(b));
+        }
         return functionMatched;
       }
     }
@@ -716,8 +735,10 @@ export function isMisfitReplacementForMaladaptiveBehavior(
   }
   if (
     (/\belope/.test(b) || /\bwandering\b/.test(b) || /\bbolting\b/.test(b) || /\brunning\s+away\b/.test(b)) &&
-    p === "on task behavior"
+    (/^on[- ]?task(?:\s+behavior)?$/i.test(program) || /time on task/i.test(program))
   ) {
+    // Prefer Walk within close distance (Safety Skills) for wandering/elopement. Time-on-task is a
+    // misfit unless the BIP map explicitly lists it for this behavior (handled above via mappedSafe).
     return true;
   }
   if (/\bphysical\s+aggression\b/.test(b) && /walk within close|close distance|safety skills?/i.test(p)) {
@@ -1052,6 +1073,13 @@ export function rebalanceRepeatedReplacementProgramsAcrossSegments(params: {
   authorizedProgramNames: string[];
   maladaptiveBehaviorFunctionsForHour?: (import("@workspace/db/schema").ClinicalFunction[] | null)[] | undefined;
   swapExplicitDuplicates?: boolean;
+  /**
+   * When no function-preferred distinct alternative remains, allow swapping a duplicate to ANY distinct
+   * authorized program that is not a genuine SAFETY (hard) misfit, so every ABC uses a different
+   * replacement program whenever the client/assessment has enough distinct programs. Prefers
+   * non-selected (assessment/client-linked) programs so auto-filled hours do not reuse selected ones.
+   */
+  allowFunctionRelaxedDistinctness?: boolean;
   slotLabel?: string;
 }): string[] {
   const {
@@ -1068,6 +1096,7 @@ export function rebalanceRepeatedReplacementProgramsAcrossSegments(params: {
     authorizedProgramNames,
     maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
     swapExplicitDuplicates = false,
+    allowFunctionRelaxedDistinctness = false,
     slotLabel = "Segment",
   } = params;
 
@@ -1132,6 +1161,24 @@ export function rebalanceRepeatedReplacementProgramsAcrossSegments(params: {
         .filter((id) => isUsable(id))
         .sort((a, b) => (selectedIdSet.has(a) ? 0 : 1) - (selectedIdSet.has(b) ? 0 : 1));
       pick = sorted[0];
+    }
+
+    if (pick === undefined && allowFunctionRelaxedDistinctness) {
+      // Distinctness fallback: no function-preferred alternative remains for this behavior, but the
+      // client/assessment still has unused authorized programs. Per the directive that every ABC use a
+      // different replacement program whenever enough programs exist, swap to any DISTINCT authorized
+      // program that is not a genuine SAFETY (hard) misfit. Prefer non-selected programs so extra hours
+      // draw on assessment/client-linked programs instead of reusing the ones selected for the session.
+      const relaxed = poolIds
+        .filter((id) => {
+          const n = idToName.get(id)?.trim();
+          if (!n) return false;
+          const key = normalizeReplacementProgramKey(n);
+          if (key === currentKey || usedKeys.has(key)) return false;
+          return !isHardMisfitReplacementForMaladaptiveBehavior(behavior, n, hourFunctions);
+        })
+        .sort((a, b) => (selectedIdSet.has(a) ? 1 : 0) - (selectedIdSet.has(b) ? 1 : 0));
+      pick = relaxed[0];
     }
 
     if (pick === undefined) {
@@ -1318,8 +1365,28 @@ export function ensureReplacementProgramAlignmentForSegments(params: {
     );
   }
 
+  // Prefer Walk within close distance (Safety Skills) for wandering/elopement over Time on task when
+  // the proximity program is authorized for the client — even if Time on task was BIP-mapped.
+  swapped.push(
+    ...rebalanceWanderingSafetyProximityPrograms({
+      segmentCount: S,
+      maladaptiveBehaviorForHour: beh,
+      names,
+      rbtActionsOnlyOutcomeForHour: rbt,
+      programIdForHour: pids,
+      explicitProgramIdByHour: explicit,
+      poolIds: rebalancePoolIds,
+      idToName,
+      selectedIdSet,
+      authorizedProgramNames,
+      slotLabel,
+    }),
+  );
+
   // Final pass: ensure no replacement program repeats across the note's ABC segments when a distinct
-  // authorized alternative is available for the duplicated segment's behavior.
+  // authorized alternative is available. When the session has more hours than distinct function-preferred
+  // programs, `allowFunctionRelaxedDistinctness` lets the pass reach for any other authorized, non-safety
+  // program so every ABC still gets a different replacement program whenever enough programs exist.
   swapped.push(
     ...rebalanceRepeatedReplacementProgramsAcrossSegments({
       segmentCount: S,
@@ -1334,10 +1401,84 @@ export function ensureReplacementProgramAlignmentForSegments(params: {
       behaviorToReplacementsMap,
       authorizedProgramNames,
       maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
+      allowFunctionRelaxedDistinctness: true,
       slotLabel,
     }),
   );
 
+  return swapped;
+}
+
+/**
+ * When Wandering Away / elopement is paired with Time on task (or On task Behavior) but the client
+ * has an authorized "Walk within close distance of adult (Safety Skills)" program, swap to that
+ * proximity program so the ABC documents the safety skill that matches the topography.
+ */
+export function rebalanceWanderingSafetyProximityPrograms(params: {
+  segmentCount: number;
+  maladaptiveBehaviorForHour: string[];
+  names: string[];
+  rbtActionsOnlyOutcomeForHour: boolean[];
+  programIdForHour: (number | null)[];
+  explicitProgramIdByHour: (number | null | undefined)[];
+  poolIds: number[];
+  idToName: Map<number, string>;
+  selectedIdSet: Set<number>;
+  authorizedProgramNames: string[];
+  slotLabel?: string;
+}): string[] {
+  const {
+    segmentCount: S,
+    maladaptiveBehaviorForHour: beh,
+    names,
+    rbtActionsOnlyOutcomeForHour: rbt,
+    programIdForHour: pids,
+    explicitProgramIdByHour: explicit,
+    poolIds,
+    idToName,
+    selectedIdSet,
+    authorizedProgramNames,
+    slotLabel = "Segment",
+  } = params;
+
+  const walkCloseName =
+    authorizedProgramNames.find((n) => /walk within close|close distance|safety skills/i.test(n)) ??
+    [...idToName.values()].find((n) => /walk within close|close distance|safety skills/i.test(n));
+  if (!walkCloseName) return [];
+
+  const walkCloseId =
+    [...idToName.entries()].find(
+      ([, n]) => normalizeReplacementProgramKey(n) === normalizeReplacementProgramKey(walkCloseName),
+    )?.[0] ?? null;
+  if (walkCloseId === null || !poolIds.includes(walkCloseId)) return [];
+
+  const swapped: string[] = [];
+  for (let s = 0; s < S; s++) {
+    const behavior = beh[s]?.trim() ?? "";
+    if (!behavior) continue;
+    if (
+      !/\belope/.test(behavior.toLowerCase()) &&
+      !/\bwandering\b/.test(behavior.toLowerCase()) &&
+      !/\bbolting\b/.test(behavior.toLowerCase()) &&
+      !/\brunning\s+away\b/.test(behavior.toLowerCase())
+    ) {
+      continue;
+    }
+    if (typeof explicit[s] === "number") continue;
+    const current = names[s]?.trim() ?? "";
+    if (!current) continue;
+    if (/walk within close|close distance|safety skills/i.test(current)) continue;
+    if (!/^on[- ]?task(?:\s+behavior)?$/i.test(current) && !/time on task/i.test(current)) {
+      continue;
+    }
+
+    names[s] = walkCloseName;
+    pids[s] = walkCloseId;
+    rbt[s] = !selectedIdSet.has(walkCloseId);
+    swapped.push(
+      `${slotLabel} ${s + 1} (${behavior}): replacement program rebalanced from "${current}" to "${walkCloseName}" to match wandering/elopement with the approved proximity/safety skills program.`,
+    );
+  }
   return swapped;
 }
 

@@ -76,12 +76,14 @@ The server-provided SessionContext is frozen and authoritative:
 - Do not use learner names, initials, caregivers, parents, guardians, aunts, uncles, siblings, or other relatives, subjective/emotional language, diagnoses, inferred intent, or unsupported clinical facts. Present people belong only in the server opening sentence.
 - Do not begin antecedent (or any narrative field) with the word "During". Vary openings so hour paragraphs sound organic (e.g. "The RBT presented…", "Later, the RBT arranged…", "Next, materials were set out…").
 - When behaviorTopography is present, treat it as an assessment action bank only: paraphrase those observable actions into natural session-episode topography (what the client did in this hour). Use **exactly one** concrete action for this segment (e.g. for Excessive Motor Behavior, pick flapping hands OR head movement OR pacing — not the whole BIP list). Never paste BIP/VIP/assessment definition text, scoring language, "defined as," "any instance," "Status:", "To be initiated," or catalog labels alone. Never return only the behavior label or a generic phrase such as "motor behavior" or "elopement."
+- For **Task Refusal**, topography must describe observable *refusal* (e.g. not initiating the demand within 10 seconds, pushing materials away, turning away)—never the appropriate activity itself (never "by washing hands" / "by brushing teeth" / "by completing the worksheet").
+- For **Wandering Away / elopement / bolting**, topography must be a concrete leaving-boundary action observed this session (e.g. walking several feet toward the hallway without permission)—never paste the BIP operational definition.
 - Keep all narrative fields sounding like a written session note: concise, concrete client/RBT actions—not copied plan language.
 - Reinforcers in narrative fields must come from SessionContext.reinforcementPreferences (or approved plain "praise"). Never write "social praise", "verbal praise", or "behavior-specific praise" — reviewers treat those as unauthorized intervention labels. Use plain "praise" only. Never write bare "preferred toys" / "a preferred toy" / unspecified "toys" as the delivered reinforcer—name the specific toy preference on file (e.g. sensory toys, spinning toys, balls, Disney dolls). If only the umbrella "Preferred toys" exists, prefer naming another listed item/activity instead of inventing a toy type.
 - When clientAgeYears is known and under 14, never mention YouTube (or YouTube videos) as a reward, reinforcer, or activity. Use another preference from reinforcementPreferences instead.
 - If activityAntecedent is non-null, include that exact text in antecedent.
 - Do not write prose opening/closing text, headings, markdown, counts, fractions, percentages, trial totals, durations, or invented metrics. The server owns all metrics and final prose.
-- Each intervention application describes only how the exact assigned intervention was applied.
+- Each intervention application must clearly describe what the RBT did to implement the procedure (restate contingency, re-present demand, redirect, block, arrange materials)—not only a thin contingency phrase. For Physical Aggression and Property Destruction after Premack/demand interventions, include restating/re-presenting the demand (and for Property Destruction, redirecting to retrieve the item) before client-response detail.
 - When the assigned intervention is Premack principle (or Premack), describe only the demand-before-reinforcer contingency in plain prose (e.g. "required cleanup before access to the tablet"). Never write "first-then", "first/then", "First-Then Statement", or similar labels — reviewers treat those as unauthorized interventions unless they appear on the client's approved intervention list.
 - Teaching/prompting and topography clauses must be gerund phrases suitable after "by" (e.g. "repeating the instruction…", "swearing after the cleanup instruction", "making open-hand contact with the RBT's arm") — do not start those fields with "the RBT" or "the client".
 - For every non-acquisition segment, responseToIntervention must begin with "The client" and state at least one observable client action after intervention; RBT actions alone are not an outcome. resultSummary must also remain observable. Do not claim mastery or progress beyond supplied facts.
@@ -135,35 +137,35 @@ const NOTE_PLAN_JSON_SCHEMA = {
               description:
                 "One concise observable setup/context sentence. Do not begin with 'During'; vary openings. If activityAntecedent is provided, include that exact text.",
             },
-            topography: {
-              type: "string",
-              minLength: 1,
-              description:
-                "Exactly ONE concrete observable action the client did this hour (e.g. 'making open-hand contact with the RBT's arm'). Never paste the full BIP list, definition/scoring text, 'Status:', 'To be initiated', or the bare behavior label.",
-            },
-            interventions: {
-              type: "array",
-              description:
-                "The exact assigned intervention(s) for this segment, copied verbatim from context. Do not add, drop, or reorder. Empty for acquisition-only segments.",
-              items: {
-                type: "object",
-                additionalProperties: false,
-                required: ["label", "application"],
-                properties: {
-                  label: {
-                    type: "string",
-                    minLength: 1,
-                    description: "Exact intervention label from context (verbatim, no paraphrase).",
-                  },
-                  application: {
+                topography: {
                     type: "string",
                     minLength: 1,
                     description:
-                      "Gerund phrase describing only how this exact intervention was applied. For Premack, describe only the demand-before-reinforcer contingency; never write 'first-then'.",
+                      "Exactly ONE concrete observable maladaptive action the client did this hour (e.g. 'making open-hand contact with the RBT's arm', 'not initiating the handwashing routine within 10 seconds', 'walking toward the hallway without permission'). Never paste BIP definitions, scoring text, 'Status:', or the bare behavior label. For Task Refusal never name the appropriate activity itself.",
                   },
-                },
-              },
-            },
+                  interventions: {
+                    type: "array",
+                    description:
+                      "The exact assigned intervention(s) for this segment, copied verbatim from context. Do not add, drop, or reorder. Empty for acquisition-only segments.",
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["label", "application"],
+                      properties: {
+                        label: {
+                          type: "string",
+                          minLength: 1,
+                          description: "Exact intervention label from context (verbatim, no paraphrase).",
+                        },
+                        application: {
+                          type: "string",
+                          minLength: 1,
+                          description:
+                            "Gerund phrase describing what the RBT did to apply this intervention (restate contingency, re-present demand, redirect, block, arrange). For Premack include demand-before-reinforcer detail; never write 'first-then'. For Physical Aggression / Property Destruction, include restating/re-presenting the demand (and retrieving redirected materials when relevant).",
+                        },
+                      },
+                    },
+                  },
             responseToIntervention: {
               type: "string",
               minLength: 1,
@@ -223,7 +225,7 @@ export function isOpenAINoteGenerationConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-16.schema-descriptions-distinct-program-v2";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-18.audit-topo-wandering-safety-v1";
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
   .update("\u0000")

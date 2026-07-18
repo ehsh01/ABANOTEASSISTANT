@@ -8,6 +8,7 @@ import {
 import {
   assignedBehaviorAllowsResponseBlockSafetyChain,
   isPhysicalAggressionBehaviorLabel,
+  isPropertyDestructionBehaviorLabel,
 } from "./response-block-eligibility";
 import { findResponseBlockInterventionLabel, selectSecondSafetyChainIntervention } from "./safety-chain-enforcement";
 import {
@@ -24,12 +25,16 @@ import {
   elopementEpisodeLacksObservableTopography,
   isElopementFamilyBehaviorLabel,
   isIncompleteTopographyAction,
+  isTaskRefusalBehaviorLabel,
   isUnusableStoredTopography,
   lastResortObservableTopographyForBehavior,
+  looksLikePastedBipDefinitionTopography,
   paragraphReflectsStoredTopography,
   pickSingleTopographyActionForSegment,
   recoverTopographyFromSegmentProse,
   splitTopographyActionAlternatives,
+  taskRefusalTopographyDescribesAppropriateBehavior,
+  taskRefusalTopographyFromAntecedent,
 } from "./maladaptive-behavior-topography";
 import { filterReinforcementPreferencesForNote } from "./reinforcer-preferences";
 
@@ -261,6 +266,31 @@ export function shouldPreferStoredTopographyOverModel(
   if (model.toLowerCase() === behaviorLabel.trim().toLowerCase()) return true;
   if (!containsObservableClinicalAction(model)) return true;
 
+  // Never paste BIP operational-definition dumps into the note when the model already wrote a
+  // concrete session action (especially Wandering Away / elopement family).
+  if (looksLikePastedBipDefinitionTopography(stored) && containsObservableClinicalAction(model)) {
+    if (
+      isElopementFamilyBehaviorLabel(behaviorLabel) &&
+      !elopementEpisodeLacksObservableTopography(
+        `The client manifested ${behaviorLabel} by ${model}.`,
+        behaviorLabel,
+      )
+    ) {
+      return false;
+    }
+    if (!isElopementFamilyBehaviorLabel(behaviorLabel)) {
+      return false;
+    }
+  }
+
+  // Task Refusal must describe refusal, not the appropriate activity ("washing hands").
+  if (
+    isTaskRefusalBehaviorLabel(behaviorLabel) &&
+    taskRefusalTopographyDescribesAppropriateBehavior(model)
+  ) {
+    return true;
+  }
+
   // Physical Aggression BIP definitions are usually vague ("any part of another person's body …").
   // When the model names a specific person-directed contact action with a body part/target, keep it
   // so the note documents exactly what the client did (e.g. "made contact with the RBT's arm").
@@ -276,6 +306,8 @@ export function shouldPreferStoredTopographyOverModel(
     isElopementFamilyBehaviorLabel(behaviorLabel) &&
     elopementEpisodeLacksObservableTopography(manifested, behaviorLabel)
   ) {
+    // Prefer stored only when it is a usable single-action topography — not a BIP definition dump.
+    if (looksLikePastedBipDefinitionTopography(stored)) return false;
     return true;
   }
 
@@ -284,6 +316,13 @@ export function shouldPreferStoredTopographyOverModel(
   // Using the same threshold here means: keep the model's natural wording when it genuinely describes
   // the stored actions, otherwise fall back to the sanitized stored topography (which is derived from
   // the operational definition and therefore always satisfies the gate) so generation is not blocked.
+  // Exception: for elopement/wandering, never force a BIP definition dump over a usable model episode.
+  if (
+    isElopementFamilyBehaviorLabel(behaviorLabel) &&
+    looksLikePastedBipDefinitionTopography(stored)
+  ) {
+    return false;
+  }
   return !paragraphReflectsStoredTopography(manifested, stored, 2);
 }
 
@@ -484,20 +523,35 @@ export function groundNotePlanWithFrozenContext(
             locked.behaviorTopography,
             locked.behaviorLabel,
           ) &&
-          locked.behaviorTopography
+          locked.behaviorTopography &&
+          !looksLikePastedBipDefinitionTopography(locked.behaviorTopography)
         ) {
           topography = locked.behaviorTopography;
-        } else if (isUnusableStoredTopography(topography)) {
-          // Never keep BIP status placeholders ("Status: To be initiated") in the manifested-behavior
-          // slot. Prefer stored definition → cues already in other segment fields → last-resort
-          // observable phrase for that behavior family. (BIP extract already ran upstream in
-          // enrichMaladaptiveTargetsWithAssessmentTopography before the context was frozen.)
+        } else if (
+          isUnusableStoredTopography(topography) ||
+          looksLikePastedBipDefinitionTopography(topography) ||
+          (isTaskRefusalBehaviorLabel(locked.behaviorLabel) &&
+            taskRefusalTopographyDescribesAppropriateBehavior(topography))
+        ) {
+          // Never keep BIP status placeholders, pasted BIP definitions, or Task Refusal framed as
+          // the appropriate activity ("washing hands"). Prefer session refusal/leaving topography.
+          const fromAntecedent =
+            isTaskRefusalBehaviorLabel(locked.behaviorLabel)
+              ? taskRefusalTopographyFromAntecedent(sanitized.antecedent)
+              : null;
           const fromStored =
-            locked.behaviorTopography && !isUnusableStoredTopography(locked.behaviorTopography)
+            !fromAntecedent &&
+            locked.behaviorTopography &&
+            !isUnusableStoredTopography(locked.behaviorTopography) &&
+            !looksLikePastedBipDefinitionTopography(locked.behaviorTopography) &&
+            !(
+              isTaskRefusalBehaviorLabel(locked.behaviorLabel) &&
+              taskRefusalTopographyDescribesAppropriateBehavior(locked.behaviorTopography)
+            )
               ? locked.behaviorTopography
               : "";
           const fromProse =
-            !fromStored
+            !fromAntecedent && !fromStored
               ? recoverTopographyFromSegmentProse(locked.behaviorLabel, [
                   sanitized.responseToIntervention,
                   sanitized.resultSummary,
@@ -505,10 +559,10 @@ export function groundNotePlanWithFrozenContext(
                 ])
               : null;
           const fromLastResort =
-            !fromStored && !fromProse
+            !fromAntecedent && !fromStored && !fromProse
               ? lastResortObservableTopographyForBehavior(locked.behaviorLabel)
               : null;
-          topography = fromStored || fromProse || fromLastResort || "";
+          topography = fromAntecedent || fromStored || fromProse || fromLastResort || "";
         }
 
         // One observable action per ABC — never dump the full BIP "including A, B, or C" list.
@@ -532,27 +586,79 @@ export function groundNotePlanWithFrozenContext(
         if (
           !topography.trim() ||
           isUnusableStoredTopography(topography) ||
-          isIncompleteTopographyAction(topography)
+          isIncompleteTopographyAction(topography) ||
+          looksLikePastedBipDefinitionTopography(topography) ||
+          (isTaskRefusalBehaviorLabel(locked.behaviorLabel) &&
+            taskRefusalTopographyDescribesAppropriateBehavior(topography))
         ) {
           topography =
+            (isTaskRefusalBehaviorLabel(locked.behaviorLabel)
+              ? taskRefusalTopographyFromAntecedent(sanitized.antecedent)
+              : null) ||
             (locked.behaviorTopography &&
             !isUnusableStoredTopography(locked.behaviorTopography) &&
-            !isIncompleteTopographyAction(locked.behaviorTopography)
+            !isIncompleteTopographyAction(locked.behaviorTopography) &&
+            !looksLikePastedBipDefinitionTopography(locked.behaviorTopography)
               ? locked.behaviorTopography
               : null) ||
             lastResortObservableTopographyForBehavior(locked.behaviorLabel) ||
             topography;
         }
       }
+
+      const interventions = sanitized.interventions.map((intervention) => ({
+        ...intervention,
+        application: enrichInterventionApplicationForBehavior(
+          intervention.application,
+          locked.behaviorLabel,
+          intervention.label,
+        ),
+      }));
+
       const responseToIntervention =
         !locked.acquisitionOnly &&
         !containsObservableClientOutcome(sanitized.responseToIntervention) &&
         containsObservableClientOutcome(sanitized.resultSummary)
           ? sanitized.resultSummary
           : sanitized.responseToIntervention;
-      return { ...sanitized, topography, responseToIntervention };
+      return { ...sanitized, topography, interventions, responseToIntervention };
     }),
   };
+}
+
+/**
+ * Ensure Physical Aggression / Property Destruction intervention-application clauses document what
+ * the RBT did (restate contingency, re-present demand, redirect to retrieve) — not only a thin
+ * Premack "required X before access to Y" contingency without therapist action detail.
+ */
+export function enrichInterventionApplicationForBehavior(
+  application: string,
+  behaviorLabel: string,
+  interventionLabel: string,
+): string {
+  const app = application.trim().replace(/\s+/g, " ");
+  if (!app) return app;
+  const behavior = behaviorLabel.trim();
+  const alreadyRich =
+    /\b(?:restat(?:ed|ing)|re-?present(?:ed|ing)|redirect(?:ed|ing)|block(?:ed|ing)|retriev(?:ed|ing)|maintain(?:ed|ing)\s+the\s+(?:demand|expectation)|kept\s+the\s+demand)\b/i.test(
+      app,
+    );
+  if (alreadyRich) return app;
+
+  const thinPremack =
+    /\brequir(?:ed|ing)\b.+\bbefore\s+access\b/i.test(app) ||
+    (/premack/i.test(interventionLabel) && /\bbefore\s+access\b/i.test(app));
+
+  if (isPropertyDestructionBehaviorLabel(behavior) && (thinPremack || app.length < 90)) {
+    return "redirecting the client to retrieve the item, re-presenting the task demand, and requiring completion of the activity before access to the reinforcer";
+  }
+  if (isPhysicalAggressionBehaviorLabel(behavior) && thinPremack) {
+    // Keep the reinforcer/item cue from the thin clause when present.
+    const accessMatch = app.match(/\bbefore\s+access\s+to\s+(.+?)(?:\.|$)/i);
+    const accessTarget = accessMatch?.[1]?.trim().replace(/\.$/, "") || "the preferred item";
+    return `restating the contingency, re-presenting the demand, and requiring completion of the presented task before access to ${accessTarget}`;
+  }
+  return app;
 }
 
 const SUBJECTIVE_RE =

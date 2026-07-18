@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  lastResortObservableTopographyForBehavior,
+  looksLikePastedBipDefinitionTopography,
   pickSingleTopographyActionForSegment,
   pickStoredTopographyActionForSegment,
   splitTopographyActionAlternatives,
+  taskRefusalTopographyDescribesAppropriateBehavior,
+  taskRefusalTopographyFromAntecedent,
 } from "./maladaptive-behavior-topography";
 
 describe("Physical Aggression topography single-action selection", () => {
@@ -106,5 +110,45 @@ describe("semicolon-delimited BIP topography lists", () => {
         0,
       ),
     ).toBe("contacting any part of another person's body with a foot");
+  });
+});
+
+describe("Task Refusal / Wandering topography audit guards", () => {
+  it("detects Task Refusal topography that names the appropriate activity", () => {
+    expect(taskRefusalTopographyDescribesAppropriateBehavior("washing hands")).toBe(true);
+    expect(taskRefusalTopographyDescribesAppropriateBehavior("brushing teeth")).toBe(true);
+    expect(
+      taskRefusalTopographyDescribesAppropriateBehavior(
+        "not initiating the handwashing routine within 10 seconds after the instruction was delivered",
+      ),
+    ).toBe(false);
+  });
+
+  it("rebuilds refusal topography from the antecedent activity", () => {
+    expect(
+      taskRefusalTopographyFromAntecedent(
+        "The RBT presented a toothbrushing routine with the toothbrush and sink materials ready.",
+      ),
+    ).toMatch(/not initiating the toothbrushing routine/i);
+  });
+
+  it("detects pasted BIP definition dumps for wandering", () => {
+    expect(
+      looksLikePastedBipDefinitionTopography(
+        "Defined as any instance in which the client leaves the supervised area without permission from an adult when the client is expected to remain within the designated area.",
+      ),
+    ).toBe(true);
+    expect(
+      looksLikePastedBipDefinitionTopography(
+        "walking several feet away from the RBT toward the hallway without permission",
+      ),
+    ).toBe(false);
+  });
+
+  it("provides last-resort topography for Task Refusal and Wandering Away", () => {
+    expect(lastResortObservableTopographyForBehavior("Task Refusal")).toMatch(/not initiating/i);
+    expect(lastResortObservableTopographyForBehavior("Wandering Away")).toMatch(
+      /walking several feet away/i,
+    );
   });
 });

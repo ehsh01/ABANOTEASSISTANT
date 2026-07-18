@@ -76,6 +76,7 @@ import {
   sanitizeReinforcerNarrativeText,
 } from "./reinforcer-preferences";
 import {
+  canonicalizeInterventionCatalog,
   normalizeClinicalBodyEscapedQuotes,
   normalizeClinicalBodyInterventionActionAttribution,
   normalizeClinicalBodyInterventionDetailPhrases,
@@ -545,11 +546,11 @@ export async function generateSessionNoteForClient(params: {
     isLanguageMaladaptiveBehaviorLabel(b),
   );
 
-  let interventionsForNote = profile?.interventions ?? [];
+  let interventionsForNote = canonicalizeInterventionCatalog(profile?.interventions ?? []);
   if (structuredForNote) {
     interventionsForNote = intersectCatalog(
       interventionsForNote,
-      structuredForNote.interventions,
+      canonicalizeInterventionCatalog(structuredForNote.interventions),
     );
     if (interventionsForNote.length === 0) {
       return {

@@ -9,6 +9,66 @@ export function isElopementFamilyBehaviorLabel(behaviorName: string): boolean {
   );
 }
 
+export function isTaskRefusalBehaviorLabel(behaviorName: string): boolean {
+  return /\btask\s+refusal\b/i.test(behaviorName.trim());
+}
+
+/**
+ * True when Task Refusal topography describes the *appropriate* activity (e.g. "washing hands")
+ * instead of an observable refusal (not initiating, pushing materials away, turning away, etc.).
+ */
+export function taskRefusalTopographyDescribesAppropriateBehavior(topography: string): boolean {
+  const t = topography.trim().replace(/\s+/g, " ");
+  if (!t) return false;
+  const refusalCues =
+    /\b(?:not\s+initiat|refus(?:ed|ing|al)?|push(?:ed|ing|es)?\s+(?:away|materials|items)|turn(?:ed|ing)\s+(?:away|from|his|her|their)\s+head|walk(?:ed|ing)\s+away|ignor(?:ed|ing)|did\s+not|does\s+not|doesn't|fail(?:ed|ing)?\s+to|without\s+(?:begin|start|initiat)|left\s+the\s+(?:table|task|area)|drop(?:ped|ping)\s+(?:materials|items)|threw\s+(?:materials|items)|no\s+response|remain(?:ed|ing)\s+(?:silent|still)|sit(?:ting)?\s+(?:idle|still))\b/i;
+  if (refusalCues.test(t)) return false;
+  // Leading compliance/engagement verbs used as if they were the maladaptive topography.
+  if (
+    /^(?:washing|brushing|cleaning|completing|writing|matching|sorting|putting|placing|picking|following|sitting|engaging|participating|performing|doing|starting|beginning|initiating)\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  // Short activity noun phrases with no refusal framing ("handwashing", "the toothbrushing routine").
+  if (
+    t.length < 80 &&
+    /\b(?:hand\s*-?\s*wash|toothbrush|brush(?:ing)?\s+teeth|cleanup|clean\s*-?\s*up|worksheet|matching|sorting|table\s*-?\s*work)\b/i.test(
+      t,
+    ) &&
+    !refusalCues.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * BIP operational-definition dumps pasted into topography (scoring frames, "any instance", long
+ * legalese). Session notes must use a single observed action, not the plan definition.
+ */
+export function looksLikePastedBipDefinitionTopography(topography: string): boolean {
+  const t = topography.trim().replace(/\s+/g, " ");
+  if (!t) return false;
+  if (
+    /\b(?:defined as|operational(?:ly)?\s+defined|any\s+instance|any\s+episode|characterized by|scored\s+after|episodes?\s+are\s+scored)\b/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+  // Long multi-clause definition style without a concrete single session action.
+  if (
+    t.length > 140 &&
+    /\b(?:without permission|supervised area|designated area|expected to remain|when the client is)\b/i.test(t) &&
+    /(?:and|or|,)/.test(t)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 /**
  * BIP program-tracking / status lines and empty placeholders must never be used as topography.
  * Profile fields sometimes store "Status: To be initiated" which is not an observable form of the
@@ -42,6 +102,12 @@ export function isUnusableStoredTopography(text: string | null | undefined): boo
 export function lastResortObservableTopographyForBehavior(behaviorLabel: string): string | null {
   const b = behaviorLabel.trim().toLowerCase();
   if (!b) return null;
+  if (/\btask\s+refusal\b/.test(b)) {
+    return "not initiating the presented demand within 10 seconds after the instruction was delivered";
+  }
+  if (isElopementFamilyBehaviorLabel(behaviorLabel)) {
+    return "walking several feet away from the RBT toward the hallway without permission";
+  }
   if (/\bclimb/.test(b)) {
     return "placing a foot or knees on furniture or elevated surfaces to reach preferred items";
   }
@@ -56,6 +122,28 @@ export function lastResortObservableTopographyForBehavior(behaviorLabel: string)
   }
   if (/\bphysical\s+aggression\b/.test(b)) {
     return "contacting another person's body with an open hand";
+  }
+  return null;
+}
+
+/**
+ * When Task Refusal topography wrongly names the activity, rebuild a refusal topography from the
+ * antecedent's activity cues when possible (handwashing, toothbrushing, cleanup, etc.).
+ */
+export function taskRefusalTopographyFromAntecedent(antecedent: string): string | null {
+  const a = antecedent.trim().replace(/\s+/g, " ");
+  if (!a) return null;
+  if (/\bhand\s*-?\s*wash|wash(?:ing)?\s+hands\b/i.test(a)) {
+    return "not initiating the handwashing routine within 10 seconds after the instruction was delivered";
+  }
+  if (/\btooth\s*-?\s*brush|brush(?:ing)?\s+teeth\b/i.test(a)) {
+    return "not initiating the toothbrushing routine within 10 seconds after the instruction was delivered";
+  }
+  if (/\bclean\s*-?\s*up|cleanup\b/i.test(a)) {
+    return "not initiating the cleanup demand within 10 seconds after the instruction was delivered";
+  }
+  if (/\b(?:worksheet|writing|table\s*-?\s*work|matching|sorting)\b/i.test(a)) {
+    return "not initiating the presented table-work demand within 10 seconds after the instruction was delivered";
   }
   return null;
 }

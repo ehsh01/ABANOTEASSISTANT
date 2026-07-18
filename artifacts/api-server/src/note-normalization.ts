@@ -22,6 +22,97 @@ export function catalogInterventionBaseWithoutParenthetical(full: string): strin
   return base.length > 0 ? base : null;
 }
 
+/**
+ * Bare clinical-function tokens that are sometimes mis-extracted into the interventions list
+ * (e.g. BIP line "Hypothesized function: Escape" → profile intervention "Escape"). These are
+ * **not** catalog interventions.
+ */
+export function isBareClinicalFunctionInterventionLabel(name: string): boolean {
+  return /^(?:escape|attention|tangible|automatic|sensory)$/i.test(name.trim());
+}
+
+/**
+ * Safe expansions when a bare function token appears where an intervention name is required.
+ * Only map when the expanded form is the unambiguous BIP procedure for that function.
+ */
+const BARE_FUNCTION_INTERVENTION_ALIAS: Record<string, string> = {
+  escape: "Escape Extinction",
+};
+
+/**
+ * Rewrite a truncated / bare-function intervention label to its exact catalog form when possible.
+ * - "Escape" → existing catalog "Escape Extinction" (or the canonical alias when the catalog lacks it)
+ * - other bare function tokens (Attention, Tangible, …) → null (drop; not interventions)
+ * - otherwise return the trimmed original
+ */
+export function canonicalizeInterventionLabel(
+  label: string,
+  interventionCatalog: readonly string[] = [],
+): string | null {
+  const trimmed = label.trim().replace(/\s+/g, " ");
+  if (!trimmed) return null;
+  if (!isBareClinicalFunctionInterventionLabel(trimmed)) return trimmed;
+
+  const key = trimmed.toLowerCase();
+  const alias = BARE_FUNCTION_INTERVENTION_ALIAS[key];
+  if (!alias) return null;
+
+  const existing = interventionCatalog.find(
+    (n) => n.trim().toLowerCase() === alias.toLowerCase(),
+  );
+  if (existing) return existing.trim();
+
+  // Catalog may only have the bare token (mis-extraction). Promote to the canonical BIP name so
+  // notes never document "Escape" as an intervention.
+  return alias;
+}
+
+/**
+ * Normalize a client's intervention list for note generation: expand bare function tokens to real
+ * procedure names and drop unrecognized bare-function labels. Preserves first-seen order.
+ */
+export function canonicalizeInterventionCatalog(interventions: readonly string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const raw of interventions) {
+    const next = canonicalizeInterventionLabel(raw, interventions);
+    if (!next) continue;
+    const key = next.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(next);
+  }
+  return out;
+}
+
+/**
+ * Longest catalog label that the given naming-sentence token is a strict word-prefix of
+ * (e.g. "Escape" → "Escape Extinction"). Returns null when the token is already an exact catalog
+ * entry or no longer catalog form starts with it as whole words.
+ */
+export function longerCatalogInterventionForPrefix(
+  prefix: string,
+  interventionCatalog: readonly string[],
+): string | null {
+  const p = prefix.trim().replace(/\s+/g, " ");
+  if (!p || p.length < 4) return null;
+  const pLower = p.toLowerCase();
+  if (interventionCatalog.some((n) => n.trim().toLowerCase() === pLower)) {
+    return null;
+  }
+  let best: string | null = null;
+  for (const full of interventionCatalog) {
+    const f = full.trim().replace(/\s+/g, " ");
+    if (!f || f.toLowerCase() === pLower) continue;
+    // Prefix must be a whole-word prefix of the catalog label ("Escape" ⊂ "Escape Extinction").
+    if (!f.toLowerCase().startsWith(`${pLower} `) && !f.toLowerCase().startsWith(`${pLower}(`)) {
+      continue;
+    }
+    if (!best || f.length > best.length) best = f;
+  }
+  return best;
+}
+
 export function phraseMatchesAuthorizedIntervention(phrase: string, interventionCatalog: string[]): boolean {
   const p = phrase.trim().toLowerCase();
   if (!p) return false;
@@ -333,7 +424,7 @@ export function normalizeClauseAfterBy(text: string): string {
   return t;
 }
 
-/** Fix partial intervention labels (e.g. DRI without parenthetical) before validation. */
+/** Fix partial intervention labels (e.g. DRI without parenthetical, Escape → Escape Extinction). */
 export function normalizeClinicalBodyInterventionLabels(body: string, interventionCatalog: string[]): string {
   let out = body;
   for (const full of interventionCatalog) {
@@ -342,6 +433,23 @@ export function normalizeClinicalBodyInterventionLabels(body: string, interventi
     const re = new RegExp(`((?:implemented|applied)\\s+)${escapeRegExp(base)}(\\s*\\.)`, "gi");
     out = out.replace(re, `$1${full}$2`);
   }
+  // Truncated multi-word catalog names: "implemented Escape." → "implemented Escape Extinction."
+  // Prefer longer catalog forms; skip when the prefix is itself an exact catalog entry.
+  const namingTokenRe = /((?:implemented|applied)\s+)([A-Za-z][A-Za-z0-9'/-]*(?:\s+[A-Za-z][A-Za-z0-9'/-]*){0,6})(\s*\.)/gi;
+  out = out.replace(namingTokenRe, (match, lead: string, token: string, trail: string) => {
+    const longer = longerCatalogInterventionForPrefix(token, interventionCatalog);
+    if (!longer) return match;
+    return `${lead}${longer}${trail}`;
+  });
+  // Bare function token with no longer catalog form yet (e.g. catalog only had "Escape"): promote alias.
+  out = out.replace(
+    /((?:implemented|applied)\s+)(Escape|Attention|Tangible|Automatic|Sensory)(\s*\.)/gi,
+    (match, lead: string, token: string, trail: string) => {
+      const canonical = canonicalizeInterventionLabel(token, interventionCatalog);
+      if (!canonical || canonical.toLowerCase() === token.toLowerCase()) return match;
+      return `${lead}${canonical}${trail}`;
+    },
+  );
   // Exact BIP string is typically "Visual Supports" (plural); rewrite singular naming sentences.
   const visualSupportsExact = interventionCatalog.find((n) => /^visual supports$/i.test(n.trim()));
   if (visualSupportsExact) {

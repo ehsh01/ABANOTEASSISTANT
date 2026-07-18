@@ -53,6 +53,7 @@ import {
   DEFAULT_UNAUTHORIZED_REPLACEMENT_LIKE_PHRASES,
   catalogInterventionBaseWithoutParenthetical,
   escapeRegExp,
+  longerCatalogInterventionForPrefix,
   phraseMatchesAuthorizedIntervention,
   phraseMatchesAuthorizedReplacementProgram,
 } from "./note-normalization";
@@ -865,6 +866,17 @@ function findInterventionPartialMatchIssue(paragraph: string, catalog: string[])
     if (re.test(paragraph)) {
       const suffix = full.match(/\(([^)]+)\)\s*$/)?.[1] ?? "acronym";
       return `Interventions: use exact catalog string "${full}" including (${suffix}), not "${base}" without the parenthetical.`;
+    }
+  }
+  // Truncated multi-word names: "Escape" when catalog has "Escape Extinction".
+  const namingTokenRe =
+    /(?:implemented|applied)\s+([A-Za-z][A-Za-z0-9'/-]*(?:\s+[A-Za-z][A-Za-z0-9'/-]*){0,6})\s*\./gi;
+  let m: RegExpExecArray | null;
+  while ((m = namingTokenRe.exec(paragraph)) !== null) {
+    const token = m[1]!.trim();
+    const longer = longerCatalogInterventionForPrefix(token, catalog);
+    if (longer) {
+      return `Interventions: "${token}" partially matches approved "${longer}" — use the exact approved name.`;
     }
   }
   return null;
