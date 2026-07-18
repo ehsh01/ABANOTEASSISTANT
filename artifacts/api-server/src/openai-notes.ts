@@ -79,6 +79,10 @@ The server-provided SessionContext is frozen and authoritative:
 - When behaviorTopography is present, treat it as an assessment action bank only: paraphrase those observable actions into natural session-episode topography (what the client did in this hour). Use **exactly one** concrete action for this segment (e.g. for Excessive Motor Behavior, pick flapping hands OR head movement OR pacing — not the whole BIP list). Never paste BIP/VIP/assessment definition text, scoring language, "defined as," "any instance," "Status:", "To be initiated," or catalog labels alone. Never return only the behavior label or a generic phrase such as "motor behavior" or "elopement."
 - For **Task Refusal**, topography must describe observable *refusal* (e.g. not initiating the demand within 10 seconds, pushing materials away, turning away)—never the appropriate activity itself (never "by washing hands" / "by brushing teeth" / "by completing the worksheet").
 - For **Wandering Away / elopement / bolting**, topography must be a concrete leaving-boundary action observed this session (e.g. walking several feet toward the hallway without permission)—never paste the BIP operational definition.
+- Topography must be a COMPLETE observable action. Never truncate; never end a field with "(e.g.", a dangling "(", or an unfinished list. Never use interpretation-only phrases with no observable action ("refusing to comply", "was noncompliant", "did not want to", "acted out", "was defiant"). If you would write one of those, instead state what was observed (not initiating within 10 seconds, pushing materials away, turning away, leaving the area).
+- Copy each segment's intervention label EXACTLY from context (the server already function-matched it to the behavior). Never substitute a different intervention and never describe a safety response (moving out of reach, blocking contact) as if it were the behavioral intervention: name the assigned intervention, then describe the RBT's actions and any safety response separately.
+- Do NOT invent environmental details that were not provided: no "marked play space", "marked area", "visual boundary", schedules, timers, or materials unless they appear in context. Use neutral observable locations (e.g. "the designated activity area", "the work table").
+- Do NOT fabricate reinforcement/extinction/blocking procedures or praise schedules that are not in the assigned intervention or context. Describe only what the assigned intervention and session data support.
 - Keep all narrative fields sounding like a written session note: concise, concrete client/RBT actions—not copied plan language.
 - Reinforcers in narrative fields must come from SessionContext.reinforcementPreferences (or approved plain "praise"). Never write "social praise", "verbal praise", or "behavior-specific praise" — reviewers treat those as unauthorized intervention labels. Use plain "praise" only. Never write bare "preferred toys" / "a preferred toy" / unspecified "toys" as the delivered reinforcer—name the specific toy preference on file (e.g. sensory toys, spinning toys, balls, Disney dolls). If only the umbrella "Preferred toys" exists, prefer naming another listed item/activity instead of inventing a toy type.
 - When clientAgeYears is known and under 14, never mention YouTube (or YouTube videos) as a reward, reinforcer, or activity. Use another preference from reinforcementPreferences instead.
@@ -228,7 +232,7 @@ export function isOpenAINoteGenerationConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-18.realism-antiecho-variety-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-18.function-match-observable-topo-v1";
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
   .update("\u0000")

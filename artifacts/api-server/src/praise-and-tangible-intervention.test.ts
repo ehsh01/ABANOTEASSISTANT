@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
+  inferBehaviorFunctionsFromLabel,
+  isAttentionOnlyInterventionLabel,
   isFunctionMisfitIntervention,
   isGadgetAccessMaladaptiveBehaviorLabel,
   interventionMatchesFunctionCategory,
@@ -10,8 +12,120 @@ import {
   normalizeClinicalBodyInterventionLabels,
   normalizeClinicalBodyPraiseWording,
   scrubAssembledNoteQcHotspots,
+  scrubInventedEnvironmentDetails,
 } from "./note-normalization";
-import { assignInterventionsForSegment } from "./note-plan-validation";
+import {
+  assignInterventionsForSegment,
+  diversifyInterventionLabelsAcrossSegments,
+} from "./note-plan-validation";
+
+const DRA = "Differential Reinforcement of Alternative Behavior (DRA)";
+
+describe("function-matched intervention assignment (no universal Pivot Praise)", () => {
+  test("inferBehaviorFunctionsFromLabel maps common labels to functions", () => {
+    expect(inferBehaviorFunctionsFromLabel("Task Refusal")).toEqual(["escape"]);
+    expect(inferBehaviorFunctionsFromLabel("Elopement")).toEqual(["escape"]);
+    expect(inferBehaviorFunctionsFromLabel("Motor Stereotypy")).toEqual(["automatic"]);
+    expect(inferBehaviorFunctionsFromLabel("Physical Aggression")).toEqual(["escape", "tangible"]);
+    expect(isAttentionOnlyInterventionLabel("Pivot Praise")).toBe(true);
+    expect(isAttentionOnlyInterventionLabel("Premack Principle")).toBe(false);
+  });
+
+  test("does not assign attention-only Pivot Praise to an escape behavior with a function match available", () => {
+    const assigned = assignInterventionsForSegment({
+      acquisitionOnly: false,
+      behaviorLabel: "Task Refusal",
+      approvedInterventions: ["Pivot Praise", "Premack Principle"],
+      behaviorFunctions: null,
+    });
+    expect(assigned).toEqual(["Premack Principle"]);
+  });
+
+  test("keeps Pivot Praise for an attention-maintained behavior", () => {
+    const assigned = assignInterventionsForSegment({
+      acquisitionOnly: false,
+      behaviorLabel: "Disruptive Behavior",
+      approvedInterventions: ["Pivot Praise"],
+      behaviorFunctions: ["attention"],
+    });
+    expect(assigned).toEqual(["Pivot Praise"]);
+  });
+
+  test("falls back to the only approved intervention when nothing else exists", () => {
+    const assigned = assignInterventionsForSegment({
+      acquisitionOnly: false,
+      behaviorLabel: "Task Refusal",
+      approvedInterventions: ["Pivot Praise"],
+      behaviorFunctions: null,
+    });
+    expect(assigned).toEqual(["Pivot Praise"]);
+  });
+
+  test("diversifies a repeated intervention across segments when a function-appropriate alternative exists", () => {
+    const segments = [
+      {
+        behaviorLabel: "Task Refusal",
+        acquisitionOnly: false,
+        interventionLabels: ["Premack Principle"],
+        behaviorFunctions: null,
+      },
+      {
+        behaviorLabel: "Elopement",
+        acquisitionOnly: false,
+        interventionLabels: ["Premack Principle"],
+        behaviorFunctions: null,
+      },
+    ];
+    diversifyInterventionLabelsAcrossSegments(
+      segments,
+      ["Premack Principle", DRA],
+      [undefined, undefined],
+    );
+    expect(segments[0]!.interventionLabels).toEqual(["Premack Principle"]);
+    expect(segments[1]!.interventionLabels).toEqual([DRA]);
+  });
+
+  test("does not diversify to a function-mismatched or attention-only intervention", () => {
+    const segments = [
+      {
+        behaviorLabel: "Task Refusal",
+        acquisitionOnly: false,
+        interventionLabels: ["Premack Principle"],
+        behaviorFunctions: null,
+      },
+      {
+        behaviorLabel: "Elopement",
+        acquisitionOnly: false,
+        interventionLabels: ["Premack Principle"],
+        behaviorFunctions: null,
+      },
+    ];
+    // Only Pivot Praise (attention-only, escape-mismatch) is the other approved option → keep Premack.
+    diversifyInterventionLabelsAcrossSegments(
+      segments,
+      ["Premack Principle", "Pivot Praise"],
+      [undefined, undefined],
+    );
+    expect(segments[1]!.interventionLabels).toEqual(["Premack Principle"]);
+  });
+});
+
+describe("invented environmental details", () => {
+  test("rewrites marked play space / visual boundary to a neutral location", () => {
+    expect(
+      scrubInventedEnvironmentDetails("The client stopped beside the marked play space."),
+    ).toBe("The client stopped beside the designated activity area.");
+    expect(scrubInventedEnvironmentDetails("returned to the visual boundary")).toBe(
+      "returned to the designated activity area",
+    );
+  });
+
+  test("does not touch 'marked' used as a verb", () => {
+    expect(scrubInventedEnvironmentDetails("He marked a response on the worksheet.")).toBe(
+      "He marked a response on the worksheet.",
+    );
+  });
+});
 
 describe("praise wording normalization", () => {
   test("collapses compound praise labels to plain praise but keeps the sentence grammatical", () => {

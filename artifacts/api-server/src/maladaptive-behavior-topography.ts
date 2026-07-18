@@ -156,6 +156,62 @@ export function isIncompleteTopographyAction(action: string): boolean {
   if (/\bwith\s+(?:an?|the)?$/i.test(t)) return true;
   if (/\b(?:an?|the|or|and|and\/or)$/i.test(t)) return true;
   if (/\bopen or closed$/i.test(t)) return true;
+  // Truncated example parenthetical: "... (e.g." / "... (i.e." / trailing "(".
+  if (/\((?:e\.?g\.?|i\.?e\.?|such as|including|like)?\.?$/i.test(t)) return true;
+  if (/\be\.?g\.?$/i.test(t)) return true;
+  return false;
+}
+
+/**
+ * Normalize an example parenthetical inside topography. A COMPLETE "(e.g. a, b, c)" after a generic
+ * lead ("repeating leg/hand movements") is replaced by the concrete examples so a single observable
+ * action can be selected. An UNTERMINATED "(e.g. …" (the truncation bug) is dropped entirely.
+ */
+export function normalizeExampleParenthetical(text: string): string {
+  let t = text.trim().replace(/\s+/g, " ");
+  if (!t) return t;
+  // Unterminated example parenthetical (no closing paren) → drop it.
+  if (/\((?:e\.?g\.?|i\.?e\.?|such as|including|like)\b[^)]*$/i.test(t)) {
+    t = t.replace(/\s*\((?:e\.?g\.?|i\.?e\.?|such as|including|like)\b[^)]*$/i, "").trim();
+  }
+  const m = t.match(
+    /^(.*?)\s*\(\s*(?:e\.?g\.?|i\.?e\.?|such as|including|like)\b[.:,]*\s*([^)]+)\)\s*(.*)$/i,
+  );
+  if (m) {
+    const lead = m[1]!.trim();
+    const inner = m[2]!.trim();
+    const tail = m[3]!.trim();
+    if (
+      !tail &&
+      /\b(?:movements?|behaviou?rs?|actions?|forms?|responses?|stereotypy|motions?)$/i.test(lead)
+    ) {
+      t = inner;
+    } else {
+      t = `${lead}${tail ? ` ${tail}` : ""}`.trim();
+    }
+  }
+  return t
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,;])/g, "$1")
+    .replace(/\(\s*$/, "")
+    .trim();
+}
+
+/**
+ * True when the maladaptive topography is an interpretation ("refusing to comply", "was noncompliant",
+ * "acted out") with no observable action. Auditors require what was actually observed, so these must be
+ * recovered from the antecedent/last-resort observable topography.
+ */
+export function isVagueMaladaptiveTopography(text: string | null | undefined): boolean {
+  const t = (text ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (!t) return true;
+  const observableFollowUp =
+    /\b(?:by|and|,)\s*(?:not\s+initiat|push|turn|walk|drop|throw|threw|leav|cross|put|plac|scream|hit|kick|slap|grab|bit|move|remain|sit|stay|ignor|point|refuse\s+to\s+touch)/i;
+  const interpretationLead =
+    /^(?:refus(?:ed|ing|al)?|did\s*n[o']t\s+want\s+to|would\s+not|was\s+non-?compliant|being\s+non-?compliant|non-?compliance|acted\s+out|misbehav(?:ed|ing)|not\s+complying|declined|was\s+defiant|was\s+uncooperative)\b/i;
+  if (interpretationLead.test(t) && !observableFollowUp.test(t)) return true;
+  if (/refus\w*\s+to\s+comply/.test(t) && !observableFollowUp.test(t)) return true;
+  if (/\bnon-?compliant\b/.test(t) && !observableFollowUp.test(t)) return true;
   return false;
 }
 
@@ -399,7 +455,7 @@ function expandSharedComplementVerbList(text: string): string[] | null {
  * Does not split idioms like "back and forth", and does not truncate "open or closed hand".
  */
 export function splitTopographyActionAlternatives(text: string): string[] {
-  const cleaned = text.trim().replace(/\s+/g, " ");
+  const cleaned = normalizeExampleParenthetical(text.trim().replace(/\s+/g, " "));
   if (!cleaned) return [];
 
   const semicolonList = expandSemicolonTopographyList(cleaned);

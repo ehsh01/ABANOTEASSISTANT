@@ -1,13 +1,45 @@
 import { describe, expect, it } from "vitest";
 import {
+  isIncompleteTopographyAction,
+  isVagueMaladaptiveTopography,
   lastResortObservableTopographyForBehavior,
   looksLikePastedBipDefinitionTopography,
+  normalizeExampleParenthetical,
   pickSingleTopographyActionForSegment,
   pickStoredTopographyActionForSegment,
   splitTopographyActionAlternatives,
   taskRefusalTopographyDescribesAppropriateBehavior,
   taskRefusalTopographyFromAntecedent,
 } from "./maladaptive-behavior-topography";
+
+describe("example parenthetical + incomplete/vague topography", () => {
+  it("drops an unterminated '(e.g.' parenthetical (reported truncation bug)", () => {
+    expect(normalizeExampleParenthetical("repeating leg/hand movements (e.g.")).toBe(
+      "repeating leg/hand movements",
+    );
+    expect(isIncompleteTopographyAction("repeating leg/hand movements (e.g.")).toBe(true);
+  });
+
+  it("uses concrete examples from a complete parenthetical after a generic lead", () => {
+    const actions = splitTopographyActionAlternatives(
+      "repeating leg/hand movements (e.g. flapping hands, side-to-side head movement)",
+    );
+    expect(actions).toContain("flapping hands");
+    expect(actions).toContain("side-to-side head movement");
+    expect(actions.every((a) => !/e\.?g\./i.test(a))).toBe(true);
+  });
+
+  it("flags interpretation-only refusal topography as vague", () => {
+    expect(isVagueMaladaptiveTopography("refusing to comply with demands")).toBe(true);
+    expect(isVagueMaladaptiveTopography("was noncompliant")).toBe(true);
+    expect(isVagueMaladaptiveTopography("did not want to do the task")).toBe(true);
+    // Observable actions are NOT vague.
+    expect(
+      isVagueMaladaptiveTopography("not initiating the worksheet within 10 seconds"),
+    ).toBe(false);
+    expect(isVagueMaladaptiveTopography("refused by pushing the materials away")).toBe(false);
+  });
+});
 
 describe("Physical Aggression topography single-action selection", () => {
   it("does not truncate 'open or closed hand' into 'with an open'", () => {

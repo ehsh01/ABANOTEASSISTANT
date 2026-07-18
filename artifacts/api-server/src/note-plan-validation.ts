@@ -1,5 +1,7 @@
 import {
   findNonContingentReinforcementInterventionLabel,
+  inferBehaviorFunctionsFromLabel,
+  isAttentionOnlyInterventionLabel,
   isEnvironmentalManipulationInterventionLabel,
   isResponseBlockInterventionLabel,
   isSibMaladaptiveBehaviorLabel,
@@ -27,6 +29,7 @@ import {
   isIncompleteTopographyAction,
   isTaskRefusalBehaviorLabel,
   isUnusableStoredTopography,
+  isVagueMaladaptiveTopography,
   lastResortObservableTopographyForBehavior,
   looksLikePastedBipDefinitionTopography,
   paragraphReflectsStoredTopography,
@@ -382,15 +385,108 @@ export function assignInterventionsForSegment(params: {
     }
   }
 
-  const preferred =
-    candidates[0] ??
-    preferredInterventionCandidatesForBehaviorFunction(
+  // Documented functions first; when the profile has none, infer from the behavior label so the
+  // fallback stays function-appropriate instead of grabbing the first approved intervention (the root
+  // cause of the "Pivot Praise for every behavior" audit failure).
+  const effectiveFunctions =
+    params.behaviorFunctions && params.behaviorFunctions.length > 0
+      ? params.behaviorFunctions
+      : inferBehaviorFunctionsFromLabel(params.behaviorLabel);
+  const behaviorIsAttentionMaintained = (effectiveFunctions ?? []).includes("attention");
+
+  const functionPool = uniqueLabels([
+    ...candidates,
+    ...preferredInterventionCandidatesForBehaviorFunction(
       approved,
-      params.behaviorFunctions,
+      effectiveFunctions,
       params.behaviorLabel,
-    ).find((label) => !isResponseBlockInterventionLabel(label)) ??
-    approved.find((label) => !isResponseBlockInterventionLabel(label));
+    ),
+  ]).filter((label) => approved.includes(label) && !isResponseBlockInterventionLabel(label));
+
+  // Never let an attention-only intervention (Pivot Praise) treat a non-attention behavior when any
+  // function-matched or other non-attention-only approved intervention exists.
+  const functionPoolPreferred = behaviorIsAttentionMaintained
+    ? functionPool
+    : functionPool.filter((label) => !isAttentionOnlyInterventionLabel(label));
+
+  const nonResponseBlockApproved = approved.filter(
+    (label) => !isResponseBlockInterventionLabel(label),
+  );
+  const nonAttentionOnlyApproved = behaviorIsAttentionMaintained
+    ? nonResponseBlockApproved
+    : nonResponseBlockApproved.filter((label) => !isAttentionOnlyInterventionLabel(label));
+
+  const preferred =
+    functionPoolPreferred[0] ??
+    functionPool[0] ??
+    nonAttentionOnlyApproved[0] ??
+    nonResponseBlockApproved[0];
   return preferred ? [preferred] : [];
+}
+
+/**
+ * Reduce clinically inaccurate reuse of the SAME intervention across ABC segments. When a non-safety
+ * segment's primary intervention already appeared in an earlier segment, swap it for a DISTINCT
+ * function-appropriate approved alternative when one exists. Swaps only ever draw from the behavior's
+ * function-matched approved pool, so we never trade a mismatch for variety; when the only
+ * function-appropriate option is the repeated one, it is kept (defensible repetition). Safety-chain
+ * segments (Response Block first) are left untouched — that primary is required and may repeat.
+ */
+export function diversifyInterventionLabelsAcrossSegments(
+  segments: {
+    behaviorLabel: string;
+    acquisitionOnly: boolean;
+    interventionLabels: string[];
+    behaviorFunctions: RuntimeGenerationContext["maladaptiveBehaviorFunctionsForHour"][number];
+  }[],
+  approvedInterventions: string[],
+  functionCandidatesForHour: (string[] | undefined)[],
+): void {
+  const approved = uniqueLabels(approvedInterventions);
+  const usedPrimary = new Set<string>();
+  segments.forEach((segment, index) => {
+    if (segment.acquisitionOnly || segment.interventionLabels.length === 0) return;
+    const primary = segment.interventionLabels[0]!;
+    const primaryKey = primary.trim().toLowerCase();
+
+    // Required safety primaries (Response Block first) may legitimately repeat across safety segments.
+    if (isResponseBlockInterventionLabel(primary)) {
+      usedPrimary.add(primaryKey);
+      return;
+    }
+    if (!usedPrimary.has(primaryKey)) {
+      usedPrimary.add(primaryKey);
+      return;
+    }
+
+    const effectiveFunctions =
+      segment.behaviorFunctions && segment.behaviorFunctions.length > 0
+        ? segment.behaviorFunctions
+        : inferBehaviorFunctionsFromLabel(segment.behaviorLabel);
+    const attentionMaintained = (effectiveFunctions ?? []).includes("attention");
+    const pool = uniqueLabels([
+      ...(functionCandidatesForHour[index] ?? []),
+      ...preferredInterventionCandidatesForBehaviorFunction(
+        approved,
+        effectiveFunctions,
+        segment.behaviorLabel,
+      ),
+    ]).filter(
+      (label) =>
+        approved.includes(label) &&
+        !isResponseBlockInterventionLabel(label) &&
+        (attentionMaintained || !isAttentionOnlyInterventionLabel(label)),
+    );
+    const alternative = pool.find(
+      (label) => label.trim().toLowerCase() !== primaryKey && !usedPrimary.has(label.trim().toLowerCase()),
+    );
+    if (alternative) {
+      segment.interventionLabels[0] = alternative;
+      usedPrimary.add(alternative.trim().toLowerCase());
+    } else {
+      usedPrimary.add(primaryKey);
+    }
+  });
 }
 
 export function buildFrozenSessionContext(
@@ -433,6 +529,14 @@ export function buildFrozenSessionContext(
       rbtActionsOnlyOutcome: ctx.rbtActionsOnlyOutcomeForHour[segmentIndex] === true,
     };
   });
+
+  // Avoid documenting the same intervention for every behavior when function-appropriate approved
+  // alternatives exist (audit compliance: intervention must match the behavior's function).
+  diversifyInterventionLabelsAcrossSegments(
+    segments,
+    ctx.interventions,
+    ctx.interventionCandidatesForHour,
+  );
 
   return SessionContextSchema.parse({
     narrativeSegmentCount: ctx.narrativeSegmentCount,
@@ -531,11 +635,13 @@ export function groundNotePlanWithFrozenContext(
         } else if (
           isUnusableStoredTopography(topography) ||
           looksLikePastedBipDefinitionTopography(topography) ||
+          isVagueMaladaptiveTopography(topography) ||
           (isTaskRefusalBehaviorLabel(locked.behaviorLabel) &&
             taskRefusalTopographyDescribesAppropriateBehavior(topography))
         ) {
-          // Never keep BIP status placeholders, pasted BIP definitions, or Task Refusal framed as
-          // the appropriate activity ("washing hands"). Prefer session refusal/leaving topography.
+          // Never keep BIP status placeholders, pasted BIP definitions, vague interpretations
+          // ("refusing to comply"), or Task Refusal framed as the appropriate activity
+          // ("washing hands"). Prefer session refusal/leaving topography.
           const fromAntecedent =
             isTaskRefusalBehaviorLabel(locked.behaviorLabel)
               ? taskRefusalTopographyFromAntecedent(sanitized.antecedent)
@@ -545,6 +651,7 @@ export function groundNotePlanWithFrozenContext(
             locked.behaviorTopography &&
             !isUnusableStoredTopography(locked.behaviorTopography) &&
             !looksLikePastedBipDefinitionTopography(locked.behaviorTopography) &&
+            !isVagueMaladaptiveTopography(locked.behaviorTopography) &&
             !(
               isTaskRefusalBehaviorLabel(locked.behaviorLabel) &&
               taskRefusalTopographyDescribesAppropriateBehavior(locked.behaviorTopography)
@@ -589,6 +696,7 @@ export function groundNotePlanWithFrozenContext(
           isUnusableStoredTopography(topography) ||
           isIncompleteTopographyAction(topography) ||
           looksLikePastedBipDefinitionTopography(topography) ||
+          isVagueMaladaptiveTopography(topography) ||
           (isTaskRefusalBehaviorLabel(locked.behaviorLabel) &&
             taskRefusalTopographyDescribesAppropriateBehavior(topography))
         ) {
@@ -599,7 +707,8 @@ export function groundNotePlanWithFrozenContext(
             (locked.behaviorTopography &&
             !isUnusableStoredTopography(locked.behaviorTopography) &&
             !isIncompleteTopographyAction(locked.behaviorTopography) &&
-            !looksLikePastedBipDefinitionTopography(locked.behaviorTopography)
+            !looksLikePastedBipDefinitionTopography(locked.behaviorTopography) &&
+            !isVagueMaladaptiveTopography(locked.behaviorTopography)
               ? locked.behaviorTopography
               : null) ||
             lastResortObservableTopographyForBehavior(locked.behaviorLabel) ||

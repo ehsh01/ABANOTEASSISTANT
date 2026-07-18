@@ -519,13 +519,34 @@ export function scrubMedicationReferences(text: string): string {
 }
 
 /**
+ * Auditors flag environmental details that are not documented (marked play spaces, visual boundaries,
+ * marked lines/zones). Replace those invented references with a neutral, observable location phrase.
+ * "marked" as a verb ("marked a response on the worksheet") is untouched — only the invented
+ * "marked <space/area/boundary>" noun phrase is rewritten.
+ */
+export function scrubInventedEnvironmentDetails(text: string): string {
+  if (!text) return text;
+  return text
+    .replace(
+      /\b(?:the|a|an|his|her|their)?\s*marked\s+(?:play\s+|work\s+|activity\s+)?(?:space|spaces|area|areas|boundary|boundaries|spot|spots|line|lines|zone|zones|circle|square|mat)\b/gi,
+      "the designated activity area",
+    )
+    .replace(
+      /\b(?:the|a|an)?\s*visual\s+(?:boundary|boundaries|line|lines|marker|markers)\b/gi,
+      "the designated activity area",
+    )
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,;])/g, "$1");
+}
+
+/**
  * Final scrub for full assembled notes (clinical body + locked closing): never leave "social praise",
- * BIP status-placeholder topography, or medication references in saved note text.
+ * BIP status-placeholder topography, medication references, or invented environmental details.
  */
 export function scrubAssembledNoteQcHotspots(noteText: string): string {
   return collapseDuplicateAdjacentWords(
     scrubFirstThenProcedureLabels(
-      scrubMedicationReferences(noteText)
+      scrubInventedEnvironmentDetails(scrubMedicationReferences(noteText))
         .replace(/\bsocial praise\b/gi, "praise")
         .replace(
           /\bby\s+Status\s*:\s*To be initiated\.?/gi,

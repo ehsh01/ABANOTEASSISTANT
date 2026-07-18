@@ -37,6 +37,41 @@ export function isGadgetAccessMaladaptiveBehaviorLabel(behaviorName: string): bo
   );
 }
 
+/**
+ * Interventions that ONLY target an attention-maintained contingency (e.g. Pivot Praise). Using these
+ * as the primary behavior-reduction intervention for an escape/tangible/automatic behavior is a
+ * function mismatch and an audit red flag. They stay eligible only for attention-maintained behaviors.
+ */
+export function isAttentionOnlyInterventionLabel(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  if (!n) return false;
+  return /pivot praise/.test(n);
+}
+
+/**
+ * Best-effort function inference from the maladaptive behavior LABEL, used only when the client
+ * profile has no documented function for that behavior. This prevents the assignment fallback from
+ * dropping an attention-only or arbitrary "first approved" intervention onto an escape/tangible/
+ * automatic behavior. It never invents prose; it only guides selection among APPROVED interventions.
+ */
+export function inferBehaviorFunctionsFromLabel(
+  behaviorLabel: string,
+): ClinicalFunction[] | null {
+  const b = behaviorLabel.trim().toLowerCase();
+  if (!b) return null;
+  if (/task\s*refusal|non-?compliance|noncompliant|refus/.test(b)) return ["escape"];
+  if (/elope|wander|bolt|running\s*away|\bflight\b/.test(b)) return ["escape"];
+  if (/property\s*destruction/.test(b)) return ["escape", "tangible"];
+  if (/physical\s*aggression/.test(b) || (/aggression/.test(b) && !/verbal/.test(b)))
+    return ["escape", "tangible"];
+  if (/tantrum|meltdown/.test(b)) return ["escape", "tangible"];
+  if (/stereotyp|self-?stim|stimming|excessive\s*motor|repetitive\s*motor/.test(b))
+    return ["automatic"];
+  if (/disrupt/.test(b)) return ["escape", "attention"];
+  if (/verbal\s*aggression|scream|yell/.test(b)) return ["attention", "escape"];
+  return null;
+}
+
 export function interventionMatchesFunctionCategory(
   interventionName: string,
   fn: ClinicalFunction,
