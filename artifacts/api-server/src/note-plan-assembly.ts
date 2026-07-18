@@ -99,6 +99,46 @@ export function manifestedBehaviorBridge(segmentIndex: number): string {
   return MANIFESTED_BRIDGES[segmentIndex % MANIFESTED_BRIDGES.length]!;
 }
 
+/**
+ * Intervention naming-sentence leads. Every variant preserves the exact "the RBT implemented <label>."
+ * clause that `countInterventionImplementationsInParagraph` and the safety-chain validators detect, so
+ * only the human-sounding lead varies. Index 0 keeps the canonical "To address this behavior," opener
+ * so single-segment fixtures/tests stay stable.
+ */
+const INTERVENTION_NAMING_LEADS = [
+  "To address this behavior, the RBT implemented",
+  "In response, the RBT implemented",
+  "To reduce this behavior, the RBT implemented",
+  "To manage this behavior, the RBT implemented",
+  "In response to this behavior, the RBT implemented",
+  "Addressing this behavior, the RBT implemented",
+] as const;
+
+/** Connectives for a 2nd+ intervention naming sentence within one (safety-chain) segment. */
+const INTERVENTION_NAMING_FOLLOW_ON_LEADS = [
+  "The RBT then implemented",
+  "Next, the RBT implemented",
+  "The RBT also implemented",
+] as const;
+
+/**
+ * Human-sounding naming sentence for one intervention. `labelIndex === 0` rotates by segment so
+ * multi-hour notes do not repeat the same opener; later labels in a safety chain use a follow-on lead.
+ */
+export function interventionNamingSentence(
+  label: string,
+  segmentIndex: number,
+  labelIndex: number,
+): string {
+  const lead =
+    labelIndex === 0
+      ? INTERVENTION_NAMING_LEADS[segmentIndex % INTERVENTION_NAMING_LEADS.length]!
+      : INTERVENTION_NAMING_FOLLOW_ON_LEADS[
+          (labelIndex - 1) % INTERVENTION_NAMING_FOLLOW_ON_LEADS.length
+        ]!;
+  return `${lead} ${label.trim()}.`;
+}
+
 export function roundedTrialPercentage(summary: TherapistTrialSummary): number {
   const successful = new Set(
     summary.successfulTrialNumbers.filter(
@@ -109,18 +149,36 @@ export function roundedTrialPercentage(summary: TherapistTrialSummary): number {
 }
 
 /**
+ * Trial-percentage sentence variants. Every form is accepted by `therapistTrialPercentRollupPhrasePresent`
+ * (each states the same rounded percentage tied to the program and never uses an "N out of M" rollup), so
+ * the repeated per-hour trial line reads less mechanically across a multi-hour note. Index 0 keeps the
+ * canonical "criterion was met on approximately X% of discrete trials." wording for fixture stability.
+ */
+function trialSentenceVariant(replacementLabel: string, pct: number, seedIndex: number): string {
+  const variants = [
+    `For "${replacementLabel}", criterion was met on approximately ${pct}% of discrete trials.`,
+    `For "${replacementLabel}", the client met criterion on approximately ${pct}% of trials.`,
+    `For "${replacementLabel}", criterion was met on approximately ${pct}% of recorded trials.`,
+    `For "${replacementLabel}", target responses met criterion approximately ${pct}% of the time.`,
+  ];
+  return variants[seedIndex % variants.length]!;
+}
+
+/**
  * When therapist-entered trial data exists, emit the locked percentage sentence.
  * When missing, return empty — do not invent a % and do not apologize for missing RBT input.
+ * `segmentIndex` only rotates the surface wording; the percentage/program are unchanged.
  */
 export function buildDeterministicTrialSentence(
   replacementLabel: string,
   summary: TherapistTrialSummary | null,
+  segmentIndex = 0,
 ): string {
   if (!summary) {
     return "";
   }
   const percentage = roundedTrialPercentage(summary);
-  return `For "${replacementLabel}", criterion was met on approximately ${percentage}% of discrete trials.`;
+  return trialSentenceVariant(replacementLabel, percentage, segmentIndex);
 }
 
 export function assembleClinicalBodyFromNotePlan(
@@ -168,7 +226,7 @@ export function assembleClinicalBodyFromNotePlan(
             ) ??
             segment.interventions[labelIndex] ??
             segment.interventions[0];
-          parts.push(`To address this behavior, the RBT implemented ${label}.`);
+          parts.push(interventionNamingSentence(label, index, labelIndex));
           const application = neutralize(match?.application?.trim() ?? "");
           if (application && !isRedundantInterventionApplication(application, label)) {
             parts.push(`Following this intervention, ${followingClause(application)}`);
@@ -190,6 +248,7 @@ export function assembleClinicalBodyFromNotePlan(
       const trialSentence = buildDeterministicTrialSentence(
         locked.replacementLabel,
         locked.trialSummary,
+        index,
       );
       if (trialSentence) {
         parts.push(trialSentence);

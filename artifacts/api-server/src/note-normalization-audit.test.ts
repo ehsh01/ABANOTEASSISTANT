@@ -5,6 +5,7 @@ import {
   normalizeClinicalBodyInterventionDetailPhrases,
   scrubAssembledNoteQcHotspots,
   scrubFirstThenProcedureLabels,
+  scrubMedicationReferences,
 } from "./note-normalization";
 import { assembleClinicalBodyFromNotePlan } from "./note-plan-assembly";
 import type { NotePlan, SessionContext } from "./note-plan-schema";
@@ -33,6 +34,51 @@ describe("first-then Premack scrubbing", () => {
     );
     expect(out).not.toMatch(/first[\s\-\/]*then/i);
     expect(out).toMatch(/Playing with the tablet/i);
+  });
+});
+
+describe("medication references (out of RBT scope)", () => {
+  it("drops a medication instruction clause from the antecedent (reported case)", () => {
+    const out = scrubMedicationReferences(
+      "the RBT presented an instruction related to taking medications after a short break with sensory toys.",
+    );
+    expect(out).not.toMatch(/medication/i);
+    expect(out).toBe(
+      "the RBT presented an instruction after a short break with sensory toys.",
+    );
+  });
+
+  it("rewrites 'take/administer medication' verb phrases to a neutral task", () => {
+    expect(scrubMedicationReferences("prompting the client to take his medication")).toBe(
+      "prompting the client to complete the task",
+    );
+    expect(scrubMedicationReferences("the RBT administered the medication")).not.toMatch(
+      /medicat/i,
+    );
+  });
+
+  it("neutralizes medication routine/schedule and standalone nouns", () => {
+    expect(scrubMedicationReferences("the medication routine was next")).toBe(
+      "the scheduled task was next",
+    );
+    expect(scrubMedicationReferences("the pills were on the counter")).not.toMatch(/pill/i);
+    expect(scrubMedicationReferences("the medicine was ready")).not.toMatch(/medicine/i);
+  });
+
+  it("does not touch 'tablet' (a reinforcer) or 'medical history'", () => {
+    expect(scrubMedicationReferences("access to the tablet after the task")).toBe(
+      "access to the tablet after the task",
+    );
+    expect(scrubMedicationReferences("no medical history changes")).toBe(
+      "no medical history changes",
+    );
+  });
+
+  it("removes medication references from a full assembled note", () => {
+    const out = scrubAssembledNoteQcHotspots(
+      "The RBT presented an instruction to take medication before the sorting task.",
+    );
+    expect(out).not.toMatch(/medicat|\bmeds?\b|\bpills?\b/i);
   });
 });
 

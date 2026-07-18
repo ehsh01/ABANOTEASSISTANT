@@ -462,13 +462,70 @@ export function normalizeClinicalBodyInterventionLabels(body: string, interventi
 }
 
 /**
- * Final scrub for full assembled notes (clinical body + locked closing): never leave "social praise"
- * or BIP status-placeholder topography in saved note text.
+ * Medication is out of scope for an RBT: RBTs never administer, deliver, prompt, or instruct
+ * medication. Hard-remove any medication reference from note prose (any field or the assembled body),
+ * rewriting it to a neutral session task so no note ever states the RBT gave, prompted, or instructed
+ * medication. "tablet"/"capsule" are intentionally excluded — "tablet" is a common reinforcer here.
+ */
+const MEDICATION_NOUN_SOURCE =
+  "(?:medications?|medicine|medicines|meds|pills?|prescriptions?|inhalers?|dosages?|doses?)";
+
+export function scrubMedicationReferences(text: string): string {
+  if (!text) return text;
+  const med = MEDICATION_NOUN_SOURCE;
+  let out = text;
+
+  // "instruction/task/prompt (related to|regarding|about|involving|concerning|pertaining to)
+  //  (taking|administering|giving) (his/her/their/the) medication" → drop the whole medication
+  //  prepositional phrase. Bare "to"/"for" are intentionally excluded so infinitive verb phrases
+  //  ("to take his medication") fall through to the verb rewrite below instead of being deleted.
+  out = out.replace(
+    new RegExp(
+      `\\s*(?:related to|regarding|about|involving|concerning|pertaining to)\\s+(?:take|taking|administer|administering|give|giving|dispense|dispensing|receive|receiving)?\\s*(?:his|her|their|the|a|an)?\\s*${med}\\b`,
+      "gi",
+    ),
+    "",
+  );
+
+  // "take/administer/give/dispense (his/her/their/the) medication" → complete the task.
+  out = out.replace(
+    new RegExp(
+      `\\b(take|taking|administer|administering|give|giving|dispense|dispensing)\\s+(?:his|her|their|the|a|an)?\\s*${med}\\b`,
+      "gi",
+    ),
+    (_m, verb: string) => (/ing$/i.test(verb) ? "completing the task" : "complete the task"),
+  );
+
+  // "medication routine/administration/schedule/task/activity/time/management" → the scheduled task.
+  out = out.replace(
+    new RegExp(
+      `\\b(?:his|her|their|the|a|an)?\\s*${med}\\s+(?:routine|administration|schedule|task|activity|time|management)\\b`,
+      "gi",
+    ),
+    "the scheduled task",
+  );
+
+  // Catch-all: neutralize any remaining medication noun so the word never appears in a saved note.
+  out = out
+    .replace(/\b(?:pills?|inhalers?)\b/gi, "item")
+    .replace(/\b(?:dosages?|doses?)\b/gi, "step")
+    .replace(/\bprescriptions?\b/gi, "plan")
+    .replace(/\b(?:medications?|medicine|medicines|meds)\b/gi, "scheduled task");
+
+  return out
+    .replace(/\s{2,}/g, " ")
+    .replace(/\s+([.,;])/g, "$1")
+    .trim();
+}
+
+/**
+ * Final scrub for full assembled notes (clinical body + locked closing): never leave "social praise",
+ * BIP status-placeholder topography, or medication references in saved note text.
  */
 export function scrubAssembledNoteQcHotspots(noteText: string): string {
   return collapseDuplicateAdjacentWords(
     scrubFirstThenProcedureLabels(
-      noteText
+      scrubMedicationReferences(noteText)
         .replace(/\bsocial praise\b/gi, "praise")
         .replace(
           /\bby\s+Status\s*:\s*To be initiated\.?/gi,

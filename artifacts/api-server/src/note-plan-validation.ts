@@ -37,6 +37,7 @@ import {
   taskRefusalTopographyFromAntecedent,
 } from "./maladaptive-behavior-topography";
 import { filterReinforcementPreferencesForNote } from "./reinforcer-preferences";
+import { scrubMedicationReferences } from "./note-normalization";
 
 export type NotePlanIssueCode =
   | "SCHEMA_INVALID"
@@ -125,7 +126,7 @@ function sanitizeModelNarrativeText(
   blockedClientNames: string[],
   presentPeople: string[] = [],
 ): string {
-  let sanitized = replaceBlockedNames(text, blockedClientNames);
+  let sanitized = scrubMedicationReferences(replaceBlockedNames(text, blockedClientNames));
   for (const person of presentPeople) {
     const cleaned = person
       .trim()

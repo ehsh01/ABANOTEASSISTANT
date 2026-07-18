@@ -9,6 +9,7 @@ import {
   buildDeterministicTrialSentence,
   buildMinimalClinicalBodyFromSessionContext,
   countClinicalParagraphs,
+  interventionNamingSentence,
   manifestedBehaviorBridge,
   organicAntecedentLead,
   preserveClinicalParagraphStructure,
@@ -474,6 +475,41 @@ describe("server-owned metrics and deterministic assembly", () => {
     const body = assembleClinicalBodyFromNotePlan(validPlan(), context);
     expect(body).not.toMatch(/\bDuring this activity\b/i);
     expect(body).toMatch(/\bthe client manifested Task Refusal by\b/i);
+  });
+
+  it("varies intervention naming leads while preserving the countable clause", () => {
+    // Segment 0 keeps the canonical opener; every variant still ends with "the RBT implemented X."
+    expect(interventionNamingSentence("Premack principle", 0, 0)).toBe(
+      "To address this behavior, the RBT implemented Premack principle.",
+    );
+    expect(interventionNamingSentence("Premack principle", 1, 0)).not.toBe(
+      interventionNamingSentence("Premack principle", 0, 0),
+    );
+    // A 2nd label within a segment (safety chain) uses a follow-on lead, not "To address".
+    expect(interventionNamingSentence("Response Block", 2, 1)).toMatch(
+      /\bimplemented Response Block\.$/,
+    );
+    expect(interventionNamingSentence("Response Block", 2, 1)).not.toMatch(/^To address/);
+    for (let i = 0; i < 6; i++) {
+      expect(interventionNamingSentence("Redirection", i, 0)).toMatch(
+        /\bimplemented Redirection\.$/,
+      );
+    }
+  });
+
+  it("keeps every trial-sentence variant validator-safe", () => {
+    const summary = { totalTrials: 4, successfulTrialNumbers: [1, 3] };
+    for (let i = 0; i < 4; i++) {
+      const line = buildDeterministicTrialSentence("Request for Break", summary, i);
+      // 50% present and tied to the program in every variant; no N-out-of-M rollup.
+      expect(line).toContain("50%");
+      expect(line).toContain('Request for Break');
+      expect(line).not.toMatch(/\b2\s+out\s+of\s+4\b/);
+    }
+    // Default seed keeps the canonical "of discrete trials" phrasing for fixture stability.
+    expect(buildDeterministicTrialSentence("Request for Break", summary)).toContain(
+      "50% of discrete trials",
+    );
   });
 
   it("strips maternal-uncle style presence leaks from narrative fields", () => {

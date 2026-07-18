@@ -74,6 +74,7 @@ The server-provided SessionContext is frozen and authoritative:
 - Acquisition-only segments must use an empty behaviorLabel and empty interventions array.
 - Write only bounded, observable details in antecedent, topography, intervention application, response, teaching/prompting, and result fields.
 - Do not use learner names, initials, caregivers, parents, guardians, aunts, uncles, siblings, or other relatives, subjective/emotional language, diagnoses, inferred intent, or unsupported clinical facts. Present people belong only in the server opening sentence.
+- NEVER mention medication in any field. RBTs do not administer, deliver, prompt, or instruct medication. Do not reference medication, medicine, meds, pills, doses/dosages, prescriptions, inhalers, a "medication routine," or the RBT giving/instructing/handling medication. If a session activity involved medication, document only a neutral instructional/session task instead.
 - Do not begin antecedent (or any narrative field) with the word "During". Vary openings so hour paragraphs sound organic (e.g. "The RBT presented…", "Later, the RBT arranged…", "Next, materials were set out…").
 - When behaviorTopography is present, treat it as an assessment action bank only: paraphrase those observable actions into natural session-episode topography (what the client did in this hour). Use **exactly one** concrete action for this segment (e.g. for Excessive Motor Behavior, pick flapping hands OR head movement OR pacing — not the whole BIP list). Never paste BIP/VIP/assessment definition text, scoring language, "defined as," "any instance," "Status:", "To be initiated," or catalog labels alone. Never return only the behavior label or a generic phrase such as "motor behavior" or "elopement."
 - For **Task Refusal**, topography must describe observable *refusal* (e.g. not initiating the demand within 10 seconds, pushing materials away, turning away)—never the appropriate activity itself (never "by washing hands" / "by brushing teeth" / "by completing the worksheet").
@@ -87,6 +88,8 @@ The server-provided SessionContext is frozen and authoritative:
 - When the assigned intervention is Premack principle (or Premack), describe only the demand-before-reinforcer contingency in plain prose (e.g. "required cleanup before access to the tablet"). Never write "first-then", "first/then", "First-Then Statement", or similar labels — reviewers treat those as unauthorized interventions unless they appear on the client's approved intervention list.
 - Teaching/prompting and topography clauses must be gerund phrases suitable after "by" (e.g. "repeating the instruction…", "swearing after the cleanup instruction", "making open-hand contact with the RBT's arm") — do not start those fields with "the RBT" or "the client".
 - For every non-acquisition segment, responseToIntervention must begin with "The client" and state at least one observable client action after intervention; RBT actions alone are not an outcome. resultSummary must also remain observable. Do not claim mastery or progress beyond supplied facts.
+- Write like an experienced RBT documenting from memory, not by copying the ABC fields. responseToIntervention and resultSummary must ELABORATE on what the client did with fresh wording — do NOT reuse the antecedent's or topography's phrasing verbatim. Describe the concrete client action (what body part moved, what the client picked up/placed/said, how the client re-engaged) rather than restating the setup. Each segment's outcome wording should differ from other segments; avoid boilerplate like every hour ending "returned to the task."
+- resultSummary must add new observable detail beyond responseToIntervention (a different concrete action, completion, or re-engagement) — never a near-copy of it or of the topography.
 - The output shape is {"segments":[{"segmentIndex":0,"acquisitionOnly":false,"behaviorLabel":"...","antecedent":"...","topography":"...","interventions":[{"label":"...","application":"..."}],"responseToIntervention":"...","replacementLabel":"...","teachingOrPromptingSummary":"...","resultSummary":"..."}]}.`;
 
 const NOTE_PLAN_JSON_SCHEMA = {
@@ -170,7 +173,7 @@ const NOTE_PLAN_JSON_SCHEMA = {
               type: "string",
               minLength: 1,
               description:
-                "Must begin with 'The client' and state at least one observable client action after the intervention. RBT actions alone are not an outcome. No subjective/emotional words, no metrics.",
+                "Must begin with 'The client' and state at least one observable client action after the intervention, in fresh wording that elaborates rather than echoing the antecedent/topography phrasing. RBT actions alone are not an outcome. No subjective/emotional words, no metrics.",
             },
             replacementLabel: {
               type: "string",
@@ -188,7 +191,7 @@ const NOTE_PLAN_JSON_SCHEMA = {
               type: "string",
               minLength: 1,
               description:
-                "One observable closing result for this segment. No mastery/progress claims beyond supplied facts, no invented metrics, no subjective language.",
+                "One observable closing result for this segment that adds new detail beyond responseToIntervention (a different concrete action, completion, or re-engagement) — not a near-copy of it or of the topography. No mastery/progress claims beyond supplied facts, no invented metrics, no subjective language.",
             },
           },
         },
@@ -225,7 +228,7 @@ export function isOpenAINoteGenerationConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-18.audit-topo-wandering-safety-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-18.realism-antiecho-variety-v1";
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
   .update("\u0000")
@@ -264,13 +267,14 @@ function isGpt5FamilyNoteModel(modelId: string): boolean {
 }
 
 /**
- * Reasoning effort for the gpt-5 family (env `OPENAI_REASONING_EFFORT`, default `low`). Lower effort
- * cuts latency sharply for reasoning models with negligible quality loss on this bounded JSON task.
- * `none`/`off`/`default` omit the parameter (falls back to the model default).
+ * Reasoning effort for the gpt-5 family (env `OPENAI_REASONING_EFFORT`, default `medium`). `medium`
+ * measurably improves label fidelity and observable-outcome quality on this bounded JSON task; async
+ * jobs carry a larger time budget so the extra latency is absorbed. Set `OPENAI_REASONING_EFFORT=low`
+ * to prioritize latency. `none`/`off`/`default` omit the parameter (falls back to the model default).
  */
 function resolveReasoningEffort(): "low" | "medium" | "high" | null {
   const raw = process.env.OPENAI_REASONING_EFFORT?.trim().toLowerCase();
-  if (raw === undefined || raw === "") return "low";
+  if (raw === undefined || raw === "") return "medium";
   if (raw === "low" || raw === "medium" || raw === "high") return raw;
   return null;
 }
