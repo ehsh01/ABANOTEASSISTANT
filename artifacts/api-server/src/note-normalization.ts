@@ -548,8 +548,9 @@ export function scrubInventedEnvironmentDetails(text: string): string {
 export function scrubStrayPunctuationClusters(text: string): string {
   if (!text) return text;
   return text
-    .replace(/\.[ \t]*,[ \t]*\.[ \t]*/g, ". ") // ".,." → ". "
-    .replace(/,[ \t]*\.[ \t]*/g, ". ") // ",." → ". " (comma before a period is always stray)
+    .replace(/\.[ \t]*[,:;][ \t]*\.[ \t]*/g, ". ") // ".,." / ".:." / ".;." → ". "
+    .replace(/[,:;][ \t]*\.[ \t]*/g, ". ") // ",." / ":." / ";." → ". " (mark before a period is stray)
+    .replace(/\.[ \t]*[:;][ \t]*/g, ". ") // ".:" / ".;" → ". " (period before a colon/semicolon is stray)
     .replace(/\.{2,}/g, ".")
     .replace(/,{2,}/g, ",")
     .replace(/[ \t]{2,}/g, " ")

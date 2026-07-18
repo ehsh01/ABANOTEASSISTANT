@@ -197,7 +197,14 @@ export function assembleClinicalBodyFromNotePlan(
       const parts: string[] = [organicAntecedentLead(neutralize(segment.antecedent), index)];
 
       if (locked.acquisitionOnly) {
-        parts.push(sentence(neutralize(segment.topography)));
+        // Acquisition-only segments have no maladaptive behavior, so topography is often empty or a
+        // stray placeholder (":", ""). Only add it when it carries real content — otherwise the
+        // antecedent flows straight into "Additionally, the RBT implemented …" (matching approved
+        // example notes) instead of leaving a ".:." / ". ." punctuation artifact.
+        const acquisitionTopography = neutralize(segment.topography);
+        if (/[a-z0-9]/i.test(acquisitionTopography)) {
+          parts.push(sentence(acquisitionTopography));
+        }
       } else {
         // Belt-and-suspenders: never assemble BIP status placeholders into the manifested-behavior line.
         const rawTopo = neutralize(segment.topography);

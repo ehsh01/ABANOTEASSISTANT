@@ -201,6 +201,20 @@ describe("stray punctuation clusters", () => {
     );
   });
 
+  it("collapses '.:.' and ':.' colon/semicolon artifacts (reported William note)", () => {
+    expect(
+      scrubStrayPunctuationClusters(
+        "presented brief readiness directions.:. Additionally, the RBT implemented",
+      ),
+    ).toBe("presented brief readiness directions. Additionally, the RBT implemented");
+    expect(scrubStrayPunctuationClusters("before the request opportunity.:.")).toBe(
+      "before the request opportunity.",
+    );
+    expect(scrubStrayPunctuationClusters("modeled simple sounds for imitation.;.")).toBe(
+      "modeled simple sounds for imitation.",
+    );
+  });
+
   it("leaves 'e.g.', decimals, and ordinary commas intact", () => {
     expect(scrubStrayPunctuationClusters('praise (e.g., "Good job")')).toBe(
       'praise (e.g., "Good job")',
