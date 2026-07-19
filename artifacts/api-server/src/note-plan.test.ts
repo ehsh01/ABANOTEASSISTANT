@@ -259,6 +259,37 @@ describe("server-owned metrics and deterministic assembly", () => {
     expect(body).toContain("Premack principle");
   });
 
+  it("minimal fallback includes therapist trial percentages and tantrum topography", () => {
+    const context = buildFrozenSessionContext(
+      generationContext({
+        sessionHours: 1,
+        narrativeSegmentCount: 1,
+        maladaptiveBehaviors: ["Tantrum"],
+        maladaptiveBehaviorForHour: ["Tantrum"],
+        replacementProgramForHour: ["Time on task"],
+        rbtActionsOnlyOutcomeForHour: [false],
+        activityAntecedentForHour: ["a matching worksheet"],
+        languageMaladaptiveEpisodeForHour: [false],
+        therapistTrialSummaryForReplacementHour: [
+          { totalTrials: 10, successfulTrialNumbers: [1, 2, 3, 4] },
+        ],
+        acquisitionOnlySegmentForHour: [false],
+        maladaptiveBehaviorFunctionsForHour: [["escape"] as const],
+        maladaptiveBehaviorTopographyForHour: [null],
+        behaviorReplacementCandidatesForHour: [["Time on task"]],
+        interventionCandidatesForHour: [["DRA"]],
+        interventions: ["DRA", "Premack principle"],
+        behaviorToReplacementsMap: { Tantrum: ["Time on task"] },
+      }),
+    );
+    const body = buildMinimalClinicalBodyFromSessionContext(context);
+    expect(body).toMatch(/approximately 40% of/);
+    expect(body).toContain("Time on task");
+    expect(body).toMatch(/crying|yelling|dropping to the floor/i);
+    expect(body).not.toContain("targeted motor actions for this episode");
+    expect(body).toContain("matching worksheet");
+  });
+
   it("sanitizes assessment definitions into name-free observable topography", () => {
     const sanitized = sanitizeStoredTopographyForNarrative(
       "Defined as any instance in which Anthony repeats a specific movement pattern, including frequently flapping his hands and walking back and forth repetitively. Episodes are scored after 30 seconds.",

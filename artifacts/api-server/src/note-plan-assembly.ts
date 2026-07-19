@@ -9,6 +9,7 @@ import {
   normalizeClauseAfterBy,
 } from "./note-normalization";
 import type { NotePlan, SessionContext, TherapistTrialSummary } from "./note-plan-schema";
+import { enrichInterventionApplicationForBehavior } from "./note-plan-validation";
 
 function sentence(text: string): string {
   const trimmed = text.trim().replace(/\s+/g, " ");
@@ -300,12 +301,26 @@ export function preserveClinicalParagraphStructure(
 /**
  * Deterministic minimal clinical body when the model returns nothing usable.
  * One paragraph per frozen segment using locked labels only — enough to save a note.
+ * Must still emit therapist-entered trial percentages and usable topography/application detail
+ * so soft-fail saves are not clinically empty shells.
  */
 export function buildMinimalClinicalBodyFromSessionContext(context: SessionContext): string {
   return context.segments
     .map((locked, index) => {
-      const lead =
-        index === 0
+      const activity = locked.activityAntecedent?.trim();
+      const lead = activity
+        ? sentence(
+            index === 0
+              ? `The RBT presented session materials and began ${activity.replace(/^\.+/, "")}`
+              : index === 1
+                ? `Next, the RBT continued with ${activity.replace(/^\.+/, "")}`
+                : index === 2
+                  ? `Later, the RBT arranged ${activity.replace(/^\.+/, "")}`
+                  : index === 3
+                    ? `After that, the RBT presented materials for ${activity.replace(/^\.+/, "")}`
+                    : `Near the end of the session, the RBT presented ${activity.replace(/^\.+/, "")}`,
+          )
+        : index === 0
           ? "The RBT presented session materials and began the scheduled activity."
           : index === 1
             ? "Next, the RBT continued with the next scheduled activity."
@@ -315,33 +330,59 @@ export function buildMinimalClinicalBodyFromSessionContext(context: SessionConte
                 ? "After that, the RBT presented the next task materials."
                 : "Near the end of the session, the RBT presented the final activity.";
 
+      const trialSentence = buildDeterministicTrialSentence(
+        locked.replacementLabel,
+        locked.trialSummary,
+        index,
+      );
+
       if (locked.acquisitionOnly) {
         return [
           lead,
           `The RBT implemented the replacement program "${locked.replacementLabel}" by modeling the target response and prompting the client through the presented opportunities.`,
           "The client participated in the presented opportunities with prompting as needed.",
-        ].join(" ");
+          trialSentence,
+        ]
+          .filter(Boolean)
+          .join(" ");
       }
 
       const topo =
-        locked.behaviorTopography && !isUnusableStoredTopography(locked.behaviorTopography)
+        locked.behaviorTopography &&
+        !isUnusableStoredTopography(locked.behaviorTopography) &&
+        !isIncompleteTopographyAction(locked.behaviorTopography)
           ? locked.behaviorTopography
           : (lastResortObservableTopographyForBehavior(locked.behaviorLabel) ??
-            "engaging in the targeted motor actions for this episode");
-      const intervention =
-        locked.interventionLabels[0] ??
-        context.planCatalogSnapshot.interventions[0] ??
-        "Premack principle";
-
-      return [
+            "engaging in the observable actions documented for this target during the episode");
+      const namingLabels =
+        locked.interventionLabels.length > 0
+          ? locked.interventionLabels
+          : [
+              context.planCatalogSnapshot.interventions[0] ?? "Premack principle",
+            ];
+      const parts: string[] = [
         lead,
-        `${manifestedBehaviorBridge(index)} ${locked.behaviorLabel} by ${topo}.`,
-        `To address this behavior, the RBT implemented ${intervention}.`,
-        "Following this intervention, the RBT restated the demand and delivered reinforcement for the alternative response.",
-        "The client returned to the presented activity after the intervention.",
+        `${manifestedBehaviorBridge(index)} ${locked.behaviorLabel} by ${clauseAfterBy(topo)}`,
+      ];
+      namingLabels.forEach((label, labelIndex) => {
+        parts.push(interventionNamingSentence(label, index, labelIndex));
+        const application = enrichInterventionApplicationForBehavior(
+          // Intentionally thin seed so behavior-specific enrichment templates apply.
+          "applying the assigned contingency during the episode",
+          locked.behaviorLabel,
+          label,
+        );
+        if (application) {
+          parts.push(`Following this intervention, ${followingClause(application)}`);
+        }
+      });
+      parts.push("The client returned to the presented activity after the intervention.");
+      parts.push(
         `${index % 2 === 0 ? "Additionally, the" : "The"} RBT implemented the replacement program "${locked.replacementLabel}" by modeling the target response and prompting the client before reinforcement was delivered.`,
-        "The client completed the prompted response and remained near the materials.",
-      ].join(" ");
+      );
+      parts.push("The client completed the prompted response and remained near the materials.");
+      if (trialSentence) parts.push(trialSentence);
+      return parts.join(" ");
     })
     .join("\n\n");
 }

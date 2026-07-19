@@ -65,7 +65,11 @@ export function inferBehaviorFunctionsFromLabel(
   if (/physical\s*aggression/.test(b) || (/aggression/.test(b) && !/verbal/.test(b)))
     return ["escape", "tangible"];
   if (/tantrum|meltdown/.test(b)) return ["escape", "tangible"];
-  if (/stereotyp|self-?stim|stimming|excessive\s*motor|repetitive\s*motor/.test(b))
+  if (
+    /stereotyp|self-?stim|stimming|excessive\s*motor|repetitive\s*motor|repetitive\s*behaviou?r/.test(
+      b,
+    )
+  )
     return ["automatic"];
   if (/disrupt/.test(b)) return ["escape", "attention"];
   if (/verbal\s*aggression|scream|yell/.test(b)) return ["attention", "escape"];

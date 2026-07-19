@@ -206,6 +206,8 @@ describe("Task Refusal / Wandering topography audit guards", () => {
 
   it("provides last-resort topography for Task Refusal and Wandering Away", () => {
     expect(lastResortObservableTopographyForBehavior("Task Refusal")).toMatch(/not initiating/i);
+    expect(lastResortObservableTopographyForBehavior("Tantrum")).toMatch(/crying|yelling|floor/i);
+    expect(lastResortObservableTopographyForBehavior("Repetitive Behavior")).toMatch(/repetitive/i);
     expect(lastResortObservableTopographyForBehavior("Wandering Away")).toMatch(
       /walking several feet away/i,
     );

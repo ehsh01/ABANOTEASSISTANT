@@ -497,6 +497,8 @@ export async function generateSessionNoteForClient(params: {
     if (unique.length === 0) return replacementProgramsCatalogForNote;
     return unique.sort((a, b) => b.length - a.length || a.localeCompare(b));
   })();
+  const sessionSelectionCoversHours =
+    body.selectedReplacements.length >= replacementProgramSlotCount(body.sessionHours);
   const {
     names: replacementProgramForHour,
     rbtActionsOnly: rbtActionsOnlyOutcomeForHour,
@@ -507,8 +509,7 @@ export async function generateSessionNoteForClient(params: {
     idToName: idToNameForPrograms,
     selectedIdSet: selectedIdSet,
     explicitProgramIdByHour,
-    sessionSelectionCoversHours:
-      body.selectedReplacements.length >= replacementProgramSlotCount(body.sessionHours),
+    sessionSelectionCoversHours,
   });
 
   rebalanceTaskRefusalReplacementProgramsHourly({
@@ -527,7 +528,9 @@ export async function generateSessionNoteForClient(params: {
   // via ensureReplacementProgramAlignmentForSegments (single entrypoint — do not re-run hourly).
   const behaviorToReplacementsMap = structuredForNote?.behavior_to_replacements_map ?? {};
 
-  const therapistTrialSummaryHourly = buildTherapistTrialSummaryForReplacementHour({
+  // Preliminary trial map (hour-indexed); rebuilt after segment alignment so swapped program ids
+  // still receive the therapist-entered % for the program assigned to that hour.
+  let therapistTrialSummaryHourly = buildTherapistTrialSummaryForReplacementHour({
     sessionHours: body.sessionHours,
     programIdForHour,
     rbtActionsOnlyOutcomeForHour,
@@ -598,6 +601,8 @@ export async function generateSessionNoteForClient(params: {
     return undefined;
   });
   // Same session-effective pool as initial assignment — do NOT expand to the full client catalog here.
+  // When the wizard already selected enough programs for every hour, skip soft BIP remaps so
+  // selection order is preserved (avoids Time-on-task collapsing every maladaptive hour).
   const segmentAlignmentSwaps = ensureReplacementProgramAlignmentForSegments({
     segmentCount,
     maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
@@ -612,10 +617,29 @@ export async function generateSessionNoteForClient(params: {
     authorizedProgramNames: replacementProgramsCatalogForNote,
     maladaptiveBehaviorFunctionsForHour,
     overrideExplicitOnHardMisfit: true,
+    rebalanceSoftMisfits: !sessionSelectionCoversHours,
     slotLabel: "Segment",
   });
   narrativeCollapsed.replacementProgramForHour = segmentReplacementNames;
   narrativeCollapsed.rbtActionsOnlyOutcomeForHour = segmentRbtFlags;
+  // Keep hourly program ids in sync with post-alignment segment ids for trial remapping.
+  for (let s = 0; s < segmentCount; s++) {
+    const pid = segmentProgramIds[s] ?? null;
+    for (const h of replacementProgramSlotHours(body.sessionHours, s)) {
+      programIdForHour[h] = pid;
+      rbtActionsOnlyOutcomeForHour[h] = segmentRbtFlags[s] === true;
+    }
+  }
+  therapistTrialSummaryHourly = buildTherapistTrialSummaryForReplacementHour({
+    sessionHours: body.sessionHours,
+    programIdForHour,
+    rbtActionsOnlyOutcomeForHour,
+    programTrialData: body.programTrialData,
+  });
+  narrativeCollapsed.therapistTrialSummaryForReplacementHour = therapistTrialSummaryHourly.slice(
+    0,
+    segmentCount,
+  );
 
   const complianceCtxBase: NoteComplianceContext = {
     sessionHours: body.sessionHours,
@@ -909,6 +933,7 @@ export async function generateSessionNoteForClient(params: {
       authorizedProgramNames: replacementProgramsCatalogForNote,
       maladaptiveBehaviorFunctionsForHour,
       overrideExplicitOnHardMisfit: true,
+      rebalanceSoftMisfits: !sessionSelectionCoversHours,
       slotLabel: "Segment",
     });
     const assignmentsChanged = repairNames.some(

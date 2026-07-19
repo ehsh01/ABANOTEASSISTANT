@@ -815,21 +815,29 @@ export function enrichInterventionApplicationForBehavior(
   if (!app) return app;
   const behavior = behaviorLabel.trim();
   const label = interventionLabel.trim();
-  const alreadyRich =
-    /\b(?:restat(?:ed|ing)|re-?present(?:ed|ing)|redirect(?:ed|ing)|block(?:ed|ing)|retriev(?:ed|ing)|maintain(?:ed|ing)\s+the\s+(?:demand|expectation)|kept\s+the\s+demand|reinforc(?:ed|ing)\s+the\s+alternative|arrang(?:ed|ing)\s+the\s+(?:activity|environment)|remov(?:ed|ing)\s+(?:distracting|extra|competing))\b/i.test(
-      app,
-    );
-  if (alreadyRich) return app;
+  // Require at least two concrete therapist actions before treating the clause as rich enough to
+  // skip enrichment. A single "restated the demand…" boilerplate must still be expanded for
+  // Property Destruction / Premack / DRA (audit reviewers reject thin application detail).
+  const richActionHits = (
+    app.match(
+      /\b(?:restat(?:ed|ing)|re-?present(?:ed|ing)|redirect(?:ed|ing)|block(?:ed|ing)|retriev(?:ed|ing)|maintain(?:ed|ing)\s+the\s+(?:demand|expectation)|kept\s+the\s+demand|reinforc(?:ed|ing)\s+the\s+alternative|arrang(?:ed|ing)\s+the\s+(?:activity|environment)|remov(?:ed|ing)\s+(?:distracting|extra|competing)|point(?:ed|ing)\s+to\s+the\s+task)\b/gi,
+    ) ?? []
+  ).length;
+  if (richActionHits >= 2 && app.length >= 90) return app;
 
   const thinPremack =
     /\brequir(?:ed|ing)\b.+\bbefore\s+access\b/i.test(app) ||
     (/premack/i.test(label) && /\bbefore\s+access\b/i.test(app));
-  const thinGeneric = app.length < 70;
+  const thinGeneric =
+    app.length < 90 ||
+    richActionHits < 2 ||
+    /\bapplying the assigned contingency\b/i.test(app) ||
+    /\brestat(?:ed|ing) the demand and (?:delivered|delivering) reinforcement\b/i.test(app);
 
   if (isPropertyDestructionBehaviorLabel(behavior) && (thinPremack || thinGeneric)) {
     return "redirecting the client to retrieve the item, re-presenting the task demand, and requiring completion of the activity before access to the reinforcer";
   }
-  if (isPhysicalAggressionBehaviorLabel(behavior) && thinPremack) {
+  if (isPhysicalAggressionBehaviorLabel(behavior) && (thinPremack || thinGeneric)) {
     // Keep the reinforcer/item cue from the thin clause when present.
     const accessMatch = app.match(/\bbefore\s+access\s+to\s+(.+?)(?:\.|$)/i);
     const accessTarget = accessMatch?.[1]?.trim().replace(/\.$/, "") || "the preferred item";
@@ -857,6 +865,9 @@ export function enrichInterventionApplicationForBehavior(
   }
   if (/escape\s+extinction/i.test(label) && thinGeneric) {
     return "maintaining the presented demand, re-presenting the instruction without removing the task expectation, and prompting completion before access to the reinforcer";
+  }
+  if (/high-?probability|behavioral momentum/i.test(label) && thinGeneric) {
+    return "delivering a brief series of high-probability instructions the client was likely to complete, then re-presenting the target demand and reinforcing compliance with the sequence";
   }
   return app;
 }

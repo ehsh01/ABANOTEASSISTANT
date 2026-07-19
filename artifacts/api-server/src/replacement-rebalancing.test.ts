@@ -378,6 +378,43 @@ describe("ensureReplacementProgramAlignmentForSegments", () => {
     expect(swaps.length).toBeGreaterThan(0);
   });
 
+  test("when soft misfits are disabled, preserves distinct selected programs instead of BIP-collapsing to one label", () => {
+    const TIME_ON_TASK = "Time on task";
+    const ACCEPT_NO = "Accept 'No' as an answer";
+    const REQUEST_BREAK = "Request for break";
+    const idToName = new Map<number, string>([
+      [1, TIME_ON_TASK],
+      [2, ACCEPT_NO],
+      [3, REQUEST_BREAK],
+    ]);
+    const names = [TIME_ON_TASK, ACCEPT_NO, REQUEST_BREAK];
+    const pids: (number | null)[] = [1, 2, 3];
+    const rbt = [false, false, false];
+    ensureReplacementProgramAlignmentForSegments({
+      segmentCount: 3,
+      maladaptiveBehaviorForHour: ["Property Destruction", "Tantrum", "Repetitive Behavior"],
+      names,
+      rbtActionsOnlyOutcomeForHour: rbt,
+      programIdForHour: pids,
+      explicitProgramIdByHour: [undefined, undefined, undefined],
+      rebalancePoolIds: [1, 2, 3],
+      idToName,
+      selectedIdSet: new Set([1, 2, 3]),
+      behaviorToReplacementsMap: {
+        "Property Destruction": [TIME_ON_TASK],
+        Tantrum: [TIME_ON_TASK],
+        "Repetitive Behavior": [TIME_ON_TASK],
+      },
+      authorizedProgramNames: [TIME_ON_TASK, ACCEPT_NO, REQUEST_BREAK],
+      maladaptiveBehaviorFunctionsForHour: [["escape"], ["escape"], ["automatic"]],
+      overrideExplicitOnHardMisfit: true,
+      rebalanceSoftMisfits: false,
+      slotLabel: "Segment",
+    });
+    expect(new Set(names).size).toBe(3);
+    expect(names).toEqual(expect.arrayContaining([TIME_ON_TASK, ACCEPT_NO, REQUEST_BREAK]));
+  });
+
   test("never introduces programs outside the session-effective pool even when authorized names are wider", () => {
     const EXTRA = "Echoic Skills";
     const idToName = new Map<number, string>([

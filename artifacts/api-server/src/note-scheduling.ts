@@ -835,6 +835,12 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
   maladaptiveBehaviorFunctionsForHour?: (import("@workspace/db/schema").ClinicalFunction[] | null)[] | undefined;
   /** When true, swap even explicit ABC pins if the current program is a hard function mismatch. */
   overrideExplicitOnHardMisfit?: boolean;
+  /**
+   * When true (default), soft BIP/function misfits are rebalanced. When false, only hard/safety
+   * misfits are swapped — used when the wizard selection already covers every hour so selected
+   * programs are not collapsed onto a single BIP-mapped label (e.g. Time on task × N).
+   */
+  rebalanceSoftMisfits?: boolean;
   slotLabel?: string;
 }): string[] {
   const {
@@ -851,6 +857,7 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
     authorizedProgramNames,
     maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
     overrideExplicitOnHardMisfit = false,
+    rebalanceSoftMisfits = true,
     slotLabel = "Hour",
   } = params;
 
@@ -868,14 +875,15 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
         isHardMisfitReplacementForMaladaptiveBehavior(behavior, currentName, hourFunctions);
       if (!hardMisfit) continue;
     }
-    if (
-      !isMisfitReplacementForMaladaptiveBehavior(
-        behavior,
-        currentName,
-        behaviorToReplacementsMap,
-        hourFunctions,
-      )
-    ) {
+    const isMisfit = rebalanceSoftMisfits
+      ? isMisfitReplacementForMaladaptiveBehavior(
+          behavior,
+          currentName,
+          behaviorToReplacementsMap,
+          hourFunctions,
+        )
+      : isHardMisfitReplacementForMaladaptiveBehavior(behavior, currentName, hourFunctions);
+    if (!isMisfit) {
       continue;
     }
 
@@ -1271,6 +1279,11 @@ export function ensureReplacementProgramAlignmentForSegments(params: {
   authorizedProgramNames: string[];
   maladaptiveBehaviorFunctionsForHour?: (import("@workspace/db/schema").ClinicalFunction[] | null)[] | undefined;
   overrideExplicitOnHardMisfit?: boolean;
+  /**
+   * When false, BIP soft-misfit remaps are skipped so a full wizard selection is not collapsed onto
+   * one mapped program. Hard/safety misfits still swap. Default true.
+   */
+  rebalanceSoftMisfits?: boolean;
   slotLabel?: string;
 }): string[] {
   const {
@@ -1287,6 +1300,7 @@ export function ensureReplacementProgramAlignmentForSegments(params: {
     authorizedProgramNames,
     maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
     overrideExplicitOnHardMisfit = true,
+    rebalanceSoftMisfits = true,
     slotLabel = "Segment",
   } = params;
 
@@ -1306,6 +1320,7 @@ export function ensureReplacementProgramAlignmentForSegments(params: {
       authorizedProgramNames,
       maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
       overrideExplicitOnHardMisfit,
+      rebalanceSoftMisfits,
       slotLabel,
     }),
   );

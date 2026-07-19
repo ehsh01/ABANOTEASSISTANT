@@ -711,28 +711,32 @@ export async function generateClinicalBodyOpenAI(
     body = "";
     finalProseIssues = [];
     blockingProseIssues = [];
-    // Skip expensive prose compliance when the plan is already invalid — repairs must fix structure first.
-    if (plan && planIssues.length === 0) {
+    // Soft-fail: always assemble from a schema-valid grounded plan so trial % / locked labels ship
+    // even when soft field issues remain. Previously soft plan issues left body="" and the service
+    // fell back to a thin template that omitted percentages and used vague topography.
+    if (plan) {
       body = assembleClinicalBodyFromNotePlan(plan, frozen);
-      // Deterministic pre-repair scrubs (punctuation / client-subject) before counting a prose failure.
       body = normalizeClinicalBodySentenceInitialPronouns(scrubStrayPunctuationClusters(body));
-      const proseValidation = validateClinicalBodyComplianceDetailed(
-        body,
-        toComplianceCtx(ctx, validationOptions?.blockedClientNames),
-      );
-      finalProseIssues = proseValidation.issues;
-      blockingProseIssues = proseValidation.blocking;
-      if (blockingProseIssues.length > 0) {
-        planIssues = blockingProseIssues.map((issue) => ({
-          code: `PROSE_${issue.code}`,
-          message: issue.message,
-          segmentIndex: issue.paragraphIndex,
-        }));
+      if (planIssues.length === 0) {
+        const proseValidation = validateClinicalBodyComplianceDetailed(
+          body,
+          toComplianceCtx(ctx, validationOptions?.blockedClientNames),
+        );
+        finalProseIssues = proseValidation.issues;
+        blockingProseIssues = proseValidation.blocking;
+        if (blockingProseIssues.length > 0) {
+          planIssues = blockingProseIssues.map((issue) => ({
+            code: `PROSE_${issue.code}`,
+            message: issue.message,
+            segmentIndex: issue.paragraphIndex,
+          }));
+        }
       }
     }
     currentTelemetry.planIssues = structuredIssuesForAttempt;
     currentTelemetry.proseIssues = [...finalProseIssues];
-    currentTelemetry.passed = planIssues.length === 0 && blockingProseIssues.length === 0;
+    currentTelemetry.passed =
+      structuredIssuesForAttempt.length === 0 && blockingProseIssues.length === 0;
     attemptHistory.push(currentTelemetry);
     if (currentTelemetry.passed) break;
 

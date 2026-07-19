@@ -123,8 +123,16 @@ export function lastResortObservableTopographyForBehavior(behaviorLabel: string)
   if (/\bclimb/.test(b)) {
     return "placing a foot or knees on furniture or elevated surfaces to reach preferred items";
   }
-  if (/\bstereotyp/.test(b) || /\bstereotypy\b/.test(b) || /\brepetitive\s+motor\b/.test(b)) {
+  if (
+    /\bstereotyp/.test(b) ||
+    /\bstereotypy\b/.test(b) ||
+    /\brepetitive\s+motor\b/.test(b) ||
+    /\brepetitive\s+behaviou?r\b/.test(b)
+  ) {
     return "engaging in repetitive motor movements with the hands unrelated to the presented task";
+  }
+  if (/\btantrum\b/.test(b) || /\bmeltdown\b/.test(b)) {
+    return "crying, yelling, and dropping to the floor during the presented demand";
   }
   if (/\bproperty\s+destruction\b/.test(b)) {
     return "throwing or knocking session materials from the work surface";
