@@ -473,19 +473,44 @@ export async function generateSessionNoteForClient(params: {
 
   const linkedIdsUnique = [...new Set(allowedProgramRows.map((r) => r.id))].sort((a, b) => a - b);
   const idToNameForPrograms = allowedIdToName.size > 0 ? allowedIdToName : nameById;
+  // Session-effective pool: selected-only when selection covers every hour; otherwise selected first
+  // then other assessment/linked programs. EVERY later assignment/rebalance/repair path must use this
+  // same pool — never the full client catalog — so unselected assessment programs cannot enter the note
+  // unless hours > selected count (or the RBT explicitly pins one in ABC Builder).
   const poolIds = replacementProgramPoolForAutoAssignment(
     body.selectedReplacements,
     linkedIdsUnique.length > 0 ? linkedIdsUnique : body.selectedReplacements,
     body.sessionHours,
   );
   const explicitProgramIdByHour = Array.from({ length: body.sessionHours }, (_, h) => hints[h]?.replacementProgramId);
+  const sessionAssignmentPoolIds = (() => {
+    const ids = [...poolIds];
+    const seen = new Set(ids);
+    for (const pid of explicitProgramIdByHour) {
+      if (typeof pid === "number" && idToNameForPrograms.has(pid) && !seen.has(pid)) {
+        seen.add(pid);
+        ids.push(pid);
+      }
+    }
+    return ids;
+  })();
+  // Narrow the note catalog to the session-effective pool so the model, validators, and rebalancers
+  // cannot treat unselected assessment programs as authorized for this note.
+  replacementProgramsCatalogForNote = (() => {
+    const names = sessionAssignmentPoolIds
+      .map((id) => idToNameForPrograms.get(id)?.trim() ?? "")
+      .filter((n) => n.length > 0);
+    const unique = [...new Set(names)];
+    if (unique.length === 0) return replacementProgramsCatalogForNote;
+    return unique.sort((a, b) => b.length - a.length || a.localeCompare(b));
+  })();
   const {
     names: replacementProgramForHour,
     rbtActionsOnly: rbtActionsOnlyOutcomeForHour,
     programIdForHour,
   } = replacementProgramAssignmentsForSessionHours({
     sessionHours: body.sessionHours,
-    poolIds,
+    poolIds: sessionAssignmentPoolIds,
     idToName: idToNameForPrograms,
     selectedIdSet: selectedIdSet,
     explicitProgramIdByHour,
@@ -500,7 +525,7 @@ export async function generateSessionNoteForClient(params: {
     rbtActionsOnlyOutcomeForHour,
     programIdForHour,
     explicitProgramIdByHour,
-    poolIds,
+    poolIds: sessionAssignmentPoolIds,
     idToName: idToNameForPrograms,
     selectedIdSet,
   });
@@ -513,7 +538,7 @@ export async function generateSessionNoteForClient(params: {
     rbtActionsOnlyOutcomeForHour,
     programIdForHour,
     explicitProgramIdByHour,
-    poolIds,
+    poolIds: sessionAssignmentPoolIds,
     idToName: idToNameForPrograms,
     selectedIdSet,
     behaviorToReplacementsMap,
@@ -528,7 +553,7 @@ export async function generateSessionNoteForClient(params: {
     rbtActionsOnlyOutcomeForHour,
     programIdForHour,
     explicitProgramIdByHour,
-    poolIds,
+    poolIds: sessionAssignmentPoolIds,
     idToName: idToNameForPrograms,
     selectedIdSet,
     behaviorToReplacementsMap,
@@ -590,8 +615,6 @@ export async function generateSessionNoteForClient(params: {
     maladaptiveBehaviorLabelsEquivalent,
   );
 
-  const fullCatalogPoolIds =
-    linkedIdsUnique.length > 0 ? linkedIdsUnique : poolIds;
   const segmentCount = narrativeCollapsed.narrativeSegmentCount;
   const segmentReplacementNames = [...narrativeCollapsed.replacementProgramForHour];
   const segmentRbtFlags = [...narrativeCollapsed.rbtActionsOnlyOutcomeForHour];
@@ -608,6 +631,7 @@ export async function generateSessionNoteForClient(params: {
     }
     return undefined;
   });
+  // Same session-effective pool as initial assignment — do NOT expand to the full client catalog here.
   const segmentAlignmentSwaps = ensureReplacementProgramAlignmentForSegments({
     segmentCount,
     maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
@@ -615,7 +639,7 @@ export async function generateSessionNoteForClient(params: {
     rbtActionsOnlyOutcomeForHour: segmentRbtFlags,
     programIdForHour: segmentProgramIds,
     explicitProgramIdByHour: segmentExplicitProgramIds,
-    rebalancePoolIds: fullCatalogPoolIds,
+    rebalancePoolIds: sessionAssignmentPoolIds,
     idToName: idToNameForPrograms,
     selectedIdSet,
     behaviorToReplacementsMap,
@@ -912,7 +936,7 @@ export async function generateSessionNoteForClient(params: {
       rbtActionsOnlyOutcomeForHour: repairRbt,
       programIdForHour: repairPids,
       explicitProgramIdByHour: segmentExplicitProgramIds,
-      rebalancePoolIds: fullCatalogPoolIds,
+      rebalancePoolIds: sessionAssignmentPoolIds,
       idToName: idToNameForPrograms,
       selectedIdSet,
       behaviorToReplacementsMap,

@@ -5,6 +5,7 @@ import {
   rebalanceDistinctReplacementProgramsByFunction,
   rebalanceRepeatedReplacementProgramsAcrossSegments,
   rebalanceWanderingSafetyProximityPrograms,
+  replacementProgramPoolForAutoAssignment,
 } from "./note-validation";
 import { enrichInterventionApplicationForBehavior } from "./note-plan-validation";
 
@@ -328,8 +329,22 @@ describe("rebalanceRepeatedReplacementProgramsAcrossSegments", () => {
   });
 });
 
+describe("replacementProgramPoolForAutoAssignment (session-effective pool)", () => {
+  test("uses selected programs only when selection covers every hour", () => {
+    expect(replacementProgramPoolForAutoAssignment([10, 20, 30], [10, 20, 30, 40, 50], 3)).toEqual([
+      10, 20, 30,
+    ]);
+  });
+
+  test("appends linked/assessment programs only when hours exceed the selection", () => {
+    expect(replacementProgramPoolForAutoAssignment([10, 20], [10, 20, 40, 50], 4)).toEqual([
+      10, 20, 40, 50,
+    ]);
+  });
+});
+
 describe("ensureReplacementProgramAlignmentForSegments", () => {
-  test("corrects escape behaviors paired with leave-area and tangible programs using full catalog", () => {
+  test("corrects escape behaviors paired with leave-area and tangible programs using session pool", () => {
     const idToName = new Map<number, string>([
       [1, LEAVE_AREA],
       [2, REQUEST_TANGIBLES],
@@ -339,6 +354,7 @@ describe("ensureReplacementProgramAlignmentForSegments", () => {
     const names = [LEAVE_AREA, REQUEST_TANGIBLES];
     const pids: (number | null)[] = [1, 2];
     const rbt = [true, true];
+    // Hours exceed selection (2 selected, but pool includes fill-ins 3+4) — fill-ins are eligible.
     const swaps = ensureReplacementProgramAlignmentForSegments({
       segmentCount: 2,
       maladaptiveBehaviorForHour: ["Physical aggression", "Verbal aggression"],
@@ -360,6 +376,40 @@ describe("ensureReplacementProgramAlignmentForSegments", () => {
     expect(names[0]).toBe(PROGRAM_B);
     expect(names[1]).toBe(PROGRAM_B);
     expect(swaps.length).toBeGreaterThan(0);
+  });
+
+  test("never introduces programs outside the session-effective pool even when authorized names are wider", () => {
+    const EXTRA = "Echoic Skills";
+    const idToName = new Map<number, string>([
+      [1, PROGRAM_A],
+      [2, PROGRAM_B],
+      [3, EXTRA],
+    ]);
+    // Selection covers hours: pool is selected-only. Authorized names still list EXTRA (assessment).
+    const names = [PROGRAM_A, PROGRAM_A];
+    const pids: (number | null)[] = [1, 1];
+    const rbt = [false, false];
+    ensureReplacementProgramAlignmentForSegments({
+      segmentCount: 2,
+      maladaptiveBehaviorForHour: ["Task Refusal", "Tantrum"],
+      names,
+      rbtActionsOnlyOutcomeForHour: rbt,
+      programIdForHour: pids,
+      explicitProgramIdByHour: [undefined, undefined],
+      rebalancePoolIds: [1, 2],
+      idToName,
+      selectedIdSet: new Set([1, 2]),
+      behaviorToReplacementsMap: {
+        "Task Refusal": [PROGRAM_A],
+        Tantrum: [PROGRAM_A],
+      },
+      authorizedProgramNames: [PROGRAM_A, PROGRAM_B, EXTRA],
+      maladaptiveBehaviorFunctionsForHour: [["escape"], ["escape"]],
+      overrideExplicitOnHardMisfit: true,
+      slotLabel: "Segment",
+    });
+    expect(names.every((n) => n === PROGRAM_A || n === PROGRAM_B)).toBe(true);
+    expect(names).not.toContain(EXTRA);
   });
 });
 

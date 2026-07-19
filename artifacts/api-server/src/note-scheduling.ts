@@ -1075,9 +1075,9 @@ export function rebalanceRepeatedReplacementProgramsAcrossSegments(params: {
   swapExplicitDuplicates?: boolean;
   /**
    * When no function-preferred distinct alternative remains, allow swapping a duplicate to ANY distinct
-   * authorized program that is not a genuine SAFETY (hard) misfit, so every ABC uses a different
-   * replacement program whenever the client/assessment has enough distinct programs. Prefers
-   * non-selected (assessment/client-linked) programs so auto-filled hours do not reuse selected ones.
+   * program already in `poolIds` that is not a genuine SAFETY (hard) misfit. The session-effective pool
+   * (not this flag) controls whether unselected assessment programs are eligible: when selection covers
+   * hours the pool is selected-only; when hours exceed selection, fill-ins may already be in `poolIds`.
    */
   allowFunctionRelaxedDistinctness?: boolean;
   slotLabel?: string;
@@ -1164,11 +1164,9 @@ export function rebalanceRepeatedReplacementProgramsAcrossSegments(params: {
     }
 
     if (pick === undefined && allowFunctionRelaxedDistinctness) {
-      // Distinctness fallback: no function-preferred alternative remains for this behavior, but the
-      // client/assessment still has unused authorized programs. Per the directive that every ABC use a
-      // different replacement program whenever enough programs exist, swap to any DISTINCT authorized
-      // program that is not a genuine SAFETY (hard) misfit. Prefer non-selected programs so extra hours
-      // draw on assessment/client-linked programs instead of reusing the ones selected for the session.
+      // Distinctness fallback within `poolIds` only: when hours exceed selection the pool may already
+      // include assessment fill-ins; when selection covers hours the pool is selected-only and this
+      // cannot introduce unselected programs. Prefer non-selected pool members when present (fill-ins).
       const relaxed = poolIds
         .filter((id) => {
           const n = idToName.get(id)?.trim();
@@ -1253,9 +1251,11 @@ function resolveReplacementProgramIdByName(
 }
 
 /**
- * Rebalance replacement programs per narrative segment using the **full client catalog** pool,
+ * Rebalance replacement programs per narrative segment using the **session-effective** pool
+ * (`rebalancePoolIds` — selected-only when selection covers hours; otherwise selected + fill-ins),
  * override explicit ABC pins when they are hard function mismatches, and apply a final fallback
- * picker so assignments always align before note generation.
+ * picker so assignments always align before note generation. Callers must not pass the full client
+ * catalog when the wizard selection already covers every hour.
  */
 export function ensureReplacementProgramAlignmentForSegments(params: {
   segmentCount: number;
@@ -1328,6 +1328,16 @@ export function ensureReplacementProgramAlignmentForSegments(params: {
     }),
   );
 
+  const poolNameAllowList = new Set(
+    rebalancePoolIds
+      .map((id) => idToName.get(id)?.trim() ?? "")
+      .filter((n) => n.length > 0)
+      .map((n) => normalizeReplacementProgramKey(n)),
+  );
+  const authorizedInPool = authorizedProgramNames.filter((n) =>
+    poolNameAllowList.has(normalizeReplacementProgramKey(n)),
+  );
+
   for (let s = 0; s < S; s++) {
     const behavior = beh[s]?.trim() ?? "";
     const currentName = names[s]?.trim() ?? "";
@@ -1346,15 +1356,18 @@ export function ensureReplacementProgramAlignmentForSegments(params: {
     const usedNames = new Set(
       names.map((n, idx) => (idx === s ? "" : n.trim())).filter((n) => n.length > 0),
     );
+    // Never pick outside the session-effective pool — even if authorizedProgramNames is wider.
     const fallback = pickBestReplacementProgramForBehavior(
       behavior,
       behaviorToReplacementsMap,
-      authorizedProgramNames,
+      authorizedInPool.length > 0 ? authorizedInPool : authorizedProgramNames,
       hourFunctions,
       usedNames,
     );
     if (!fallback || fallback === currentName) continue;
+    if (!poolNameAllowList.has(normalizeReplacementProgramKey(fallback))) continue;
     const pid = resolveReplacementProgramIdByName(fallback, idToName);
+    if (pid !== null && !rebalancePoolIds.includes(pid)) continue;
     names[s] = fallback;
     if (pid !== null) {
       pids[s] = pid;
@@ -1378,15 +1391,14 @@ export function ensureReplacementProgramAlignmentForSegments(params: {
       poolIds: rebalancePoolIds,
       idToName,
       selectedIdSet,
-      authorizedProgramNames,
+      authorizedProgramNames: authorizedInPool.length > 0 ? authorizedInPool : authorizedProgramNames,
       slotLabel,
     }),
   );
 
   // Final pass: ensure no replacement program repeats across the note's ABC segments when a distinct
-  // authorized alternative is available. When the session has more hours than distinct function-preferred
-  // programs, `allowFunctionRelaxedDistinctness` lets the pass reach for any other authorized, non-safety
-  // program so every ABC still gets a different replacement program whenever enough programs exist.
+  // alternative remains in the session-effective pool. `allowFunctionRelaxedDistinctness` may use any
+  // non-safety pool member for distinctness — it must not expand beyond `rebalancePoolIds`.
   swapped.push(
     ...rebalanceRepeatedReplacementProgramsAcrossSegments({
       segmentCount: S,
@@ -1399,7 +1411,7 @@ export function ensureReplacementProgramAlignmentForSegments(params: {
       idToName,
       selectedIdSet,
       behaviorToReplacementsMap,
-      authorizedProgramNames,
+      authorizedProgramNames: authorizedInPool.length > 0 ? authorizedInPool : authorizedProgramNames,
       maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
       allowFunctionRelaxedDistinctness: true,
       slotLabel,
