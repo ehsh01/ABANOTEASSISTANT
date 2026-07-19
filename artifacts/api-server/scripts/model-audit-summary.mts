@@ -44,9 +44,13 @@ async function main(): Promise<void> {
       round(avg(validator_issue_count)::numeric, 2)  AS avg_validator,
       round(avg(warning_count)::numeric, 2)          AS avg_warnings,
       round(avg(repair_attempts)::numeric, 2)        AS avg_repairs,
+      round(100.0 * sum((repair_attempts = 0)::int) / count(*), 1)              AS first_pass_pct,
       round(avg(latency_ms)::numeric, 0)             AS avg_latency_ms,
+      round(percentile_cont(0.50) WITHIN GROUP (ORDER BY latency_ms)::numeric, 0) AS p50_latency_ms,
+      round(percentile_cont(0.95) WITHIN GROUP (ORDER BY latency_ms)::numeric, 0) AS p95_latency_ms,
       round(avg(total_tokens)::numeric, 0)           AS avg_tokens,
       round(100.0 * sum((final_status = 'saved')::int) / count(*), 1)            AS saved_pct,
+      round(100.0 * sum((final_status = 'saved_with_warnings')::int) / count(*), 1) AS saved_warn_pct,
       round(100.0 * sum((final_status = 'blocked_critical')::int) / count(*), 1) AS blocked_pct,
       round(100.0 * sum((final_status = 'model_failed')::int) / count(*), 1)     AS model_failed_pct
     FROM abanote.note_generation_audit
@@ -64,6 +68,9 @@ async function main(): Promise<void> {
   }
 
   console.log("\n=== Note-generation quality by model (from audit history) ===");
+  console.log(
+    "Tip: use first_pass_pct + avg_repairs + p95_latency_ms to tune OPENAI_REASONING_EFFORT / async budgets.",
+  );
   console.table(summary.rows);
 
   const codes = await pool.query(

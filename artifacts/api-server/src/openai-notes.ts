@@ -18,11 +18,17 @@ import {
 import { assembleClinicalBodyFromNotePlan } from "./note-plan-assembly";
 import { NotePlanSchema, type NotePlan } from "./note-plan-schema";
 import {
+  normalizeClinicalBodySentenceInitialPronouns,
+  scrubStrayPunctuationClusters,
+} from "./note-normalization";
+import {
   buildFrozenSessionContext,
   groundNotePlanWithFrozenContext,
+  toModelFacingSessionContext,
   validateNotePlan,
   type NotePlanIssue,
 } from "./note-plan-validation";
+import type { SessionContext } from "./note-plan-schema";
 
 export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-5.5";
 
@@ -65,37 +71,39 @@ export type NoteGenerationContext = {
   behaviorToReplacementsMap?: Record<string, string[]> | undefined;
 };
 
+/**
+ * Stable system prompt kept as message[0] so OpenAI automatic prompt caching can reuse the prefix.
+ * Session-specific JSON is always placed last in the user message.
+ * Scrubber-enforced rules (medication, first-then, social praise, marked play space, bare He/She,
+ * punctuation clusters) are enforced server-side — do not rely on the model alone for those.
+ */
 const SYSTEM_PROMPT = `You draft a structured ABA NotePlan. Return JSON only.
 
 The server-provided SessionContext is frozen and authoritative:
 - Return exactly one segment for every context segment, in the same order and with the same segmentIndex.
-- Copy acquisitionOnly, behaviorLabel, replacementLabel, and intervention labels exactly. Never add, remove, reorder, rename, or paraphrase labels. The server may assign a distinct replacement program per hour; write the teaching/prompting detail for the program actually given in that segment and do not merge programs across hours.
+- Copy acquisitionOnly, behaviorLabel, replacementLabel, and intervention labels exactly from context (the server already assigned and function-matched them). Never add, remove, reorder, rename, or paraphrase labels. Write teaching/prompting for the program given in that segment only.
 - Use straight quotes only. Never emit escaped quotes (\\" or \\') inside string values.
 - Acquisition-only segments must use an empty behaviorLabel and empty interventions array.
 - Write only bounded, observable details in antecedent, topography, intervention application, response, teaching/prompting, and result fields.
-- Do not use learner names, initials, caregivers, parents, guardians, aunts, uncles, siblings, or other relatives, subjective/emotional language, diagnoses, inferred intent, or unsupported clinical facts. Present people belong only in the server opening sentence.
-- NEVER mention medication in any field. RBTs do not administer, deliver, prompt, or instruct medication. Do not reference medication, medicine, meds, pills, doses/dosages, prescriptions, inhalers, a "medication routine," or the RBT giving/instructing/handling medication. If a session activity involved medication, document only a neutral instructional/session task instead.
-- Do not begin antecedent (or any narrative field) with the word "During". Vary openings so hour paragraphs sound organic (e.g. "The RBT presented…", "Later, the RBT arranged…", "Next, materials were set out…").
-- When behaviorTopography is present, treat it as an assessment action bank only: paraphrase those observable actions into natural session-episode topography (what the client did in this hour). Use **exactly one** concrete action for this segment (e.g. for Excessive Motor Behavior, pick flapping hands OR head movement OR pacing — not the whole BIP list). Never paste BIP/VIP/assessment definition text, scoring language, "defined as," "any instance," "Status:", "To be initiated," or catalog labels alone. Never return only the behavior label or a generic phrase such as "motor behavior" or "elopement."
-- For **Task Refusal**, topography must describe observable *refusal* (e.g. not initiating the demand within 10 seconds, pushing materials away, turning away)—never the appropriate activity itself (never "by washing hands" / "by brushing teeth" / "by completing the worksheet").
-- For **Wandering Away / elopement / bolting**, topography must be a concrete leaving-boundary action observed this session (e.g. walking several feet toward the hallway without permission)—never paste the BIP operational definition.
-- Topography must be a COMPLETE observable action. Never truncate; never end a field with "(e.g.", a dangling "(", or an unfinished list. Never use interpretation-only phrases with no observable action ("refusing to comply", "was noncompliant", "did not want to", "acted out", "was defiant"). If you would write one of those, instead state what was observed (not initiating within 10 seconds, pushing materials away, turning away, leaving the area).
-- Copy each segment's intervention label EXACTLY from context (the server already function-matched it to the behavior). Never substitute a different intervention and never describe a safety response (moving out of reach, blocking contact) as if it were the behavioral intervention: name the assigned intervention, then describe the RBT's actions and any safety response separately.
-- Do NOT invent environmental details that were not provided: no "marked play space", "marked area", "visual boundary", schedules, timers, or materials unless they appear in context. Use neutral observable locations (e.g. "the designated activity area", "the work table").
-- Do NOT fabricate reinforcement/extinction/blocking procedures or praise schedules that are not in the assigned intervention or context. Describe only what the assigned intervention and session data support.
-- Keep all narrative fields sounding like a written session note: concise, concrete client/RBT actions—not copied plan language.
-- Reinforcers in narrative fields must come from SessionContext.reinforcementPreferences (or approved plain "praise"). Never write "social praise", "verbal praise", or "behavior-specific praise" — reviewers treat those as unauthorized intervention labels. Use plain "praise" only. Never write bare "preferred toys" / "a preferred toy" / unspecified "toys" as the delivered reinforcer—name the specific toy preference on file (e.g. sensory toys, spinning toys, balls, Disney dolls). If only the umbrella "Preferred toys" exists, prefer naming another listed item/activity instead of inventing a toy type.
-- When clientAgeYears is known and under 14, never mention YouTube (or YouTube videos) as a reward, reinforcer, or activity. Use another preference from reinforcementPreferences instead.
+- Do not use learner names, initials, caregivers/relatives, subjective/emotional language, diagnoses, inferred intent, or unsupported clinical facts. Present people belong only in the server opening sentence.
+- Do not begin antecedent (or any narrative field) with the word "During". Vary openings (e.g. "The RBT presented…", "Later, the RBT arranged…").
+- When behaviorTopography is present, treat it as an action bank only: paraphrase into natural session topography. Use **exactly one** concrete action per segment. Never paste BIP definition text, scoring language, "defined as," "any instance," "Status:", "To be initiated," or catalog labels alone.
+- For **Task Refusal**, topography must describe observable refusal (not initiating within 10 seconds, pushing materials away)—never the appropriate activity itself.
+- For **Wandering Away / elopement**, topography must be a concrete leaving-boundary action—never the BIP operational definition.
+- Topography must be a COMPLETE observable action. Never truncate or end with "(e.g." / a dangling "(". Never use interpretation-only phrases without an observable action ("refusing to comply", "was noncompliant").
+- Never describe a safety response (moving out of reach, blocking contact) as if it were the behavioral intervention: describe the RBT's assigned-intervention actions; safety may follow separately.
+- Do NOT invent environmental details not in context (no "marked play space" / "visual boundary"). Use neutral locations ("the designated activity area", "the work table").
+- Do NOT fabricate reinforcement/extinction/blocking procedures or praise schedules not supported by the assigned intervention or context.
+- Reinforcers must come from reinforcementPreferences or plain "praise" only (never "social/verbal/behavior-specific praise"; never bare "preferred toys"—name the specific preference). Under age 14, never mention YouTube.
 - If activityAntecedent is non-null, include that exact text in antecedent.
-- Do not write prose opening/closing text, headings, markdown, counts, fractions, percentages, trial totals, durations, or invented metrics. The server owns all metrics and final prose.
-- Each intervention application must clearly describe what the RBT did to implement the procedure (restate contingency, re-present demand, redirect, block, arrange materials)—not only a thin contingency phrase. For Physical Aggression and Property Destruction after Premack/demand interventions, include restating/re-presenting the demand (and for Property Destruction, redirecting to retrieve the item) before client-response detail.
-- When the assigned intervention is Premack principle (or Premack), describe only the demand-before-reinforcer contingency in plain prose (e.g. "required cleanup before access to the tablet"). Never write "first-then", "first/then", "First-Then Statement", or similar labels — reviewers treat those as unauthorized interventions unless they appear on the client's approved intervention list.
-- Teaching/prompting and topography clauses must be gerund phrases suitable after "by" (e.g. "repeating the instruction…", "swearing after the cleanup instruction", "making open-hand contact with the RBT's arm") — do not start those fields with "the RBT" or "the client".
-- For every non-acquisition segment, responseToIntervention must begin with "The client" and state at least one observable client action after intervention; RBT actions alone are not an outcome. resultSummary must also remain observable. Do not claim mastery or progress beyond supplied facts.
-- Begin every client-action sentence (responseToIntervention, resultSummary, and acquisition-only client outcomes) with "The client", never a bare pronoun such as "He" or "She". Refer to the learner as "the client" as the sentence subject/actor throughout — do not use "he"/"she" as the subject reference (a possessive like "his hand"/"her hand" describing a body part is fine). End every field with clean punctuation — never a stray ".," / ",." / trailing comma.
-- For Differential Reinforcement (DRA/DRI), the application must name the specific alternative/incompatible behavior being reinforced (e.g. "reinforcing the alternative response of keeping hands down and engaging with the task materials"), not a generic phrase.
-- Write like an experienced RBT documenting from memory, not by copying the ABC fields. responseToIntervention and resultSummary must ELABORATE on what the client did with fresh wording — do NOT reuse the antecedent's or topography's phrasing verbatim. Describe the concrete client action (what body part moved, what the client picked up/placed/said, how the client re-engaged) rather than restating the setup. Each segment's outcome wording should differ from other segments; avoid boilerplate like every hour ending "returned to the task."
-- resultSummary must add new observable detail beyond responseToIntervention (a different concrete action, completion, or re-engagement) — never a near-copy of it or of the topography.
+- Do not write opening/closing prose, headings, markdown, counts, fractions, percentages, trial totals, durations, or invented metrics. The server owns metrics and final prose.
+- Each intervention application must describe what the RBT did (restate contingency, re-present demand, redirect, arrange materials)—not only a thin contingency phrase. For Physical Aggression / Property Destruction after Premack/demand interventions, include restating/re-presenting the demand (and for Property Destruction, redirecting to retrieve the item).
+- For Premack, describe demand-before-reinforcer in plain prose only (never "first-then" labels).
+- Teaching/prompting and topography clauses must be gerund phrases suitable after "by" — do not start those fields with "the RBT" or "the client".
+- For every non-acquisition segment, responseToIntervention must begin with "The client" and state at least one observable client action; RBT actions alone are not an outcome. resultSummary must also remain observable and add NEW detail beyond responseToIntervention (not a near-copy).
+- For DRA/DRI, the application must name the specific alternative/incompatible behavior being reinforced.
+- Write like an experienced RBT documenting from memory: elaborate client actions with fresh wording; avoid boilerplate that every hour ends "returned to the task."
+- Server will rewrite medication references, first-then labels, social-praise compounds, invented environment phrases, stray punctuation, and sentence-initial He/She — still avoid emitting them.
 - The output shape is {"segments":[{"segmentIndex":0,"acquisitionOnly":false,"behaviorLabel":"...","antecedent":"...","topography":"...","interventions":[{"label":"...","application":"..."}],"responseToIntervention":"...","replacementLabel":"...","teachingOrPromptingSummary":"...","resultSummary":"..."}]}.`;
 
 const NOTE_PLAN_JSON_SCHEMA = {
@@ -234,7 +242,7 @@ export function isOpenAINoteGenerationConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-18.client-subject-clean-punct-v2";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-19.opt-compact-label-lock-v1";
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
   .update("\u0000")
@@ -526,6 +534,64 @@ export function resolveBackgroundNoteGenerationTimeBudgetMs(): number {
   return Number.isFinite(raw) && raw >= 15_000 ? Math.floor(raw) : 240_000;
 }
 
+/**
+ * Build a compact repair user message: only failing segments (+ their frozen locks) when possible,
+ * so repairs do not re-pay the full session context every attempt. Still asks for a complete NotePlan
+ * so merge/validate stays simple.
+ */
+export function buildScopedRepairUserMessage(params: {
+  frozen: SessionContext;
+  planIssues: NotePlanIssue[];
+  priorRaw: string;
+  priorPlan: NotePlan | null;
+}): string {
+  const failingIndexes = [
+    ...new Set(
+      params.planIssues
+        .map((issue) => issue.segmentIndex)
+        .filter((idx): idx is number => typeof idx === "number" && idx >= 0),
+    ),
+  ].sort((a, b) => a - b);
+
+  const modelFacing = toModelFacingSessionContext(params.frozen);
+  const scopedContext =
+    failingIndexes.length > 0 && failingIndexes.length < params.frozen.segments.length
+      ? {
+          ...modelFacing,
+          segments: (modelFacing.segments as unknown[]).filter((seg) => {
+            const index = (seg as { segmentIndex?: number }).segmentIndex;
+            return typeof index === "number" && failingIndexes.includes(index);
+          }),
+          assessmentGrounding: (
+            modelFacing.assessmentGrounding as { segmentIndex?: number }[]
+          ).filter(
+            (seg) => typeof seg.segmentIndex === "number" && failingIndexes.includes(seg.segmentIndex),
+          ),
+          repairFocusSegmentIndexes: failingIndexes,
+        }
+      : modelFacing;
+
+  let priorSegmentJson: unknown = params.priorRaw;
+  if (params.priorPlan && failingIndexes.length > 0) {
+    priorSegmentJson = {
+      segments: params.priorPlan.segments.filter((s) => failingIndexes.includes(s.segmentIndex)),
+    };
+  } else if (params.priorPlan) {
+    priorSegmentJson = params.priorPlan;
+  }
+
+  return `Correct only the invalid JSON fields. Return the complete corrected NotePlan as JSON only (all segments, in order).
+
+Structured violations:
+${JSON.stringify(params.planIssues)}
+
+Frozen SessionContext (authoritative; never change assignments; scoped to failing segments when listed):
+${JSON.stringify(scopedContext)}
+
+Prior model JSON/output (scoped when possible):
+${typeof priorSegmentJson === "string" ? priorSegmentJson : JSON.stringify(priorSegmentJson)}`;
+}
+
 export async function generateClinicalBodyOpenAI(
   ctx: NoteGenerationContext,
   validationOptions?: {
@@ -600,7 +666,8 @@ export async function generateClinicalBodyOpenAI(
     }
   };
 
-  const initialUser = `Frozen SessionContext JSON:\n${JSON.stringify(frozen, null, 2)}\n\nReturn the NotePlan JSON now.`;
+  const modelFacing = toModelFacingSessionContext(frozen);
+  const initialUser = `Frozen SessionContext JSON:\n${JSON.stringify(modelFacing)}\n\nReturn the NotePlan JSON now.`;
   let modelResponse = await callModel({
     attempt: 0,
     messages: [
@@ -644,8 +711,11 @@ export async function generateClinicalBodyOpenAI(
     body = "";
     finalProseIssues = [];
     blockingProseIssues = [];
+    // Skip expensive prose compliance when the plan is already invalid — repairs must fix structure first.
     if (plan && planIssues.length === 0) {
       body = assembleClinicalBodyFromNotePlan(plan, frozen);
+      // Deterministic pre-repair scrubs (punctuation / client-subject) before counting a prose failure.
+      body = normalizeClinicalBodySentenceInitialPronouns(scrubStrayPunctuationClusters(body));
       const proseValidation = validateClinicalBodyComplianceDetailed(
         body,
         toComplianceCtx(ctx, validationOptions?.blockedClientNames),
@@ -705,16 +775,12 @@ export async function generateClinicalBodyOpenAI(
     warnings.push(
       `${blockingProseIssues.length > 0 ? "Assembled clinical body compliance validation" : "Structured NotePlan validation"} failed; attempting JSON-only repair (${repairAttempts}/${MAX_NOTE_PLAN_REPAIR_ATTEMPTS}).`,
     );
-    const repairUser = `Correct only the invalid JSON fields. Return the complete corrected NotePlan as JSON only.
-
-Structured violations:
-${JSON.stringify(planIssues, null, 2)}
-
-Frozen SessionContext (authoritative; never change assignments):
-${JSON.stringify(frozen, null, 2)}
-
-Prior model JSON/output:
-${raw}`;
+    const repairUser = buildScopedRepairUserMessage({
+      frozen,
+      planIssues,
+      priorRaw: raw,
+      priorPlan: plan,
+    });
     modelResponse = await callModel({
       attempt: repairAttempts,
       messages: [

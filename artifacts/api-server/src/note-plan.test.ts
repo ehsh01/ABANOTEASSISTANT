@@ -797,24 +797,19 @@ describe("JSON-only repair orchestration", () => {
     expect(result.body).not.toMatch(/\b(?:caregiver|peers?)\b/i);
   });
 
-  it("repairs invalid structured fields without sending assembled prose", async () => {
-    const calls: Parameters<NotePlanModelCall>[0][] = [];
-    const modelCall = vi.fn<NotePlanModelCall>(async (request) => {
-      calls.push(request);
-      return JSON.stringify(request.attempt === 0
-        ? validPlan({ behaviorLabel: "Wrong Label" })
-        : validPlan());
-    });
+  it("force-locks wrong model labels without a repair call", async () => {
+    const modelCall = vi.fn<NotePlanModelCall>(async () =>
+      JSON.stringify(validPlan({ behaviorLabel: "Wrong Label" })),
+    );
 
     const result = await generateClinicalBodyOpenAI(generationContext(), { modelCall });
-    expect(modelCall).toHaveBeenCalledTimes(2);
-    expect(result.repairAttempts).toBe(1);
+    expect(modelCall).toHaveBeenCalledTimes(1);
+    expect(result.repairAttempts).toBe(0);
     expect(result.planIssues).toEqual([]);
     expect(result.notePlan?.segments[0]?.behaviorLabel).toBe("Task Refusal");
-    expect(calls[1]?.messages.at(-1)?.content).toContain("Prior model JSON/output");
-    expect(calls[1]?.messages.at(-1)?.content).not.toContain(
-      "To address this behavior, the RBT implemented",
-    );
+    expect(result.notePlan?.segments[0]?.interventions.map((i) => i.label)).toEqual([
+      "Premack principle",
+    ]);
   });
 
   it("repairs an outcome field through JSON when no existing result can be reused", async () => {
@@ -846,15 +841,13 @@ describe("JSON-only repair orchestration", () => {
   });
 
   it("returns blocking compatibility issues after bounded repair is exhausted", async () => {
-    const modelCall = vi.fn<NotePlanModelCall>(async () =>
-      JSON.stringify(validPlan({ behaviorLabel: "Wrong Label" })),
-    );
+    // Persistently invalid JSON cannot be force-locked or grounded — exhausts repair budget.
+    const modelCall = vi.fn<NotePlanModelCall>(async () => "{not-valid-json");
 
     const result = await generateClinicalBodyOpenAI(generationContext(), { modelCall });
     expect(modelCall).toHaveBeenCalledTimes(5);
     expect(result.body).toBe("");
     expect(result.repairAttempts).toBe(4);
-    expect(result.planIssues.map((issue) => issue.code)).toContain("BEHAVIOR_ASSIGNMENT");
     expect(result.finalIssues.every((issue) => issue.severity === "blocking")).toBe(true);
   });
 

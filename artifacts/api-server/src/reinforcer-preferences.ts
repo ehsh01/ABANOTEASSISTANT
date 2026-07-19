@@ -193,6 +193,9 @@ export function filterReinforcementPreferencesForNote(
     if (isPersonRolePreference(p)) return false;
     if (youtubeBanned && isYouTubePreference(p)) return false;
     if (isBipReinforcerDumpLine(p)) return false;
+    // OCR/garbled tokens that must never reach the locked closing (standalone or mid-list).
+    if (/\bpop\s+start\b/i.test(p)) return false;
+    if (/\b(?:mother|father|mom|dad|caregiver)(?:'s|’s)?\s+phone\b/i.test(p)) return false;
     return true;
   });
   const concreteToys = concreteToyPreferences(cleaned);

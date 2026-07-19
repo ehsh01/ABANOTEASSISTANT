@@ -45,8 +45,6 @@ import {
   maladaptiveBehaviorsForSessionHours,
   replacementProgramAssignmentsForSessionHours,
   rebalanceTaskRefusalReplacementProgramsHourly,
-  rebalanceBehaviorMappedReplacementProgramsHourly,
-  rebalanceDistinctReplacementProgramsByFunction,
   ensureReplacementProgramAlignmentForSegments,
   replacementProgramSlotHours,
   buildBehaviorReplacementCandidatesForNarrativeSegments,
@@ -465,11 +463,6 @@ export async function generateSessionNoteForClient(params: {
     canonicalMaladaptiveBehaviorLabel,
   );
   const activityAntecedentForHour = abcResolved.activityAntecedentForHour;
-  const maladaptiveBehaviorFunctionsHourly = maladaptiveBehaviorFunctionsForHourLabels(
-    maladaptiveBehaviorForHour,
-    maladaptiveBehaviorTargetsForNote,
-    maladaptiveBehaviorLabelsEquivalent,
-  );
 
   const linkedIdsUnique = [...new Set(allowedProgramRows.map((r) => r.id))].sort((a, b) => a - b);
   const idToNameForPrograms = allowedIdToName.size > 0 ? allowedIdToName : nameById;
@@ -530,36 +523,9 @@ export async function generateSessionNoteForClient(params: {
     selectedIdSet,
   });
 
+  // BIP-map / distinct / wandering / repeated-program alignment runs once after narrative collapse
+  // via ensureReplacementProgramAlignmentForSegments (single entrypoint — do not re-run hourly).
   const behaviorToReplacementsMap = structuredForNote?.behavior_to_replacements_map ?? {};
-  const behaviorRebalanceSwaps = rebalanceBehaviorMappedReplacementProgramsHourly({
-    sessionHours: body.sessionHours,
-    maladaptiveBehaviorForHour,
-    names: replacementProgramForHour,
-    rbtActionsOnlyOutcomeForHour,
-    programIdForHour,
-    explicitProgramIdByHour,
-    poolIds: sessionAssignmentPoolIds,
-    idToName: idToNameForPrograms,
-    selectedIdSet,
-    behaviorToReplacementsMap,
-    authorizedProgramNames: replacementProgramsCatalogForNote,
-    maladaptiveBehaviorFunctionsForHour: maladaptiveBehaviorFunctionsHourly,
-  });
-
-  const distinctReplacementSwaps = rebalanceDistinctReplacementProgramsByFunction({
-    sessionHours: body.sessionHours,
-    maladaptiveBehaviorForHour,
-    names: replacementProgramForHour,
-    rbtActionsOnlyOutcomeForHour,
-    programIdForHour,
-    explicitProgramIdByHour,
-    poolIds: sessionAssignmentPoolIds,
-    idToName: idToNameForPrograms,
-    selectedIdSet,
-    behaviorToReplacementsMap,
-    authorizedProgramNames: replacementProgramsCatalogForNote,
-    maladaptiveBehaviorFunctionsForHour: maladaptiveBehaviorFunctionsHourly,
-  });
 
   const therapistTrialSummaryHourly = buildTherapistTrialSummaryForReplacementHour({
     sessionHours: body.sessionHours,
@@ -725,7 +691,7 @@ export async function generateSessionNoteForClient(params: {
       "Sunday sessions require documented parental consent. Verify that a signed consent form authorizing Sunday sessions is on file for this client — otherwise the agency is in breach of the authorization requirements.",
     );
   }
-  warnings.push(...behaviorRebalanceSwaps, ...distinctReplacementSwaps, ...segmentAlignmentSwaps);
+  warnings.push(...segmentAlignmentSwaps);
 
   const maladaptiveBehaviorTopographyForHour = maladaptiveBehaviorTopographyForHourLabels(
     maladaptiveBehaviorForNarrative,

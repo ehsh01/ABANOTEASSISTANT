@@ -564,7 +564,47 @@ export function buildFrozenSessionContext(
 }
 
 /**
+ * Compact, model-facing view of the frozen SessionContext. Omits fields the model must not use
+ * (empty assessment excerpt, validation profile, trial metrics the server owns) and pretty-print
+ * whitespace. Assembly/validation continue to use the full SessionContext.
+ */
+export function toModelFacingSessionContext(context: SessionContext): Record<string, unknown> {
+  return {
+    narrativeSegmentCount: context.narrativeSegmentCount,
+    gender: context.gender,
+    clientAgeYears: context.clientAgeYears,
+    ageBand: context.ageBand,
+    assessmentReferenceFileName: context.assessmentReferenceFileName,
+    reinforcementPreferences: context.reinforcementPreferences,
+    // Name-safe structured grounding: per-segment topography/functions already scrubbed server-side.
+    // Raw assessment prose is intentionally never included (learner/caregiver name leak risk).
+    assessmentGrounding: context.segments.map((s) => ({
+      segmentIndex: s.segmentIndex,
+      behaviorLabel: s.behaviorLabel,
+      behaviorTopography: s.behaviorTopography,
+      behaviorFunctions: s.behaviorFunctions,
+      replacementLabel: s.replacementLabel,
+      interventionLabels: s.interventionLabels,
+    })),
+    planCatalogSnapshot: context.planCatalogSnapshot,
+    segments: context.segments.map((s) => ({
+      segmentIndex: s.segmentIndex,
+      acquisitionOnly: s.acquisitionOnly,
+      behaviorLabel: s.behaviorLabel,
+      replacementLabel: s.replacementLabel,
+      interventionLabels: s.interventionLabels,
+      activityAntecedent: s.activityAntecedent,
+      behaviorTopography: s.behaviorTopography,
+      behaviorFunctions: s.behaviorFunctions,
+      rbtActionsOnlyOutcome: s.rbtActionsOnlyOutcome,
+    })),
+  };
+}
+
+/**
  * Apply only source-preserving corrections before validation:
+ * - force-lock behavior/replacement/intervention labels and acquisitionOnly from frozen context
+ *   (model must not own catalog labels; wrong echoes must not burn repair budget);
  * - when model topography is weak or assessment-inconsistent, use the sanitized BIP clause;
  *   otherwise keep the model's natural session wording (do not paste VIP/BIP definitions);
  * - an observable client result already present in resultSummary is reused when the model
@@ -584,8 +624,26 @@ export function groundNotePlanWithFrozenContext(
     segments: plan.segments.map((segment, index) => {
       const locked = context.segments[index];
       if (!locked) return segment;
+      // Force-lock catalog labels from the server assignment before any narrative sanitization.
+      const lockedInterventions = locked.acquisitionOnly
+        ? []
+        : locked.interventionLabels.map((label, i) => {
+            const prior =
+              segment.interventions.find(
+                (item) => item.label.trim().toLowerCase() === label.trim().toLowerCase(),
+              ) ?? segment.interventions[i];
+            return {
+              label,
+              application: prior?.application?.trim() || "implementing the assigned intervention as outlined in the treatment plan",
+            };
+          });
       const sanitized = {
         ...segment,
+        segmentIndex: locked.segmentIndex,
+        acquisitionOnly: locked.acquisitionOnly,
+        behaviorLabel: locked.behaviorLabel,
+        replacementLabel: locked.replacementLabel,
+        interventions: lockedInterventions,
         antecedent: sanitizeModelNarrativeText(
           segment.antecedent,
           blockedClientNames,
@@ -596,14 +654,6 @@ export function groundNotePlanWithFrozenContext(
           blockedClientNames,
           presentPeople,
         ),
-        interventions: segment.interventions.map((intervention) => ({
-          ...intervention,
-          application: sanitizeModelNarrativeText(
-            intervention.application,
-            blockedClientNames,
-            presentPeople,
-          ),
-        })),
         responseToIntervention: sanitizeModelNarrativeText(
           segment.responseToIntervention,
           blockedClientNames,
@@ -620,8 +670,23 @@ export function groundNotePlanWithFrozenContext(
           presentPeople,
         ),
       };
+      // Re-sanitize applications after label lock (applications may have been remapped).
+      sanitized.interventions = sanitized.interventions.map((intervention) => ({
+        ...intervention,
+        application: sanitizeModelNarrativeText(
+          intervention.application,
+          blockedClientNames,
+          presentPeople,
+        ),
+      }));
       let topography = sanitized.topography;
-      if (!locked.acquisitionOnly) {
+      if (locked.acquisitionOnly) {
+        // Acquisition-only segments have no maladaptive topography; keep a short observable filler
+        // so schema/plan validation does not fail on empty/punctuation-only model output.
+        if (!topography.trim() || !/[a-z0-9]/i.test(topography)) {
+          topography = "orienting toward the presented materials";
+        }
+      } else {
         if (
           shouldPreferStoredTopographyOverModel(
             topography,
@@ -749,17 +814,19 @@ export function enrichInterventionApplicationForBehavior(
   const app = application.trim().replace(/\s+/g, " ");
   if (!app) return app;
   const behavior = behaviorLabel.trim();
+  const label = interventionLabel.trim();
   const alreadyRich =
-    /\b(?:restat(?:ed|ing)|re-?present(?:ed|ing)|redirect(?:ed|ing)|block(?:ed|ing)|retriev(?:ed|ing)|maintain(?:ed|ing)\s+the\s+(?:demand|expectation)|kept\s+the\s+demand)\b/i.test(
+    /\b(?:restat(?:ed|ing)|re-?present(?:ed|ing)|redirect(?:ed|ing)|block(?:ed|ing)|retriev(?:ed|ing)|maintain(?:ed|ing)\s+the\s+(?:demand|expectation)|kept\s+the\s+demand|reinforc(?:ed|ing)\s+the\s+alternative|arrang(?:ed|ing)\s+the\s+(?:activity|environment)|remov(?:ed|ing)\s+(?:distracting|extra|competing))\b/i.test(
       app,
     );
   if (alreadyRich) return app;
 
   const thinPremack =
     /\brequir(?:ed|ing)\b.+\bbefore\s+access\b/i.test(app) ||
-    (/premack/i.test(interventionLabel) && /\bbefore\s+access\b/i.test(app));
+    (/premack/i.test(label) && /\bbefore\s+access\b/i.test(app));
+  const thinGeneric = app.length < 70;
 
-  if (isPropertyDestructionBehaviorLabel(behavior) && (thinPremack || app.length < 90)) {
+  if (isPropertyDestructionBehaviorLabel(behavior) && (thinPremack || thinGeneric)) {
     return "redirecting the client to retrieve the item, re-presenting the task demand, and requiring completion of the activity before access to the reinforcer";
   }
   if (isPhysicalAggressionBehaviorLabel(behavior) && thinPremack) {
@@ -767,6 +834,29 @@ export function enrichInterventionApplicationForBehavior(
     const accessMatch = app.match(/\bbefore\s+access\s+to\s+(.+?)(?:\.|$)/i);
     const accessTarget = accessMatch?.[1]?.trim().replace(/\.$/, "") || "the preferred item";
     return `restating the contingency, re-presenting the demand, and requiring completion of the presented task before access to ${accessTarget}`;
+  }
+
+  // Deterministic application skeletons for common catalog interventions when the model is thin.
+  if (/premack/i.test(label) && (thinPremack || thinGeneric)) {
+    const accessMatch = app.match(/\bbefore\s+access\s+to\s+(.+?)(?:\.|$)/i);
+    const accessTarget = accessMatch?.[1]?.trim().replace(/\.$/, "") || "the preferred item";
+    return `restating that completing the current task step was required before access to ${accessTarget}, pointing to the task materials, and re-presenting the instruction`;
+  }
+  if (
+    /environmental\s+manipulat|antecedent\s+manipulat/i.test(label) &&
+    thinGeneric
+  ) {
+    return "arranging the activity area so that only the materials required for the current task were available, removing distracting items, and presenting the instruction again using a clear, concise verbal prompt";
+  }
+  if (
+    /differential\s+reinforcement|\bDRA\b|\bDRI\b/i.test(label) &&
+    thinGeneric &&
+    !/\breinforc(?:ed|ing)\s+the\s+alternative\b/i.test(app)
+  ) {
+    return "reinforcing the alternative response of engaging with the presented task materials and providing praise following appropriate responding";
+  }
+  if (/escape\s+extinction/i.test(label) && thinGeneric) {
+    return "maintaining the presented demand, re-presenting the instruction without removing the task expectation, and prompting completion before access to the reinforcer";
   }
   return app;
 }

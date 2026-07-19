@@ -49,7 +49,7 @@ describe("frozen note-generation regression corpus", () => {
     },
   );
 
-  it("repairs the legacy safety/topography/praise production warning as JSON only", async () => {
+  it("force-locks a wrong behavior label without a model repair (legacy fixture)", async () => {
     const fixture = corpus.cases.find(
       (item) => item.id === "legacy-safety-topography-praise-home-1h-zero",
     );
@@ -57,22 +57,21 @@ describe("frozen note-generation regression corpus", () => {
     const valid = fixtureNotePlan(fixture);
     const invalid = structuredClone(valid);
     invalid.segments[0]!.behaviorLabel = "Aggression";
-    const modelCall = vi.fn<NotePlanModelCall>(async ({ attempt }) => ({
-      output: JSON.stringify(attempt === 0 ? invalid : valid),
-      completionId: `mock-completion-${attempt}`,
+    const modelCall = vi.fn<NotePlanModelCall>(async () => ({
+      output: JSON.stringify(invalid),
+      completionId: "mock-completion-0",
       usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
     }));
 
     const result = await generateClinicalBodyOpenAI(fixtureGenerationContext(fixture), {
       modelCall,
     });
-    expect(result.repairAttempts).toBe(1);
-    expect(result.attemptHistory.map((attempt) => attempt.passed)).toEqual([false, true]);
-    expect(result.attemptHistory[0]?.planIssues.map((issue) => issue.code)).toContain(
-      "BEHAVIOR_ASSIGNMENT",
-    );
+    // Server grounding overwrites catalog labels — no repair call needed for label echo errors.
+    expect(result.repairAttempts).toBe(0);
+    expect(result.attemptHistory.map((attempt) => attempt.passed)).toEqual([true]);
+    expect(result.notePlan?.segments[0]?.behaviorLabel).toBe(valid.segments[0]!.behaviorLabel);
     expect(result.body).toContain("Response Block.");
     expect(result.body).not.toContain("verbal praise");
-    expect(modelCall).toHaveBeenCalledTimes(2);
+    expect(modelCall).toHaveBeenCalledTimes(1);
   });
 });

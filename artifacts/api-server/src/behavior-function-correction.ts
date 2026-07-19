@@ -1,8 +1,16 @@
+/**
+ * RETIRED FROM LIVE NOTEPLAN PATH (2026-07-19).
+ *
+ * These free-prose prompt strings are **not imported** by `openai-notes.ts` / structured NotePlan
+ * generation. Live clinical rules live in `SYSTEM_PROMPT` + server assignment
+ * (`assignInterventionsForSegment`, validators, scrubbers). Kept only so older references/docs do
+ * not break if something still imports the symbols; do not wire them back into generation.
+ */
 import type { ClinicalFunction } from "@workspace/db/schema";
 import { primaryFunctionForReplacementSelection } from "./behavior-function-replacement-mapping";
 import { RESPONSE_BLOCK_ELIGIBILITY_PROMPT } from "./response-block-eligibility";
 
-/** Binding core correction rules — checked on every maladaptive ABC segment at generation time. */
+/** @deprecated Not used by structured NotePlan generation. */
 export const CORE_CORRECTION_RULES_PROMPT = `CORE CORRECTION RULES (every maladaptive behavior segment — mandatory):
 1. **Clear topography:** Describe what the client physically or verbally did in observable, measurable terms. The manifested-behavior line must never be the catalog label alone—use "manifested [exact label] by …" with specific actions/vocalizations from maladaptiveBehaviorTopographyForHour[s] and the assessment excerpt when available.
 2. **Function-based alignment:** Use JSON maladaptiveBehaviorFunctionsForHour[s] as the documented function when non-empty (attention, escape, tangible, automatic). When function is documented, **every** catalog intervention and the replacement-program teaching must logically match that function. Do **not** invent function labels in prose; apply function only through intervention and replacement selection.
@@ -12,6 +20,7 @@ export const CORE_CORRECTION_RULES_PROMPT = `CORE CORRECTION RULES (every malada
 6. **Observable outcome required:** End each maladaptive segment with a concrete, observable behavioral outcome after the intervention (e.g. the behavior decreased in frequency, the client resumed task engagement, compliance increased, the client used the appropriate request). Do not stop after listing RBT actions.
 7. **Replacement program logic:** Use only the verbatim replacementProgramForHour[s] assigned for that segment. Teaching prose must match the **same function** as the maladaptive behavior. Do **not** write replacement teaching that fits a different function than documented. Prefer distinct BIP-mapped replacements per behavior when behaviorReplacementCandidatesForHour[s] lists different options—do not copy the same replacement teaching strategy across unrelated functions when the server assigned different programs.`;
 
+/** @deprecated Not used by structured NotePlan generation. */
 export const FUNCTION_BASED_MATCHING_GUIDE_PROMPT = `FUNCTION-BASED MATCHING GUIDE (when maladaptiveBehaviorFunctionsForHour[s] is non-empty). Build a COMPLETE, audit-ready intervention chain for the documented function. Name only interventions present in JSON interventions / interventionCandidatesForHour[s]; never invent an intervention or replacement not already listed:
 **ATTENTION-maintained** (e.g. SIB, verbal aggression, attention-seeking):
 - Required chain when the labels are listed: **(1)** Response Block/Response Blocking first ONLY when maladaptiveBehaviorForHour[s] is an **eligible** safety topography (Physical Aggression, SIB, elopement/wandering/bolting, Property Destruction when immediately preventing harm)—**never** for Verbal Aggression, Inappropriate Language, screaming/yelling alone, or other non-physical topographies; **(2) DRA or DRI** as the primary function intervention (reinforce an appropriate alternative that replaces the attention-maintained topography); **(3) Attention Independent Response Delivery / Non-contingent reinforcement (NCR)** when it is on JSON interventions — deliver attention on a time-based, behavior-independent schedule so appropriate behavior no longer needs the maladaptive topography to access attention.
@@ -30,6 +39,7 @@ export const FUNCTION_BASED_MATCHING_GUIDE_PROMPT = `FUNCTION-BASED MATCHING GUI
 - **Following this intervention:** keep preferred access withheld during topography; reinforce appropriate requesting, waiting, schedule compliance, or tolerance, then grant access contingent on the appropriate response.
 - Replacement: communication/choice/waiting skill from behaviorReplacementCandidatesForHour[s] (Request for Tangible, Accept "No", Accepting alternatives, Delay of Reinforcement / waiting—BIP-mapped only). Do **not** present an attention-request program (e.g. Request for Attention) as the intervention that reduced the tangible-access topography—even if that skill is the assigned replacement skill-acquisition target for the segment.`;
 
+/** @deprecated Not used by structured NotePlan generation. */
 export const FUNCTION_BASED_ABC_CORRECTION_PROMPT = `${CORE_CORRECTION_RULES_PROMPT}
 
 ${FUNCTION_BASED_MATCHING_GUIDE_PROMPT}
@@ -39,6 +49,7 @@ ${RESPONSE_BLOCK_ELIGIBILITY_PROMPT}
 - **ABC sequence:** Antecedent (materials, demand, access context) → observable client behavior/topography → consequence (safety if needed, then function intervention naming sentence(s), then **Following this intervention,** detail with withholding + reinforcement tied to replacement skill) → verbatim replacement-program sentence → quantified tail.
 - **Editing tone:** Objective, measurable, neutral—no vague wording, no internal states, no meta commentary about the BIP function.`;
 
+/** @deprecated Not used by structured NotePlan generation. */
 export const CORE_CORRECTION_QUALITY_CHECKLIST_PROMPT = `QUALITY CHECK BEFORE FINAL OUTPUT (verify every maladaptive segment — audit-ready, zero reviewer corrections):
 - Documented function identified from maladaptiveBehaviorFunctionsForHour[s] (or topography-only when empty).
 - Observable topography present in manifested-behavior line.
@@ -50,6 +61,7 @@ export const CORE_CORRECTION_QUALITY_CHECKLIST_PROMPT = `QUALITY CHECK BEFORE FI
 - Antecedent is specific (task, instruction type, environmental/access/transition context); no vague setup.
 - Professional ABA tone throughout.`;
 
+/** @deprecated Not used by structured NotePlan generation. */
 export const FUNCTION_BASED_CORRECTION_REVISION_HINTS = `Apply **CORE CORRECTION RULES** and **FUNCTION-BASED MATCHING GUIDE** from the base prompt: fix function/replacement mismatches; complete the function chain using only listed labels (attention → DRA/DRI plus NCR when listed; escape → escape/demand intervention plus reinforcement for task engagement/compliance; tangible → withhold/deny access during behavior plus DRA for appropriate requesting); keep Response Block as safety-only with a second function intervention; strengthen thin topography; specify vague antecedents; ensure each segment ends with an observable behavioral outcome; align replacement teaching to assigned replacementProgramForHour[s] and documented function; run the **QUALITY CHECK BEFORE FINAL OUTPUT** mentally before returning text.`;
 
 /** Human-readable function label for validation messages. */
