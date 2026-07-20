@@ -159,6 +159,10 @@ export function taskRefusalTopographyFromAntecedent(antecedent: string): string 
   if (/\btooth\s*-?\s*brush|brush(?:ing)?\s+teeth\b/i.test(a)) {
     return "not initiating the toothbrushing routine within 10 seconds after the instruction was delivered";
   }
+  // Generic hygiene/sink only when a more specific routine was not already matched above.
+  if (/\bhygiene\b|\bat the sink\b/i.test(a)) {
+    return "not initiating the hygiene routine within 10 seconds after the instruction was delivered";
+  }
   if (/\bclean\s*-?\s*up|cleanup\b/i.test(a)) {
     return "not initiating the cleanup demand within 10 seconds after the instruction was delivered";
   }

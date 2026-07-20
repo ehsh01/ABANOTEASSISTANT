@@ -435,6 +435,13 @@ export function normalizeClinicalBodyParallelPastTense(body: string): string {
           const past = gerundActionToPast(gerund);
           return `${sep}${past ?? gerund}`;
         },
+      )
+      .replace(
+        new RegExp(`(\\s+then\\s+)(${GERUND})\\b`, "gi"),
+        (_m, sep: string, gerund: string) => {
+          const past = gerundActionToPast(gerund);
+          return `${sep}${past ?? gerund}`;
+        },
       );
 
     return `${fixedHead}${tail}`;
@@ -673,6 +680,8 @@ export function scrubAssembledNoteQcHotspots(noteText: string): string {
             .replace(/\bTo be initiated\.?/gi, "")
             .replace(/\bPlaying with (?:his|her|their)\s+/gi, "Playing with the ")
             .replace(/\bPlaying with the tablet\b/g, "playing with the tablet")
+            // "toys such as animals such as animals" → "toys such as animals"
+            .replace(/\b(such as\s+[^,.;]+?)\s+\1\b/gi, "$1")
             .replace(/[ \t]{2,}/g, " ")
             .replace(/ \./g, "."),
         ),

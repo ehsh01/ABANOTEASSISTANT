@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeClinicalBodyParallelPastTense,
+  scrubAssembledNoteQcHotspots,
   scrubOrphanedGerundSentenceFragments,
 } from "./note-normalization";
 import {
@@ -80,11 +81,12 @@ describe("normalizeClinicalBodyParallelPastTense", () => {
     expect(out).not.toMatch(/and re-presenting/);
   });
 
-  it("rewrites reinforced … and providing", () => {
+  it("rewrites then re-presenting after a past-tense RBT action", () => {
     const out = normalizeClinicalBodyParallelPastTense(
-      "The RBT reinforced the alternative response and providing praise following appropriate engagement.",
+      "Following this intervention, the RBT delivered a brief series of high-probability instructions the client was likely to complete, then re-presenting the target demand and reinforced compliance with the sequence.",
     );
-    expect(out).toContain("and provided praise");
+    expect(out).toContain("then re-presented the target demand");
+    expect(out).not.toMatch(/then re-presenting/);
   });
 });
 
@@ -172,25 +174,53 @@ describe("acquisition assembly does not emit dangling topography", () => {
   });
 });
 
-describe("minimal fallback uses program-specific teaching", () => {
-  it("does not repeat generic modeling boilerplate for Echoic", () => {
+describe("Task Refusal washing-hands never ships", () => {
+  it("recovers hygiene refusal topography from antecedent when model writes washing hands", () => {
     const context = buildFrozenSessionContext(
       generationContext({
-        acquisitionOnlySegmentForHour: [true],
-        maladaptiveBehaviorForHour: [""],
-        replacementProgramForHour: ["Echoic Skills"],
-        replacementProgramsInOrder: ["Echoic Skills"],
-        interventions: [],
-        interventionCandidatesForHour: [[]],
-        behaviorReplacementCandidatesForHour: [["Echoic Skills"]],
-        therapistTrialSummaryForReplacementHour: [
-          { totalTrials: 10, successfulTrialNumbers: [1] },
-        ],
+        maladaptiveBehaviors: ["Task Refusal"],
+        maladaptiveBehaviorForHour: ["Task Refusal"],
+        maladaptiveBehaviorTopographyForHour: ["washing hands"],
+        activityAntecedentForHour: ["The RBT directed the client to begin a hygiene routine at the sink."],
+        replacementProgramForHour: ["Follow demands after the first prompt"],
+        replacementProgramsInOrder: ["Follow demands after the first prompt"],
+        behaviorReplacementCandidatesForHour: [["Follow demands after the first prompt"]],
+        behaviorToReplacementsMap: {
+          "Task Refusal": ["Follow demands after the first prompt"],
+        },
       }),
     );
-    const body = buildMinimalClinicalBodyFromSessionContext(context);
-    expect(body).toMatch(/vocal model/i);
-    expect(body).toMatch(/approximately 10%/i);
-    expect(body).not.toContain("modeling the target response and prompting the client through the presented opportunities");
+    const plan: NotePlan = {
+      segments: [
+        {
+          segmentIndex: 0,
+          acquisitionOnly: false,
+          behaviorLabel: "Task Refusal",
+          antecedent: "The RBT directed the client to begin a hygiene routine at the sink.",
+          topography: "washing hands",
+          interventions: [{ label: "Premack principle", application: "restating the contingency" }],
+          responseToIntervention: "The client turned toward the sink after prompting.",
+          replacementLabel: "Follow demands after the first prompt",
+          teachingOrPromptingSummary: "prompting the requested step after one direction",
+          resultSummary: "The client completed the prompted step and returned to the table.",
+        },
+      ],
+    };
+    const grounded = groundNotePlanWithFrozenContext(plan, context);
+    expect(grounded.segments[0]!.topography).toMatch(/not initiating the hygiene routine/i);
+    expect(grounded.segments[0]!.topography).not.toMatch(/^washing hands$/i);
+    const body = assembleClinicalBodyFromNotePlan(grounded, context);
+    expect(body).toMatch(/Task Refusal by not initiating the hygiene routine/i);
+    expect(body).not.toMatch(/Task Refusal by washing hands/i);
+  });
+});
+
+describe("scrub duplicated such-as reinforcer phrases", () => {
+  it("collapses such as animals such as animals", () => {
+    const out = scrubAssembledNoteQcHotspots(
+      "The RBT arranged toys such as animals such as animals before access.",
+    );
+    expect(out).toContain("toys such as animals");
+    expect(out).not.toMatch(/such as animals such as animals/i);
   });
 });

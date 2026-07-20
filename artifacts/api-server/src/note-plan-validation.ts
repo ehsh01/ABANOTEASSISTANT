@@ -299,11 +299,16 @@ export function shouldPreferStoredTopographyOverModel(
   }
 
   // Task Refusal must describe refusal, not the appropriate activity ("washing hands").
+  // Prefer stored only when stored is itself a real refusal topography — otherwise fall through
+  // so groundNotePlan can recover from antecedent / last-resort.
   if (
     isTaskRefusalBehaviorLabel(behaviorLabel) &&
     taskRefusalTopographyDescribesAppropriateBehavior(model)
   ) {
-    return true;
+    if (stored && !taskRefusalTopographyDescribesAppropriateBehavior(stored)) {
+      return true;
+    }
+    return false;
   }
 
   // Physical Aggression BIP definitions are usually vague ("any part of another person's body …").
@@ -707,7 +712,11 @@ export function groundNotePlanWithFrozenContext(
             locked.behaviorLabel,
           ) &&
           locked.behaviorTopography &&
-          !looksLikePastedBipDefinitionTopography(locked.behaviorTopography)
+          !looksLikePastedBipDefinitionTopography(locked.behaviorTopography) &&
+          !(
+            isTaskRefusalBehaviorLabel(locked.behaviorLabel) &&
+            taskRefusalTopographyDescribesAppropriateBehavior(locked.behaviorTopography)
+          )
         ) {
           topography = locked.behaviorTopography;
         } else if (

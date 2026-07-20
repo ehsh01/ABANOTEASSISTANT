@@ -872,9 +872,15 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
     if (typeof explicit[h] === "number") {
       const hardMisfit =
         overrideExplicitOnHardMisfit &&
-        isHardMisfitReplacementForMaladaptiveBehavior(behavior, currentName, hourFunctions);
+        (rebalanceSoftMisfits
+          ? isHardMisfitReplacementForMaladaptiveBehavior(behavior, currentName, hourFunctions)
+          : isSafetyHardMisfitReplacementForMaladaptiveBehavior(behavior, currentName));
       if (!hardMisfit) continue;
     }
+    // When the wizard selection already covers every hour, only *safety* hard misfits may remapped
+    // (leave-area on non-elopement, etc.). Function-category mismatches (FCT / Request Help / Walk
+    // on escape behaviors) must NOT collapse every hour onto "Follow demands…" — that was the
+    // production bug where 5 selected programs became Follow demands × 4.
     const isMisfit = rebalanceSoftMisfits
       ? isMisfitReplacementForMaladaptiveBehavior(
           behavior,
@@ -882,7 +888,7 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
           behaviorToReplacementsMap,
           hourFunctions,
         )
-      : isHardMisfitReplacementForMaladaptiveBehavior(behavior, currentName, hourFunctions);
+      : isSafetyHardMisfitReplacementForMaladaptiveBehavior(behavior, currentName);
     if (!isMisfit) {
       continue;
     }
@@ -897,15 +903,28 @@ export function rebalanceBehaviorMappedReplacementProgramsHourly(params: {
     const poolCandidates = poolIds.filter((id) => {
       const n = idToName.get(id)?.trim();
       if (!n || n === currentName) return false;
-      if (isMisfitReplacementForMaladaptiveBehavior(behavior, n, behaviorToReplacementsMap, hourFunctions)) {
+      if (rebalanceSoftMisfits) {
+        if (
+          isMisfitReplacementForMaladaptiveBehavior(
+            behavior,
+            n,
+            behaviorToReplacementsMap,
+            hourFunctions,
+          )
+        ) {
+          return false;
+        }
+      } else if (isSafetyHardMisfitReplacementForMaladaptiveBehavior(behavior, n)) {
         return false;
       }
       if (candidates.length === 0) return true;
       if (candidates.includes(n)) return true;
       // When the BIP map only lists hard mismatches, allow heuristic-aligned pool programs.
       const mapped = mappedReplacementsForBehaviorKey(behavior, behaviorToReplacementsMap);
-      const mappedViable = mapped.filter(
-        (p) => !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p, hourFunctions),
+      const mappedViable = mapped.filter((p) =>
+        rebalanceSoftMisfits
+          ? !isHardMisfitReplacementForMaladaptiveBehavior(behavior, p, hourFunctions)
+          : !isSafetyHardMisfitReplacementForMaladaptiveBehavior(behavior, p),
       );
       return mappedViable.length === 0;
     });
@@ -1088,6 +1107,12 @@ export function rebalanceRepeatedReplacementProgramsAcrossSegments(params: {
    * hours the pool is selected-only; when hours exceed selection, fill-ins may already be in `poolIds`.
    */
   allowFunctionRelaxedDistinctness?: boolean;
+  /**
+   * When true (wizard selection covers hours), treat only safety hard misfits as blocking for
+   * distinctness — function-category mismatches stay eligible so selected FCT / Request Help / Walk
+   * can replace duplicate Follow-demands hours.
+   */
+  preserveSessionSelectedPrograms?: boolean;
   slotLabel?: string;
 }): string[] {
   const {
@@ -1105,6 +1130,7 @@ export function rebalanceRepeatedReplacementProgramsAcrossSegments(params: {
     maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
     swapExplicitDuplicates = false,
     allowFunctionRelaxedDistinctness = false,
+    preserveSessionSelectedPrograms = false,
     slotLabel = "Segment",
   } = params;
 
@@ -1143,6 +1169,9 @@ export function rebalanceRepeatedReplacementProgramsAcrossSegments(params: {
       if (!n) return false;
       const key = normalizeReplacementProgramKey(n);
       if (key === currentKey || usedKeys.has(key)) return false;
+      if (preserveSessionSelectedPrograms) {
+        return !isSafetyHardMisfitReplacementForMaladaptiveBehavior(behavior, n);
+      }
       return !isMisfitReplacementForMaladaptiveBehavior(
         behavior,
         n,
@@ -1181,7 +1210,9 @@ export function rebalanceRepeatedReplacementProgramsAcrossSegments(params: {
           if (!n) return false;
           const key = normalizeReplacementProgramKey(n);
           if (key === currentKey || usedKeys.has(key)) return false;
-          return !isHardMisfitReplacementForMaladaptiveBehavior(behavior, n, hourFunctions);
+          // Always safety-only here: function-category "hard" misfits must remain eligible when
+          // preserving a full wizard selection (otherwise Follow demands repeats forever).
+          return !isSafetyHardMisfitReplacementForMaladaptiveBehavior(behavior, n);
         })
         .sort((a, b) => (selectedIdSet.has(a) ? 1 : 0) - (selectedIdSet.has(b) ? 1 : 0));
       pick = relaxed[0];
@@ -1324,24 +1355,28 @@ export function ensureReplacementProgramAlignmentForSegments(params: {
       slotLabel,
     }),
   );
-  swapped.push(
-    ...rebalanceDistinctReplacementProgramsByFunction({
-      sessionHours: S,
-      maladaptiveBehaviorForHour: beh,
-      names,
-      rbtActionsOnlyOutcomeForHour: rbt,
-      programIdForHour: pids,
-      explicitProgramIdByHour: explicit,
-      poolIds: rebalancePoolIds,
-      idToName,
-      selectedIdSet,
-      behaviorToReplacementsMap,
-      authorizedProgramNames,
-      maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
-      overrideExplicitOnHardMisfit,
-      slotLabel,
-    }),
-  );
+  // Soft function-distinctness only when soft remaps are enabled — otherwise it can still
+  // collapse selected programs onto the few that match escape/tangible heuristics.
+  if (rebalanceSoftMisfits) {
+    swapped.push(
+      ...rebalanceDistinctReplacementProgramsByFunction({
+        sessionHours: S,
+        maladaptiveBehaviorForHour: beh,
+        names,
+        rbtActionsOnlyOutcomeForHour: rbt,
+        programIdForHour: pids,
+        explicitProgramIdByHour: explicit,
+        poolIds: rebalancePoolIds,
+        idToName,
+        selectedIdSet,
+        behaviorToReplacementsMap,
+        authorizedProgramNames,
+        maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
+        overrideExplicitOnHardMisfit,
+        slotLabel,
+      }),
+    );
+  }
 
   const poolNameAllowList = new Set(
     rebalancePoolIds
@@ -1358,14 +1393,15 @@ export function ensureReplacementProgramAlignmentForSegments(params: {
     const currentName = names[s]?.trim() ?? "";
     if (!behavior || !currentName) continue;
     const hourFunctions = behaviorFunctions?.[s];
-    if (
-      !isMisfitReplacementForMaladaptiveBehavior(
-        behavior,
-        currentName,
-        behaviorToReplacementsMap,
-        hourFunctions,
-      )
-    ) {
+    const stillMisfit = rebalanceSoftMisfits
+      ? isMisfitReplacementForMaladaptiveBehavior(
+          behavior,
+          currentName,
+          behaviorToReplacementsMap,
+          hourFunctions,
+        )
+      : isSafetyHardMisfitReplacementForMaladaptiveBehavior(behavior, currentName);
+    if (!stillMisfit) {
       continue;
     }
     const usedNames = new Set(
@@ -1429,6 +1465,7 @@ export function ensureReplacementProgramAlignmentForSegments(params: {
       authorizedProgramNames: authorizedInPool.length > 0 ? authorizedInPool : authorizedProgramNames,
       maladaptiveBehaviorFunctionsForHour: behaviorFunctions,
       allowFunctionRelaxedDistinctness: true,
+      preserveSessionSelectedPrograms: !rebalanceSoftMisfits,
       slotLabel,
     }),
   );

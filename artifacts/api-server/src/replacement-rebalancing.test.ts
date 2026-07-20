@@ -415,6 +415,62 @@ describe("ensureReplacementProgramAlignmentForSegments", () => {
     expect(names).toEqual(expect.arrayContaining([TIME_ON_TASK, ACCEPT_NO, REQUEST_BREAK]));
   });
 
+  test("selection-covers hours: does not collapse FCT/Request Help/Walk onto Follow demands for escape behaviors", () => {
+    const RESPOND = "Respond to own Name";
+    const HELP = "Request Help";
+    const FCT = "Functional Communication Training (FCT)";
+    const WALK = "Walk within close distance of adult (safety skills)";
+    const FOLLOW = "Follow demands after the first prompt";
+    const idToName = new Map<number, string>([
+      [1, RESPOND],
+      [2, HELP],
+      [3, FCT],
+      [4, WALK],
+      [5, FOLLOW],
+    ]);
+    // Sequential wizard assignment (selection covers 5 hours).
+    const names = [RESPOND, HELP, FCT, WALK, FOLLOW];
+    const pids: (number | null)[] = [1, 2, 3, 4, 5];
+    const rbt = [false, false, false, false, false];
+    ensureReplacementProgramAlignmentForSegments({
+      segmentCount: 5,
+      maladaptiveBehaviorForHour: [
+        "Task Refusal",
+        "Task Refusal",
+        "Property Destruction",
+        "Tantrum",
+        "Repetitive Behavior",
+      ],
+      names,
+      rbtActionsOnlyOutcomeForHour: rbt,
+      programIdForHour: pids,
+      explicitProgramIdByHour: [undefined, undefined, undefined, undefined, undefined],
+      rebalancePoolIds: [1, 2, 3, 4, 5],
+      idToName,
+      selectedIdSet: new Set([1, 2, 3, 4, 5]),
+      behaviorToReplacementsMap: {
+        "Task Refusal": [FOLLOW],
+        "Property Destruction": [FOLLOW],
+        Tantrum: [FOLLOW],
+        "Repetitive Behavior": [FOLLOW],
+      },
+      authorizedProgramNames: [RESPOND, HELP, FCT, WALK, FOLLOW],
+      maladaptiveBehaviorFunctionsForHour: [
+        ["escape"],
+        ["escape"],
+        ["escape"],
+        ["escape"],
+        ["automatic"],
+      ],
+      overrideExplicitOnHardMisfit: true,
+      rebalanceSoftMisfits: false,
+      slotLabel: "Segment",
+    });
+    expect(new Set(names).size).toBe(5);
+    expect(names).toEqual(expect.arrayContaining([RESPOND, HELP, FCT, WALK, FOLLOW]));
+    expect(names.filter((n) => n === FOLLOW).length).toBe(1);
+  });
+
   test("never introduces programs outside the session-effective pool even when authorized names are wider", () => {
     const EXTRA = "Echoic Skills";
     const idToName = new Map<number, string>([

@@ -277,6 +277,9 @@ export function sanitizeReinforcerNarrativeText(
       .trim();
   }
 
+  // Collapse duplicated reinforcer exemplars: "toys such as animals such as animals".
+  out = out.replace(/\b(such as\s+[^,.;]+?)\s+\1\b/gi, "$1");
+
   return out;
 }
 
