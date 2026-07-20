@@ -62,11 +62,34 @@ export function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | n
     typeof data.hasEnvironmentalChanges !== "boolean" ||
     !Array.isArray(data.presentPeople) ||
     !Array.isArray(data.selectedReplacements) ||
+    !Array.isArray(data.abcHints) ||
+    data.abcHints.length !== data.sessionHours ||
+    data.programTrialData == null ||
     data.therapySetting == null ||
     !isTherapySetting(data.therapySetting)
   ) {
     return null;
   }
+
+  const abcHints: AbcHintEntry[] = data.abcHints.map((row) => ({
+    activityAntecedent: row.activityAntecedent?.trim() || null,
+    maladaptiveBehavior: row.maladaptiveBehavior?.trim() || null,
+    replacementProgramId: row.replacementProgramId,
+  }));
+  const validAssignments = abcHints.every(
+    (row) =>
+      row.replacementProgramId != null &&
+      data.selectedReplacements!.includes(row.replacementProgramId) &&
+      data.programTrialData?.[String(row.replacementProgramId)]?.count != null,
+  );
+  if (!validAssignments) return null;
+
+  const programTrialData: NonNullable<GenerateNoteRequest["programTrialData"]> = {};
+  for (const row of abcHints) {
+    const id = row.replacementProgramId!;
+    programTrialData[String(id)] = normalizeProgramTrialEntry(data.programTrialData[String(id)]!);
+  }
+
   const body: GenerateNoteRequest = {
     clientId: data.clientId,
     sessionHours: data.sessionHours,
@@ -75,6 +98,8 @@ export function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | n
     presentPeople: data.presentPeople,
     hasEnvironmentalChanges: data.hasEnvironmentalChanges,
     selectedReplacements: data.selectedReplacements,
+    abcHints,
+    programTrialData,
   };
   const env = data.environmentalChanges?.trim();
   if (env) {
@@ -83,36 +108,6 @@ export function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | n
   const next = data.nextSessionDate?.trim();
   if (next) {
     body.nextSessionDate = next;
-  }
-  if (Array.isArray(data.abcHints)) {
-    const capped = data.abcHints.slice(0, data.sessionHours);
-    const cleaned: AbcHintEntry[] = capped.map((row) => {
-      const hasActivity = !!row.activityAntecedent;
-      const hasBehavior = !!row.maladaptiveBehavior;
-      const pid = row.replacementProgramId ?? null;
-      if (hasActivity && hasBehavior) {
-        return {
-          activityAntecedent: row.activityAntecedent,
-          maladaptiveBehavior: row.maladaptiveBehavior,
-          replacementProgramId: pid,
-        };
-      }
-      if (hasActivity !== hasBehavior) {
-        return { activityAntecedent: null, maladaptiveBehavior: null, replacementProgramId: pid };
-      }
-      return { activityAntecedent: null, maladaptiveBehavior: null, replacementProgramId: pid };
-    });
-    const hasAny = cleaned.some((r) => !!r.activityAntecedent || r.replacementProgramId != null);
-    if (hasAny) {
-      body.abcHints = cleaned;
-    }
-  }
-  if (data.programTrialData != null && Object.keys(data.programTrialData).length > 0) {
-    const clamped: NonNullable<GenerateNoteRequest["programTrialData"]> = {};
-    for (const [k, v] of Object.entries(data.programTrialData)) {
-      clamped[k] = normalizeProgramTrialEntry(v);
-    }
-    body.programTrialData = clamped;
   }
   return body;
 }

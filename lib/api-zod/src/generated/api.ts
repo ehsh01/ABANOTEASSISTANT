@@ -2012,6 +2012,8 @@ export const generateNoteBodySessionHoursMax = 8;
 
 export const generateNoteBodyAbcHintsMax = 8;
 
+export const generateNoteBodyProgramTrialDataCountMax = 10;
+
 export const GenerateNoteBody = zod.object({
   clientId: zod.number(),
   sessionHours: zod.number().min(1).max(generateNoteBodySessionHoursMax),
@@ -2074,19 +2076,18 @@ export const GenerateNoteBody = zod.object({
             ),
           replacementProgramId: zod
             .number()
-            .nullish()
+            .nullable()
             .describe(
-              "Optional. ID of a replacement program linked to this client (GET \/clients\/:id\/programs). When set, hour h uses this program in the ABC instead of the default rotation from selectedReplacements. If this id is not in selectedReplacements, the clinical narrative for that hour must describe RBT implementation only and must not state positive or negative client outcomes for that program.\n",
+              "ID of the selected replacement program used for this hour. Must be present in selectedReplacements. The property is nullable only while the wizard row is incomplete; POST \/notes\/generate rejects null.\n",
             ),
         })
         .describe(
-          "One optional ABC row. activityAntecedent and maladaptiveBehavior must be non-empty together, or both empty\/null — partial pairs are invalid. replacementProgramId may be set alone or with a complete activity\/behavior pair.\n",
+          "One required hourly assignment. replacementProgramId is mandatory. activityAntecedent and maladaptiveBehavior are optional independent hints.\n",
         ),
     )
     .max(generateNoteBodyAbcHintsMax)
-    .optional()
     .describe(
-      "Optional ABC Builder rows, index-aligned with service hours (index 0 = first hour). When both activityAntecedent and maladaptiveBehavior are set for an index, the AI must use those exact strings for that hour; empty rows use default AI rotation. Optional replacementProgramId per index assigns which linked replacement program that hour's ABC documents (defaults to server rotation from selectedReplacements). When replacementProgramId is not among selectedReplacements, the narrative must document RBT actions only for that hour—no valenced client outcome. Length must not exceed sessionHours. Omit or send [] for fully automatic ABCs.\n",
+      "Required hour-indexed ABC assignments (index 0 = first hour). The array length must equal sessionHours and every row must include replacementProgramId from selectedReplacements. activityAntecedent and maladaptiveBehavior are optional hints; when omitted, the model chooses them from the client profile\/assessment. The server never rotates, auto-fills, or remaps the hourly program.\n",
     ),
   programTrialData: zod
     .record(
@@ -2094,9 +2095,11 @@ export const GenerateNoteBody = zod.object({
       zod.object({
         count: zod
           .number()
+          .min(1)
+          .max(generateNoteBodyProgramTrialDataCountMax)
           .nullable()
           .describe(
-            'Total trials conducted for this replacement program when therapist-entered. `null` means \"no trial data entered\" — the server falls back to default quantified language. `>= 1` means trials were entered (including a deliberate 0% selection, encoded as `count >= 1` plus an empty `effectiveTrials`).\n',
+            "Fixed trial denominator used by the app percentage selector (currently 10). Nullable only while wizard state is incomplete; POST \/notes\/generate rejects null.\n",
           ),
         effectiveTrials: zod
           .array(zod.number())
@@ -2105,9 +2108,8 @@ export const GenerateNoteBody = zod.object({
           ),
       }),
     )
-    .optional()
     .describe(
-      'Optional. Maps replacement program id (string keys, e.g. \"42\") to trial metadata. When `count` is \*\*null\*\*, no trial data was entered and the server uses default quantified replacement-program language for that hour. When `count` is \*\*>= 1\*\*, the therapist entered trial data for that program — `effectiveTrials` lists the 1-based trial indices that met criterion (so an empty `effectiveTrials` paired with `count >= 1` represents \*\*0 successes \/ count trials\*\*, i.e. a deliberate 0% entry, not \"no data\"). The clinical narrative for that hour must incorporate the rounded percentage (`successfulTrialNumbers.length` \/ `totalTrials`) for the verbatim replacement program name. Ignored for hours that document RBT-only replacement programs (not selected session targets).\n',
+      "Required. Maps every hourly replacement program id to the percentage manually selected in the app, encoded as count + effectiveTrials. The server freezes the corresponding integer percentage and requires that exact value in every hour assigned to the program.\n",
     ),
 });
 
@@ -2281,6 +2283,8 @@ export const createNoteGenerationJobBodySessionHoursMax = 8;
 
 export const createNoteGenerationJobBodyAbcHintsMax = 8;
 
+export const createNoteGenerationJobBodyProgramTrialDataCountMax = 10;
+
 export const CreateNoteGenerationJobBody = zod.object({
   clientId: zod.number(),
   sessionHours: zod
@@ -2346,19 +2350,18 @@ export const CreateNoteGenerationJobBody = zod.object({
             ),
           replacementProgramId: zod
             .number()
-            .nullish()
+            .nullable()
             .describe(
-              "Optional. ID of a replacement program linked to this client (GET \/clients\/:id\/programs). When set, hour h uses this program in the ABC instead of the default rotation from selectedReplacements. If this id is not in selectedReplacements, the clinical narrative for that hour must describe RBT implementation only and must not state positive or negative client outcomes for that program.\n",
+              "ID of the selected replacement program used for this hour. Must be present in selectedReplacements. The property is nullable only while the wizard row is incomplete; POST \/notes\/generate rejects null.\n",
             ),
         })
         .describe(
-          "One optional ABC row. activityAntecedent and maladaptiveBehavior must be non-empty together, or both empty\/null — partial pairs are invalid. replacementProgramId may be set alone or with a complete activity\/behavior pair.\n",
+          "One required hourly assignment. replacementProgramId is mandatory. activityAntecedent and maladaptiveBehavior are optional independent hints.\n",
         ),
     )
     .max(createNoteGenerationJobBodyAbcHintsMax)
-    .optional()
     .describe(
-      "Optional ABC Builder rows, index-aligned with service hours (index 0 = first hour). When both activityAntecedent and maladaptiveBehavior are set for an index, the AI must use those exact strings for that hour; empty rows use default AI rotation. Optional replacementProgramId per index assigns which linked replacement program that hour's ABC documents (defaults to server rotation from selectedReplacements). When replacementProgramId is not among selectedReplacements, the narrative must document RBT actions only for that hour—no valenced client outcome. Length must not exceed sessionHours. Omit or send [] for fully automatic ABCs.\n",
+      "Required hour-indexed ABC assignments (index 0 = first hour). The array length must equal sessionHours and every row must include replacementProgramId from selectedReplacements. activityAntecedent and maladaptiveBehavior are optional hints; when omitted, the model chooses them from the client profile\/assessment. The server never rotates, auto-fills, or remaps the hourly program.\n",
     ),
   programTrialData: zod
     .record(
@@ -2366,9 +2369,11 @@ export const CreateNoteGenerationJobBody = zod.object({
       zod.object({
         count: zod
           .number()
+          .min(1)
+          .max(createNoteGenerationJobBodyProgramTrialDataCountMax)
           .nullable()
           .describe(
-            'Total trials conducted for this replacement program when therapist-entered. `null` means \"no trial data entered\" — the server falls back to default quantified language. `>= 1` means trials were entered (including a deliberate 0% selection, encoded as `count >= 1` plus an empty `effectiveTrials`).\n',
+            "Fixed trial denominator used by the app percentage selector (currently 10). Nullable only while wizard state is incomplete; POST \/notes\/generate rejects null.\n",
           ),
         effectiveTrials: zod
           .array(zod.number())
@@ -2377,9 +2382,8 @@ export const CreateNoteGenerationJobBody = zod.object({
           ),
       }),
     )
-    .optional()
     .describe(
-      'Optional. Maps replacement program id (string keys, e.g. \"42\") to trial metadata. When `count` is \*\*null\*\*, no trial data was entered and the server uses default quantified replacement-program language for that hour. When `count` is \*\*>= 1\*\*, the therapist entered trial data for that program — `effectiveTrials` lists the 1-based trial indices that met criterion (so an empty `effectiveTrials` paired with `count >= 1` represents \*\*0 successes \/ count trials\*\*, i.e. a deliberate 0% entry, not \"no data\"). The clinical narrative for that hour must incorporate the rounded percentage (`successfulTrialNumbers.length` \/ `totalTrials`) for the verbatim replacement program name. Ignored for hours that document RBT-only replacement programs (not selected session targets).\n',
+      "Required. Maps every hourly replacement program id to the percentage manually selected in the app, encoded as count + effectiveTrials. The server freezes the corresponding integer percentage and requires that exact value in every hour assigned to the program.\n",
     ),
 });
 

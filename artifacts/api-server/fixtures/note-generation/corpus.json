@@ -1,78 +1,75 @@
 {
-  "version": "phase4-v1",
+  "version": "flexible-abc-v1",
   "cases": [
     {
-      "id": "legacy-safety-topography-praise-home-1h-zero",
-      "tags": ["production-warning-regression", "home", "safety", "topography", "praise", "1h", "0-percent"],
+      "id": "sample-1-two-hours",
+      "tags": ["sample-1", "two-hours", "exact-percentages"],
       "setting": "Home",
-      "assessment": {"fileName": "deidentified-bip.pdf", "excerpt": "Physical Aggression is defined as an open hand contacting another person's arm. Praise and bubbles are documented reinforcers.", "truncated": false},
-      "reinforcementPreferences": ["social praise", "bubbles"],
-      "segments": [{"behavior": "Physical Aggression", "topography": "open hand contacting another person's arm", "functions": ["escape"], "replacement": "Request for Break", "interventions": ["Response Block", "Escape Extinction"], "trial": {"totalTrials": 4, "successfulTrialNumbers": []}}],
-      "plan": [{"antecedent": "The RBT presented a sorting task at the table", "topography": "the client moved an open hand into contact with the RBT's arm", "applications": ["The RBT positioned an open hand between the client and the contact area", "The RBT maintained the task direction while keeping materials available"], "response": "The client lowered both hands and returned near the task materials after prompting", "teaching": "modeling a break-request gesture before the task continued", "result": "The client used the modeled gesture following the prompt"}]
-    },
-    {
-      "id": "school-elopement-partial",
-      "tags": ["school", "elopement", "partial"],
-      "setting": "School",
-      "assessment": {"fileName": "deidentified-fba.pdf", "excerpt": "Elopement is defined as moving more than several steps from the assigned instructional area without permission.", "truncated": false},
-      "reinforcementPreferences": ["music"],
-      "segments": [{"behavior": "Elopement", "topography": "moving from the assigned instructional area without permission", "functions": ["escape"], "replacement": "Request for Break", "interventions": ["Redirection"], "trial": {"totalTrials": 5, "successfulTrialNumbers": [1, 3]}}],
-      "plan": [{"antecedent": "The teacher placed a classroom worksheet on the client's desk and presented the instruction to begin", "topography": "the client moved from the assigned instructional area without permission", "applications": ["The RBT directed the client back toward the assigned chair"], "response": "The client returned to the assigned chair after prompting", "teaching": "modeling the break-request response before another worksheet item", "result": "The client used the modeled response following the prompt"}]
-    },
-    {
-      "id": "sib-attention-safety-chain-100",
-      "tags": ["sib", "safety-chain", "100-percent"],
-      "setting": "Home",
-      "assessment": {"fileName": "deidentified-bip.pdf", "excerpt": "Self-Injurious Behavior (SIB) is defined as the client's hand contacting the client's head. The documented function includes attention.", "truncated": false},
-      "reinforcementPreferences": ["preferred toys"],
-      "segments": [{"behavior": "Self-Injurious Behavior (SIB)", "topography": "hand contacting the client's head", "functions": ["attention"], "replacement": "Request Attention", "interventions": ["Response Block", "Differential Reinforcement of Alternative Behavior (DRA)", "Attention independent response delivery"], "trial": {"totalTrials": 3, "successfulTrialNumbers": [1, 2, 3]}}],
-      "plan": [{"antecedent": "The RBT placed picture cards on the table and shifted attention to the session materials", "topography": "the client moved a hand toward the client's head", "applications": ["The RBT placed a hand between the client's hand and head", "The RBT delivered attention following the assigned alternative response", "The RBT provided scheduled attention independent of the behavior"], "response": "The client lowered the hand and remained near the RBT", "teaching": "modeling the assigned attention-request response", "result": "The client used the modeled response following the prompt"}]
-    },
-    {
-      "id": "gadget-access-visual-supports",
-      "tags": ["gadget-access", "visual-supports", "tangible"],
-      "setting": "Home",
-      "assessment": {"fileName": "deidentified-bip.pdf", "excerpt": "Disruptive Behavior includes pushing materials from the table following delayed access to an electronic item.", "truncated": false},
-      "reinforcementPreferences": ["sensory toys"],
-      "catalogInterventions": ["Environmental Manipulation", "Visual Supports"],
-      "segments": [{"behavior": "Disruptive Behavior", "topography": "pushing materials from the table", "functions": ["tangible"], "replacement": "Request for Tangible", "interventions": ["Environmental Manipulation"], "trial": null}],
-      "plan": [{"antecedent": "The RBT delayed access to the electronic item and presented puzzle pieces at the table", "topography": "the client pushed materials from the table", "applications": ["The RBT moved the electronic item outside the immediate work area and displayed the approved activity sequence"], "response": "The client placed hands on the table and oriented toward the activity", "teaching": "modeling the assigned tangible-request response", "result": "The client used the modeled response after prompting"}]
-    },
-    {
-      "id": "disruptive-multi-hour-no-trials",
-      "tags": ["disruptive-behavior", "multi-hour", "no-trials"],
-      "setting": "School",
-      "assessment": {"fileName": "deidentified-fba.pdf", "excerpt": "Disruptive Behavior is defined as sweeping instructional materials from the work surface. Task Refusal is defined as turning away from presented work.", "truncated": false},
-      "reinforcementPreferences": [],
-      "segments": [
-        {"behavior": "Disruptive Behavior", "topography": "sweeping instructional materials from the work surface", "functions": ["escape"], "replacement": "Request for Break", "interventions": ["Premack principle"], "trial": null},
-        {"behavior": "Task Refusal", "topography": "turning away from presented work", "functions": ["escape"], "replacement": "Request for Break", "interventions": ["Premack principle"], "trial": null}
+      "assessmentExcerpt": "Task refusal and Physical Aggression are documented. Premack Principle and Differential Reinforcement of Alternative Behavior (DRA) are available.",
+      "profileBehaviors": ["Task refusal", "Physical Aggression"],
+      "profileInterventions": ["Premack Principle", "Differential Reinforcement of Alternative Behavior (DRA)"],
+      "hourlyAssignments": [
+        {"programId": 1, "programName": "Compliance Training", "criterionPercentage": 20},
+        {"programId": 2, "programName": "Accept “no” as a response", "criterionPercentage": 10}
       ],
-      "plan": [
-        {"antecedent": "The teacher placed matching cards on the classroom table and instructed the client to match the first pair", "topography": "the client swept instructional materials from the work surface", "applications": ["The RBT pointed to the first match and then to the preferred item"], "response": "The client returned materials after prompting", "teaching": "modeling a break-request gesture", "result": "The client used the modeled gesture after prompting"},
-        {"antecedent": "The teacher placed a second worksheet on the client's desk and instructed the client to mark the first item", "topography": "the client turned away from the presented work", "applications": ["The RBT pointed to the first worksheet item and then to the preferred item"], "response": "The client oriented toward the work and completed the presented step", "teaching": "modeling the assigned break-request response", "result": "The client used the modeled response after prompting"}
+      "paragraphs": [
+        "At the dining table, the RBT presented a worksheet and the client pushed the materials away. The RBT used Premack Principle and prompted task completion. The RBT implemented the replacement program \"Compliance Training\" through single-step directions; approximately 20% of discrete trials met criterion.",
+        "In the living room, the client hit the RBT's arm after access to a ball was delayed. The RBT used Differential Reinforcement of Alternative Behavior (DRA) and reinforced keeping hands to self. The RBT implemented the replacement program \"Accept “no” as a response\"; approximately 10% of discrete trials met criterion."
       ]
     },
     {
-      "id": "acquisition-only-echoic",
-      "tags": ["acquisition-only", "1h"],
-      "setting": "School",
-      "assessment": {"fileName": "deidentified-assessment.pdf", "excerpt": "Echoic Skills is an authorized acquisition target.", "truncated": false},
-      "reinforcementPreferences": ["music"],
-      "segments": [{"behavior": "", "topography": null, "functions": null, "replacement": "Echoic Skills", "interventions": [], "trial": {"totalTrials": 4, "successfulTrialNumbers": [1, 2] }, "acquisitionOnly": true}],
-      "plan": [{"antecedent": "The teacher placed picture cards on the classroom table while the RBT modeled a sound", "topography": "the client oriented toward the modeled sound", "applications": [], "response": "The client remained near the teaching materials", "teaching": "modeling the sound and providing the assigned prompt", "result": "The client produced a vocal response following the prompt"}]
+      "id": "sample-2-repeated-program",
+      "tags": ["sample-2", "repeated-program", "multiple-interventions"],
+      "setting": "Home",
+      "assessmentExcerpt": "Task refusal and Physical Aggression are documented.",
+      "profileBehaviors": ["Task refusal", "Physical Aggression"],
+      "profileInterventions": ["Escape independent response delivery", "Response blocking", "Differential Reinforcement of Alternative Behavior (DRA)", "Premack Principle"],
+      "hourlyAssignments": [
+        {"programId": 3, "programName": "Schedule of activities", "criterionPercentage": 10},
+        {"programId": 4, "programName": "Accepting alternatives and making choices", "criterionPercentage": 10},
+        {"programId": 3, "programName": "Schedule of activities", "criterionPercentage": 10}
+      ],
+      "paragraphs": [
+        "The RBT presented a chore list and the client turned away from the table. The RBT used Escape independent response delivery and re-presented smaller task steps. The RBT implemented \"Schedule of activities\" by reviewing current and next tasks; criterion was met on approximately 10% of discrete trials.",
+        "The client pushed the RBT's forearm when a snack was unavailable. The RBT used Response blocking and Differential Reinforcement of Alternative Behavior (DRA), then reinforced an appropriate choice. The RBT implemented \"Accepting alternatives and making choices\"; criterion was met on approximately 10% of discrete trials.",
+        "The RBT presented a folding task and the client pushed clothing back into a bin. The RBT used Premack Principle and reinforced completed steps. The RBT implemented \"Schedule of activities\" before transitions; criterion was met on approximately 10% of discrete trials."
+      ]
     },
     {
-      "id": "assessment-truncated-valid",
-      "tags": ["assessment-truncated", "home"],
+      "id": "sample-3-thirty-percent",
+      "tags": ["sample-3", "thirty-percent"],
       "setting": "Home",
-      "assessment": {"fileName": "deidentified-long-bip.pdf", "excerpt": "Task Refusal is defined as moving task materials away.", "truncated": true},
-      "reinforcementPreferences": [],
-      "segments": [{"behavior": "Task Refusal", "topography": "moving task materials away", "functions": ["escape"], "replacement": "Request for Break", "interventions": ["Premack principle"], "trial": null}],
-      "plan": [{"antecedent": "The RBT presented a brief table task", "topography": "the client moved task materials away", "applications": ["The RBT presented the brief task before access to a preferred activity"], "response": "The client returned the materials after prompting", "teaching": "modeling the assigned break-request response", "result": "The client used the modeled response after prompting"}]
+      "assessmentExcerpt": "Elopement and Property destruction are documented.",
+      "profileBehaviors": ["Elopement", "Property destruction"],
+      "profileInterventions": ["Response blocking", "Escape independent response delivery", "Differential Reinforcement of Alternative Behavior (DRA)"],
+      "hourlyAssignments": [
+        {"programId": 5, "programName": "Request permission to leave the unsupervised area", "criterionPercentage": 30},
+        {"programId": 6, "programName": "Remaining seated, completing the task", "criterionPercentage": 30}
+      ],
+      "paragraphs": [
+        "The client left the work area after a worksheet was presented. The RBT used Response blocking and Escape independent response delivery before prompting an appropriate request. The RBT implemented \"Request permission to leave the unsupervised area\"; criterion was met on approximately 30% of discrete trials.",
+        "The client tore a reading page during a written task. The RBT used Differential Reinforcement of Alternative Behavior (DRA) and reinforced intact materials. The RBT implemented \"Remaining seated, completing the task\"; approximately 30% of discrete trials met criterion."
+      ]
     },
-    {"id": "assessment-missing-gate", "tags": ["assessment-gate", "missing"], "gate": {"hasAssessment": false, "assessmentStatus": "missing"}, "expectedGateError": true},
-    {"id": "assessment-unreadable-gate", "tags": ["assessment-gate", "unreadable"], "gate": {"hasAssessment": true, "assessmentStatus": "failed"}, "expectedGateError": true},
-    {"id": "assessment-processing-gate", "tags": ["assessment-gate", "processing"], "gate": {"hasAssessment": true, "assessmentStatus": "processing"}, "expectedGateError": true}
+    {
+      "id": "sample-4-four-hours",
+      "tags": ["sample-4", "four-hours", "repeated-program"],
+      "setting": "Home",
+      "assessmentExcerpt": "Property destruction, Self-injury behavior (SIB), and Physical Aggression are documented.",
+      "profileBehaviors": ["Property destruction", "Self-injury behavior (SIB)", "Physical Aggression"],
+      "profileInterventions": ["Response blocking", "Escape independent response delivery", "Differential Reinforcement of Alternative Behavior (DRA)", "Premack Principle"],
+      "hourlyAssignments": [
+        {"programId": 1, "programName": "Compliance Training", "criterionPercentage": 20},
+        {"programId": 7, "programName": "Express and accept opinion, agreement and disagreement", "criterionPercentage": 20},
+        {"programId": 1, "programName": "Compliance Training", "criterionPercentage": 20},
+        {"programId": 8, "programName": "Time on Task", "criterionPercentage": 20}
+      ],
+      "paragraphs": [
+        "The client tore a worksheet during table work. The RBT used Response blocking and Escape independent response delivery. The RBT implemented \"Compliance Training\" through short directions; criterion was met on approximately 20% of discrete trials.",
+        "The client struck his face during a card game. The RBT used Response blocking and Differential Reinforcement of Alternative Behavior (DRA). The RBT implemented \"Express and accept opinion, agreement and disagreement\" through modeled statements; criterion was met on approximately 20% of discrete trials.",
+        "The client attempted to hit during a cleanup direction. The RBT used Response blocking and Premack Principle. The RBT implemented \"Compliance Training\" across household directions; criterion was met on approximately 20% of discrete trials.",
+        "The client tore notebook materials during written work. The RBT used Differential Reinforcement of Alternative Behavior (DRA). The RBT implemented \"Time on Task\" through short work intervals; criterion was met on approximately 20% of discrete trials."
+      ]
+    }
   ]
 }

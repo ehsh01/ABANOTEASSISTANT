@@ -1,129 +1,46 @@
-/**
- * Note-generation orchestration for `POST /notes/generate` (extracted from routes/notes.ts).
- *
- * The route owns HTTP concerns (auth, body parsing, billing gates, draft-slot quota, response
- * shaping); this service owns the pipeline: catalog/rotation building, ABC-hint resolution,
- * per-hour assignment and rebalancing, OpenAI generation, compliance validation, locked
- * assembly, persistence, and the generation audit trail.
- */
-import { APIError } from "openai";
 import { and, eq, inArray } from "drizzle-orm";
 import { GenerateNoteBody } from "@workspace/api-zod";
 import { db } from "@workspace/db";
 import {
   clientsTable,
-  programsTable,
   clientProgramsTable,
   notesTable,
+  programsTable,
   type ClientProfileRow,
 } from "@workspace/db/schema";
 import {
-  CLINICAL_BODY_PROMPT_VERSION,
   CLINICAL_BODY_PROMPT_HASH,
+  CLINICAL_BODY_PROMPT_VERSION,
   generateClinicalBodyOpenAI,
   openaiNoteGenerationLabel,
   resolvedOpenAIModel,
-  type NoteGenerationContext,
   type NoteGenerationAttemptTelemetry,
+  type NoteGenerationContext,
 } from "./openai-notes";
-import {
-  buildNoteGenerationAuditEntry,
-  hashNoteGenerationContext,
-  writeNoteGenerationAudit,
-} from "./note-generation-audit";
-import { maladaptiveBehaviorTargetsForNoteCatalog } from "./client-profile-maladaptive";
-import {
-  maladaptiveBehaviorFunctionsForHourLabels,
-  maladaptiveBehaviorTopographyForHourLabels,
-  enrichMaladaptiveTargetsWithAssessmentFunctions,
-} from "./clinical-behavior-function";
-import {
-  approximateAgeYearsAtSession,
-  canonicalMaladaptiveBehaviorLabel,
-  deterministicRotationSeed,
-  maladaptiveBehaviorsCatalogForRotation,
-  maladaptiveBehaviorsForSessionHours,
-  replacementProgramAssignmentsForSessionHours,
-  rebalanceTaskRefusalReplacementProgramsHourly,
-  ensureReplacementProgramAlignmentForSegments,
-  replacementProgramSlotHours,
-  buildBehaviorReplacementCandidatesForNarrativeSegments,
-  buildInterventionCandidatesForNarrativeSegments,
-  isSundaySessionDate,
-  replacementProgramPoolForAutoAssignment,
-  replacementProgramSlotCount,
-  validateAssembledSessionNote,
-  validateClinicalBodyComplianceDetailed,
-  stripUnauthorizedCaregiverLanguage,
-  collapseHourlyNoteNarrativeToSegments,
-  maladaptiveBehaviorLabelsEquivalent,
-  type NoteValidationIssue,
-  type NoteComplianceContext,
-  type TherapistTrialSummaryForHourEntry,
-} from "./note-validation";
-import { repairClinicalBodyReplacementProgramAssignments } from "./replacement-program-repair";
 import {
   buildLockedClosingParagraph,
   buildLockedOpening,
   buildNextSessionSentence,
   buildPerformanceSentence,
-  type TherapySetting,
 } from "./note-assembly";
 import {
-  filterReinforcementPreferencesForNote,
-  sanitizeReinforcerNarrativeText,
-} from "./reinforcer-preferences";
-import {
-  canonicalizeInterventionCatalog,
-  normalizeClinicalBodyEscapedQuotes,
-  normalizeClinicalBodyInterventionActionAttribution,
-  normalizeClinicalBodyInterventionDetailPhrases,
-  normalizeClinicalBodyInterventionLabels,
-  normalizeClinicalBodyMaladaptiveBehaviorLabels,
-  normalizeClinicalBodyParallelPastTense,
-  normalizeClinicalBodyPraiseWording,
-  normalizeClinicalBodyReplacementLikePhrases,
-  scrubAssembledNoteQcHotspots,
-  scrubOrphanedGerundSentenceFragments,
-} from "./note-normalization";
-import {
-  assembleClinicalBodyFromNotePlan,
-  buildMinimalClinicalBodyFromSessionContext,
-  countClinicalParagraphs,
-  preserveClinicalParagraphStructure,
-} from "./note-plan-assembly";
-import { buildFrozenSessionContext } from "./note-plan-validation";
-import type { NotePlan } from "./note-plan-schema";
+  buildNoteGenerationAuditEntry,
+  hashNoteGenerationContext,
+  writeNoteGenerationAudit,
+} from "./note-generation-audit";
 import { assessmentGenerationGate } from "./note-readiness";
-import {
-  enrichMaladaptiveTargetsWithAssessmentTopography,
-  truncateAssessmentTextForNoteContext,
-} from "./assessment-extract";
-import {
-  getAssessmentStructuredFromProfile,
-  intersectCatalog,
-  validateAssessmentStructured,
-  withProfileListsUnioned,
-} from "./assessment-structured";
-import { resolveAbcHintsForNoteGeneration } from "./abc-hints";
-import { isLanguageMaladaptiveBehaviorLabel } from "./language-maladaptive-behavior";
-import {
-  isSkillAcquisitionOnlyReplacementProgram,
-  maladaptiveReplacementPairingsForSessionNote,
-} from "./skill-acquisition-programs";
+import { truncateAssessmentTextForNoteContext } from "./assessment-extract";
 import {
   buildNoteAccuracyReport,
-  missingSelectedPrograms,
-  parseAlteredSelectionsFromSwapMessages,
   type NoteAccuracyReport,
 } from "./note-accuracy-report";
+import { criterionPercentage, scrubAssessmentNames } from "./flexible-note-input";
 
 type ClientRow = typeof clientsTable.$inferSelect;
 type GenerateNoteInput = ReturnType<typeof GenerateNoteBody.parse>;
 
 export type GenerateSessionNoteFailure = {
   ok: false;
-  /** HTTP status the route should return (message text preserved verbatim). */
   status: 400 | 422 | 502;
   error: string;
   messages: string[];
@@ -136,1093 +53,252 @@ export type GenerateSessionNoteSuccess = {
   generatedAt: Date;
   generationModel: string;
   warnings: string[];
-  maladaptiveReplacementPairings: ReturnType<typeof maladaptiveReplacementPairingsForSessionNote>;
+  maladaptiveReplacementPairings: {
+    segmentIndex: number;
+    maladaptiveBehavior: string;
+    replacementProgramName: string;
+  }[];
   accuracyReport: NoteAccuracyReport;
 };
 
-export type GenerateSessionNoteResult = GenerateSessionNoteFailure | GenerateSessionNoteSuccess;
+export type GenerateSessionNoteResult =
+  | GenerateSessionNoteFailure
+  | GenerateSessionNoteSuccess;
 
-/**
- * Per-hour trial summary for the AI when `programTrialData` has a usable entry for that hour's program id.
- * Indices outside 1..count are dropped; duplicates removed; list sorted ascending.
- *
- * Contract: `count == null` means "no trial data entered" (skip the hour). `count >= 1` means trials
- * were entered for that program — even when `effectiveTrials` is empty, we keep the entry as a
- * **0-success / count-trial** record so the wizard's "0%" selection genuinely flows through to the
- * end-of-note performance line and the per-paragraph percentage prose (the AI will write
- * "successful approximately 0% of the time"). Previously an empty `effectiveTrials` was treated the
- * same as missing data and the hour was dropped entirely.
- */
-function buildTherapistTrialSummaryForReplacementHour(params: {
-  sessionHours: number;
-  programIdForHour: (number | null)[];
-  rbtActionsOnlyOutcomeForHour: boolean[];
-  programTrialData:
-    | Record<string, { count: number | null; effectiveTrials: number[] }>
-    | undefined;
-}): NoteGenerationContext["therapistTrialSummaryForReplacementHour"] {
-  const { sessionHours, programIdForHour, rbtActionsOnlyOutcomeForHour, programTrialData } = params;
-  return Array.from({ length: sessionHours }, (_, h) => {
-    if (rbtActionsOnlyOutcomeForHour[h]) return null;
-    const id = programIdForHour[h];
-    if (id == null) return null;
-    const entry = programTrialData?.[String(id)];
-    if (!entry) return null;
-    const count = entry.count;
-    if (typeof count !== "number" || !Number.isFinite(count) || !Number.isInteger(count) || count < 1) {
-      return null;
-    }
-    const trials = entry.effectiveTrials ?? [];
-    const inRange = trials.filter(
-      (t): t is number => typeof t === "number" && Number.isInteger(t) && t >= 1 && t <= count,
-    );
-    const uniqueSorted = [...new Set(inRange)].sort((a, b) => a - b);
-    // Empty `successfulTrialNumbers` is intentional for 0% selections — keep the entry instead of
-    // returning null, so the percentage rollup downstream sees 0/count for this hour.
-    return { totalTrials: count, successfulTrialNumbers: uniqueSorted };
-  });
+function assembleSessionNote(params: {
+  opening: string;
+  clinicalBody: string;
+  closing: string;
+  performance: string;
+  nextSession: string;
+}): string {
+  return [
+    params.opening.trim(),
+    params.clinicalBody.trim(),
+    params.closing.trim(),
+    params.performance.trim(),
+    params.nextSession.trim(),
+  ].join("\n\n");
 }
 
-/** Map OpenAI / transport failures to actionable text (distinct from "missing OPENAI_API_KEY" 503). */
-function formatOpenAINoteGenerationError(err: unknown): string {
-  const status = err instanceof APIError ? err.status : undefined;
-  if (status === 401) {
-    return (
-      "OpenAI returned 401 (unauthorized): the key is invalid, revoked, or for a different organization/project. " +
-      "Create or verify a key at https://platform.openai.com/api-keys , set OPENAI_API_KEY in artifacts/api-server/.env on the server, then restart PM2. " +
-      "Your .env line can look unchanged locally while the key no longer works at OpenAI."
-    );
-  }
-  if (status === 429) {
-    return (
-      "OpenAI returned 429 (rate limit or insufficient quota). Check usage and billing at https://platform.openai.com — nothing on your server changed, but OpenAI may have tightened limits or a payment failed."
-    );
-  }
-  if (status === 503 || status === 502) {
-    return "OpenAI returned a temporary service error. Retry in a few minutes.";
-  }
-  const msg = err instanceof Error ? err.message : String(err);
-  if (/401|incorrect api key|invalid api key|invalid_api_key|authentication/i.test(msg)) {
-    return (
-      "OpenAI rejected the API key. The value in .env may be expired or revoked at OpenAI even if the file was not edited. " +
-      "Generate a new key at https://platform.openai.com/api-keys , update the server .env, and restart PM2."
-    );
-  }
-  return msg;
+function modelFailureMessage(error: unknown): string {
+  return error instanceof Error ? error.message : "Unknown OpenAI error";
 }
 
-function assembleSessionNote(
-  presentPeople: string[],
-  hasEnvChanges: boolean,
-  therapySetting: TherapySetting,
-  clinicalBody: string,
-  nextSessionDate: string | undefined,
-  clientFirstName: string | null | undefined,
-  narrativeProgramSegmentCount: number,
-  therapistTrialSummaryForReplacementHour: TherapistTrialSummaryForHourEntry[] | undefined,
-  reinforcementPreferences?: string[] | null,
-  clientAgeYears?: number | null,
-): string {
-  const opening = buildLockedOpening(presentPeople, hasEnvChanges, therapySetting, clientFirstName);
-  const closing = buildLockedClosingParagraph(reinforcementPreferences, { clientAgeYears });
-  const performance = buildPerformanceSentence(
-    narrativeProgramSegmentCount,
-    therapistTrialSummaryForReplacementHour,
-    clientFirstName,
-  );
-  const nextSession = buildNextSessionSentence(nextSessionDate);
-
-  return [opening, "", clinicalBody, "", closing, "", performance, "", nextSession].join("\n");
-}
-
-/**
- * Full generation pipeline for one session note. Assumes the route already enforced auth,
- * billing gates, OpenAI configuration, client/assessment policy, and the unsaved-draft cap.
- */
 export async function generateSessionNoteForClient(params: {
   companyId: number;
   client: ClientRow;
   body: GenerateNoteInput;
-  /**
-   * Optional generation-tuning overrides. Background (async job) callers pass a larger per-request
-   * timeout and overall budget so repairs can converge; the synchronous endpoint omits these and
-   * keeps the conservative Cloudflare-safe defaults.
-   */
   generation?: {
-    requestTimeoutMs?: number | undefined;
-    timeBudgetMs?: number | undefined;
-    fallbackModel?: string | null | undefined;
+    requestTimeoutMs?: number;
+    timeBudgetMs?: number;
+    fallbackModel?: string | null;
   };
 }): Promise<GenerateSessionNoteResult> {
-  const { companyId, client, body, generation } = params;
-
+  const { companyId, client, body, generation: tuning } = params;
   const profile = (client.profile as ClientProfileRow | null | undefined) ?? null;
-  const rawAssessmentSnapshot = profile?.assessmentTextSnapshot?.trim() ?? "";
   const assessmentGate = assessmentGenerationGate({
     hasAssessment: client.hasAssessment,
     assessmentStatus: client.assessmentStatus,
     profile,
   });
-  if (!assessmentGate.ok) {
-    return assessmentGate;
-  }
+  if (!assessmentGate.ok) return assessmentGate;
 
+  const hints = body.abcHints;
+  const inputErrors: string[] = [];
+  if (hints.length !== body.sessionHours) {
+    inputErrors.push(`abcHints must contain exactly ${body.sessionHours} hourly rows.`);
+  }
   if (body.selectedReplacements.length === 0) {
-    return {
-      ok: false,
-      status: 422,
-      error: "Programs required",
-      messages: ["Select at least one replacement program for this session before generating a note."],
-    };
+    inputErrors.push("Select at least one replacement program.");
   }
 
-  let programNames: string[] = [];
-  // These two reads are independent; run them concurrently to shave a round-trip off generation.
-  const [programRows, linkedProgramRows] = await Promise.all([
-    db
-      .select()
-      .from(programsTable)
-      .where(
-        and(
-          eq(programsTable.companyId, companyId),
-          inArray(programsTable.id, body.selectedReplacements),
-        ),
-      ),
-    db
-      .select({ id: programsTable.id, name: programsTable.name })
-      .from(clientProgramsTable)
-      .innerJoin(programsTable, eq(clientProgramsTable.programId, programsTable.id))
-      .where(
-        and(
-          eq(clientProgramsTable.clientId, body.clientId),
-          eq(programsTable.companyId, companyId),
-        ),
-      ),
-  ]);
-  const nameById = new Map(programRows.map((p) => [p.id, p.name]));
-  programNames = body.selectedReplacements.map((id) => nameById.get(id) ?? `Program ${id}`);
-
-  const selectedIdSet = new Set(body.selectedReplacements);
-  const assessmentReplacementNameSet = new Set(
-    (profile?.replacementPrograms ?? [])
-      .map((n) => String(n).trim())
-      .filter((n) => n.length > 0),
-  );
-
-  /** Linked DB rows authorized for this note: assessment profile list + anything explicitly selected for the session. */
-  let allowedProgramRows =
-    assessmentReplacementNameSet.size > 0
-      ? linkedProgramRows.filter(
-          (r) => selectedIdSet.has(r.id) || assessmentReplacementNameSet.has(r.name.trim()),
-        )
-      : linkedProgramRows;
-
-  // App profile is authoritative: union the profile's own lists into the structured allow-lists so
-  // the intersections below can never DROP a behavior/program/intervention the RBT added to the app
-  // (e.g. when the PDF-extracted allow-list is stale or narrower than the app). Assessment-only items
-  // are still never ADDED, because the catalogs are derived from the profile in the first place.
-  const structuredForNote = withProfileListsUnioned(
-    getAssessmentStructuredFromProfile(profile),
-    profile,
-  );
-  if (structuredForNote) {
-    const structIssues = validateAssessmentStructured(structuredForNote);
-    if (structIssues.length > 0) {
-      return {
-        ok: false,
-        status: 422,
-        error: "Invalid structured assessment on client profile",
-        messages: structIssues,
-      };
+  const assignedIds: number[] = [];
+  for (let hour = 0; hour < body.sessionHours; hour++) {
+    const id = hints[hour]?.replacementProgramId;
+    if (id == null || !body.selectedReplacements.includes(id)) {
+      inputErrors.push(
+        `Hour ${hour + 1} must assign a replacementProgramId from selectedReplacements.`,
+      );
+      continue;
     }
-    for (const id of body.selectedReplacements) {
-      const n = nameById.get(id)?.trim();
-      if (n && !structuredForNote.replacement_programs.includes(n)) {
-        return {
-          ok: false,
-          status: 422,
-          error: "Program not on structured assessment",
-          messages: [
-            `Selected program "${n}" is not listed on the client's assessmentStructured.replacement_programs.`,
-          ],
-        };
-      }
-    }
-    allowedProgramRows = allowedProgramRows.filter((r) =>
-      structuredForNote.replacement_programs.includes(r.name.trim()),
-    );
-  }
-
-  const allowedIdToName = new Map(allowedProgramRows.map((r) => [r.id, r.name]));
-  for (const id of body.selectedReplacements) {
-    const n = nameById.get(id);
-    if (n) {
-      allowedIdToName.set(id, n);
+    assignedIds.push(id);
+    const trialEntry = body.programTrialData[String(id)];
+    if (!trialEntry || criterionPercentage(trialEntry) == null) {
+      inputErrors.push(`Hour ${hour + 1} program ${id} requires a valid selected percentage.`);
     }
   }
-
-  const hints = body.abcHints ?? [];
-  const abcHintProgramMessages: string[] = [];
-  for (let h = 0; h < hints.length; h++) {
-    const pid = hints[h]?.replacementProgramId;
-    if (pid == null) continue;
-    if (typeof pid !== "number" || !allowedIdToName.has(pid)) {
-      abcHintProgramMessages.push(
-        assessmentReplacementNameSet.size > 0
-          ? `abcHints[${h}]: replacementProgramId must be a program selected for this session or one whose exact name is on the client's replacement-program list from the assessment/profile.`
-          : `abcHints[${h}]: replacementProgramId must be the id of a replacement program linked to this client (GET /api/clients/:clientId/programs).`,
+  const assignedSet = new Set(assignedIds);
+  for (const selectedId of body.selectedReplacements) {
+    if (!assignedSet.has(selectedId)) {
+      inputErrors.push(
+        `Selected program ${selectedId} must be assigned to at least one service hour.`,
       );
     }
   }
-  if (abcHintProgramMessages.length > 0) {
+  if (inputErrors.length > 0) {
     return {
       ok: false,
       status: 400,
-      error: "Invalid ABC Builder input",
-      messages: abcHintProgramMessages,
+      error: "Invalid hourly program assignments",
+      messages: inputErrors,
     };
   }
 
-  const replacementProgramsCatalog = (() => {
-    const names = [
-      ...allowedProgramRows.map((r) => r.name.trim()),
-      ...programNames.map((s) => s.trim()),
-    ].filter((s) => s.length > 0);
-    if (names.length > 0) {
-      return [...new Set(names)].sort((a, b) => b.length - a.length || a.localeCompare(b));
-    }
-    return [];
-  })();
-
-  let replacementProgramsCatalogForNote = replacementProgramsCatalog;
-  if (structuredForNote) {
-    replacementProgramsCatalogForNote = intersectCatalog(
-      replacementProgramsCatalogForNote,
-      structuredForNote.replacement_programs,
+  const linkedPrograms = await db
+    .select({ id: programsTable.id, name: programsTable.name })
+    .from(clientProgramsTable)
+    .innerJoin(programsTable, eq(clientProgramsTable.programId, programsTable.id))
+    .where(
+      and(
+        eq(clientProgramsTable.clientId, client.id),
+        eq(programsTable.companyId, companyId),
+        inArray(programsTable.id, [...new Set(assignedIds)]),
+      ),
     );
-    if (replacementProgramsCatalogForNote.length === 0) {
-      return {
-        ok: false,
-        status: 422,
-        error: "No replacement programs remain after applying structured assessment",
-        messages: [
-          "Program names for this session did not intersect with assessmentStructured.replacement_programs.",
-        ],
-      };
-    }
+  const programNameById = new Map(linkedPrograms.map((program) => [program.id, program.name]));
+  const missingLinked = [...new Set(assignedIds)].filter((id) => !programNameById.has(id));
+  if (missingLinked.length > 0) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Invalid hourly program assignments",
+      messages: missingLinked.map(
+        (id) => `Program ${id} is not linked to this client and company.`,
+      ),
+    };
   }
 
-  const clientAgeYears = approximateAgeYearsAtSession(profile?.dateOfBirth ?? null, body.sessionDate);
+  const rawAssessment = profile?.assessmentTextSnapshot?.trim() ?? "";
+  const { text: truncatedAssessment, truncated } =
+    truncateAssessmentTextForNoteContext(rawAssessment);
+  const assessmentExcerpt = scrubAssessmentNames(truncatedAssessment, profile);
+  const hourlyAssignments = hints.map((hint, segmentIndex) => {
+    const programId = hint.replacementProgramId!;
+    return {
+      segmentIndex,
+      programId,
+      programName: programNameById.get(programId)!,
+      criterionPercentage: criterionPercentage(body.programTrialData[String(programId)]!)!,
+      activityHint: hint.activityAntecedent?.trim() || null,
+      behaviorHint: hint.maladaptiveBehavior?.trim() || null,
+    };
+  });
 
-  const { text: clientAssessmentTextExcerpt, truncated: assessmentExcerptForNoteTruncated } =
-    truncateAssessmentTextForNoteContext(profile?.assessmentTextSnapshot ?? "");
-
-  const profileBehaviorList = profile?.maladaptiveBehaviors ?? [];
-  const rotationResult = maladaptiveBehaviorsCatalogForRotation(
-    profileBehaviorList,
-    rawAssessmentSnapshot,
-  );
-  let behaviorCatalog = rotationResult.catalog.map(canonicalMaladaptiveBehaviorLabel);
-  if (structuredForNote) {
-    behaviorCatalog = intersectCatalog(
-      behaviorCatalog,
-      structuredForNote.behaviors.map(canonicalMaladaptiveBehaviorLabel),
-    );
-    if (behaviorCatalog.length === 0) {
-      return {
-        ok: false,
-        status: 422,
-        error: "No maladaptive behaviors remain after applying structured assessment",
-        messages: [
-          "The session rotation catalog did not intersect with assessmentStructured.behaviors; align profile/assessment text labels with the structured assessment list.",
-        ],
-      };
-    }
-  }
-  const maladaptiveBehaviorTargetsForNote = enrichMaladaptiveTargetsWithAssessmentTopography(
-    enrichMaladaptiveTargetsWithAssessmentFunctions(
-      maladaptiveBehaviorTargetsForNoteCatalog(behaviorCatalog, profile ?? undefined),
-      rawAssessmentSnapshot,
-    ),
-    rawAssessmentSnapshot,
-  );
-  // Deterministic rotation: the SAME session inputs must regenerate to the SAME behavior/hour
-  // order (no per-request UUID). ABC-Builder pins still override rotation downstream, so this
-  // does not reduce RBT control.
-  const behaviorRotationSeed = deterministicRotationSeed({
-    clientId: client.id,
+  const context: NoteGenerationContext = {
+    sessionHours: body.sessionHours,
     sessionDate: body.sessionDate,
-    sessionHours: body.sessionHours,
-    selectedReplacements: body.selectedReplacements,
-  });
-  const baseMaladaptiveForHour = maladaptiveBehaviorsForSessionHours(
-    behaviorCatalog,
-    body.sessionHours,
-    behaviorRotationSeed,
-  );
-
-  const abcResolved = resolveAbcHintsForNoteGeneration(
-    body.abcHints,
-    body.sessionHours,
-    behaviorCatalog,
-    baseMaladaptiveForHour,
-  );
-  if (!abcResolved.ok) {
-    return {
-      ok: false,
-      status: 400,
-      error: "Invalid ABC Builder input",
-      messages: abcResolved.messages,
-    };
-  }
-
-  const maladaptiveBehaviorForHour = abcResolved.maladaptiveBehaviorForHour.map(
-    canonicalMaladaptiveBehaviorLabel,
-  );
-  const activityAntecedentForHour = abcResolved.activityAntecedentForHour;
-
-  const linkedIdsUnique = [...new Set(allowedProgramRows.map((r) => r.id))].sort((a, b) => a - b);
-  const idToNameForPrograms = allowedIdToName.size > 0 ? allowedIdToName : nameById;
-  // Session-effective pool: selected-only when selection covers every hour; otherwise selected first
-  // then other assessment/linked programs. EVERY later assignment/rebalance/repair path must use this
-  // same pool — never the full client catalog — so unselected assessment programs cannot enter the note
-  // unless hours > selected count (or the RBT explicitly pins one in ABC Builder).
-  const poolIds = replacementProgramPoolForAutoAssignment(
-    body.selectedReplacements,
-    linkedIdsUnique.length > 0 ? linkedIdsUnique : body.selectedReplacements,
-    body.sessionHours,
-  );
-  const explicitProgramIdByHour = Array.from({ length: body.sessionHours }, (_, h) => hints[h]?.replacementProgramId);
-  const sessionAssignmentPoolIds = (() => {
-    const ids = [...poolIds];
-    const seen = new Set(ids);
-    for (const pid of explicitProgramIdByHour) {
-      if (typeof pid === "number" && idToNameForPrograms.has(pid) && !seen.has(pid)) {
-        seen.add(pid);
-        ids.push(pid);
-      }
-    }
-    return ids;
-  })();
-  // Narrow the note catalog to the session-effective pool so the model, validators, and rebalancers
-  // cannot treat unselected assessment programs as authorized for this note.
-  replacementProgramsCatalogForNote = (() => {
-    const names = sessionAssignmentPoolIds
-      .map((id) => idToNameForPrograms.get(id)?.trim() ?? "")
-      .filter((n) => n.length > 0);
-    const unique = [...new Set(names)];
-    if (unique.length === 0) return replacementProgramsCatalogForNote;
-    return unique.sort((a, b) => b.length - a.length || a.localeCompare(b));
-  })();
-  const sessionSelectionCoversHours =
-    body.selectedReplacements.length >= replacementProgramSlotCount(body.sessionHours);
-  const {
-    names: replacementProgramForHour,
-    rbtActionsOnly: rbtActionsOnlyOutcomeForHour,
-    programIdForHour,
-  } = replacementProgramAssignmentsForSessionHours({
-    sessionHours: body.sessionHours,
-    poolIds: sessionAssignmentPoolIds,
-    idToName: idToNameForPrograms,
-    selectedIdSet: selectedIdSet,
-    explicitProgramIdByHour,
-    sessionSelectionCoversHours,
-  });
-
-  rebalanceTaskRefusalReplacementProgramsHourly({
-    sessionHours: body.sessionHours,
-    maladaptiveBehaviorForHour,
-    names: replacementProgramForHour,
-    rbtActionsOnlyOutcomeForHour,
-    programIdForHour,
-    explicitProgramIdByHour,
-    poolIds: sessionAssignmentPoolIds,
-    idToName: idToNameForPrograms,
-    selectedIdSet,
-  });
-
-  // BIP-map / distinct / wandering / repeated-program alignment runs once after narrative collapse
-  // via ensureReplacementProgramAlignmentForSegments (single entrypoint — do not re-run hourly).
-  const behaviorToReplacementsMap = structuredForNote?.behavior_to_replacements_map ?? {};
-
-  // Preliminary trial map (hour-indexed); rebuilt after segment alignment so swapped program ids
-  // still receive the therapist-entered % for the program assigned to that hour.
-  let therapistTrialSummaryHourly = buildTherapistTrialSummaryForReplacementHour({
-    sessionHours: body.sessionHours,
-    programIdForHour,
-    rbtActionsOnlyOutcomeForHour,
-    programTrialData: body.programTrialData,
-  });
-  const languageMaladaptiveEpisodeHourly = maladaptiveBehaviorForHour.map((b) =>
-    isLanguageMaladaptiveBehaviorLabel(b),
-  );
-
-  let interventionsForNote = canonicalizeInterventionCatalog(profile?.interventions ?? []);
-  if (structuredForNote) {
-    interventionsForNote = intersectCatalog(
-      interventionsForNote,
-      canonicalizeInterventionCatalog(structuredForNote.interventions),
-    );
-    if (interventionsForNote.length === 0) {
-      return {
-        ok: false,
-        status: 422,
-        error: "No interventions remain after applying structured assessment",
-        messages: [
-          "Profile interventions did not intersect with assessmentStructured.interventions; update the client profile or structured assessment.",
-        ],
-      };
-    }
-  }
-
-  const narrativeCollapsed = collapseHourlyNoteNarrativeToSegments({
-    sessionHours: body.sessionHours,
-    maladaptiveBehaviorForHour,
-    replacementProgramForHour,
-    rbtActionsOnlyOutcomeForHour,
-    activityAntecedentForHour,
-    languageMaladaptiveEpisodeForHour: languageMaladaptiveEpisodeHourly,
-    therapistTrialSummaryForReplacementHour: therapistTrialSummaryHourly,
-  });
-
-  const acquisitionOnlySegmentForHour = narrativeCollapsed.replacementProgramForHour.map((name) =>
-    isSkillAcquisitionOnlyReplacementProgram(name),
-  );
-  const maladaptiveBehaviorForNarrative = narrativeCollapsed.maladaptiveBehaviorForHour.map((b, i) =>
-    acquisitionOnlySegmentForHour[i] ? "" : b,
-  );
-  const languageMaladaptiveForNarrative = narrativeCollapsed.languageMaladaptiveEpisodeForHour.map((v, i) =>
-    acquisitionOnlySegmentForHour[i] ? false : v,
-  );
-
-  const maladaptiveBehaviorFunctionsForHour = maladaptiveBehaviorFunctionsForHourLabels(
-    maladaptiveBehaviorForNarrative,
-    maladaptiveBehaviorTargetsForNote,
-    maladaptiveBehaviorLabelsEquivalent,
-  );
-
-  const segmentCount = narrativeCollapsed.narrativeSegmentCount;
-  const segmentReplacementNames = [...narrativeCollapsed.replacementProgramForHour];
-  const segmentRbtFlags = [...narrativeCollapsed.rbtActionsOnlyOutcomeForHour];
-  const segmentProgramIds: (number | null)[] = Array.from({ length: segmentCount }, (_, s) => {
-    for (const h of replacementProgramSlotHours(body.sessionHours, s)) {
-      if (programIdForHour[h] !== null) return programIdForHour[h];
-    }
-    return null;
-  });
-  const segmentExplicitProgramIds = Array.from({ length: segmentCount }, (_, s) => {
-    for (const h of replacementProgramSlotHours(body.sessionHours, s)) {
-      const pid = explicitProgramIdByHour[h];
-      if (typeof pid === "number") return pid;
-    }
-    return undefined;
-  });
-  // Same session-effective pool as initial assignment — do NOT expand to the full client catalog here.
-  // When the wizard already selected enough programs for every hour, skip soft BIP remaps so
-  // selection order is preserved (avoids Time-on-task collapsing every maladaptive hour).
-  // Structured record of every server-side program change (accuracy report `alteredSelections`).
-  const programSelectionSwaps: string[] = [];
-  const segmentAlignmentSwaps = ensureReplacementProgramAlignmentForSegments({
-    segmentCount,
-    maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
-    names: segmentReplacementNames,
-    rbtActionsOnlyOutcomeForHour: segmentRbtFlags,
-    programIdForHour: segmentProgramIds,
-    explicitProgramIdByHour: segmentExplicitProgramIds,
-    rebalancePoolIds: sessionAssignmentPoolIds,
-    idToName: idToNameForPrograms,
-    selectedIdSet,
-    behaviorToReplacementsMap,
-    authorizedProgramNames: replacementProgramsCatalogForNote,
-    maladaptiveBehaviorFunctionsForHour,
-    overrideExplicitOnHardMisfit: true,
-    rebalanceSoftMisfits: !sessionSelectionCoversHours,
-    slotLabel: "Segment",
-  });
-  narrativeCollapsed.replacementProgramForHour = segmentReplacementNames;
-  narrativeCollapsed.rbtActionsOnlyOutcomeForHour = segmentRbtFlags;
-  // Keep hourly program ids in sync with post-alignment segment ids for trial remapping.
-  for (let s = 0; s < segmentCount; s++) {
-    const pid = segmentProgramIds[s] ?? null;
-    for (const h of replacementProgramSlotHours(body.sessionHours, s)) {
-      programIdForHour[h] = pid;
-      rbtActionsOnlyOutcomeForHour[h] = segmentRbtFlags[s] === true;
-    }
-  }
-  therapistTrialSummaryHourly = buildTherapistTrialSummaryForReplacementHour({
-    sessionHours: body.sessionHours,
-    programIdForHour,
-    rbtActionsOnlyOutcomeForHour,
-    programTrialData: body.programTrialData,
-  });
-  narrativeCollapsed.therapistTrialSummaryForReplacementHour = therapistTrialSummaryHourly.slice(
-    0,
-    segmentCount,
-  );
-
-  const complianceCtxBase: NoteComplianceContext = {
-    sessionHours: body.sessionHours,
     therapySetting: body.therapySetting,
-    narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
-    replacementProgramsInOrder: replacementProgramsCatalogForNote,
-    replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
-    rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
-    maladaptiveBehaviors: behaviorCatalog,
-    maladaptiveBehaviorForHour: maladaptiveBehaviorForNarrative,
-    activityAntecedentForHour: narrativeCollapsed.activityAntecedentForHour,
-    languageMaladaptiveEpisodeForHour: languageMaladaptiveForNarrative,
-    acquisitionOnlySegmentForHour,
-    interventions: interventionsForNote,
-    therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
-    clientAgeYears,
-    presentPeople: body.presentPeople,
-    reinforcementPreferences: filterReinforcementPreferencesForNote(
+    environmentalChanges: body.environmentalChanges?.trim() ?? "",
+    profileBehaviors: profile?.maladaptiveBehaviors ?? [],
+    profileInterventions: profile?.interventions ?? [],
+    reinforcementPreferences:
       profile?.assessmentSummary?.reinforcementPreferences ?? [],
-      { clientAgeYears },
-    ),
+    assessmentExcerpt,
+    assessmentReferenceFileName: profile?.assessmentFileName ?? null,
+    hourlyAssignments,
   };
 
   const warnings: string[] = [];
-  if (structuredForNote) {
-    warnings.push(
-      "Structured assessment mode: maladaptive behaviors, interventions, and replacement programs for this note were intersected with profile.assessmentStructured allow-lists.",
-    );
+  if (truncated) {
+    warnings.push("The assessment excerpt supplied to the model was truncated for prompt size.");
   }
-  if (acquisitionOnlySegmentForHour.some(Boolean)) {
-    warnings.push(
-      "One or more narrative segments use skill-acquisition-only programs (Respond to Own Name, or a program name containing Echoic): the clinical body must not cite a maladaptive catalog label in those paragraphs.",
-    );
-  }
-  if (assessmentReplacementNameSet.size > 0) {
-    const omitted = linkedProgramRows.filter(
-      (r) => !selectedIdSet.has(r.id) && !assessmentReplacementNameSet.has(r.name.trim()),
-    );
-    if (omitted.length > 0) {
-      warnings.push(
-        `These linked programs are not on the client's assessment/profile replacement-program list and were omitted from hour assignment: ${omitted.map((r) => r.name).join(", ")}.`,
-      );
-    }
-  }
-  if (rotationResult.labelsAddedFromAssessmentText.length > 0) {
-    warnings.push(
-      `These maladaptive behaviors appear in the stored assessment but are not on the client profile, so they were NOT used in this note: ${rotationResult.labelsAddedFromAssessmentText.join(", ")}. Add them to the client profile if you want them included.`,
-    );
-  }
-  if (rotationResult.labelsOmittedNotFoundInAssessment.length > 0) {
-    warnings.push(
-      `These maladaptive behaviors are in the rotation but were not found as exact substrings in the stored assessment text (check OCR/BIP wording if needed): ${rotationResult.labelsOmittedNotFoundInAssessment.join(", ")}.`,
-    );
-  }
-  if (rawAssessmentSnapshot.length === 0) {
-    warnings.push(
-      "No assessment text excerpt is stored on this client. Upload the assessment PDF (POST /api/clients/:clientId/assessment/document) so the AI can ground narratives in the BIP/FBA. Until then, generation uses profile behavior and program lists only.",
-    );
-  } else if (assessmentExcerptForNoteTruncated) {
-    warnings.push(
-      "Assessment excerpt sent to the AI was truncated for prompt size; later pages of very long assessments may not influence this note.",
-    );
-  }
-
-  const filledAbcHours = activityAntecedentForHour.map((a) => (typeof a === "string" && a.length > 0 ? 1 : 0));
-  if (filledAbcHours.some((x) => x === 1)) {
-    warnings.push(
-      "ABC Builder: one or more hours use RBT-selected activity/antecedent and maladaptive behavior; the AI must keep those exact strings.",
-    );
-  }
-  if (isSundaySessionDate(body.sessionDate)) {
-    warnings.push(
-      "Sunday sessions require documented parental consent. Verify that a signed consent form authorizing Sunday sessions is on file for this client — otherwise the agency is in breach of the authorization requirements.",
-    );
-  }
-  warnings.push(...segmentAlignmentSwaps);
-  programSelectionSwaps.push(...segmentAlignmentSwaps);
-
-  const maladaptiveBehaviorTopographyForHour = maladaptiveBehaviorTopographyForHourLabels(
-    maladaptiveBehaviorForNarrative,
-    maladaptiveBehaviorTargetsForNote,
-    maladaptiveBehaviorLabelsEquivalent,
-  );
-
-  const behaviorReplacementCandidatesForHour = buildBehaviorReplacementCandidatesForNarrativeSegments({
-    narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
-    maladaptiveBehaviorForHour: maladaptiveBehaviorForNarrative,
-    acquisitionOnlySegmentForHour,
-    behaviorToReplacementsMap,
-    authorizedProgramNames: replacementProgramsCatalogForNote,
-    maladaptiveBehaviorFunctionsForHour,
-  });
-
-  const interventionCandidatesForHour = buildInterventionCandidatesForNarrativeSegments({
-    narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
-    maladaptiveBehaviorForHour: maladaptiveBehaviorForNarrative,
-    acquisitionOnlySegmentForHour,
-    authorizedInterventions: interventionsForNote,
-    maladaptiveBehaviorFunctionsForHour,
-  });
-
-  const blockedClientNames = [profile?.firstName, profile?.lastName]
-    .filter((name): name is string => typeof name === "string" && name.trim().length >= 2);
-  const oaCtx: NoteGenerationContext = {
-    /** Deliberately not the profile name — session notes must not contain personal names. */
-    clientName: "the client",
-    firstName: "the client",
-    gender: profile?.gender,
-    sessionHours: body.sessionHours,
-    narrativeSegmentCount: narrativeCollapsed.narrativeSegmentCount,
-    sessionDate: body.sessionDate,
-    therapySetting: body.therapySetting,
-    presentPeople: body.presentPeople,
-    hasEnvironmentalChanges: body.hasEnvironmentalChanges,
-    environmentalChanges: body.environmentalChanges ?? "",
-    maladaptiveBehaviors: behaviorCatalog,
-    maladaptiveBehaviorTargets: maladaptiveBehaviorTargetsForNote,
-    maladaptiveBehaviorForHour: maladaptiveBehaviorForNarrative,
-    acquisitionOnlySegmentForHour,
-    interventions: interventionsForNote,
-    replacementProgramsInOrder: replacementProgramsCatalogForNote,
-    replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
-    rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
-    requestNonce: behaviorRotationSeed,
-    clientAgeYears,
-    ageBand: client.ageBand,
-    clientAssessmentTextExcerpt,
-    assessmentReferenceFileName: profile?.assessmentFileName ?? null,
-    reinforcementPreferences: filterReinforcementPreferencesForNote(
-      profile?.assessmentSummary?.reinforcementPreferences ?? [],
-      { clientAgeYears },
-    ),
-    activityAntecedentForHour: narrativeCollapsed.activityAntecedentForHour,
-    languageMaladaptiveEpisodeForHour: narrativeCollapsed.languageMaladaptiveEpisodeForHour,
-    therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
-    behaviorReplacementCandidatesForHour,
-    interventionCandidatesForHour,
-    maladaptiveBehaviorFunctionsForHour,
-    maladaptiveBehaviorTopographyForHour,
-    behaviorToReplacementsMap,
-  };
-
-  let clinicalBody: string;
-  let generationNotePlan: NotePlan | null = null;
-  let generationModel: string;
-  let generationRepairAttempts = 0;
-  let generationFinalIssues: NoteValidationIssue[] = [];
-  let generationAttemptHistory: NoteGenerationAttemptTelemetry[] = [];
-  let generationRawOutputs: string[] = [];
-  let generationRepairActions: string[] = [];
-  const contextHash = hashNoteGenerationContext(oaCtx);
   const auditBase = {
     companyId,
     clientId: client.id,
     model: resolvedOpenAIModel(),
     promptVersion: CLINICAL_BODY_PROMPT_VERSION,
     promptHash: CLINICAL_BODY_PROMPT_HASH,
-    contextHash,
+    contextHash: hashNoteGenerationContext(context),
     assessmentFilename: profile?.assessmentFileName ?? null,
-    assessmentText: rawAssessmentSnapshot,
-    assessmentExcerptLength: clientAssessmentTextExcerpt.length,
-    assessmentExcerptTruncated: assessmentExcerptForNoteTruncated,
+    assessmentText: rawAssessment,
+    assessmentExcerptLength: assessmentExcerpt.length,
+    assessmentExcerptTruncated: truncated,
     sessionDate: body.sessionDate,
     sessionHours: body.sessionHours,
   };
 
+  let modelGeneration;
   try {
-    const oaResult = await generateClinicalBodyOpenAI(oaCtx, {
-      blockedClientNames,
-      requestTimeoutMs: generation?.requestTimeoutMs,
-      timeBudgetMs: generation?.timeBudgetMs,
-      fallbackModel: generation?.fallbackModel,
+    modelGeneration = await generateClinicalBodyOpenAI(context, {
+      requestTimeoutMs: tuning?.requestTimeoutMs,
+      timeBudgetMs: tuning?.timeBudgetMs,
+      fallbackModel: tuning?.fallbackModel,
     });
-    clinicalBody = oaResult.body;
-    generationNotePlan = oaResult.notePlan;
-    warnings.push(`Clinical narrative generated via ${openaiNoteGenerationLabel()}.`);
-    warnings.push(...oaResult.warnings);
-    generationModel = oaResult.modelUsed ?? resolvedOpenAIModel();
-    generationRepairAttempts = oaResult.repairAttempts;
-    generationFinalIssues = oaResult.finalIssues;
-    generationAttemptHistory = oaResult.attemptHistory;
-    generationRawOutputs = oaResult.rawModelOutputs;
-    generationRepairActions = oaResult.repairActions;
-  } catch (err) {
-    generationAttemptHistory =
-      err && typeof err === "object" && "noteGenerationAttemptHistory" in err
-        ? ((err as { noteGenerationAttemptHistory?: NoteGenerationAttemptTelemetry[] })
+  } catch (error) {
+    const attemptHistory =
+      error && typeof error === "object" && "noteGenerationAttemptHistory" in error
+        ? ((error as { noteGenerationAttemptHistory?: NoteGenerationAttemptTelemetry[] })
             .noteGenerationAttemptHistory ?? [])
         : [];
-    generationRawOutputs =
-      err && typeof err === "object" && "noteGenerationRawModelOutputs" in err
-        ? ((err as { noteGenerationRawModelOutputs?: string[] }).noteGenerationRawModelOutputs ??
-          [])
+    const rawModelOutputs =
+      error && typeof error === "object" && "noteGenerationRawModelOutputs" in error
+        ? ((error as { noteGenerationRawModelOutputs?: string[] })
+            .noteGenerationRawModelOutputs ?? [])
         : [];
-    generationRepairActions =
-      err && typeof err === "object" && "noteGenerationRepairActions" in err
-        ? ((err as { noteGenerationRepairActions?: string[] }).noteGenerationRepairActions ?? [])
+    const repairActions =
+      error && typeof error === "object" && "noteGenerationRepairActions" in error
+        ? ((error as { noteGenerationRepairActions?: string[] })
+            .noteGenerationRepairActions ?? [])
         : [];
-    console.error(
-      `[notes/generate] OpenAI failed status=${err instanceof APIError ? err.status : "unknown"} type=${err instanceof Error ? err.name : "unknown"}`,
+    await writeNoteGenerationAudit(
+      buildNoteGenerationAuditEntry({
+        ...auditBase,
+        noteId: null,
+        repairAttempts: repairActions.length,
+        validatorIssues: [],
+        criticalIssues: [],
+        finalValidatorIssues: [],
+        finalCriticalIssues: [],
+        attemptHistory,
+        repairActions,
+        warnings,
+        rawModelOutputs,
+        finalStatus: "model_failed",
+      }),
     );
-    const modelFailurePlanIssues = generationAttemptHistory.flatMap(
-      (attempt) => attempt.planIssues,
-    );
-    const modelFailureProseIssues = generationAttemptHistory.flatMap(
-      (attempt) => attempt.proseIssues,
-    );
-    await writeNoteGenerationAudit(buildNoteGenerationAuditEntry({
-      ...auditBase,
-      noteId: null,
-      repairAttempts: generationRepairActions.length,
-      validatorIssues: [],
-      criticalIssues: [],
-      finalValidatorIssues: [...modelFailurePlanIssues, ...modelFailureProseIssues],
-      finalCriticalIssues: [
-        ...modelFailurePlanIssues,
-        ...modelFailureProseIssues.filter((issue) => issue.severity === "blocking"),
-      ],
-      attemptHistory: generationAttemptHistory,
-      repairActions: generationRepairActions,
-      warnings,
-      rawModelOutputs: generationRawOutputs,
-      finalStatus: "model_failed",
-    }));
     return {
       ok: false,
       status: 502,
       error: "AI note generation failed.",
-      messages: [formatOpenAINoteGenerationError(err)],
+      messages: [modelFailureMessage(error)],
     };
   }
 
-  let finalClinicalBody = clinicalBody;
-  const expectedNarrativeParagraphs = narrativeCollapsed.narrativeSegmentCount;
-  const frozenForAssembly = buildFrozenSessionContext(oaCtx, { blockedClientNames });
-
-  const ensureClinicalBodyPresent = (reason: string): void => {
-    const count = countClinicalParagraphs(finalClinicalBody);
-    if (count >= expectedNarrativeParagraphs && finalClinicalBody.trim().length > 0) {
-      return;
-    }
-    if (generationNotePlan) {
-      const reassembled = assembleClinicalBodyFromNotePlan(generationNotePlan, frozenForAssembly);
-      if (countClinicalParagraphs(reassembled) >= expectedNarrativeParagraphs) {
-        finalClinicalBody = reassembled;
-        warnings.push(
-          `Restored clinical body from structured NotePlan (${reason}); blank-line paragraph structure was missing.`,
-        );
-        return;
-      }
-    }
-    finalClinicalBody = buildMinimalClinicalBodyFromSessionContext(frozenForAssembly);
-    warnings.push(
-      `Used deterministic fallback clinical paragraphs (${reason}) so the note could still be saved.`,
-    );
-  };
-
-  ensureClinicalBodyPresent("empty or incomplete model body");
-
-  const buildComplianceContext = (): NoteComplianceContext => ({
-    ...complianceCtxBase,
-    replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
-    rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
-    maladaptiveBehaviorFunctionsForHour,
-    maladaptiveBehaviorTopographyForHour,
-    behaviorToReplacementsMap,
-    blockedClientNames,
-  });
-
-  let complianceResult: ReturnType<typeof validateClinicalBodyComplianceDetailed> =
-    validateClinicalBodyComplianceDetailed(finalClinicalBody, buildComplianceContext());
-  let complianceIssues = complianceResult.issues;
-  const replacementProgramIssue = (issue: NoteValidationIssue): boolean =>
-    issue.code === "PROGRAM_FUNCTION_MISMATCH";
-
-  if (complianceIssues.some(replacementProgramIssue)) {
-    const assignmentsBeforeRepair = [...narrativeCollapsed.replacementProgramForHour];
-    const repairNames = [...narrativeCollapsed.replacementProgramForHour];
-    const repairRbt = [...narrativeCollapsed.rbtActionsOnlyOutcomeForHour];
-    const repairPids = [...segmentProgramIds];
-    const repairSwaps = ensureReplacementProgramAlignmentForSegments({
-      segmentCount,
-      maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
-      names: repairNames,
-      rbtActionsOnlyOutcomeForHour: repairRbt,
-      programIdForHour: repairPids,
-      explicitProgramIdByHour: segmentExplicitProgramIds,
-      rebalancePoolIds: sessionAssignmentPoolIds,
-      idToName: idToNameForPrograms,
-      selectedIdSet,
-      behaviorToReplacementsMap,
-      authorizedProgramNames: replacementProgramsCatalogForNote,
-      maladaptiveBehaviorFunctionsForHour,
-      overrideExplicitOnHardMisfit: true,
-      rebalanceSoftMisfits: !sessionSelectionCoversHours,
-      slotLabel: "Segment",
-    });
-    const assignmentsChanged = repairNames.some(
-      (name, idx) => name !== assignmentsBeforeRepair[idx],
-    );
-    if (assignmentsChanged || repairSwaps.length > 0) {
-      const repaired = repairClinicalBodyReplacementProgramAssignments(
-        finalClinicalBody,
-        assignmentsBeforeRepair,
-        repairNames,
-      );
-      const preserved = preserveClinicalParagraphStructure(
-        finalClinicalBody,
-        repaired,
-        expectedNarrativeParagraphs,
-      );
-      finalClinicalBody = preserved.text;
-      narrativeCollapsed.replacementProgramForHour = repairNames;
-      narrativeCollapsed.rbtActionsOnlyOutcomeForHour = repairRbt;
-      warnings.push(...repairSwaps);
-      programSelectionSwaps.push(...repairSwaps);
-      if (preserved.restored) {
-        warnings.push(
-          "Skipped a replacement-program rewrite that would have collapsed ABC paragraph separators.",
-        );
-      }
-    }
-  }
-
-  const applyBodyRewrite = (next: string, warning: string): void => {
-    const preserved = preserveClinicalParagraphStructure(
-      finalClinicalBody,
-      next,
-      expectedNarrativeParagraphs,
-    );
-    if (preserved.text === finalClinicalBody) {
-      if (preserved.restored) {
-        warnings.push(
-          `Skipped a clinical-body rewrite that would have collapsed ABC paragraph separators (${warning}).`,
-        );
-      }
-      return;
-    }
-    finalClinicalBody = preserved.text;
-    warnings.push(warning);
-  };
-
-  applyBodyRewrite(
-    stripUnauthorizedCaregiverLanguage(finalClinicalBody, body.presentPeople),
-    "Removed caregiver/family language from the clinical body so presence stays only in the opening sentence.",
-  );
-  applyBodyRewrite(
-    normalizeClinicalBodyPraiseWording(finalClinicalBody),
-    'Normalized reinforcer wording to plain "praise" (never "social praise"/compound praise labels that reviewers treat as interventions).',
-  );
-  applyBodyRewrite(
-    normalizeClinicalBodyInterventionDetailPhrases(
-      finalClinicalBody,
-      frozenForAssembly.planCatalogSnapshot.interventions,
-    ),
-    'Removed unauthorized intervention-like procedure labels (e.g. "first-then statement") from Premack/application detail; collapsed duplicate wording.',
-  );
-  applyBodyRewrite(
-    normalizeClinicalBodyEscapedQuotes(finalClinicalBody),
-    "Normalized escaped quotes in the clinical body so reviewers see clean punctuation.",
-  );
-  applyBodyRewrite(
-    normalizeClinicalBodyInterventionLabels(
-      finalClinicalBody,
-      frozenForAssembly.planCatalogSnapshot.interventions,
-    ),
-    "Completed partial intervention labels to their exact authorized catalog strings (e.g. DRI parenthetical, Visual Supports plural).",
-  );
-  applyBodyRewrite(
-    normalizeClinicalBodyMaladaptiveBehaviorLabels(finalClinicalBody, behaviorCatalog),
-    "Expanded bare maladaptive-behavior abbreviations (e.g. SIB) to the exact authorized catalog label.",
-  );
-  applyBodyRewrite(
-    normalizeClinicalBodyReplacementLikePhrases(finalClinicalBody, replacementProgramsCatalogForNote),
-    "Rewrote invented replacement-like teaching labels that are not authorized replacement programs.",
-  );
-  applyBodyRewrite(
-    normalizeClinicalBodyInterventionActionAttribution(finalClinicalBody),
-    'Attributed subjectless intervention-action detail to the RBT (e.g. "Following this intervention, requiring cleanup" \u2192 "the RBT required cleanup").',
-  );
-  applyBodyRewrite(
-    normalizeClinicalBodyParallelPastTense(finalClinicalBody),
-    "Normalized coordinated RBT action lists so past-tense verbs stay parallel (e.g. restated … and re-presented …).",
-  );
-  applyBodyRewrite(
-    scrubOrphanedGerundSentenceFragments(finalClinicalBody),
-    "Removed orphaned gerund sentence fragments that were not attached to a subject (e.g. standalone orienting/prompting phrases).",
-  );
-
-  const reinforcerPrefsForNote = filterReinforcementPreferencesForNote(
-    profile?.assessmentSummary?.reinforcementPreferences ?? [],
-    { clientAgeYears },
-  );
-  applyBodyRewrite(
-    sanitizeReinforcerNarrativeText(finalClinicalBody, reinforcerPrefsForNote, clientAgeYears),
-    "Normalized reinforcer wording (concrete preferred toys; no YouTube for clients under 14).",
-  );
-
-  ensureClinicalBodyPresent("post-scrub empty body");
-
-  // Re-validate the post-processed body once. Attempt-history blocking issues are not re-merged.
-  complianceResult = validateClinicalBodyComplianceDetailed(finalClinicalBody, {
-    ...buildComplianceContext(),
-    replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
-    rbtActionsOnlyOutcomeForHour: narrativeCollapsed.rbtActionsOnlyOutcomeForHour,
-  });
-  complianceIssues = complianceResult.issues;
-
-  const effectiveIssueMap = new Map(
-    complianceResult.issues.map((issue) => [`${issue.code}\u0000${issue.message}`, issue]),
-  );
-  for (const issue of generationFinalIssues) {
-    if (issue.severity === "blocking") {
-      continue;
-    }
-    effectiveIssueMap.set(`${issue.code}\u0000${issue.message}`, issue);
-  }
-  const effectiveIssues = [...effectiveIssueMap.values()].filter((issue) => {
-    if (issue.code === "CAREGIVER_LEAKAGE" || issue.code === "PRESENT_PERSON_LEAKAGE") {
-      return false;
-    }
-    return true;
-  });
-  const criticalEffectiveIssues = effectiveIssues.filter(
-    (issue) => issue.severity === "blocking",
-  );
-  const criticalComplianceIssues = criticalEffectiveIssues.map((issue) => issue.message);
-  const stylisticComplianceIssues = effectiveIssues
-    .filter((issue) => issue.severity === "warning")
-    .map((issue) => issue.message);
-
-  for (const issue of stylisticComplianceIssues) {
-    warnings.push(`Clinical body compliance check: ${issue}`);
-  }
-  // Fail-open: never block note creation on clinical compliance. Surface as warnings and save.
-  let savedWithComplianceWarnings = false;
-  if (criticalComplianceIssues.length > 0) {
-    savedWithComplianceWarnings = true;
-    console.warn(
-      `[notes/generate] soft_fail_critical_compliance clientId=${client.id} companyId=${companyId} issues=${criticalComplianceIssues.length}`,
-    );
-    for (const issue of criticalComplianceIssues) {
-      warnings.push(`Clinical compliance (saved anyway): ${issue}`);
-    }
-    ensureClinicalBodyPresent("compliance soft-fail with incomplete body");
-  }
-
-  applyBodyRewrite(
-    stripUnauthorizedCaregiverLanguage(finalClinicalBody, body.presentPeople),
-    "Removed additional caregiver/family language from the clinical body before assembly.",
-  );
-  ensureClinicalBodyPresent("pre-assembly empty body");
-
-  let noteContent = assembleSessionNote(
-    body.presentPeople,
-    body.hasEnvironmentalChanges,
-    body.therapySetting,
-    finalClinicalBody,
-    body.nextSessionDate,
-    profile?.firstName,
-    narrativeCollapsed.narrativeSegmentCount,
-    narrativeCollapsed.therapistTrialSummaryForReplacementHour,
-    reinforcerPrefsForNote,
-    clientAgeYears,
-  );
-  const qcScrubbedNote = scrubAssembledNoteQcHotspots(noteContent);
-  if (qcScrubbedNote !== noteContent && qcScrubbedNote.trim().length > 0) {
-    noteContent = qcScrubbedNote;
-    warnings.push(
-      'Removed QC hotspot wording ("social praise" / BIP status topography placeholders) from the assembled note before save.',
-    );
-  }
-
-  const assembledContext = {
-    presentPeople: body.presentPeople,
-    hasEnvironmentalChanges: body.hasEnvironmentalChanges,
-    therapySetting: body.therapySetting,
-    nextSessionDate: body.nextSessionDate,
-    clientFirstName: profile?.firstName,
-    blockedClientNames,
-    narrativeProgramSegmentCount: narrativeCollapsed.narrativeSegmentCount,
-    therapistTrialSummaryForReplacementHour: narrativeCollapsed.therapistTrialSummaryForReplacementHour,
-    reinforcementPreferences: reinforcerPrefsForNote,
-    clientAgeYears,
-  };
-  let assembledValidation = validateAssembledSessionNote(noteContent, assembledContext);
-
-  // Auto-resolve residual caregiver leaks in the clinical body once more before save.
-  const caregiverBlocked = assembledValidation.blocking.some((issue) => issue.code === "CAREGIVER_LEAKAGE");
-  if (caregiverBlocked) {
-    const resolvedBody = stripUnauthorizedCaregiverLanguage(finalClinicalBody, body.presentPeople);
-    if (resolvedBody !== finalClinicalBody && resolvedBody.trim().length > 0) {
-      warnings.push("Resolved remaining caregiver/family language before saving the assembled note.");
-      finalClinicalBody = resolvedBody;
-    } else {
-      finalClinicalBody = stripUnauthorizedCaregiverLanguage(
-        `${finalClinicalBody} `,
-        body.presentPeople,
-      ).trim();
-      ensureClinicalBodyPresent("caregiver strip emptied body");
-    }
-    noteContent = scrubAssembledNoteQcHotspots(
-      assembleSessionNote(
-        body.presentPeople,
-        body.hasEnvironmentalChanges,
-        body.therapySetting,
-        finalClinicalBody,
-        body.nextSessionDate,
-        profile?.firstName,
-        narrativeCollapsed.narrativeSegmentCount,
-        narrativeCollapsed.therapistTrialSummaryForReplacementHour,
-        reinforcerPrefsForNote,
-        clientAgeYears,
-      ),
-    );
-    assembledValidation = validateAssembledSessionNote(noteContent, assembledContext);
-  }
-
-  if (assembledValidation.blocking.length > 0) {
-    savedWithComplianceWarnings = true;
-    for (const issue of assembledValidation.blocking) {
-      warnings.push(`Assembled note check (saved anyway): ${issue.message}`);
-    }
-    assembledValidation = {
-      issues: assembledValidation.issues,
-      blocking: [],
-      warnings: [...assembledValidation.warnings, ...assembledValidation.blocking],
+  warnings.push(`Clinical narrative generated via ${openaiNoteGenerationLabel()}.`);
+  warnings.push(...modelGeneration.warnings);
+  const trialSummaries = hourlyAssignments.map((assignment) => {
+    const entry = body.programTrialData[String(assignment.programId)]!;
+    return {
+      totalTrials: entry.count!,
+      successfulTrialNumbers: [...entry.effectiveTrials],
     };
-  }
-
-  const programSlotNeed = replacementProgramSlotCount(body.sessionHours);
-  if (body.selectedReplacements.length < programSlotNeed) {
-    warnings.push(
-      `Fewer programs selected than billable session hours (${programSlotNeed} hourly segment(s) for ${body.sessionHours} hour(s)). Hours without a matching selection in ABC Builder are auto-filled from the client's assessment/profile replacement-program list (selected session targets first, then other assessment-listed programs). Use ABC Builder to override any hour.`,
-    );
-  }
-  if (narrativeCollapsed.rbtActionsOnlyOutcomeForHour.some(Boolean)) {
-    warnings.push(
-      "One or more narrative segments document a replacement program that was not selected for this session; the narrative for those segments must describe RBT implementation only (no valenced client outcome for that program).",
-    );
-  }
-
-  // Coverage: every program the RBT selected should appear at least once in the final assignments.
-  // A missing one is the "selected 5, only 1 showed up" class of drift — surface it (never blocks).
-  const missingSelectedProgramNames = missingSelectedPrograms({
-    selectedProgramNames: programNames,
-    assignedProgramNames: narrativeCollapsed.replacementProgramForHour,
   });
-  for (const name of missingSelectedProgramNames) {
-    warnings.push(
-      `Selected program "${name}" was not documented in any hour of this note. Pin it to an hour in ABC Builder or review the generated assignments.`,
-    );
-  }
+  const closingPreferences = profile?.assessmentSummary?.reinforcementPreferences ?? [];
+  const noteContent = assembleSessionNote({
+    opening: buildLockedOpening(
+      body.presentPeople,
+      body.hasEnvironmentalChanges,
+      body.therapySetting,
+      profile?.firstName,
+    ),
+    clinicalBody: modelGeneration.body,
+    closing: buildLockedClosingParagraph(closingPreferences),
+    performance: buildPerformanceSentence(
+      body.sessionHours,
+      trialSummaries,
+      profile?.firstName,
+    ),
+    nextSession: buildNextSessionSentence(body.nextSessionDate),
+  });
 
-  const alteredSelections = parseAlteredSelectionsFromSwapMessages(programSelectionSwaps);
   const accuracyReport = buildNoteAccuracyReport({
-    effectiveIssues,
-    alteredSelections,
-    missingSelectedProgramNames,
-    assessmentGrounded: clientAssessmentTextExcerpt.trim().length > 0,
+    effectiveIssues: [],
+    alteredSelections: [],
+    missingSelectedProgramNames: [],
+    assessmentGrounded: assessmentExcerpt.length > 0,
   });
-
   const generatedAt = new Date();
-
   const [inserted] = await db
     .insert(notesTable)
     .values({
@@ -1236,42 +312,35 @@ export async function generateSessionNoteForClient(params: {
     })
     .returning();
 
-  console.log(
-    `[notes/generate] openai_ok noteId=${inserted.id} model=${generationModel} clientId=${client.id} companyId=${companyId}${savedWithComplianceWarnings ? " soft_fail_compliance=1" : ""}`,
+  await writeNoteGenerationAudit(
+    buildNoteGenerationAuditEntry({
+      ...auditBase,
+      model: modelGeneration.modelUsed,
+      noteId: inserted.id,
+      repairAttempts: modelGeneration.repairAttempts,
+      validatorIssues: [],
+      criticalIssues: [],
+      finalValidatorIssues: [],
+      finalCriticalIssues: [],
+      attemptHistory: modelGeneration.attemptHistory,
+      repairActions: modelGeneration.repairActions,
+      warnings,
+      rawModelOutputs: modelGeneration.rawModelOutputs,
+      clinicalBody: modelGeneration.body,
+      finalNoteText: noteContent,
+      accuracyReport,
+      finalStatus: warnings.length > 1 ? "saved_with_warnings" : "saved",
+    }),
   );
-  await writeNoteGenerationAudit(buildNoteGenerationAuditEntry({
-    ...auditBase,
-    model: generationModel,
-    noteId: inserted.id,
-    repairAttempts: generationRepairAttempts,
-    validatorIssues: effectiveIssues.map((issue) => issue.message),
-    criticalIssues: criticalComplianceIssues,
-    finalValidatorIssues: effectiveIssues,
-    finalCriticalIssues: criticalEffectiveIssues,
-    attemptHistory: generationAttemptHistory,
-    repairActions: generationRepairActions,
-    warnings,
-    rawModelOutputs: generationRawOutputs,
-    clinicalBody: finalClinicalBody,
-    finalNoteText: noteContent,
-    accuracyReport,
-    finalStatus: savedWithComplianceWarnings ? "saved_with_warnings" : "saved",
-  }));
-
-  const maladaptiveReplacementPairings = maladaptiveReplacementPairingsForSessionNote({
-    acquisitionOnlySegmentForHour,
-    maladaptiveBehaviorForNarrative,
-    replacementProgramForHour: narrativeCollapsed.replacementProgramForHour,
-  });
 
   return {
     ok: true,
     noteId: inserted.id,
     content: noteContent,
     generatedAt,
-    generationModel,
+    generationModel: modelGeneration.modelUsed,
     warnings,
-    maladaptiveReplacementPairings,
+    maladaptiveReplacementPairings: [],
     accuracyReport,
   };
 }

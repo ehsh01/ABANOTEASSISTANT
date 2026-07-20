@@ -1,86 +1,48 @@
 ---
-description: Mandatory opening, closing, and end-of-note sequence for assembled session notes (non-negotiable prose)
+description: Locked opening and end-of-note prose
 alwaysApply: true
 ---
 
-# Locked prose — ABA session notes (ABA Note Assistant)
+# Locked Prose
 
-These strings are **binding** for any code, prompt, or agent that assembles the **final** session note text. They supplement `.cursor/rules/aba-note-backend.mdc` and `.cursor/rules/aba-note-companion.mdc`.
+## Opening
 
-**Source documents** (human-readable copies): `docs/note-generation/` — includes full rules from *COMPLETE NOTE GENERATION RULES*, ABC format instructions, and sample reference.
+Every note begins with exactly two sentences:
 
-## 1. Opening (locked pattern — two sentences)
+`The RBT met with [CLIENT_REFERRAL] and [CaregiverList] to implement program targets.`
 
-Every note must **begin** with exactly this structure (fill slots only; do not paraphrase the template):
+Then exactly one environmental sentence:
 
-1. `The RBT met with [CLIENT_REFERRAL] and [CaregiverList] to implement program targets.`
-   - `[CLIENT_REFERRAL]` = the client’s **first name** from the client profile when it is non-empty after trim; otherwise the literal **the client** (same as before). Do not pull names from the assessment excerpt into locked prose.
-   - **AI clinical body** (OpenAI-generated middle of the note): continue to use only **the client** plus pronouns from JSON gender — no first names, last names, nicknames, or initials (including nothing copied from the assessment excerpt).
-   - `[CaregiverList]` = people present from session intake (e.g. Mother, Father), joined with natural English (e.g. `Mother and Father`, or `Mother, Father, and Grandmother`). If none documented, use: `the caregiver`.
-   - Do **not** name the session meeting place (home, school, community, clinic, etc.) in this opening. `therapySetting` may still be collected for session metadata; it is not written into the locked opening.
-2. Environmental status sentence (choose one; do not invent facts):
-   - If **no** environmental changes this session: `There have been no environmental changes recently.`
-   - If **yes**: `There have been environmental changes recently.` (Details belong in the note body per workflow — do not contradict the boolean.)
+- No changes: `There have been no environmental changes recently.`
+- Changes: `There have been environmental changes recently.`
 
-Do not add sentences **before** these two. Do not reorder them.
+`CLIENT_REFERRAL` is the profile first name when present, otherwise `the client`. The opening does
+not name the meeting place.
 
-## 2. Mandatory closing paragraph (verbatim)
+## Clinical body
 
-After the clinical body, the following paragraph must appear **exactly** (punctuation and wording as written; straight double quotes inside the parenthetical):
+The body contains exactly one model-written ABC paragraph per billable session hour. Each paragraph
+must include the exact replacement program assigned in the app for that hour and the exact percentage
+selected in the app. No other clinical-body prose or pairing rule is locked.
 
-```
-Throughout the session, the RBT used various reinforcers, including [PRAISE_CLAUSE] and [ITEMS_CLAUSE], contingent on task completion and appropriate behavior. There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned.
+## Closing paragraph
 
-(Caregiver/presence is stated only in the mandatory opening sentence; do not repeat caregiver language in this closing paragraph.)
-```
+The server builds the closing with `buildLockedClosingParagraph`. Its fixed tail is:
 
-Slots (server-assembled in `buildLockedClosingParagraph`; do not invent):
-- `[PRAISE_CLAUSE]` = always plain `praise (e.g., "Good job," "Wow," and "Good attention to detail")`. Never write **social praise**, **verbal praise**, or **behavior-specific praise** (external reviewers treat those compounds as unauthorized intervention labels).
-- `[ITEMS_CLAUSE]` = when reinforcementPreferences lists tangible items, `access to preferred items and activities documented for this client (e.g., [concrete BIP items])`; otherwise the generic reinforcement-system wording. Drop caregiver/person-role labels, hugs, BIP dump lines (`Food:…`, `Tangibles:…`), and person-owned phones from the example list.
+`There were no health or safety concerns during the visit. The RBT will continue working with the client as outlined in the Behavior Plan. All data on maladaptive behaviors and progress in program implementation was collected during the session in accordance with the BIP. The session was completed as planned.`
 
-No extra sentences **between** the body and this paragraph except where a validated pipeline explicitly inserts only approved blocks.
+The first closing sentence always uses plain:
 
-## 3. End-of-note sequence (exact order — after the closing paragraph)
+`praise (e.g., "Good job," "Wow," and "Good attention to detail")`
 
-1. The closing paragraph above  
-2. **Performance sentence** (server-assembled from intake + collapsed narrative segments; fixed template text — no LLM prose):  
-   - **When** at least one narrative segment has therapist-entered discrete trials (`therapistTrialSummaryForReplacementHour[s]` with `totalTrials >= 1` after collapse in `aggregateTherapistTrialSummariesForPerformanceLine`): one fixed sentence: `[CLIENT_REFERRAL] participated in session activities with inconsistent responding and required prompting across tasks.` — `[CLIENT_REFERRAL]` = the client’s **first name** from the client profile when it is non-empty after trim (same as §1 opening); otherwise the literal **`The client`** (capital **T**, sentence-initial). Do not pull names from the assessment excerpt. This line does **not** repeat a session-wide pooled percent; per-segment ABC paragraphs still carry discrete-trial percentages tied to intake JSON where required by `artifacts/api-server/src/note-validation.ts`.  
-   - **When** no such trial rows exist: a fallback sentence that states only the narrative program segment count (**N** `program` / `programs`) — e.g. `The client completed N programs.` Do **not** apologize for missing RBT trial input or state that a percentage could not be computed (see `buildPerformanceSentence` / `buildPerformanceSentenceWithoutTrialAggregate`).
-   - Per-segment ABC paragraphs: when therapist trial data exists for that hour, include the discrete-trial percentage sentence; when it does not, **omit** that sentence entirely (do not invent a %, and do not write that trial data was unavailable).
-   - Implementation: `artifacts/api-server/src/note-assembly.ts` (`buildPerformanceSentence`, `aggregateTherapistTrialSummariesForPerformanceLine`); ABC trial line: `buildDeterministicTrialSentence` in `note-plan-assembly.ts`.
-3. **Next session sentence**:  
-   - If a next session date is provided: `The next session is tentatively scheduled for [DATE].`  
-   - `[DATE]` = US-style display (e.g. `12/10/2025`).  
-   - If no date: `The next session is tentatively scheduled; the date is to be determined.`  
-   - Do **not** include a session location (home, school, community, etc.) on this line.
+and the server-approved preferred-items clause.
 
-Do not append other sentences after these without product approval.
+## End sequence
 
-## 4. ABC and documentation rules (summary)
+After the closing paragraph:
 
-Full detail: `docs/note-generation/COMPLETE-NOTE-GENERATION-RULES.md` and `docs/note-generation/ABC-FORMAT-INSTRUCTIONS.md`.
+1. Server-built performance sentence.
+2. `The next session is tentatively scheduled for [MM/DD/YYYY].`, or
+   `The next session is tentatively scheduled; the date is to be determined.`
 
-Highlights for implementers:
-
-- **Authority**: Master documentation rules → assessment → BIP; higher overrides lower.
-- **Strict labels**: Behaviors, interventions, and replacement programs must match BIP/authorized lists with **exact** wording (capitalization, spacing, punctuation).
-- **ABC**: One complete ABC sequence per hour of service when using ABC narrative; sections flow as continuous narrative unless schema says otherwise. **One maladaptive behavior catalog label per hour** (not two behaviors in the same hour). For broad labels (e.g. tantrum), topography must be observable and consistent with the assessment/BIP behavior definitions—not the label alone.
-- **Behavior rotation (AI clinical body)**: The **client app profile is authoritative**. Multi-hour notes **cycle** a catalog built **only** from behaviors on the client profile (`maladaptiveBehaviorForHour` per hour); standard BIP names may be ordered consistently when they match exactly, and each hour cites its assigned label verbatim. Behaviors that appear in the stored assessment text but were **not** added to the profile are **not** used — they surface as a non-blocking warning so the RBT can add them to the app if desired. The same app-authoritative rule applies to **replacement programs** and **interventions**: generation uses only the items on the client profile. The stored assessment (structured allow-lists + text excerpt) is used to **ground/enrich** topography, functions, and behavior→program/intervention pairing — it never adds a label that is not on the app, and it must never drop one that is (see `withProfileListsUnioned` in `artifacts/api-server/src/assessment-structured.ts` and `maladaptiveBehaviorsCatalogForRotation` in `note-scheduling.ts`).
-- **Toddlers / limited verbal**: For very young clients, avoid attributing complex spoken sentences to the client; prefer vocalizations, gestures, and observable actions.
-- **Introduction rule (doc)** mirrors section 1 above (first name or **the client** + caregivers; no meeting place; AI body still **the client** only).
-- **Replacement programs**: Either in antecedent (activity being taught) **or** after behavior in consequence — **not both** in the same ABC.
-- **BIP-map authority over function category (misfit blocking)**: A replacement program that the client's `behavior_to_replacements_map` maps to a behavior is **authorized** for that behavior and must **not** be flagged as a function mismatch, even if a different mapped program is a "better" function-category match. Program-name comparison for map membership is **normalized** (case-insensitive; curly `“ ” ‘ ’` and straight `" '` quotes treated as equivalent) so BIP spellings like `Request for Break` / `Accept “No” as an answer` match assigned catalog strings `Request for break` / `Accept 'No' as an answer` (see `normalizeReplacementProgramKey` / `isMisfitReplacementForMaladaptiveBehavior` in `note-scheduling.ts`). Genuine **safety** misfits (e.g. a leave-area program for a non-elopement behavior) still block regardless of the map. Function-category alignment only guides which mapped program auto-assignment **prefers**.
-- **Skill-acquisition programs are not replacements**: programs whose names match the catalog patterns in `artifacts/api-server/src/skill-acquisition-programs.ts` (`Pre-requisite Skills`, `Manding Skills`, `Echoic` family, `Improve eye contact`, `Attract others' attention`, `Imitate other actions`, `Respond to / Response to (own/her/his/their) name`, the `Request access to item activity PECS or pointing after being prompted once` line, `Transition Compatible with ABLLS-R Code N4`) trigger `acquisitionOnlySegmentForHour[s] = true`; those paragraphs must **omit** the maladaptive label and "manifested [behavior]" framing (no behavior → response pairing for those segments). Downstream review arrays must use `data.maladaptiveReplacementPairings` from `POST /notes/generate`, which excludes acquisition-only segments.
-- **Subjective wording is forbidden** in the AI clinical body: do not use **upset**, **frustrated**, **happy**, **angry**, **sad**, **moody**, **stubborn**, **noncompliant**, **defiant**, **lazy**, **fair performance**, **bad day**, **good day**, **did well**, **did poorly**, "in a good/bad mood", "became upset/frustrated/etc.", "got upset", "was upset/frustrated/happy/stubborn/noncompliant" — see `SUBJECTIVE_WORDING_PATTERNS` in `artifacts/api-server/src/note-validation.ts`. Replace with **observable topography** + measurable detail (trials, opportunities, prompts, percentages — never seconds/minutes for the client).
-- **Reinforcers in the AI body** must come from the approved list (**praise** only — never **social praise** / **verbal praise** / **behavior-specific praise**), music, bubbles, sensory toys, balls, Disney dolls, outdoor play, water play, from JSON `reinforcementPreferences` when present, or from the client's JSON `interventions` / `replacementProgramsInOrder`. Never write bare **preferred toys** / unspecified **toys** as the delivered reinforcer—name the **specific** toy preference on file. When `clientAgeYears` is known and **under 14**, never mention **YouTube**. Do **not** name praise as a catalog intervention. The locked closing reinforcer paragraph in §2 is server-assembled (preferences when on file; YouTube, person-role labels, and BIP dump lines filtered) and is added separately by the server.
-- **BIP status lines are not topography**: never use `Status: To be initiated`, `To be initiated`, or similar program-tracking fields as the manifested-behavior topography. When the profile topography field is a status placeholder, recover the real operational definition from the assessment text (`enrichMaladaptiveTargetsWithAssessmentTopography` / `isUnusableStoredTopography`) or require observable session actions from the model.
-- **Behavior topography (one action per ABC)**: When the BIP lists several alternative observable forms (especially **Excessive Motor Behavior** — e.g. flapping hands, side-to-side head movement, walking back and forth, repeating an activity), each ABC paragraph uses **exactly one** of those actions for that hour. Multi-hour notes rotate through the listed actions. Never dump the full alternative list into a single manifested-behavior sentence (see `pickSingleTopographyActionForSegment` in `maladaptive-behavior-topography.ts`).
-- **Visual Supports** (exact BIP string, plural): may appear only as a cueing/support tool when that exact label is in JSON `interventions`. Never write **Visual Support** (singular). Do **not** use Visual Supports as the **primary** catalog intervention for tangible-access / gadget-access topographies when **Environmental Manipulation** and/or **DRA** are listed—name those function-matched interventions instead.
-- **Consequence phrasing (catalog interventions)**: Use a **naming sentence** that ends with a period **immediately** after the exact approved intervention string, e.g. `To address this/these behavior(s), the RBT implemented [EXACT INTERVENTION NAME].` or `The RBT implemented [EXACT INTERVENTION NAME].` Do **not** attach application detail in that same sentence (forbidden: `… implemented … by …` with the catalog name). Describe how it was applied in **following** sentences (e.g. beginning with **Following this intervention,** / **Following these interventions,** when multiple interventions were named).
-- **Intervention naming sentences are server-driven (deterministic count)**: In `assembleClinicalBodyFromNotePlan`, the intervention naming sentences are built from the per-segment **server-locked** `interventionLabels` (from `assignInterventionsForSegment`), **not** the model's free-form `segments[].interventions` list. This means the documented intervention count per ABC paragraph deterministically equals the server assignment — **exactly one** for ordinary segments, and the Response-Block-first chain only for safety-priority behaviors. The assembler also neutralizes any **stray** `implemented|applied [catalog name].` naming sentence the model embeds in prose fields (rewriting it to `used …`) so it is not counted. This prevents `INTERVENTION_COUNT` blocks caused by the model over-naming interventions (see `neutralizeStrayInterventionNamingSentences` in `note-plan-assembly.ts`).
-- **Physical aggression**: When the manifested catalog behavior indicates person-directed physical aggression (e.g. label contains "Physical Aggression") and the client's approved interventions include **Response Block** (exact BIP string), the **first** intervention **named** after "To address this behavior" must be **Response Block** in its own naming sentence; describe immediate blocking to prevent further contact in the **next** sentence(s); additional interventions (e.g. environmental manipulation) follow only after that safety naming sentence, each catalog name exact and each naming sentence ending after the name with a period.
-- **Replacement program phrasing**: `Additionally, the RBT implemented the replacement program '[EXACT PROGRAM NAME]'` followed by `by` and implementation detail.
-
-## 5. Engineering rule
-
-When changing `POST /notes/generate` or any assembly step, **verify** the output starts with §1 and ends with §2–§3 in order. Add automated tests when the pipeline is non-mock.
+Nothing is appended after the next-session sentence.

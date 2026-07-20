@@ -23,7 +23,6 @@ import { THERAPY_SETTINGS_ORDERED, isTherapySetting, type TherapySetting } from 
 import {
   useClients,
   useClientPrograms,
-  useClientBehaviorProgramApprovals,
   useGenerateSessionNote,
   useDraftQuota,
   useAbcActivityAntecedents,
@@ -1064,12 +1063,8 @@ function Step6Programs() {
       <div className="text-center mb-8">
         <h2 className="text-3xl font-display font-bold text-foreground">Replacement Programs</h2>
         <p className="text-muted-foreground mt-2">
-          Choose session targets for billing/documentation (at least one). After you set session length: a{" "}
-          <strong>2-hour</strong> visit uses <strong>one program per hour</strong>; <strong>3+ hours</strong> use
-          about <strong>one program per 90 minutes</strong> of session time (calendar hours in the same window share a
-          program unless ABC Builder assigns a different program to an hour). Pick enough selected programs to cover
-          those slots when you want only session targets—otherwise the server may pull other assessment-linked
-          programs for empty slots.
+          Choose the programs used during this session and select the exact criterion percentage for
+          each one. In ABC Builder, assign one selected program to every service hour.
         </p>
       </div>
 
@@ -1233,63 +1228,29 @@ function StepAbcBuilder() {
   const { data: activitiesRes, isLoading: activitiesLoading } = useAbcActivityAntecedents();
   const { data: clientRes } = useClient(data.clientId);
   const { data: programsRes, isLoading: programsLoading } = useClientPrograms(data.clientId);
-  const { data: approvalsRes } = useClientBehaviorProgramApprovals(data.clientId);
 
   const activities = activitiesRes?.data?.activities ?? [];
   const maladaptiveBehaviors: string[] = clientRes?.data?.profile?.maladaptiveBehaviors ?? [];
   const linkedPrograms: Program[] = programsRes?.data ?? [];
-  const assessmentProgramNames = new Set(
-    (clientRes?.data?.profile?.replacementPrograms ?? [])
-      .map((n) => String(n).trim())
-      .filter((n) => n.length > 0),
-  );
-  const programsForHourPicker =
-    assessmentProgramNames.size > 0
-      ? linkedPrograms.filter(
-          (p) => selectedIds.includes(p.id) || assessmentProgramNames.has(p.name.trim()),
-        )
-      : linkedPrograms;
-
-  const approvalItems = approvalsRes?.data?.items ?? [];
-  const programIdsByBehavior = useMemo(() => {
-    const m = new Map<string, Set<number>>();
-    for (const it of approvalItems) {
-      const key = it.behaviorLabel.trim();
-      if (!m.has(key)) m.set(key, new Set());
-      m.get(key)!.add(it.programId);
-    }
-    return m;
-  }, [approvalItems]);
-
-  function approvedProgramIdsForBehavior(behavior: string | null | undefined): Set<number> | null {
-    if (!behavior?.trim()) return null;
-    const b = behavior.trim();
-    if (programIdsByBehavior.size === 0) return null;
-    for (const [k, set] of programIdsByBehavior.entries()) {
-      if (k === b || k.toLowerCase() === b.toLowerCase()) {
-        return set.size > 0 ? set : null;
-      }
-    }
-    return null;
-  }
+  const programsForHourPicker = linkedPrograms.filter((p) => selectedIds.includes(p.id));
 
   useEffect(() => {
     const want = Math.min(sessionHours, 8);
     const cur = useWizardStore.getState().data.abcHints ?? [];
-    if (cur.length === 0) {
-      useWizardStore.getState().updateData({
-        abcHints: Array.from({ length: want }, () => ABC_EMPTY_ROW()),
-      });
-      return;
-    }
-    if (cur.length < want) {
-      useWizardStore.getState().updateData({
-        abcHints: [...cur, ...Array.from({ length: want - cur.length }, () => ABC_EMPTY_ROW())],
-      });
-    } else if (cur.length > want) {
-      useWizardStore.getState().updateData({ abcHints: cur.slice(0, want) });
-    }
-  }, [sessionHours]);
+    const next = Array.from({ length: want }, (_, i) => {
+      const existing = cur[i] ?? ABC_EMPTY_ROW();
+      const valid =
+        existing.replacementProgramId != null &&
+        selectedIds.includes(existing.replacementProgramId);
+      return {
+        ...existing,
+        replacementProgramId: valid
+          ? existing.replacementProgramId
+          : (selectedIds[i % Math.max(1, selectedIds.length)] ?? null),
+      };
+    });
+    useWizardStore.getState().updateData({ abcHints: next });
+  }, [sessionHours, selectedIds.join(",")]);
 
   const rawHints = data.abcHints ?? [];
   const hints: AbcHintEntry[] = Array.from({ length: maxRows }, (_, i) => rawHints[i] ?? ABC_EMPTY_ROW());
@@ -1327,21 +1288,15 @@ function StepAbcBuilder() {
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="text-center mb-8">
         <h2 className="text-3xl font-display font-bold text-foreground">ABC Builder</h2>
-        <p className="text-muted-foreground mt-2">Optional — lock activities, behaviors, and programs per hour.</p>
+        <p className="text-muted-foreground mt-2">Assign one selected program to every service hour.</p>
       </div>
 
       <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-muted-foreground leading-relaxed space-y-2">
         <p className="font-semibold text-foreground">How it works</p>
         <p>
-          Each row is one service hour. When you fill in both activity and maladaptive behavior, the AI keeps those exact
-          strings for that hour. Use <span className="font-medium text-foreground">Program this hour</span> to override
-          which replacement program that hour uses. Only programs from the client&apos;s assessment/profile list (plus
-          any you selected for this session) are available; hours you leave on Automatic are filled from that same list.
-        </p>
-        <p>
-          If you choose a program that you <span className="font-medium text-foreground">did not</span> select on the
-          Replacement Programs step, the note will describe <span className="font-medium text-foreground">what the RBT
-          did</span> for that program only — not positive or negative client outcomes for that program.
+          Each row is one service hour. Program assignment is required and the server never changes
+          it. Activity and behavior are optional hints; when blank, the AI chooses them from the
+          client profile and assessment.
         </p>
       </div>
 
@@ -1352,24 +1307,14 @@ function StepAbcBuilder() {
       ) : (
         <div className="space-y-3">
           {hints.map((row, i) => {
-            const hasActivity = !!row.activityAntecedent;
-            const hasBehavior = !!row.maladaptiveBehavior;
-            const isComplete = hasActivity && hasBehavior;
-            const isPartial = hasActivity !== hasBehavior;
             const pid = row.replacementProgramId;
-            const rbtOnly =
-              typeof pid === "number" && Number.isFinite(pid) && !selectedIds.includes(pid);
-            const strictApproved = approvedProgramIdsForBehavior(row.maladaptiveBehavior);
-            const programsForRowPicker =
-              strictApproved !== null
-                ? programsForHourPicker.filter((p) => strictApproved.has(p.id))
-                : programsForHourPicker;
+            const isComplete = typeof pid === "number" && selectedIds.includes(pid);
             return (
               <div
                 key={i}
                 className={cn(
                   "bg-card border rounded-xl p-4 space-y-3 transition-colors",
-                  isPartial
+                  !isComplete
                     ? "border-amber-400 bg-amber-50/20"
                     : isComplete
                       ? "border-emerald-400 bg-emerald-50/20"
@@ -1385,35 +1330,23 @@ function StepAbcBuilder() {
                 <div>
                   <label className="block text-xs font-semibold text-muted-foreground mb-1.5">Program this hour</label>
                   <Select
-                    value={pid != null ? String(pid) : "__auto__"}
-                    onValueChange={(v) =>
-                      updateRow(i, "replacementProgramId", v === "__auto__" ? null : Number(v))
-                    }
+                    value={pid != null ? String(pid) : ""}
+                    onValueChange={(v) => updateRow(i, "replacementProgramId", Number(v))}
                   >
                     <SelectTrigger className="h-10 rounded-lg border-border bg-background text-sm">
-                      <SelectValue placeholder="Automatic from session targets" />
+                      <SelectValue placeholder="Select a program" />
                     </SelectTrigger>
                     <SelectContent className="max-h-[min(60vh,22rem)]">
-                      <SelectItem value="__auto__">Automatic (rotate session targets)</SelectItem>
-                      {programsForRowPicker.map((p) => (
+                      {programsForHourPicker.map((p) => (
                         <SelectItem key={p.id} value={String(p.id)}>
                           {p.name}
-                          {selectedIds.includes(p.id) ? "" : " — RBT actions only"}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {strictApproved !== null && programsForRowPicker.length === 0 && row.maladaptiveBehavior && (
+                  {!isComplete && (
                     <p className="text-xs text-amber-600 mt-1.5">
-                      No replacement programs are approved for this behavior in client setup. Link programs under
-                      Clients → Edit behaviors → Approved Programs for This Behavior, or clear the maladaptive behavior
-                      to use the full program list.
-                    </p>
-                  )}
-                  {rbtOnly && (
-                    <p className="text-xs text-muted-foreground mt-1.5">
-                      This program is not a selected session target; the narrative will use RBT-action wording only for
-                      its outcome.
+                      Choose one of the selected session programs for this hour.
                     </p>
                   )}
                 </div>
@@ -1455,12 +1388,6 @@ function StepAbcBuilder() {
                   </div>
                 </div>
 
-                {isPartial && (
-                  <p className="text-xs text-amber-600 font-semibold flex items-center gap-1">
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                    Fill in both activity fields or leave both empty before continuing.
-                  </p>
-                )}
               </div>
             );
           })}
@@ -1688,14 +1615,17 @@ export default function Wizard() {
         return typeof data.therapySetting === "string" && isTherapySetting(data.therapySetting);
       case 7: return data.hasEnvironmentalChanges === false || (data.hasEnvironmentalChanges === true && !!data.environmentalChanges?.trim());
       case 8: {
-        // ABC Builder — optional, but no partial rows allowed
+        // One explicit selected program and percentage per service hour.
         const hints = data.abcHints ?? [];
-        const hasPartial = hints.some((r) => {
-          const a = !!r.activityAntecedent;
-          const b = !!r.maladaptiveBehavior;
-          return a !== b;
+        const hours = data.sessionHours ?? 0;
+        const selected = data.selectedReplacements ?? [];
+        if (hints.length !== hours || hours < 1) return false;
+        return hints.every((row) => {
+          const id = row.replacementProgramId;
+          if (id == null || !selected.includes(id)) return false;
+          const trial = data.programTrialData?.[String(id)];
+          return trial?.count != null && trial.count >= 1;
         });
-        return !hasPartial;
       }
       case 9: return true; // Next session date — optional
       case 10: return true;

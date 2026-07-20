@@ -18,16 +18,26 @@ describe("offline note evaluation release gate", () => {
     assert.equal(report.passed, true);
   });
 
-  it("fails when a replay fixture regresses", () => {
+  it("fails when a fixture drops its exact hourly program", () => {
     const report = runOfflineNoteEvaluation([
       {
-        id: "broken-assessment-gate",
-        tags: ["assessment-gate"],
-        gate: { hasAssessment: true, assessmentStatus: "ready" },
-        expectedGateError: true,
+        id: "broken-hourly-program",
+        tags: ["exact-program"],
+        setting: "Home",
+        assessmentExcerpt: "Task refusal is documented.",
+        profileBehaviors: ["Task refusal"],
+        profileInterventions: ["Premack Principle"],
+        hourlyAssignments: [
+          {
+            programId: 1,
+            programName: "Compliance Training",
+            criterionPercentage: 20,
+          },
+        ],
+        paragraphs: ["The RBT implemented Time on Task; 20% of trials met criterion."],
       },
     ]);
     assert.equal(report.passed, false);
-    assert.equal(report.metrics.issueCodeCounts.ASSESSMENT_GATE_REGRESSION, 1);
+    assert.equal(report.metrics.issueCodeCounts.PROGRAM_MISSING, 1);
   });
 });

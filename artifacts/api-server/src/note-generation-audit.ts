@@ -109,7 +109,7 @@ export function buildNoteGenerationAuditEntry(
   const usageRows = attempts.flatMap((attempt) => (attempt.usage ? [attempt.usage] : []));
   const sum = (key: keyof (typeof usageRows)[number]): number | null =>
     usageRows.length > 0
-      ? usageRows.reduce((total, usage) => total + usage[key], 0)
+      ? usageRows.reduce((total, usage) => total + (usage[key] ?? 0), 0)
       : null;
   const storeContent = contentStorageEnabled(input.env);
   const finalValidatorIssueCodes = uniqueIssueCodes(input.finalValidatorIssues);

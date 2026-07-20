@@ -674,7 +674,11 @@ export const GenerateNoteRequestTherapySetting = {
 } as const;
 
 export interface ProgramTrialDataEntry {
-  /** Total trials conducted for this replacement program when therapist-entered. `null` means "no trial data entered" — the server falls back to default quantified language. `>= 1` means trials were entered (including a deliberate 0% selection, encoded as `count >= 1` plus an empty `effectiveTrials`).
+  /**
+   * Fixed trial denominator used by the app percentage selector (currently 10). Nullable only while wizard state is incomplete; POST /notes/generate rejects null.
+
+   * @minimum 1
+   * @maximum 10
    */
   count: number | null;
   /** 1-based indices of trials in which the client met criterion (e.g. [2, 4, 5] for trials 2, 4, and 5). When empty AND `count >= 1`, this represents **0 successes / count trials** (a 0% entry); the server still injects the rounded percentage into the prose. When empty AND `count` is null, no data was entered.
@@ -683,7 +687,7 @@ export interface ProgramTrialDataEntry {
 }
 
 /**
- * Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is **null**, no trial data was entered and the server uses default quantified replacement-program language for that hour. When `count` is **>= 1**, the therapist entered trial data for that program — `effectiveTrials` lists the 1-based trial indices that met criterion (so an empty `effectiveTrials` paired with `count >= 1` represents **0 successes / count trials**, i.e. a deliberate 0% entry, not "no data"). The clinical narrative for that hour must incorporate the rounded percentage (`successfulTrialNumbers.length` / `totalTrials`) for the verbatim replacement program name. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+ * Required. Maps every hourly replacement program id to the percentage manually selected in the app, encoded as count + effectiveTrials. The server freezes the corresponding integer percentage and requires that exact value in every hour assigned to the program.
 
  */
 export type GenerateNoteRequestProgramTrialData = {
@@ -691,7 +695,7 @@ export type GenerateNoteRequestProgramTrialData = {
 };
 
 /**
- * One optional ABC row. activityAntecedent and maladaptiveBehavior must be non-empty together, or both empty/null — partial pairs are invalid. replacementProgramId may be set alone or with a complete activity/behavior pair.
+ * One required hourly assignment. replacementProgramId is mandatory. activityAntecedent and maladaptiveBehavior are optional independent hints.
 
  */
 export interface AbcHintEntry {
@@ -699,9 +703,9 @@ export interface AbcHintEntry {
   activityAntecedent?: string | null;
   /** Exact maladaptive behavior label from the client BIP/profile catalog */
   maladaptiveBehavior?: string | null;
-  /** Optional. ID of a replacement program linked to this client (GET /clients/:id/programs). When set, hour h uses this program in the ABC instead of the default rotation from selectedReplacements. If this id is not in selectedReplacements, the clinical narrative for that hour must describe RBT implementation only and must not state positive or negative client outcomes for that program.
+  /** ID of the selected replacement program used for this hour. Must be present in selectedReplacements. The property is nullable only while the wizard row is incomplete; POST /notes/generate rejects null.
    */
-  replacementProgramId?: number | null;
+  replacementProgramId: number | null;
 }
 
 export interface GenerateNoteRequest {
@@ -721,14 +725,14 @@ export interface GenerateNoteRequest {
   selectedReplacements: number[];
   nextSessionDate?: string;
   /**
-   * Optional ABC Builder rows, index-aligned with service hours (index 0 = first hour). When both activityAntecedent and maladaptiveBehavior are set for an index, the AI must use those exact strings for that hour; empty rows use default AI rotation. Optional replacementProgramId per index assigns which linked replacement program that hour's ABC documents (defaults to server rotation from selectedReplacements). When replacementProgramId is not among selectedReplacements, the narrative must document RBT actions only for that hour—no valenced client outcome. Length must not exceed sessionHours. Omit or send [] for fully automatic ABCs.
+   * Required hour-indexed ABC assignments (index 0 = first hour). The array length must equal sessionHours and every row must include replacementProgramId from selectedReplacements. activityAntecedent and maladaptiveBehavior are optional hints; when omitted, the model chooses them from the client profile/assessment. The server never rotates, auto-fills, or remaps the hourly program.
 
    * @maxItems 8
    */
-  abcHints?: AbcHintEntry[];
-  /** Optional. Maps replacement program id (string keys, e.g. "42") to trial metadata. When `count` is **null**, no trial data was entered and the server uses default quantified replacement-program language for that hour. When `count` is **>= 1**, the therapist entered trial data for that program — `effectiveTrials` lists the 1-based trial indices that met criterion (so an empty `effectiveTrials` paired with `count >= 1` represents **0 successes / count trials**, i.e. a deliberate 0% entry, not "no data"). The clinical narrative for that hour must incorporate the rounded percentage (`successfulTrialNumbers.length` / `totalTrials`) for the verbatim replacement program name. Ignored for hours that document RBT-only replacement programs (not selected session targets).
+  abcHints: AbcHintEntry[];
+  /** Required. Maps every hourly replacement program id to the percentage manually selected in the app, encoded as count + effectiveTrials. The server freezes the corresponding integer percentage and requires that exact value in every hour assigned to the program.
    */
-  programTrialData?: GenerateNoteRequestProgramTrialData;
+  programTrialData: GenerateNoteRequestProgramTrialData;
 }
 
 export type AbcActivityAntecedentListResponseData = {

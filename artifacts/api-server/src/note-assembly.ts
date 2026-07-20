@@ -3,7 +3,6 @@
  * Source of truth for wording: .cursor/rules/aba-note-locked-prose.mdc
  */
 
-import type { TherapistTrialSummaryForHourEntry } from "./note-validation";
 import type { TherapySetting } from "@workspace/therapy-settings";
 import { therapySettingLocationPhrase } from "@workspace/therapy-settings";
 import {
@@ -13,6 +12,11 @@ import {
 
 export type { TherapySetting };
 export { therapySettingLocationPhrase };
+
+export type TherapistTrialSummaryForHourEntry = {
+  totalTrials: number;
+  successfulTrialNumbers: number[];
+} | null;
 
 /** Trim stray punctuation from intake present-people labels (e.g. "Maternal uncle)"). */
 export function normalizePresentPersonLabel(raw: string): string {

@@ -3,13 +3,22 @@ import type {
   ClinicalFunction,
   MaladaptiveBehaviorProfileEntry,
 } from "@workspace/db/schema";
-import {
-  canonicalMaladaptiveBehaviorLabel,
-  maladaptiveBehaviorLabelsEquivalent,
-} from "./note-validation";
 import { sanitizeClinicalFunctionsInput } from "./clinical-behavior-function";
 
 const MAX_TOPOGRAPHY_CHARS = 16_000;
+const SIB_CANONICAL = "Self-Injurious Behavior (SIB)";
+
+function canonicalMaladaptiveBehaviorLabel(raw: string): string {
+  const value = raw.trim();
+  if (/^(?:sib|self[- ]injurious behavior(?: \(sib\))?)$/i.test(value)) {
+    return SIB_CANONICAL;
+  }
+  return value;
+}
+
+function maladaptiveBehaviorLabelsEquivalent(a: string, b: string): boolean {
+  return canonicalMaladaptiveBehaviorLabel(a) === canonicalMaladaptiveBehaviorLabel(b);
+}
 
 function trimNonEmptyStrings(names: string[]): string[] {
   return names.map((s) => s.trim()).filter((s) => s.length > 0);
