@@ -32,7 +32,8 @@ import {
 } from "./note-plan-validation";
 import type { SessionContext } from "./note-plan-schema";
 
-export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-5.5";
+/** Temporary primary until further notice; override with env `OPENAI_MODEL`. */
+export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-4.1";
 
 /** Existing caller input retained as the runtime SessionContext source. */
 export type NoteGenerationContext = {
@@ -296,12 +297,13 @@ function resolveReasoningEffort(): "low" | "medium" | "high" | null {
 }
 
 /**
- * Faster/cheaper model used only when the primary times out or errors (env `OPENAI_FALLBACK_MODEL`,
- * default `gpt-4.1`). Set to `none`/`off`/`disabled` to turn fallback off.
+ * Secondary model when the primary times out or errors (env `OPENAI_FALLBACK_MODEL`,
+ * default `gpt-5.5` while primary is temporarily `gpt-4.1`). Set to `none`/`off`/`disabled`
+ * to turn fallback off. Same-as-primary values are ignored at call time.
  */
 export function resolvedFallbackOpenAIModel(): string | null {
   const raw = process.env.OPENAI_FALLBACK_MODEL?.trim();
-  if (raw === undefined) return "gpt-4.1";
+  if (raw === undefined) return "gpt-5.5";
   if (raw === "" || /^(?:none|off|disabled)$/i.test(raw)) return null;
   return raw;
 }
