@@ -18,7 +18,9 @@ import {
 import { assembleClinicalBodyFromNotePlan } from "./note-plan-assembly";
 import { NotePlanSchema, type NotePlan } from "./note-plan-schema";
 import {
+  normalizeClinicalBodyParallelPastTense,
   normalizeClinicalBodySentenceInitialPronouns,
+  scrubOrphanedGerundSentenceFragments,
   scrubStrayPunctuationClusters,
 } from "./note-normalization";
 import {
@@ -716,7 +718,11 @@ export async function generateClinicalBodyOpenAI(
     // fell back to a thin template that omitted percentages and used vague topography.
     if (plan) {
       body = assembleClinicalBodyFromNotePlan(plan, frozen);
-      body = normalizeClinicalBodySentenceInitialPronouns(scrubStrayPunctuationClusters(body));
+      body = scrubOrphanedGerundSentenceFragments(
+        normalizeClinicalBodyParallelPastTense(
+          normalizeClinicalBodySentenceInitialPronouns(scrubStrayPunctuationClusters(body)),
+        ),
+      );
       if (planIssues.length === 0) {
         const proseValidation = validateClinicalBodyComplianceDetailed(
           body,

@@ -80,9 +80,11 @@ import {
   normalizeClinicalBodyInterventionDetailPhrases,
   normalizeClinicalBodyInterventionLabels,
   normalizeClinicalBodyMaladaptiveBehaviorLabels,
+  normalizeClinicalBodyParallelPastTense,
   normalizeClinicalBodyPraiseWording,
   normalizeClinicalBodyReplacementLikePhrases,
   scrubAssembledNoteQcHotspots,
+  scrubOrphanedGerundSentenceFragments,
 } from "./note-normalization";
 import {
   assembleClinicalBodyFromNotePlan,
@@ -1017,6 +1019,14 @@ export async function generateSessionNoteForClient(params: {
   applyBodyRewrite(
     normalizeClinicalBodyInterventionActionAttribution(finalClinicalBody),
     'Attributed subjectless intervention-action detail to the RBT (e.g. "Following this intervention, requiring cleanup" \u2192 "the RBT required cleanup").',
+  );
+  applyBodyRewrite(
+    normalizeClinicalBodyParallelPastTense(finalClinicalBody),
+    "Normalized coordinated RBT action lists so past-tense verbs stay parallel (e.g. restated … and re-presented …).",
+  );
+  applyBodyRewrite(
+    scrubOrphanedGerundSentenceFragments(finalClinicalBody),
+    "Removed orphaned gerund sentence fragments that were not attached to a subject (e.g. standalone orienting/prompting phrases).",
   );
 
   const reinforcerPrefsForNote = filterReinforcementPreferencesForNote(

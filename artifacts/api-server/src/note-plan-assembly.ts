@@ -10,6 +10,7 @@ import {
 } from "./note-normalization";
 import type { NotePlan, SessionContext, TherapistTrialSummary } from "./note-plan-schema";
 import { enrichInterventionApplicationForBehavior } from "./note-plan-validation";
+import { enrichTeachingOrPromptingForProgram } from "./program-teaching-templates";
 
 function sentence(text: string): string {
   const trimmed = text.trim().replace(/\s+/g, " ");
@@ -198,14 +199,9 @@ export function assembleClinicalBodyFromNotePlan(
       const parts: string[] = [organicAntecedentLead(neutralize(segment.antecedent), index)];
 
       if (locked.acquisitionOnly) {
-        // Acquisition-only segments have no maladaptive behavior, so topography is often empty or a
-        // stray placeholder (":", ""). Only add it when it carries real content — otherwise the
-        // antecedent flows straight into "Additionally, the RBT implemented …" (matching approved
-        // example notes) instead of leaving a ".:." / ". ." punctuation artifact.
-        const acquisitionTopography = neutralize(segment.topography);
-        if (/[a-z0-9]/i.test(acquisitionTopography)) {
-          parts.push(sentence(acquisitionTopography));
-        }
+        // Acquisition-only: do not emit topography as its own sentence. Schema may still carry a
+        // complete placeholder for validation, but approved notes flow antecedent → replacement
+        // teaching. Emitting gerund/topography fillers produced dangling "orienting toward…" fragments.
       } else {
         // Belt-and-suspenders: never assemble BIP status placeholders into the manifested-behavior line.
         const rawTopo = neutralize(segment.topography);
@@ -328,7 +324,9 @@ export function buildMinimalClinicalBodyFromSessionContext(context: SessionConte
               ? "Later, the RBT arranged the next instructional opportunity."
               : index === 3
                 ? "After that, the RBT presented the next task materials."
-                : "Near the end of the session, the RBT presented the final activity.";
+                : index === context.segments.length - 1
+                  ? "Near the end of the session, the RBT presented the final activity."
+                  : `During a subsequent activity, the RBT presented the next scheduled task.`;
 
       const trialSentence = buildDeterministicTrialSentence(
         locked.replacementLabel,
@@ -337,9 +335,13 @@ export function buildMinimalClinicalBodyFromSessionContext(context: SessionConte
       );
 
       if (locked.acquisitionOnly) {
+        const teaching = enrichTeachingOrPromptingForProgram(
+          "modeling the target response and prompting the client through the presented opportunities",
+          locked.replacementLabel,
+        );
         return [
           lead,
-          `The RBT implemented the replacement program "${locked.replacementLabel}" by modeling the target response and prompting the client through the presented opportunities.`,
+          `The RBT implemented the replacement program "${locked.replacementLabel}" by ${clauseAfterBy(teaching)}`,
           "The client participated in the presented opportunities with prompting as needed.",
           trialSentence,
         ]
@@ -378,7 +380,12 @@ export function buildMinimalClinicalBodyFromSessionContext(context: SessionConte
       });
       parts.push("The client returned to the presented activity after the intervention.");
       parts.push(
-        `${index % 2 === 0 ? "Additionally, the" : "The"} RBT implemented the replacement program "${locked.replacementLabel}" by modeling the target response and prompting the client before reinforcement was delivered.`,
+        `${index % 2 === 0 ? "Additionally, the" : "The"} RBT implemented the replacement program "${locked.replacementLabel}" by ${clauseAfterBy(
+          enrichTeachingOrPromptingForProgram(
+            "modeling the target response and prompting the client before reinforcement was delivered",
+            locked.replacementLabel,
+          ),
+        )}`,
       );
       parts.push("The client completed the prompted response and remained near the materials.");
       if (trialSentence) parts.push(trialSentence);

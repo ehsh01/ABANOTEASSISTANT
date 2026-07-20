@@ -33,6 +33,13 @@ describe("example parenthetical + incomplete/vague topography", () => {
     expect(isVagueMaladaptiveTopography("refusing to comply with demands")).toBe(true);
     expect(isVagueMaladaptiveTopography("was noncompliant")).toBe(true);
     expect(isVagueMaladaptiveTopography("did not want to do the task")).toBe(true);
+    expect(isVagueMaladaptiveTopography("intentionally breaks valuable objects")).toBe(true);
+    expect(isVagueMaladaptiveTopography("pushing others")).toBe(true);
+    expect(
+      isVagueMaladaptiveTopography(
+        "wandering off as being more than 2 feet away in the community (malls.",
+      ),
+    ).toBe(true);
     // Observable actions are NOT vague.
     expect(
       isVagueMaladaptiveTopography("not initiating the worksheet within 10 seconds"),

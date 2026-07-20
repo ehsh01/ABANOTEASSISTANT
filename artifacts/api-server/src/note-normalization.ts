@@ -401,6 +401,80 @@ export function normalizeClinicalBodyInterventionActionAttribution(body: string)
 }
 
 /**
+ * Fix mixed tense in coordinated RBT action lists: "restated … and re-presenting …" →
+ * "restated … and re-presented …". Also fixes comma lists after a finite past verb
+ * ("redirected the client, re-presenting the demand" → "…, re-presented the demand").
+ * Leaves gerunds in `by …` teaching/topography clauses untouched.
+ */
+export function normalizeClinicalBodyParallelPastTense(body: string): string {
+  if (!body) return body;
+  const GERUND =
+    "re-?presenting|providing|requiring|redirecting|reinforcing|delivering|prompting|restating|arranging|maintaining|blocking|retrieving|pointing|moving|placing";
+
+  return body.replace(/[^.!?]+[.!?]?/g, (sentence) => {
+    const byIdx = sentence.search(/\sby\s/i);
+    const protectFrom = byIdx >= 0 ? byIdx : sentence.length;
+    const head = sentence.slice(0, protectFrom);
+    const tail = sentence.slice(protectFrom);
+
+    // Only rewrite when an RBT past-tense action already appears in the unprotected head.
+    if (!/\b(?:the\s+)?RBT\b/i.test(head)) return sentence;
+    if (!/\b[A-Za-z]+(?:ed|aid|ook|ent|ade|ought|ept)\b/i.test(head)) return sentence;
+
+    const fixedHead = head
+      .replace(
+        new RegExp(`(\\s+(?:and|or)\\s+)(${GERUND})\\b`, "gi"),
+        (_m, conj: string, gerund: string) => {
+          const past = gerundActionToPast(gerund);
+          return `${conj}${past ?? gerund}`;
+        },
+      )
+      .replace(
+        new RegExp(`(,\\s+)(${GERUND})\\b`, "gi"),
+        (_m, sep: string, gerund: string) => {
+          const past = gerundActionToPast(gerund);
+          return `${sep}${past ?? gerund}`;
+        },
+      );
+
+    return `${fixedHead}${tail}`;
+  });
+}
+
+/**
+ * Remove orphaned gerund-only "sentences" that leaked out of by-clauses or acquisition fillers
+ * (e.g. standalone "orienting toward the presented materials."). Prefer deletion over inventing
+ * a client response. Also collapses repeated identical short sentences.
+ */
+export function scrubOrphanedGerundSentenceFragments(body: string): string {
+  if (!body) return body;
+  const orphanLead =
+    /(?:^|(?<=[.!?]\s+)|(?<=\n\s*))((?:orienting|providing|re-?presenting|prompting|restating|redirecting|requiring|delivering|modeling|arranging|reinforcing|maintaining|pointing|blocking|retrieving|moving|placing|engaging)\b[^.!?\n]{0,160})([.!?])/gi;
+
+  let out = body.replace(orphanLead, (match, phrase: string, end: string, offset: number) => {
+    // Keep if this is clearly mid-sentence after "by " / "and " (should not match due to lookbehind,
+    // but guard against false positives at paragraph starts that are complete client sentences).
+    const before = body.slice(Math.max(0, offset - 12), offset).toLowerCase();
+    if (/\bby\s+$/.test(before) || /\band\s+$/.test(before)) return match;
+    // Complete sentence with a subject already present somewhere in the phrase — keep.
+    if (/\b(?:the\s+)?(?:rbt|client)\b/i.test(phrase)) return match;
+    return "";
+  });
+
+  out = out
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\s+([.!?])/g, "$1")
+    .replace(/([.!?]){2,}/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^[ \t]+/gm, "")
+    .trim();
+
+  // Drop exact duplicate consecutive sentences (common with repeated "final activity" leads).
+  out = out.replace(/([^.!?\n]+[.!?])(\s+\1)+/g, "$1");
+  return out;
+}
+
+/**
  * Normalize text that follows "… by" in manifested-behavior / replacement sentences.
  * Strips leading "the RBT"/"the client" subjects and converts the lead verb to a gerund so
  * assembly never emits "by the RBT repeated…" or "by the client swore…".
@@ -580,22 +654,29 @@ export function normalizeClinicalBodySentenceInitialPronouns(body: string): stri
  */
 export function scrubAssembledNoteQcHotspots(noteText: string): string {
   return collapseDuplicateAdjacentWords(
-    scrubFirstThenProcedureLabels(
-      normalizeClinicalBodySentenceInitialPronouns(
-        scrubStrayPunctuationClusters(
-          scrubInventedEnvironmentDetails(scrubMedicationReferences(noteText)),
+    scrubOrphanedGerundSentenceFragments(
+      normalizeClinicalBodyParallelPastTense(
+        scrubFirstThenProcedureLabels(
+          normalizeClinicalBodySentenceInitialPronouns(
+            scrubStrayPunctuationClusters(
+              scrubInventedEnvironmentDetails(scrubMedicationReferences(noteText)),
+            ),
+          )
+            .replace(/\bsocial praise\b/gi, "praise")
+            .replace(/\bbehavior-specific praise\b/gi, "praise")
+            .replace(/\bverbal praise\b/gi, "praise")
+            .replace(
+              /\bby\s+Status\s*:\s*To be initiated\.?/gi,
+              "by engaging in the targeted motor actions for this episode.",
+            )
+            .replace(/\bStatus\s*:\s*To be initiated\.?/gi, "")
+            .replace(/\bTo be initiated\.?/gi, "")
+            .replace(/\bPlaying with (?:his|her|their)\s+/gi, "Playing with the ")
+            .replace(/\bPlaying with the tablet\b/g, "playing with the tablet")
+            .replace(/[ \t]{2,}/g, " ")
+            .replace(/ \./g, "."),
         ),
-      )
-        .replace(/\bsocial praise\b/gi, "praise")
-        .replace(
-          /\bby\s+Status\s*:\s*To be initiated\.?/gi,
-          "by engaging in the targeted motor actions for this episode.",
-        )
-        .replace(/\bStatus\s*:\s*To be initiated\.?/gi, "")
-        .replace(/\bTo be initiated\.?/gi, "")
-        .replace(/\bPlaying with (?:his|her|their)\s+/gi, "Playing with the ")
-        .replace(/[ \t]{2,}/g, " ")
-        .replace(/ \./g, "."),
+      ),
     ),
   ).trim();
 }

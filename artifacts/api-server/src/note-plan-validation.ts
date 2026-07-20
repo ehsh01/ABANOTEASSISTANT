@@ -41,6 +41,17 @@ import {
 } from "./maladaptive-behavior-topography";
 import { filterReinforcementPreferencesForNote } from "./reinforcer-preferences";
 import { scrubMedicationReferences } from "./note-normalization";
+import { enrichTeachingOrPromptingForProgram } from "./program-teaching-templates";
+
+/** True when topography is a bare gerund phrase that would assemble as a dangling fragment sentence. */
+function isOrphanGerundTopography(text: string): boolean {
+  const t = text.trim().replace(/\s+/g, " ");
+  if (!t) return false;
+  if (/\b(?:the\s+)?(?:rbt|client)\b/i.test(t)) return false;
+  return /^(?:orienting|providing|re-?presenting|prompting|restating|redirecting|requiring|delivering|modeling|arranging|reinforcing|maintaining|engaging)\b/i.test(
+    t,
+  );
+}
 
 export type NotePlanIssueCode =
   | "SCHEMA_INVALID"
@@ -681,10 +692,12 @@ export function groundNotePlanWithFrozenContext(
       }));
       let topography = sanitized.topography;
       if (locked.acquisitionOnly) {
-        // Acquisition-only segments have no maladaptive topography; keep a short observable filler
-        // so schema/plan validation does not fail on empty/punctuation-only model output.
-        if (!topography.trim() || !/[a-z0-9]/i.test(topography)) {
-          topography = "orienting toward the presented materials";
+        // Acquisition-only segments have no maladaptive topography. Keep a complete schema-safe
+        // placeholder that assembly deliberately does NOT emit as its own sentence (teaching prose
+        // carries the narrative). Never use a bare gerund filler — that leaked as
+        // "orienting toward the presented materials." fragments in saved notes.
+        if (!topography.trim() || !/[a-z0-9]/i.test(topography) || isOrphanGerundTopography(topography)) {
+          topography = "The client oriented toward the presented materials.";
         }
       } else {
         if (
@@ -790,13 +803,24 @@ export function groundNotePlanWithFrozenContext(
         ),
       }));
 
+      const teachingOrPromptingSummary = enrichTeachingOrPromptingForProgram(
+        sanitized.teachingOrPromptingSummary,
+        locked.replacementLabel,
+      );
+
       const responseToIntervention =
         !locked.acquisitionOnly &&
         !containsObservableClientOutcome(sanitized.responseToIntervention) &&
         containsObservableClientOutcome(sanitized.resultSummary)
           ? sanitized.resultSummary
           : sanitized.responseToIntervention;
-      return { ...sanitized, topography, interventions, responseToIntervention };
+      return {
+        ...sanitized,
+        topography,
+        interventions,
+        teachingOrPromptingSummary,
+        responseToIntervention,
+      };
     }),
   };
 }

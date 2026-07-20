@@ -16,6 +16,8 @@ describe("notes-service scrub chain wiring", () => {
     "normalizeClinicalBodyMaladaptiveBehaviorLabels",
     "normalizeClinicalBodyReplacementLikePhrases",
     "normalizeClinicalBodyInterventionActionAttribution",
+    "normalizeClinicalBodyParallelPastTense",
+    "scrubOrphanedGerundSentenceFragments",
   ];
 
   for (const fn of wiredNormalizers) {

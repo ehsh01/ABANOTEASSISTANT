@@ -141,7 +141,7 @@ export function lastResortObservableTopographyForBehavior(behaviorLabel: string)
     return "flapping hands near the work materials";
   }
   if (/\bphysical\s+aggression\b/.test(b)) {
-    return "contacting another person's body with an open hand";
+    return "contacting the RBT's arm with an open hand after the demand was presented";
   }
   return null;
 }
@@ -232,6 +232,15 @@ export function isVagueMaladaptiveTopography(text: string | null | undefined): b
   if (interpretationLead.test(t) && !observableFollowUp.test(t)) return true;
   if (/refus\w*\s+to\s+comply/.test(t) && !observableFollowUp.test(t)) return true;
   if (/\bnon-?compliant\b/.test(t) && !observableFollowUp.test(t)) return true;
+  // Subjective intent / value judgments are not observable session topography.
+  if (/\bintentionally\b/.test(t) || /\bvaluable objects?\b/.test(t)) return true;
+  // Bare contact without a specific target ("pushing others", "hitting people").
+  if (/^(?:pushing|hitting|kicking|slapping|grabbing)\s+(?:others?|people|someone|somebody)\.?$/i.test(t)) {
+    return true;
+  }
+  // Incomplete BIP definition dumps (unclosed paren / mall-community template).
+  if (/\([^)]*$/.test(t)) return true;
+  if (/\bin the community\b/.test(t) && /\bmalls?\b/.test(t)) return true;
   return false;
 }
 
