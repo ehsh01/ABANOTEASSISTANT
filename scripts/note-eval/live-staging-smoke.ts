@@ -16,6 +16,7 @@ const { db } = await import("@workspace/db");
 const {
   clientsTable,
   clientProgramsTable,
+  companiesTable,
   notesTable,
   programsTable,
 } = await import("@workspace/db/schema");
@@ -42,6 +43,7 @@ const clients = await db
 
 let chosenClient: (typeof clients)[number] | null = null;
 let linkedPrograms: { id: number; name: string }[] = [];
+let temporaryCompanyId: number | null = null;
 for (const client of clients) {
   const rows = await db
     .select({ id: programsTable.id, name: programsTable.name })
@@ -61,7 +63,74 @@ for (const client of clients) {
 }
 
 if (!chosenClient) {
-  throw new Error("No staging client has a ready assessment and five linked programs.");
+  const [company] = await db
+    .insert(companiesTable)
+    .values({
+      name: `Flexible note staging smoke ${Date.now()}`,
+      freeUsage: true,
+    })
+    .returning({ id: companiesTable.id });
+  temporaryCompanyId = company!.id;
+  const programNames = [
+    "Compliance Training",
+    "Request for Break",
+    "Accepting alternatives and making choices",
+    "Schedule of activities",
+    "Time on Task",
+  ];
+  linkedPrograms = await db
+    .insert(programsTable)
+    .values(
+      programNames.map((name) => ({
+        companyId: temporaryCompanyId!,
+        name,
+        type: "primary",
+      })),
+    )
+    .returning({ id: programsTable.id, name: programsTable.name });
+  const [client] = await db
+    .insert(clientsTable)
+    .values({
+      companyId: temporaryCompanyId,
+      name: "Staging Smoke Client",
+      hasAssessment: true,
+      assessmentStatus: "ready",
+      profile: {
+        firstName: "Smoke",
+        lastName: "Client",
+        dateOfBirth: "2018-01-01",
+        gender: "male",
+        maladaptiveBehaviors: ["Task refusal", "Physical Aggression"],
+        replacementPrograms: programNames,
+        skillAcquisitionPrograms: [],
+        interventions: [
+          "Premack Principle",
+          "Response blocking",
+          "Differential Reinforcement of Alternative Behavior (DRA)",
+        ],
+        assessmentFileName: "staging-smoke-assessment.pdf",
+        assessmentTextSnapshot:
+          "Task refusal includes pushing work materials away. Physical Aggression includes hitting with an open hand. Approved interventions include Premack Principle, Response blocking, and Differential Reinforcement of Alternative Behavior (DRA).",
+      },
+    })
+    .returning({
+      id: clientsTable.id,
+      companyId: clientsTable.companyId,
+      name: clientsTable.name,
+      ageBand: clientsTable.ageBand,
+      hasAssessment: clientsTable.hasAssessment,
+      assessmentStatus: clientsTable.assessmentStatus,
+      profile: clientsTable.profile,
+      createdAt: clientsTable.createdAt,
+      updatedAt: clientsTable.updatedAt,
+    });
+  chosenClient = client!;
+  await db.insert(clientProgramsTable).values(
+    linkedPrograms.map((program) => ({
+      clientId: chosenClient!.id,
+      programId: program.id,
+    })),
+  );
 }
 
 const percentages = [0, 10, 20, 30, 100];
@@ -103,17 +172,19 @@ const request = GenerateNoteBody.parse({
   programTrialData,
 });
 
-const result = await generateSessionNoteForClient({
-  companyId: chosenClient.companyId,
-  client: { ...chosenClient, avatarPngBase64: null, avatarUpdatedAt: null },
-  body: request,
-  generation: { requestTimeoutMs: 180_000, timeBudgetMs: 240_000 },
-});
-if (!result.ok) {
-  throw new Error(`${result.error}: ${result.messages.join(" ")}`);
-}
-
+let generatedNoteId: number | null = null;
 try {
+  const result = await generateSessionNoteForClient({
+    companyId: chosenClient.companyId,
+    client: { ...chosenClient, avatarPngBase64: null, avatarUpdatedAt: null },
+    body: request,
+    generation: { requestTimeoutMs: 180_000, timeBudgetMs: 240_000 },
+  });
+  if (!result.ok) {
+    throw new Error(`${result.error}: ${result.messages.join(" ")}`);
+  }
+  generatedNoteId = result.noteId;
+
   for (let index = 0; index < linkedPrograms.length; index++) {
     const program = linkedPrograms[index]!;
     const percentage = percentages[index]!;
@@ -148,7 +219,12 @@ try {
     }),
   );
 } finally {
-  await db.delete(notesTable).where(eq(notesTable.id, result.noteId));
+  if (generatedNoteId != null) {
+    await db.delete(notesTable).where(eq(notesTable.id, generatedNoteId));
+  }
+  if (temporaryCompanyId != null) {
+    await db.delete(companiesTable).where(eq(companiesTable.id, temporaryCompanyId));
+  }
 }
 
 process.exit(0);
