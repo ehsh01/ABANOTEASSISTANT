@@ -20,7 +20,7 @@ const {
   notesTable,
   programsTable,
 } = await import("@workspace/db/schema");
-const { and, eq } = await import("drizzle-orm");
+const { and, eq, sql } = await import("drizzle-orm");
 const { GenerateNoteBody } = await import("@workspace/api-zod");
 const { generateSessionNoteForClient } = await import(
   "../../artifacts/api-server/src/notes-service"
@@ -63,14 +63,12 @@ for (const client of clients) {
 }
 
 if (!chosenClient) {
-  const [company] = await db
-    .insert(companiesTable)
-    .values({
-      name: `Flexible note staging smoke ${Date.now()}`,
-      freeUsage: true,
-    })
-    .returning({ id: companiesTable.id });
-  temporaryCompanyId = company!.id;
+  const companyInsert = await db.execute<{ id: number }>(
+    sql`insert into ${companiesTable} (name, free_usage)
+        values (${`Flexible note staging smoke ${Date.now()}`}, true)
+        returning id`,
+  );
+  temporaryCompanyId = companyInsert.rows[0]!.id;
   const programNames = [
     "Compliance Training",
     "Request for Break",
@@ -88,32 +86,31 @@ if (!chosenClient) {
       })),
     )
     .returning({ id: programsTable.id, name: programsTable.name });
+  const profile = {
+    firstName: "Smoke",
+    lastName: "Client",
+    dateOfBirth: "2018-01-01",
+    gender: "male",
+    maladaptiveBehaviors: ["Task refusal", "Physical Aggression"],
+    replacementPrograms: programNames,
+    skillAcquisitionPrograms: [],
+    interventions: [
+      "Premack Principle",
+      "Response blocking",
+      "Differential Reinforcement of Alternative Behavior (DRA)",
+    ],
+    assessmentFileName: "staging-smoke-assessment.pdf",
+    assessmentTextSnapshot:
+      "Task refusal includes pushing work materials away. Physical Aggression includes hitting with an open hand. Approved interventions include Premack Principle, Response blocking, and Differential Reinforcement of Alternative Behavior (DRA).",
+  };
+  const clientInsert = await db.execute<{ id: number }>(
+    sql`insert into ${clientsTable}
+        (company_id, name, has_assessment, assessment_status, profile)
+        values (${temporaryCompanyId}, ${"Staging Smoke Client"}, true, ${"ready"}, ${JSON.stringify(profile)}::jsonb)
+        returning id`,
+  );
   const [client] = await db
-    .insert(clientsTable)
-    .values({
-      companyId: temporaryCompanyId,
-      name: "Staging Smoke Client",
-      hasAssessment: true,
-      assessmentStatus: "ready",
-      profile: {
-        firstName: "Smoke",
-        lastName: "Client",
-        dateOfBirth: "2018-01-01",
-        gender: "male",
-        maladaptiveBehaviors: ["Task refusal", "Physical Aggression"],
-        replacementPrograms: programNames,
-        skillAcquisitionPrograms: [],
-        interventions: [
-          "Premack Principle",
-          "Response blocking",
-          "Differential Reinforcement of Alternative Behavior (DRA)",
-        ],
-        assessmentFileName: "staging-smoke-assessment.pdf",
-        assessmentTextSnapshot:
-          "Task refusal includes pushing work materials away. Physical Aggression includes hitting with an open hand. Approved interventions include Premack Principle, Response blocking, and Differential Reinforcement of Alternative Behavior (DRA).",
-      },
-    })
-    .returning({
+    .select({
       id: clientsTable.id,
       companyId: clientsTable.companyId,
       name: clientsTable.name,
@@ -123,7 +120,10 @@ if (!chosenClient) {
       profile: clientsTable.profile,
       createdAt: clientsTable.createdAt,
       updatedAt: clientsTable.updatedAt,
-    });
+    })
+    .from(clientsTable)
+    .where(eq(clientsTable.id, clientInsert.rows[0]!.id))
+    .limit(1);
   chosenClient = client!;
   await db.insert(clientProgramsTable).values(
     linkedPrograms.map((program) => ({
