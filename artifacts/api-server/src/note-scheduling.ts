@@ -149,6 +149,25 @@ export function maladaptiveBehaviorsCatalogForRotation(
   };
 }
 
+/**
+ * Deterministic rotation seed for a session. The SAME inputs must always produce the SAME seed so a
+ * re-generate reproduces the same behavior/hour order (no per-request randomness). Program ids are
+ * sorted so selection order does not change the seed.
+ */
+export function deterministicRotationSeed(params: {
+  clientId: number;
+  sessionDate: string;
+  sessionHours: number;
+  selectedReplacements: number[];
+}): string {
+  return [
+    `client:${params.clientId}`,
+    `date:${params.sessionDate}`,
+    `hours:${params.sessionHours}`,
+    `programs:${[...params.selectedReplacements].sort((a, b) => a - b).join(",")}`,
+  ].join("|");
+}
+
 /** Non-cryptographic hash for rotating which catalog behavior starts hour 0 (variety across regenerations). */
 export function hashStringForRotation(s: string): number {
   let h = 0;

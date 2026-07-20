@@ -88,6 +88,7 @@ The server-provided SessionContext is frozen and authoritative:
 - Use straight quotes only. Never emit escaped quotes (\\" or \\') inside string values.
 - Acquisition-only segments must use an empty behaviorLabel and empty interventions array.
 - Write only bounded, observable details in antecedent, topography, intervention application, response, teaching/prompting, and result fields.
+- assessmentExcerpt (when present) is name-scrubbed BIP/assessment prose provided ONLY to ground realistic antecedent context, behavior topography, and client response for THIS client. Draw observable detail from it, but never copy learner/caregiver names from it, never quote its definition/scoring language verbatim, and never introduce any behavior, replacement, or intervention label that is not already in this segment's context. Labels always come solely from context.
 - Do not use learner names, initials, caregivers/relatives, subjective/emotional language, diagnoses, inferred intent, or unsupported clinical facts. Present people belong only in the server opening sentence.
 - Do not begin antecedent (or any narrative field) with the word "During". Vary openings (e.g. "The RBT presented…", "Later, the RBT arranged…").
 - When behaviorTopography is present, treat it as an action bank only: paraphrase into natural session topography. Use **exactly one** concrete action per segment. Never paste BIP definition text, scoring language, "defined as," "any instance," "Status:", "To be initiated," or catalog labels alone.
@@ -245,7 +246,7 @@ export function isOpenAINoteGenerationConfigured(): boolean {
   return Boolean(process.env.OPENAI_API_KEY?.trim());
 }
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-19.opt-compact-label-lock-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-20.assessment-excerpt-grounding-v1";
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
   .update("\u0000")

@@ -410,6 +410,7 @@ router.post("/notes/generate", async (req, res) => {
       generationModel: result.generationModel,
       maladaptiveReplacementPairings: result.maladaptiveReplacementPairings,
       draftQuota: { used: slot.used, max: slot.max },
+      accuracyReport: result.accuracyReport,
     },
     warnings: result.warnings.length > 0 ? result.warnings : undefined,
     error: null,

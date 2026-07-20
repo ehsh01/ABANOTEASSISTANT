@@ -69,6 +69,16 @@ export const noteGenerationAuditTable = abanote.table("note_generation_audit", {
   rawModelJson: jsonb("raw_model_json").$type<unknown[] | null>(),
   /** Null unless NOTE_AUDIT_STORE_CONTENT=true. */
   finalNoteText: text("final_note_text"),
+  /** Per-note accuracy confidence (high | medium | low); null for blocked/model-failed rows. */
+  accuracyConfidence: text("accuracy_confidence"),
+  /** True when every selected program was documented and none were swapped. */
+  accuracySelectionHonored: boolean("accuracy_selection_honored"),
+  /** True when a name-scrubbed assessment excerpt was sent to the model for grounding. */
+  accuracyAssessmentGrounded: boolean("accuracy_assessment_grounded"),
+  /** Count of server-side program changes (altered/auto-filled selections). */
+  accuracyAlteredCount: integer("accuracy_altered_count"),
+  /** Full structured accuracy report. Null unless NOTE_AUDIT_STORE_CONTENT=true. */
+  accuracyReport: jsonb("accuracy_report").$type<unknown>(),
   /** saved | blocked_critical | model_failed */
   finalStatus: text("final_status").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

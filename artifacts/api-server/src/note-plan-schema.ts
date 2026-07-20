@@ -33,6 +33,12 @@ export const SessionContextSchema = z
     ageBand: z.string().nullable(),
     environmentalChanges: z.string(),
     clientAssessmentTextExcerpt: z.string(),
+    /**
+     * Name-scrubbed, length-capped assessment prose sent ONLY to the model to ground antecedent
+     * context, topography detail, and client response. Built in `buildFrozenSessionContext`; it is
+     * never used by assembly/validation and must never contain learner/caregiver names.
+     */
+    modelAssessmentExcerpt: z.string().optional(),
     assessmentReferenceFileName: z.string().nullable(),
     reinforcementPreferences: z.array(z.string()),
     segments: z.array(LockedSegmentContextSchema),

@@ -2115,6 +2115,10 @@ export const generateNoteResponseDataMaladaptiveReplacementPairingsItemSegmentIn
 
 export const generateNoteResponseDataDraftQuotaUsedMin = 0;
 
+export const generateNoteResponseDataAccuracyReportIssuesItemHourIndexMin = 0;
+
+export const generateNoteResponseDataAccuracyReportAlteredSelectionsItemHourIndexMin = 0;
+
 export const GenerateNoteResponse = zod.object({
   success: zod.boolean(),
   data: zod.object({
@@ -2181,6 +2185,87 @@ export const GenerateNoteResponse = zod.object({
       .optional()
       .describe(
         "Updated unsaved-draft slot snapshot AFTER this generation was counted. The UI uses `used == max` to disable the Generate button until the user saves or discards.\n",
+      ),
+    accuracyReport: zod
+      .object({
+        confidence: zod
+          .enum(["high", "medium", "low"])
+          .describe(
+            "`high` = no issues and every selected program was honored; `medium` = only warnings; `low` = a blocking rule was demoted-and-saved, or a selection was altered\/dropped.\n",
+          ),
+        assessmentGrounded: zod
+          .boolean()
+          .describe(
+            "True when a usable name-scrubbed assessment excerpt was sent to the model for grounding.",
+          ),
+        selectionHonored: zod
+          .boolean()
+          .describe(
+            "True when every program in selectedReplacements appears at least once and none were swapped.",
+          ),
+        issues: zod.array(
+          zod
+            .object({
+              code: zod
+                .string()
+                .describe(
+                  "Stable issue code (e.g. INTERVENTION_COUNT, SUBJECTIVE_LANGUAGE, PROGRAM_COVERAGE).",
+                ),
+              severity: zod
+                .enum(["blocking", "warning"])
+                .describe(
+                  "`blocking` = a critical rule was violated but the note was saved anyway (fail-open); `warning` = a stylistic\/soft issue. Neither prevents saving.\n",
+                ),
+              message: zod.string(),
+              hourIndex: zod
+                .number()
+                .min(
+                  generateNoteResponseDataAccuracyReportIssuesItemHourIndexMin,
+                )
+                .nullish()
+                .describe(
+                  "Zero-based narrative segment\/hour the issue applies to, when known.",
+                ),
+            })
+            .describe(
+              "One accuracy\/compliance finding surfaced to the RBT (note still saved; fail-open).",
+            ),
+        ),
+        alteredSelections: zod.array(
+          zod
+            .object({
+              hourIndex: zod
+                .number()
+                .min(
+                  generateNoteResponseDataAccuracyReportAlteredSelectionsItemHourIndexMin,
+                )
+                .describe(
+                  "Zero-based narrative segment\/hour the change applies to.",
+                ),
+              from: zod
+                .string()
+                .nullish()
+                .describe(
+                  "Program name previously assigned to this hour (null when the hour was auto-filled).",
+                ),
+              to: zod
+                .string()
+                .optional()
+                .describe("Program name now documented for this hour."),
+              reason: zod
+                .string()
+                .describe(
+                  "Why the change happened (e.g. safety-remap, distinctness, auto-fill, task-refusal-remap).",
+                ),
+            })
+            .describe(
+              "A case where a program the RBT selected\/pinned was changed, or an unselected program was auto-filled, during server rebalancing. Surfaced so the RBT can review or override in ABC Builder.\n",
+            ),
+        ),
+      })
+      .optional()
+      .describe(
+        "Per-note accuracy signal (confidence + issues + altered selections). The note is always saved (fail-open); this lets the UI show exactly what drifted from the app selections.\n",
       ),
   }),
   warnings: zod.array(zod.string()).optional(),
@@ -2309,6 +2394,10 @@ export const getNoteGenerationJobResponseDataNoteMaladaptiveReplacementPairingsI
 
 export const getNoteGenerationJobResponseDataNoteDraftQuotaUsedMin = 0;
 
+export const getNoteGenerationJobResponseDataNoteAccuracyReportIssuesItemHourIndexMin = 0;
+
+export const getNoteGenerationJobResponseDataNoteAccuracyReportAlteredSelectionsItemHourIndexMin = 0;
+
 export const getNoteGenerationJobResponseDataDraftQuotaUsedMin = 0;
 
 export const GetNoteGenerationJobResponse = zod.object({
@@ -2385,6 +2474,87 @@ export const GetNoteGenerationJobResponse = zod.object({
           .optional()
           .describe(
             "Updated unsaved-draft slot snapshot AFTER this generation was counted. The UI uses `used == max` to disable the Generate button until the user saves or discards.\n",
+          ),
+        accuracyReport: zod
+          .object({
+            confidence: zod
+              .enum(["high", "medium", "low"])
+              .describe(
+                "`high` = no issues and every selected program was honored; `medium` = only warnings; `low` = a blocking rule was demoted-and-saved, or a selection was altered\/dropped.\n",
+              ),
+            assessmentGrounded: zod
+              .boolean()
+              .describe(
+                "True when a usable name-scrubbed assessment excerpt was sent to the model for grounding.",
+              ),
+            selectionHonored: zod
+              .boolean()
+              .describe(
+                "True when every program in selectedReplacements appears at least once and none were swapped.",
+              ),
+            issues: zod.array(
+              zod
+                .object({
+                  code: zod
+                    .string()
+                    .describe(
+                      "Stable issue code (e.g. INTERVENTION_COUNT, SUBJECTIVE_LANGUAGE, PROGRAM_COVERAGE).",
+                    ),
+                  severity: zod
+                    .enum(["blocking", "warning"])
+                    .describe(
+                      "`blocking` = a critical rule was violated but the note was saved anyway (fail-open); `warning` = a stylistic\/soft issue. Neither prevents saving.\n",
+                    ),
+                  message: zod.string(),
+                  hourIndex: zod
+                    .number()
+                    .min(
+                      getNoteGenerationJobResponseDataNoteAccuracyReportIssuesItemHourIndexMin,
+                    )
+                    .nullish()
+                    .describe(
+                      "Zero-based narrative segment\/hour the issue applies to, when known.",
+                    ),
+                })
+                .describe(
+                  "One accuracy\/compliance finding surfaced to the RBT (note still saved; fail-open).",
+                ),
+            ),
+            alteredSelections: zod.array(
+              zod
+                .object({
+                  hourIndex: zod
+                    .number()
+                    .min(
+                      getNoteGenerationJobResponseDataNoteAccuracyReportAlteredSelectionsItemHourIndexMin,
+                    )
+                    .describe(
+                      "Zero-based narrative segment\/hour the change applies to.",
+                    ),
+                  from: zod
+                    .string()
+                    .nullish()
+                    .describe(
+                      "Program name previously assigned to this hour (null when the hour was auto-filled).",
+                    ),
+                  to: zod
+                    .string()
+                    .optional()
+                    .describe("Program name now documented for this hour."),
+                  reason: zod
+                    .string()
+                    .describe(
+                      "Why the change happened (e.g. safety-remap, distinctness, auto-fill, task-refusal-remap).",
+                    ),
+                })
+                .describe(
+                  "A case where a program the RBT selected\/pinned was changed, or an unselected program was auto-filled, during server rebalancing. Surfaced so the RBT can review or override in ABC Builder.\n",
+                ),
+            ),
+          })
+          .optional()
+          .describe(
+            "Per-note accuracy signal (confidence + issues + altered selections). The note is always saved (fail-open); this lets the UI show exactly what drifted from the app selections.\n",
           ),
       })
       .optional()

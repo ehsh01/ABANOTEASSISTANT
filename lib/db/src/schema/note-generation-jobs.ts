@@ -26,6 +26,23 @@ export type NoteGenerationJobResultData = {
     replacementProgramName: string;
   }>;
   draftQuota: { used: number; max: number };
+  accuracyReport?: {
+    confidence: "high" | "medium" | "low";
+    assessmentGrounded: boolean;
+    selectionHonored: boolean;
+    issues: Array<{
+      code: string;
+      severity: "blocking" | "warning";
+      message: string;
+      hourIndex?: number | null;
+    }>;
+    alteredSelections: Array<{
+      hourIndex: number;
+      from?: string | null;
+      to: string;
+      reason: string;
+    }>;
+  };
 };
 
 /**

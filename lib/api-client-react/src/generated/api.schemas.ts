@@ -785,6 +785,82 @@ export interface DraftQuota {
   max: number;
 }
 
+/**
+ * `high` = no issues and every selected program was honored; `medium` = only warnings; `low` = a blocking rule was demoted-and-saved, or a selection was altered/dropped.
+
+ */
+export type NoteAccuracyReportConfidence =
+  (typeof NoteAccuracyReportConfidence)[keyof typeof NoteAccuracyReportConfidence];
+
+export const NoteAccuracyReportConfidence = {
+  high: "high",
+  medium: "medium",
+  low: "low",
+} as const;
+
+/**
+ * `blocking` = a critical rule was violated but the note was saved anyway (fail-open); `warning` = a stylistic/soft issue. Neither prevents saving.
+
+ */
+export type NoteAccuracyIssueSeverity =
+  (typeof NoteAccuracyIssueSeverity)[keyof typeof NoteAccuracyIssueSeverity];
+
+export const NoteAccuracyIssueSeverity = {
+  blocking: "blocking",
+  warning: "warning",
+} as const;
+
+/**
+ * One accuracy/compliance finding surfaced to the RBT (note still saved; fail-open).
+ */
+export interface NoteAccuracyIssue {
+  /** Stable issue code (e.g. INTERVENTION_COUNT, SUBJECTIVE_LANGUAGE, PROGRAM_COVERAGE). */
+  code: string;
+  /** `blocking` = a critical rule was violated but the note was saved anyway (fail-open); `warning` = a stylistic/soft issue. Neither prevents saving.
+   */
+  severity: NoteAccuracyIssueSeverity;
+  message: string;
+  /**
+   * Zero-based narrative segment/hour the issue applies to, when known.
+   * @minimum 0
+   */
+  hourIndex?: number | null;
+}
+
+/**
+ * A case where a program the RBT selected/pinned was changed, or an unselected program was auto-filled, during server rebalancing. Surfaced so the RBT can review or override in ABC Builder.
+
+ */
+export interface AlteredProgramSelection {
+  /**
+   * Zero-based narrative segment/hour the change applies to.
+   * @minimum 0
+   */
+  hourIndex: number;
+  /** Program name previously assigned to this hour (null when the hour was auto-filled). */
+  from?: string | null;
+  /** Program name now documented for this hour. */
+  to?: string;
+  /** Why the change happened (e.g. safety-remap, distinctness, auto-fill, task-refusal-remap). */
+  reason: string;
+}
+
+/**
+ * Machine-readable accuracy signal for a generated note. The note is always saved (fail-open); this report tells the RBT exactly what drifted from the app selections and locked rules.
+
+ */
+export interface NoteAccuracyReport {
+  /** `high` = no issues and every selected program was honored; `medium` = only warnings; `low` = a blocking rule was demoted-and-saved, or a selection was altered/dropped.
+   */
+  confidence: NoteAccuracyReportConfidence;
+  /** True when a usable name-scrubbed assessment excerpt was sent to the model for grounding. */
+  assessmentGrounded: boolean;
+  /** True when every program in selectedReplacements appears at least once and none were swapped. */
+  selectionHonored: boolean;
+  issues: NoteAccuracyIssue[];
+  alteredSelections: AlteredProgramSelection[];
+}
+
 export interface GeneratedNote {
   noteId: number;
   content: string;
@@ -803,6 +879,9 @@ export interface GeneratedNote {
   /** Updated unsaved-draft slot snapshot AFTER this generation was counted. The UI uses `used == max` to disable the Generate button until the user saves or discards.
    */
   draftQuota?: DraftQuota;
+  /** Per-note accuracy signal (confidence + issues + altered selections). The note is always saved (fail-open); this lets the UI show exactly what drifted from the app selections.
+   */
+  accuracyReport?: NoteAccuracyReport;
 }
 
 export interface GenerateNoteResponse {

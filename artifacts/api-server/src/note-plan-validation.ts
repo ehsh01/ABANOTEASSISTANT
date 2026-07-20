@@ -505,6 +505,28 @@ export function diversifyInterventionLabelsAcrossSegments(
   });
 }
 
+/** Cap the model-facing assessment excerpt so grounding stays compact and prompt-cache friendly. */
+export const MAX_MODEL_ASSESSMENT_EXCERPT_CHARS = 6_000;
+
+/**
+ * Produce the name-safe assessment excerpt the model may read for grounding. Runs the same
+ * name/role/medication scrubbers used on model narrative output, then caps length. Returns "" when
+ * nothing usable remains so `toModelFacingSessionContext` can omit the field entirely.
+ */
+export function buildModelAssessmentExcerpt(
+  rawExcerpt: string,
+  blockedClientNames: string[],
+): string {
+  const source = (rawExcerpt ?? "").trim();
+  if (!source) return "";
+  const capped =
+    source.length > MAX_MODEL_ASSESSMENT_EXCERPT_CHARS
+      ? source.slice(0, MAX_MODEL_ASSESSMENT_EXCERPT_CHARS)
+      : source;
+  const scrubbed = sanitizeModelNarrativeText(capped, blockedClientNames).trim();
+  return scrubbed;
+}
+
 export function buildFrozenSessionContext(
   ctx: RuntimeGenerationContext,
   options?: { blockedClientNames?: string[] | undefined },
@@ -561,10 +583,15 @@ export function buildFrozenSessionContext(
     clientAgeYears: ctx.clientAgeYears,
     ageBand: ctx.ageBand ?? null,
     environmentalChanges: ctx.environmentalChanges,
-    // The model receives the assessment reference plus server-extracted topographies/functions.
-    // Raw prose is intentionally withheld because it can contain learner/caregiver names that are
-    // forbidden in the clinical body; the authoritative assessment still grounds this context.
+    // The full-context excerpt (which may carry learner/caregiver names) is never persisted into the
+    // frozen SessionContext used by assembly/validation. The model instead receives a name-scrubbed,
+    // length-capped excerpt (`modelAssessmentExcerpt`) so it can ground antecedents/topography in the
+    // real BIP while `validateNotePlan` remains the backstop against any residual name/label leak.
     clientAssessmentTextExcerpt: "",
+    modelAssessmentExcerpt: buildModelAssessmentExcerpt(
+      ctx.clientAssessmentTextExcerpt,
+      blockedClientNames,
+    ),
     assessmentReferenceFileName: ctx.assessmentReferenceFileName,
     reinforcementPreferences: filterReinforcementPreferencesForNote(ctx.reinforcementPreferences, {
       clientAgeYears: ctx.clientAgeYears,
@@ -585,6 +612,7 @@ export function buildFrozenSessionContext(
  * whitespace. Assembly/validation continue to use the full SessionContext.
  */
 export function toModelFacingSessionContext(context: SessionContext): Record<string, unknown> {
+  const modelAssessmentExcerpt = context.modelAssessmentExcerpt?.trim() ?? "";
   return {
     narrativeSegmentCount: context.narrativeSegmentCount,
     gender: context.gender,
@@ -592,6 +620,9 @@ export function toModelFacingSessionContext(context: SessionContext): Record<str
     ageBand: context.ageBand,
     assessmentReferenceFileName: context.assessmentReferenceFileName,
     reinforcementPreferences: context.reinforcementPreferences,
+    // Name-scrubbed BIP prose for grounding only; omitted when empty. Labels still come solely from
+    // the locked `segments`/`assessmentGrounding` below — the excerpt must not introduce new labels.
+    ...(modelAssessmentExcerpt.length > 0 ? { assessmentExcerpt: modelAssessmentExcerpt } : {}),
     // Name-safe structured grounding: per-segment topography/functions already scrubbed server-side.
     // Raw assessment prose is intentionally never included (learner/caregiver name leak risk).
     assessmentGrounding: context.segments.map((s) => ({

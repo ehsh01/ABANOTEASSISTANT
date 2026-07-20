@@ -63,7 +63,16 @@ export type BuildNoteGenerationAuditEntryInput = Pick<
   rawModelOutputs?: string[];
   clinicalBody?: string | null;
   finalNoteText?: string | null;
+  accuracyReport?: NoteAccuracyReportSummary | null;
   env?: NodeJS.ProcessEnv;
+};
+
+/** Minimal shape needed for audit persistence; mirrors `NoteAccuracyReport` in note-accuracy-report.ts. */
+export type NoteAccuracyReportSummary = {
+  confidence: string;
+  selectionHonored: boolean;
+  assessmentGrounded: boolean;
+  alteredSelections: unknown[];
 };
 
 export type AuditIssueDescriptor = {
@@ -157,6 +166,13 @@ export function buildNoteGenerationAuditEntry(
     ),
     clinicalBodyHash: input.clinicalBody ? hashAuditArtifact(input.clinicalBody) : null,
     finalNoteHash: input.finalNoteText ? hashAuditArtifact(input.finalNoteText) : null,
+    accuracyConfidence: input.accuracyReport?.confidence ?? null,
+    accuracySelectionHonored: input.accuracyReport?.selectionHonored ?? null,
+    accuracyAssessmentGrounded: input.accuracyReport?.assessmentGrounded ?? null,
+    accuracyAlteredCount: input.accuracyReport
+      ? input.accuracyReport.alteredSelections.length
+      : null,
+    accuracyReport: storeContent ? (input.accuracyReport ?? null) : null,
     rawModelJson: storeContent
       ? (input.rawModelOutputs ?? []).map(parseRawOutput)
       : null,

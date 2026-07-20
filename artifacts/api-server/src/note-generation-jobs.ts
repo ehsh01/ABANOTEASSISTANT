@@ -283,6 +283,7 @@ export async function runNoteGenerationJob(jobId: string): Promise<void> {
     generationModel: result.generationModel,
     maladaptiveReplacementPairings: result.maladaptiveReplacementPairings,
     draftQuota: { used: job.draftSlotUsed, max: job.draftSlotMax },
+    accuracyReport: result.accuracyReport,
   };
 
   const completedAt = new Date();

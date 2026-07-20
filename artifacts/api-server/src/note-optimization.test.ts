@@ -60,6 +60,18 @@ describe("toModelFacingSessionContext", () => {
     const segments = facing.segments as { trialSummary?: unknown }[];
     expect(segments[0]).not.toHaveProperty("trialSummary");
   });
+
+  it("includes a name-scrubbed assessmentExcerpt only when present", () => {
+    const without = toModelFacingSessionContext(frozenContext());
+    expect(without).not.toHaveProperty("assessmentExcerpt");
+
+    const withExcerpt = toModelFacingSessionContext(
+      frozenContext({ modelAssessmentExcerpt: "The client engages in task refusal during demands." }),
+    );
+    expect(withExcerpt.assessmentExcerpt).toBe(
+      "The client engages in task refusal during demands.",
+    );
+  });
 });
 
 describe("groundNotePlanWithFrozenContext force-locks labels", () => {

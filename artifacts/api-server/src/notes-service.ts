@@ -6,7 +6,6 @@
  * per-hour assignment and rebalancing, OpenAI generation, compliance validation, locked
  * assembly, persistence, and the generation audit trail.
  */
-import { randomUUID } from "node:crypto";
 import { APIError } from "openai";
 import { and, eq, inArray } from "drizzle-orm";
 import { GenerateNoteBody } from "@workspace/api-zod";
@@ -41,6 +40,7 @@ import {
 import {
   approximateAgeYearsAtSession,
   canonicalMaladaptiveBehaviorLabel,
+  deterministicRotationSeed,
   maladaptiveBehaviorsCatalogForRotation,
   maladaptiveBehaviorsForSessionHours,
   replacementProgramAssignmentsForSessionHours,
@@ -111,6 +111,12 @@ import {
   isSkillAcquisitionOnlyReplacementProgram,
   maladaptiveReplacementPairingsForSessionNote,
 } from "./skill-acquisition-programs";
+import {
+  buildNoteAccuracyReport,
+  missingSelectedPrograms,
+  parseAlteredSelectionsFromSwapMessages,
+  type NoteAccuracyReport,
+} from "./note-accuracy-report";
 
 type ClientRow = typeof clientsTable.$inferSelect;
 type GenerateNoteInput = ReturnType<typeof GenerateNoteBody.parse>;
@@ -131,6 +137,7 @@ export type GenerateSessionNoteSuccess = {
   generationModel: string;
   warnings: string[];
   maladaptiveReplacementPairings: ReturnType<typeof maladaptiveReplacementPairingsForSessionNote>;
+  accuracyReport: NoteAccuracyReport;
 };
 
 export type GenerateSessionNoteResult = GenerateSessionNoteFailure | GenerateSessionNoteSuccess;
@@ -439,7 +446,15 @@ export async function generateSessionNoteForClient(params: {
     ),
     rawAssessmentSnapshot,
   );
-  const behaviorRotationSeed = randomUUID();
+  // Deterministic rotation: the SAME session inputs must regenerate to the SAME behavior/hour
+  // order (no per-request UUID). ABC-Builder pins still override rotation downstream, so this
+  // does not reduce RBT control.
+  const behaviorRotationSeed = deterministicRotationSeed({
+    clientId: client.id,
+    sessionDate: body.sessionDate,
+    sessionHours: body.sessionHours,
+    selectedReplacements: body.selectedReplacements,
+  });
   const baseMaladaptiveForHour = maladaptiveBehaviorsForSessionHours(
     behaviorCatalog,
     body.sessionHours,
@@ -605,6 +620,8 @@ export async function generateSessionNoteForClient(params: {
   // Same session-effective pool as initial assignment — do NOT expand to the full client catalog here.
   // When the wizard already selected enough programs for every hour, skip soft BIP remaps so
   // selection order is preserved (avoids Time-on-task collapsing every maladaptive hour).
+  // Structured record of every server-side program change (accuracy report `alteredSelections`).
+  const programSelectionSwaps: string[] = [];
   const segmentAlignmentSwaps = ensureReplacementProgramAlignmentForSegments({
     segmentCount,
     maladaptiveBehaviorForHour: narrativeCollapsed.maladaptiveBehaviorForHour,
@@ -718,6 +735,7 @@ export async function generateSessionNoteForClient(params: {
     );
   }
   warnings.push(...segmentAlignmentSwaps);
+  programSelectionSwaps.push(...segmentAlignmentSwaps);
 
   const maladaptiveBehaviorTopographyForHour = maladaptiveBehaviorTopographyForHourLabels(
     maladaptiveBehaviorForNarrative,
@@ -956,6 +974,7 @@ export async function generateSessionNoteForClient(params: {
       narrativeCollapsed.replacementProgramForHour = repairNames;
       narrativeCollapsed.rbtActionsOnlyOutcomeForHour = repairRbt;
       warnings.push(...repairSwaps);
+      programSelectionSwaps.push(...repairSwaps);
       if (preserved.restored) {
         warnings.push(
           "Skipped a replacement-program rewrite that would have collapsed ABC paragraph separators.",
@@ -1182,6 +1201,26 @@ export async function generateSessionNoteForClient(params: {
     );
   }
 
+  // Coverage: every program the RBT selected should appear at least once in the final assignments.
+  // A missing one is the "selected 5, only 1 showed up" class of drift — surface it (never blocks).
+  const missingSelectedProgramNames = missingSelectedPrograms({
+    selectedProgramNames: programNames,
+    assignedProgramNames: narrativeCollapsed.replacementProgramForHour,
+  });
+  for (const name of missingSelectedProgramNames) {
+    warnings.push(
+      `Selected program "${name}" was not documented in any hour of this note. Pin it to an hour in ABC Builder or review the generated assignments.`,
+    );
+  }
+
+  const alteredSelections = parseAlteredSelectionsFromSwapMessages(programSelectionSwaps);
+  const accuracyReport = buildNoteAccuracyReport({
+    effectiveIssues,
+    alteredSelections,
+    missingSelectedProgramNames,
+    assessmentGrounded: clientAssessmentTextExcerpt.trim().length > 0,
+  });
+
   const generatedAt = new Date();
 
   const [inserted] = await db
@@ -1215,6 +1254,7 @@ export async function generateSessionNoteForClient(params: {
     rawModelOutputs: generationRawOutputs,
     clinicalBody: finalClinicalBody,
     finalNoteText: noteContent,
+    accuracyReport,
     finalStatus: savedWithComplianceWarnings ? "saved_with_warnings" : "saved",
   }));
 
@@ -1232,5 +1272,6 @@ export async function generateSessionNoteForClient(params: {
     generationModel,
     warnings,
     maladaptiveReplacementPairings,
+    accuracyReport,
   };
 }
