@@ -26,7 +26,17 @@ const { generateSessionNoteForClient } = await import(
 );
 
 const clients = await db
-  .select()
+  .select({
+    id: clientsTable.id,
+    companyId: clientsTable.companyId,
+    name: clientsTable.name,
+    ageBand: clientsTable.ageBand,
+    hasAssessment: clientsTable.hasAssessment,
+    assessmentStatus: clientsTable.assessmentStatus,
+    profile: clientsTable.profile,
+    createdAt: clientsTable.createdAt,
+    updatedAt: clientsTable.updatedAt,
+  })
   .from(clientsTable)
   .where(eq(clientsTable.assessmentStatus, "ready"));
 
@@ -95,7 +105,7 @@ const request = GenerateNoteBody.parse({
 
 const result = await generateSessionNoteForClient({
   companyId: chosenClient.companyId,
-  client: chosenClient,
+  client: { ...chosenClient, avatarPngBase64: null, avatarUpdatedAt: null },
   body: request,
   generation: { requestTimeoutMs: 180_000, timeBudgetMs: 240_000 },
 });
@@ -122,7 +132,7 @@ try {
   });
   const missingResult = await generateSessionNoteForClient({
     companyId: chosenClient.companyId,
-    client: chosenClient,
+    client: { ...chosenClient, avatarPngBase64: null, avatarUpdatedAt: null },
     body: missingRequest,
   });
   if (missingResult.ok || missingResult.status !== 400) {
