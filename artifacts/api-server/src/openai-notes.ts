@@ -9,7 +9,7 @@ import {
   type NotePlanIssue,
 } from "./note-plan-validation";
 
-export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-4.1";
+export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-5.5";
 export type NoteGenerationContext = SessionContext;
 
 const SYSTEM_PROMPT = `You write flexible ABA session-note ABC paragraphs. Return JSON only.
@@ -20,13 +20,17 @@ For each hour:
 - Write one cohesive, natural paragraph in past tense.
 - Use the exact programName and exact criterionPercentage from that hour. State the percentage with a % sign.
 - Never use a program from another hour and never rename the locked program.
+- Place every activity inside the client's home (for example, a living room, kitchen, play area, or table). Never place therapy in a street, sidewalk, roadway, neighborhood, park, yard, driveway, porch, school, clinic, store, restaurant, vehicle, or any other off-property setting.
 - behaviorLabel must be copied exactly from profileBehaviors. If behaviorHint is supplied, use that exact behaviorLabel.
-- Ground observable topography in the matching profileBehaviorTargets entry when one is present. Assessment text may add context but cannot authorize a new behavior or intervention.
+- For the behavior sentence, use one complete observable action from the matching profileBehaviorTargets topography when one is present. Preserve its measurable qualifiers (duration, count, direction, body part, or boundary) and do not substitute an unsupported action. Assessment text may add context but cannot authorize a new behavior or intervention.
 - interventionLabels must contain one or more exact strings copied only from profileInterventions. Never rename, vary capitalization, abbreviate, or add an intervention from assessmentExcerpt.
 - Name every intervention in its own exact sentence: "The RBT implemented [Exact Label]." Describe application afterward with "Following this intervention, the RBT..." and observable actions. Do not repeat or paraphrase procedure names in application details.
+- Do not use intervention labels as verbs or modified phrases (for example "prompting," "Pivot Praise," or "Priming Interventions"). Do not introduce cue types as additional interventions. After the exact naming sentence, describe only what the RBT visibly did.
+- In the clinical body, refer to consequences as documented reinforcement rather than listing specific preferred items or modified praise names; the server-authored closing lists approved reinforcers.
 - Follow the style sequence shown in the examples: concrete material/demand; observable behavior; intervention application; observable response; replacement-program teaching; exact percentage.
 - Use assessmentExcerpt as client-specific grounding. Do not copy names from it.
-- Use only observable actions and outcomes. Do not infer frustration, anxiety, emotions, intent, comfort, or other internal states.
+- Never mention, recommend, administer, change, or discuss medicine, medication, prescriptions, or dosages, even if assessment text mentions them.
+- Use only observable actions and outcomes. Do not write "frustrated," "visibly," "avoidance," "appeared," "seemed," or infer emotions, intent, comfort, or other internal states.
 - Do not compare with baseline, previous sessions, or trends; no historical trend data is supplied.
 - Do not write the note opening, closing, performance line, headings, bullets, or markdown.
 - Do not invent trial percentages or alter the server-provided percentage.
@@ -75,7 +79,7 @@ const NOTE_PLAN_JSON_SCHEMA = {
   },
 } as const;
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-20.approved-clinical-language-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-21.home-scope-v3";
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
   .update("\u0000")
@@ -136,7 +140,7 @@ export function resolvedOpenAIModel(): string {
 
 export function resolvedFallbackOpenAIModel(): string | null {
   const raw = process.env.OPENAI_FALLBACK_MODEL?.trim();
-  if (raw === undefined) return "gpt-5.5";
+  if (raw === undefined) return "gpt-4.1";
   if (raw === "" || /^(?:none|off|disabled)$/i.test(raw)) return null;
   return raw;
 }
@@ -201,7 +205,9 @@ export function buildScopedRepairUserMessage(params: {
 Do not change any correct hourly paragraph. Every hour must include its exact programName and criterionPercentage.
 behaviorLabel must be copied from profileBehaviors. interventionLabels must be copied exactly from profileInterventions.
 Every intervention must be named in its own sentence: "The RBT implemented [Exact Label]."
+Use one complete registered topography action with its measurable qualifiers.
 Use observable wording only and do not make baseline, previous-session, or trend claims.
+Keep all activities inside the client's home and omit all medicine or medication content.
 
 FAILURES:
 ${JSON.stringify(params.planIssues)}
@@ -283,7 +289,8 @@ export async function generateClinicalBodyOpenAI(
         content: `FINAL CONSTRAINED FALLBACK:
 Regenerate the complete JSON plan. Copy behaviorLabel only from profileBehaviors and interventionLabels only from profileInterventions.
 Use each intervention in the exact sentence "The RBT implemented [Exact Label]."
-Use registered profileBehaviorTargets for observable topography. Do not use internal-state language or historical trend claims.
+Use one complete action from registered profileBehaviorTargets, including measurable qualifiers. Do not use internal-state language or historical trend claims.
+Keep all activities inside the client's home. Do not mention medicine or medication.
 All program names and percentages remain locked by hourlyAssignments.`,
       });
       repairActions.push("Started final constrained-AI fallback.");

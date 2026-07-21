@@ -181,6 +181,57 @@ describe("flexible note contract", () => {
     expect(codes).toContain("UNSUPPORTED_TREND");
   });
 
+  it("rejects vague overlap that does not identify one registered topography", () => {
+    const ctx = context();
+    ctx.sessionHours = 1;
+    ctx.profileBehaviors = ["Repetitive Behavior"];
+    ctx.profileBehaviorTargets = [
+      {
+        name: "Repetitive Behavior",
+        topography:
+          "moving around the room for more than 10 seconds, continuous movements with hands up and down or sideways, or tapping furniture with hands more than three times",
+      },
+    ];
+    ctx.hourlyAssignments = [ctx.hourlyAssignments[0]!];
+    const plan: NotePlan = {
+      segments: [
+        {
+          segmentIndex: 0,
+          behaviorLabel: "Repetitive Behavior",
+          interventionLabels: ["Premack Principle"],
+          paragraph:
+            "At the table, the client manifested Repetitive Behavior by looking away and engaging in hand movements. The RBT implemented Premack Principle. Following this intervention, the RBT presented one step before access to a toy. The RBT implemented the replacement program Compliance Training; 0% of discrete trials met criterion.",
+        },
+      ],
+    };
+
+    expect(validateNotePlan(plan, ctx).map((issue) => issue.code)).toContain(
+      "TOPOGRAPHY_NOT_GROUNDED",
+    );
+
+    plan.segments[0]!.paragraph = plan.segments[0]!.paragraph.replace(
+      "looking away and engaging in hand movements",
+      "engaging in continuous hand movements up and down",
+    );
+    expect(validateNotePlan(plan, ctx).map((issue) => issue.code)).not.toContain(
+      "TOPOGRAPHY_NOT_GROUNDED",
+    );
+  });
+
+  it("rejects off-property therapy settings and medication content", () => {
+    const plan = validPlan();
+    plan.segments[0]!.paragraph = plan.segments[0]!.paragraph
+      .replace("The RBT presented a task", "In the street area, the RBT presented a task")
+      .replace(
+        "Following this intervention,",
+        "The RBT suggested medication before continuing. Following this intervention,",
+      );
+
+    const codes = validateNotePlan(plan, context()).map((issue) => issue.code);
+    expect(codes).toContain("SETTING_OUTSIDE_HOME");
+    expect(codes).toContain("MEDICATION_CONTENT");
+  });
+
   it("uses a final constrained-AI fallback after bounded repairs", async () => {
     const invalid = JSON.stringify({
       segments: [

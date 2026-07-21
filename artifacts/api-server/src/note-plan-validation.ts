@@ -4,6 +4,10 @@ import {
   type NotePlan,
   type SessionContext,
 } from "./note-plan-schema";
+import {
+  paragraphReflectsStoredTopography,
+  splitTopographyActionAlternatives,
+} from "./maladaptive-behavior-topography";
 
 export type NotePlanIssueCode = string;
 
@@ -30,25 +34,15 @@ function escapeRegExp(value: string): string {
 }
 
 const MENTALISTIC_PATTERN =
-  /\b(?:frustrat(?:ed|ion)|anxious|anxiety|upset|angry|happy|sad|overwhelmed|comfortable|uncomfortable)\b/i;
+  /\b(?:frustrat(?:ed|ion)|anxious|anxiety|upset|angry|happy|sad|overwhelmed|comfortable|uncomfortable|avoidance|appeared|seemed|visibly)\b/i;
 const UNSUPPORTED_TREND_PATTERN =
   /\b(?:baseline|previous session|prior session|improving|regressing|regression|maintaining|trend data)\b/i;
+const OUTSIDE_HOME_SETTING_PATTERN =
+  /\b(?:(?:in|into|near|along|toward|towards|at)\s+(?:the\s+)?(?:street|sidewalk|roadway|road|parking lot|neighborhood|park|playground|yard|backyard|front yard|driveway|porch|store|restaurant|school|clinic)|outside\s+(?:of\s+)?the\s+home|left\s+the\s+home)\b/i;
+const MEDICATION_PATTERN =
+  /\b(?:medicine|medicines|medication|medications|medicate|medicated|prescription|prescriptions|dosage|dosages|pharmaceutical|pharmaceuticals)\b/i;
 const INTERVENTION_CLAIM_PATTERN =
-  /\b(?:implemented|applied|applying|used|utilized|incorporated)\s+([^.;,]+)/gi;
-const TOPOGRAPHY_STOP_WORDS = new Set([
-  "about", "after", "before", "behavior", "client", "during", "includes", "include",
-  "instance", "more", "moving", "other", "seconds", "than", "their", "things", "with",
-]);
-
-function topographyTokens(topography: string): string[] {
-  return [...new Set(
-    topography
-      .toLowerCase()
-      .match(/[a-z]{5,}/g)
-      ?.filter((token) => !TOPOGRAPHY_STOP_WORDS.has(token)) ?? [],
-  )];
-}
-
+  /\b(?:implemented|applied|applying|used|utilized|incorporated|followed\s+with|paired\s+with|pairing\s+(?:this\s+)?with)\s+([^.;,]+)/gi;
 function exactApprovedLabelAtClaimStart(
   claim: string,
   approvedLabels: string[],
@@ -183,19 +177,35 @@ export function validateNotePlan(
         message: `Hour ${assignment.segmentIndex + 1} makes an unsupported cross-session or baseline claim.`,
       });
     }
+    if (OUTSIDE_HOME_SETTING_PATTERN.test(segment.paragraph)) {
+      issues.push({
+        code: "SETTING_OUTSIDE_HOME",
+        segmentIndex: assignment.segmentIndex,
+        message: `Hour ${assignment.segmentIndex + 1} places therapy outside the client's home.`,
+      });
+    }
+    if (MEDICATION_PATTERN.test(segment.paragraph)) {
+      issues.push({
+        code: "MEDICATION_CONTENT",
+        segmentIndex: assignment.segmentIndex,
+        message: `Hour ${assignment.segmentIndex + 1} contains prohibited medicine or medication content.`,
+      });
+    }
     const target = ctx.profileBehaviorTargets.find(
       (candidate) => candidate.name === segment.behaviorLabel,
     );
     if (target?.topography) {
-      const tokens = topographyTokens(target.topography);
+      const alternatives = splitTopographyActionAlternatives(target.topography);
+      const registeredActions =
+        alternatives.length > 0 ? alternatives : [target.topography];
       const behaviorSentence =
         segment.paragraph
           .split(/(?<=[.!?])\s+/)
           .find((sentence) => sentence.includes(segment.behaviorLabel)) ?? "";
-      const lowerBehaviorSentence = behaviorSentence.toLowerCase();
       if (
-        tokens.length > 0 &&
-        !tokens.some((token) => lowerBehaviorSentence.includes(token))
+        !registeredActions.some((action) =>
+          paragraphReflectsStoredTopography(behaviorSentence, action, 3),
+        )
       ) {
         issues.push({
           code: "TOPOGRAPHY_NOT_GROUNDED",
