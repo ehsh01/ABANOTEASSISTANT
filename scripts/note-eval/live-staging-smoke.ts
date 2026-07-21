@@ -20,13 +20,66 @@ const {
   notesTable,
   programsTable,
 } = await import("@workspace/db/schema");
-const { and, eq, sql } = await import("drizzle-orm");
+const { eq, sql } = await import("drizzle-orm");
 const { GenerateNoteBody } = await import("@workspace/api-zod");
 const { generateSessionNoteForClient } = await import(
   "../../artifacts/api-server/src/notes-service"
 );
 
-const clients = await db
+let chosenClient: typeof clientsTable.$inferSelect | null = null;
+let linkedPrograms: { id: number; name: string }[] = [];
+let temporaryCompanyId: number | null = null;
+const companyInsert = await db.execute<{ id: number }>(
+  sql`insert into ${companiesTable} (name, free_usage)
+      values (${`Approved language staging smoke ${Date.now()}`}, true)
+      returning id`,
+);
+temporaryCompanyId = companyInsert.rows[0]!.id;
+const programNames = [
+  "Compliance Training",
+  "Request for Break",
+  "Accepting alternatives and making choices",
+  "Schedule of activities",
+  "Time on Task",
+];
+linkedPrograms = await db
+  .insert(programsTable)
+  .values(
+    programNames.map((name) => ({
+      companyId: temporaryCompanyId!,
+      name,
+      type: "primary",
+    })),
+  )
+  .returning({ id: programsTable.id, name: programsTable.name });
+const profile = {
+    firstName: "Smoke",
+    lastName: "Client",
+    dateOfBirth: "2018-01-01",
+    gender: "male",
+    maladaptiveBehaviors: ["Task refusal", "Physical Aggression"],
+    maladaptiveBehaviorTargets: [
+      { name: "Task refusal", topography: "pushing work materials away" },
+      { name: "Physical Aggression", topography: "hitting with an open hand" },
+    ],
+    replacementPrograms: programNames,
+    skillAcquisitionPrograms: [],
+    interventions: [
+      "Premack Principle",
+      "Response blocking",
+      "Differential Reinforcement of Alternative Behavior (DRA)",
+    ],
+    assessmentFileName: "staging-smoke-assessment.pdf",
+    assessmentTextSnapshot:
+      "Task refusal includes pushing work materials away. Physical Aggression includes hitting with an open hand. Errorless teaching appears only in this assessment excerpt and is not profile-approved.",
+};
+const clientInsert = await db.execute<{ id: number }>(
+  sql`insert into ${clientsTable}
+      (company_id, name, has_assessment, assessment_status, profile)
+      values (${temporaryCompanyId}, ${"Staging Smoke Client"}, true, ${"ready"}, ${JSON.stringify(profile)}::jsonb)
+      returning id`,
+);
+const [client] = await db
   .select({
     id: clientsTable.id,
     companyId: clientsTable.companyId,
@@ -39,99 +92,15 @@ const clients = await db
     updatedAt: clientsTable.updatedAt,
   })
   .from(clientsTable)
-  .where(eq(clientsTable.assessmentStatus, "ready"));
-
-let chosenClient: (typeof clients)[number] | null = null;
-let linkedPrograms: { id: number; name: string }[] = [];
-let temporaryCompanyId: number | null = null;
-for (const client of clients) {
-  const rows = await db
-    .select({ id: programsTable.id, name: programsTable.name })
-    .from(clientProgramsTable)
-    .innerJoin(programsTable, eq(clientProgramsTable.programId, programsTable.id))
-    .where(
-      and(
-        eq(clientProgramsTable.clientId, client.id),
-        eq(programsTable.companyId, client.companyId),
-      ),
-    );
-  if (rows.length >= 5) {
-    chosenClient = client;
-    linkedPrograms = rows.slice(0, 5);
-    break;
-  }
-}
-
-if (!chosenClient) {
-  const companyInsert = await db.execute<{ id: number }>(
-    sql`insert into ${companiesTable} (name, free_usage)
-        values (${`Flexible note staging smoke ${Date.now()}`}, true)
-        returning id`,
-  );
-  temporaryCompanyId = companyInsert.rows[0]!.id;
-  const programNames = [
-    "Compliance Training",
-    "Request for Break",
-    "Accepting alternatives and making choices",
-    "Schedule of activities",
-    "Time on Task",
-  ];
-  linkedPrograms = await db
-    .insert(programsTable)
-    .values(
-      programNames.map((name) => ({
-        companyId: temporaryCompanyId!,
-        name,
-        type: "primary",
-      })),
-    )
-    .returning({ id: programsTable.id, name: programsTable.name });
-  const profile = {
-    firstName: "Smoke",
-    lastName: "Client",
-    dateOfBirth: "2018-01-01",
-    gender: "male",
-    maladaptiveBehaviors: ["Task refusal", "Physical Aggression"],
-    replacementPrograms: programNames,
-    skillAcquisitionPrograms: [],
-    interventions: [
-      "Premack Principle",
-      "Response blocking",
-      "Differential Reinforcement of Alternative Behavior (DRA)",
-    ],
-    assessmentFileName: "staging-smoke-assessment.pdf",
-    assessmentTextSnapshot:
-      "Task refusal includes pushing work materials away. Physical Aggression includes hitting with an open hand. Approved interventions include Premack Principle, Response blocking, and Differential Reinforcement of Alternative Behavior (DRA).",
-  };
-  const clientInsert = await db.execute<{ id: number }>(
-    sql`insert into ${clientsTable}
-        (company_id, name, has_assessment, assessment_status, profile)
-        values (${temporaryCompanyId}, ${"Staging Smoke Client"}, true, ${"ready"}, ${JSON.stringify(profile)}::jsonb)
-        returning id`,
-  );
-  const [client] = await db
-    .select({
-      id: clientsTable.id,
-      companyId: clientsTable.companyId,
-      name: clientsTable.name,
-      ageBand: clientsTable.ageBand,
-      hasAssessment: clientsTable.hasAssessment,
-      assessmentStatus: clientsTable.assessmentStatus,
-      profile: clientsTable.profile,
-      createdAt: clientsTable.createdAt,
-      updatedAt: clientsTable.updatedAt,
-    })
-    .from(clientsTable)
-    .where(eq(clientsTable.id, clientInsert.rows[0]!.id))
-    .limit(1);
-  chosenClient = client!;
-  await db.insert(clientProgramsTable).values(
-    linkedPrograms.map((program) => ({
-      clientId: chosenClient!.id,
-      programId: program.id,
-    })),
-  );
-}
+  .where(eq(clientsTable.id, clientInsert.rows[0]!.id))
+  .limit(1);
+chosenClient = client! as typeof clientsTable.$inferSelect;
+await db.insert(clientProgramsTable).values(
+  linkedPrograms.map((program) => ({
+    clientId: chosenClient!.id,
+    programId: program.id,
+  })),
+);
 
 const percentages = [0, 10, 20, 30, 100];
 const selectedReplacements = linkedPrograms.map((program) => program.id);
@@ -196,6 +165,20 @@ try {
   if (repeatedProgramOccurrences < 2) {
     throw new Error("Repeated program was not documented in both assigned hours.");
   }
+  if (
+    !profile.interventions.some((label) =>
+      result.content.includes(`The RBT implemented ${label}.`),
+    )
+  ) {
+    throw new Error("No intervention was stated with an exact approved naming sentence.");
+  }
+  if (
+    /\b(?:Errorless teaching|minimal frustration|baseline|previous session|regressing|improving)\b/i.test(
+      result.content,
+    )
+  ) {
+    throw new Error("Generated content contains unapproved, mentalistic, or trend wording.");
+  }
 
   const missingRequest = GenerateNoteBody.parse({
     ...request,
@@ -216,6 +199,7 @@ try {
       paragraphPercentages: percentages,
       repeatedProgram: true,
       missingHourRejected: true,
+      approvedClinicalLanguage: true,
     }),
   );
 } finally {
