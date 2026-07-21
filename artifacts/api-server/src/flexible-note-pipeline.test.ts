@@ -18,6 +18,10 @@ function context(): SessionContext {
     therapySetting: "Home",
     environmentalChanges: "",
     profileBehaviors: ["Task refusal", "Physical Aggression"],
+    profileBehaviorTargets: [
+      { name: "Task refusal", topography: "pushing work materials away" },
+      { name: "Physical Aggression", topography: "hitting with an open hand" },
+    ],
     profileInterventions: [
       "Premack Principle",
       "Response blocking",
@@ -60,18 +64,27 @@ function validPlan(): NotePlan {
     segments: [
       {
         segmentIndex: 0,
+        behaviorLabel: "Physical Aggression",
+        interventionLabels: ["Differential Reinforcement of Alternative Behavior (DRA)"],
         paragraph:
-          "The RBT presented a task. The RBT used Premack Principle. The RBT implemented Compliance Training; 0% of discrete trials met criterion.",
+          "The RBT presented a task and the client manifested Physical Aggression by hitting with an open hand. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, the RBT reinforced hands remaining on the table. The RBT implemented the replacement program Compliance Training; 0% of discrete trials met criterion.",
       },
       {
         segmentIndex: 1,
+        behaviorLabel: "Task refusal",
+        interventionLabels: [
+          "Response blocking",
+          "Differential Reinforcement of Alternative Behavior (DRA)",
+        ],
         paragraph:
-          "During table work, the client pushed materials away. The RBT used Response blocking and Differential Reinforcement of Alternative Behavior (DRA). The RBT implemented Request for Break; 30% of discrete trials met criterion.",
+          "During table work, the client manifested Task refusal by pushing materials away. The RBT implemented Response blocking. Following this intervention, the RBT prevented additional contact with the materials. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, the RBT reinforced keeping materials on the table. The RBT implemented the replacement program Request for Break; 30% of discrete trials met criterion.",
       },
       {
         segmentIndex: 2,
+        behaviorLabel: "Task refusal",
+        interventionLabels: ["Premack Principle"],
         paragraph:
-          "The RBT presented a second task and implemented Compliance Training; 100% of discrete trials met criterion.",
+          "The RBT presented a second task and the client manifested Task refusal by pushing materials away. The RBT implemented Premack Principle. Following this intervention, the RBT presented one task step before preferred-item access. The RBT implemented the replacement program Compliance Training; 100% of discrete trials met criterion.",
       },
     ],
   };
@@ -98,11 +111,12 @@ describe("flexible note contract", () => {
 
   it("rejects missing, remapped, or wrong-percentage hourly content", () => {
     const plan = validPlan();
-    plan.segments[1]!.paragraph = "The RBT implemented Time on Task; 40% of trials met criterion.";
-    expect(validateNotePlan(plan, context()).map((issue) => issue.code)).toEqual([
-      "PROGRAM_MISSING",
-      "PERCENTAGE_MISSING",
-    ]);
+    plan.segments[1]!.paragraph = plan.segments[1]!.paragraph
+      .replace("Request for Break", "Time on Task")
+      .replace("30%", "40%");
+    const codes = validateNotePlan(plan, context()).map((issue) => issue.code);
+    expect(codes).toContain("PROGRAM_MISSING");
+    expect(codes).toContain("PERCENTAGE_MISSING");
   });
 
   it("keeps model-authored behavior and multiple interventions unchanged", () => {
@@ -110,7 +124,10 @@ describe("flexible note contract", () => {
     const paragraph = plan.segments[1]!.paragraph;
     const body = assembleClinicalBodyFromNotePlan(plan, context());
     expect(body).toContain(paragraph);
-    expect(body).toContain("Response blocking and Differential Reinforcement");
+    expect(body).toContain("The RBT implemented Response blocking.");
+    expect(body).toContain(
+      "The RBT implemented Differential Reinforcement of Alternative Behavior (DRA).",
+    );
   });
 
   it("repairs only structural program/percentage failures", async () => {
@@ -122,6 +139,69 @@ describe("flexible note contract", () => {
     expect(result.repairAttempts).toBe(1);
     expect(result.notePlan).toEqual(validPlan());
     expect(modelCall).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects Austin-style unapproved, renamed, and mentalistic intervention prose", () => {
+    const plan = validPlan();
+    plan.segments[1] = {
+      ...plan.segments[1]!,
+      interventionLabels: ["Errorless teaching", "redirection"],
+      paragraph: plan.segments[1]!.paragraph
+        .replace(
+          "The RBT implemented Response blocking.",
+          "The RBT applied Errorless teaching with minimal frustration and used redirection to continue.",
+        )
+        .replace(
+          "The RBT implemented Differential Reinforcement of Alternative Behavior (DRA).",
+          "",
+        ),
+    };
+    const codes = validateNotePlan(plan, context()).map((issue) => issue.code);
+    expect(codes).toContain("INTERVENTION_NOT_APPROVED");
+    expect(codes).toContain("UNAPPROVED_INTERVENTION_CLAIM");
+    expect(codes).toContain("MENTALISTIC_LANGUAGE");
+  });
+
+  it("allows ordinary application details after an exact approved naming sentence", () => {
+    const plan = validPlan();
+    plan.segments[2]!.paragraph = plan.segments[2]!.paragraph.replace(
+      "Following this intervention, the RBT presented one task step before preferred-item access.",
+      "Following this intervention, the RBT arranged accessible materials, offered two communication choices, and delivered a verbal cue.",
+    );
+    expect(validateNotePlan(plan, context())).toEqual([]);
+  });
+
+  it("requires registered topography grounding and omits unsupported trends", () => {
+    const plan = validPlan();
+    plan.segments[1]!.paragraph = plan.segments[1]!.paragraph
+      .replace("pushing materials away", "looking toward the window")
+      .replace("During table work", "Compared with the previous session, during table work");
+    const codes = validateNotePlan(plan, context()).map((issue) => issue.code);
+    expect(codes).toContain("TOPOGRAPHY_NOT_GROUNDED");
+    expect(codes).toContain("UNSUPPORTED_TREND");
+  });
+
+  it("uses a final constrained-AI fallback after bounded repairs", async () => {
+    const invalid = JSON.stringify({
+      segments: [
+        {
+          segmentIndex: 0,
+          behaviorLabel: "Task refusal",
+          interventionLabels: ["Errorless teaching"],
+          paragraph: "The RBT applied Errorless teaching with minimal frustration.",
+        },
+      ],
+    });
+    const modelCall = vi
+      .fn()
+      .mockResolvedValueOnce(invalid)
+      .mockResolvedValueOnce(invalid)
+      .mockResolvedValueOnce(invalid)
+      .mockResolvedValueOnce(JSON.stringify(validPlan()));
+    const result = await generateClinicalBodyOpenAI(context(), { modelCall });
+    expect(result.repairAttempts).toBe(3);
+    expect(result.repairActions).toContain("Started final constrained-AI fallback.");
+    expect(modelCall).toHaveBeenCalledTimes(4);
   });
 
   it("scrubs client names while retaining assessment grounding", () => {

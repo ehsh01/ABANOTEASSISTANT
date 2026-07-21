@@ -1,5 +1,5 @@
 {
-  "version": "flexible-abc-v1",
+  "version": "approved-clinical-language-v1",
   "cases": [
     {
       "id": "sample-1-two-hours",
@@ -13,8 +13,8 @@
         {"programId": 2, "programName": "Accept “no” as a response", "criterionPercentage": 10}
       ],
       "paragraphs": [
-        "At the dining table, the RBT presented a worksheet and the client pushed the materials away. The RBT used Premack Principle and prompted task completion. The RBT implemented the replacement program \"Compliance Training\" through single-step directions; approximately 20% of discrete trials met criterion.",
-        "In the living room, the client hit the RBT's arm after access to a ball was delayed. The RBT used Differential Reinforcement of Alternative Behavior (DRA) and reinforced keeping hands to self. The RBT implemented the replacement program \"Accept “no” as a response\"; approximately 10% of discrete trials met criterion."
+        "At the dining table, the RBT presented a worksheet and the client manifested Task refusal by pushing the materials away. The RBT implemented Premack Principle. Following this intervention, the RBT presented one task step and reinforced completion. The RBT implemented the replacement program \"Compliance Training\" through single-step directions; approximately 20% of discrete trials met criterion.",
+        "In the living room, the client manifested Physical Aggression by hitting the RBT's arm after access to a ball was delayed. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, the RBT reinforced keeping hands to self. The RBT implemented the replacement program \"Accept “no” as a response\"; approximately 10% of discrete trials met criterion."
       ]
     },
     {
@@ -30,9 +30,9 @@
         {"programId": 3, "programName": "Schedule of activities", "criterionPercentage": 10}
       ],
       "paragraphs": [
-        "The RBT presented a chore list and the client turned away from the table. The RBT used Escape independent response delivery and re-presented smaller task steps. The RBT implemented \"Schedule of activities\" by reviewing current and next tasks; criterion was met on approximately 10% of discrete trials.",
-        "The client pushed the RBT's forearm when a snack was unavailable. The RBT used Response blocking and Differential Reinforcement of Alternative Behavior (DRA), then reinforced an appropriate choice. The RBT implemented \"Accepting alternatives and making choices\"; criterion was met on approximately 10% of discrete trials.",
-        "The RBT presented a folding task and the client pushed clothing back into a bin. The RBT used Premack Principle and reinforced completed steps. The RBT implemented \"Schedule of activities\" before transitions; criterion was met on approximately 10% of discrete trials."
+        "The RBT presented a chore list and the client manifested Task refusal by turning away from the table. The RBT implemented Escape independent response delivery. Following this intervention, the RBT re-presented smaller task steps. The RBT implemented \"Schedule of activities\" by reviewing current and next tasks; criterion was met on approximately 10% of discrete trials.",
+        "The client manifested Physical Aggression by pushing the RBT's forearm when a snack was unavailable. The RBT implemented Response blocking. Following this intervention, the RBT prevented further contact. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, the RBT reinforced an appropriate choice. The RBT implemented \"Accepting alternatives and making choices\"; criterion was met on approximately 10% of discrete trials.",
+        "The RBT presented a folding task and the client manifested Task refusal by pushing clothing back into a bin. The RBT implemented Premack Principle. Following this intervention, the RBT reinforced completed steps. The RBT implemented \"Schedule of activities\" before transitions; criterion was met on approximately 10% of discrete trials."
       ]
     },
     {
@@ -47,8 +47,8 @@
         {"programId": 6, "programName": "Remaining seated, completing the task", "criterionPercentage": 30}
       ],
       "paragraphs": [
-        "The client left the work area after a worksheet was presented. The RBT used Response blocking and Escape independent response delivery before prompting an appropriate request. The RBT implemented \"Request permission to leave the unsupervised area\"; criterion was met on approximately 30% of discrete trials.",
-        "The client tore a reading page during a written task. The RBT used Differential Reinforcement of Alternative Behavior (DRA) and reinforced intact materials. The RBT implemented \"Remaining seated, completing the task\"; approximately 30% of discrete trials met criterion."
+        "The client manifested Elopement by leaving the work area after a worksheet was presented. The RBT implemented Response blocking. Following this intervention, the RBT stopped further movement. The RBT implemented Escape independent response delivery. Following this intervention, the RBT prompted an appropriate request. The RBT implemented \"Request permission to leave the unsupervised area\"; criterion was met on approximately 30% of discrete trials.",
+        "The client manifested Property destruction by tearing a reading page during a written task. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, the RBT reinforced keeping materials intact. The RBT implemented \"Remaining seated, completing the task\"; approximately 30% of discrete trials met criterion."
       ]
     },
     {
@@ -65,10 +65,27 @@
         {"programId": 8, "programName": "Time on Task", "criterionPercentage": 20}
       ],
       "paragraphs": [
-        "The client tore a worksheet during table work. The RBT used Response blocking and Escape independent response delivery. The RBT implemented \"Compliance Training\" through short directions; criterion was met on approximately 20% of discrete trials.",
-        "The client struck his face during a card game. The RBT used Response blocking and Differential Reinforcement of Alternative Behavior (DRA). The RBT implemented \"Express and accept opinion, agreement and disagreement\" through modeled statements; criterion was met on approximately 20% of discrete trials.",
-        "The client attempted to hit during a cleanup direction. The RBT used Response blocking and Premack Principle. The RBT implemented \"Compliance Training\" across household directions; criterion was met on approximately 20% of discrete trials.",
-        "The client tore notebook materials during written work. The RBT used Differential Reinforcement of Alternative Behavior (DRA). The RBT implemented \"Time on Task\" through short work intervals; criterion was met on approximately 20% of discrete trials."
+        "The client manifested Property destruction by tearing a worksheet during table work. The RBT implemented Response blocking. Following this intervention, the RBT prevented further tearing. The RBT implemented Escape independent response delivery. Following this intervention, the RBT presented shorter task steps. The RBT implemented \"Compliance Training\" through short directions; criterion was met on approximately 20% of discrete trials.",
+        "The client manifested Self-injury behavior (SIB) by striking his face during a card game. The RBT implemented Response blocking. Following this intervention, the RBT prevented further contact. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, the RBT reinforced hands remaining away from the face. The RBT implemented \"Express and accept opinion, agreement and disagreement\" through modeled statements; criterion was met on approximately 20% of discrete trials.",
+        "The client manifested Physical Aggression by attempting to hit during a cleanup direction. The RBT implemented Response blocking. Following this intervention, the RBT prevented further contact. The RBT implemented Premack Principle. Following this intervention, the RBT reinforced completed cleanup steps. The RBT implemented \"Compliance Training\" across household directions; criterion was met on approximately 20% of discrete trials.",
+        "The client manifested Property destruction by tearing notebook materials during written work. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, the RBT reinforced keeping materials intact. The RBT implemented \"Time on Task\" through short work intervals; criterion was met on approximately 20% of discrete trials."
+      ]
+    },
+    {
+      "id": "austin-approved-language-regression",
+      "tags": ["austin", "approved-interventions", "objective-language", "topography"],
+      "setting": "Home",
+      "assessmentExcerpt": "Task Refusal includes tossing materials aside and withdrawing from a presented task. The assessment contains broad teaching terminology that does not expand the approved profile intervention list.",
+      "profileBehaviors": ["Task Refusal"],
+      "profileBehaviorTargets": [
+        {"name": "Task Refusal", "topography": "tossing task materials aside and withdrawing from the activity"}
+      ],
+      "profileInterventions": ["Environmental Manipulation", "Prompting", "offer choices"],
+      "hourlyAssignments": [
+        {"programId": 9, "programName": "Request help", "criterionPercentage": 10}
+      ],
+      "paragraphs": [
+        "During a coloring activity, the client manifested Task Refusal by tossing the marker aside and withdrawing from the activity after the cap did not open. The RBT implemented Environmental Manipulation. Following this intervention, the RBT arranged accessible materials. The RBT implemented Prompting. Following this intervention, the RBT delivered a verbal cue for requesting assistance. The RBT implemented offer choices. Following this intervention, the RBT presented gesture, word, and picture communication options. The RBT implemented the replacement program \"Request help\" by reinforcing each help-seeking response; criterion was met on approximately 10% of discrete trials."
       ]
     }
   ]

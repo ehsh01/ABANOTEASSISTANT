@@ -15,6 +15,9 @@ const caseSchema = z.object({
   setting: z.string(),
   assessmentExcerpt: z.string(),
   profileBehaviors: z.array(z.string()),
+  profileBehaviorTargets: z
+    .array(z.object({ name: z.string(), topography: z.string().nullable() }))
+    .optional(),
   profileInterventions: z.array(z.string()),
   hourlyAssignments: z.array(assignmentSchema).min(1).max(8),
   paragraphs: z.array(z.string().min(1)).min(1).max(8),
@@ -51,6 +54,7 @@ export function fixtureSessionContext(fixture: NoteRegressionPipelineCase): Sess
     therapySetting: fixture.setting,
     environmentalChanges: "",
     profileBehaviors: fixture.profileBehaviors,
+    profileBehaviorTargets: fixture.profileBehaviorTargets ?? [],
     profileInterventions: fixture.profileInterventions,
     reinforcementPreferences: [],
     assessmentExcerpt: fixture.assessmentExcerpt,
@@ -68,9 +72,19 @@ export const fixtureGenerationContext = fixtureSessionContext;
 
 export function fixtureNotePlan(fixture: NoteRegressionPipelineCase): NotePlan {
   return {
-    segments: fixture.paragraphs.map((paragraph, segmentIndex) => ({
-      segmentIndex,
-      paragraph,
-    })),
+    segments: fixture.paragraphs.map((paragraph, segmentIndex) => {
+      const behaviorLabel =
+        fixture.profileBehaviors.find((label) => paragraph.includes(label)) ??
+        fixture.profileBehaviors[segmentIndex % fixture.profileBehaviors.length]!;
+      const interventionLabels = fixture.profileInterventions.filter((label) =>
+        paragraph.includes(`The RBT implemented ${label}.`),
+      );
+      return {
+        segmentIndex,
+        behaviorLabel,
+        interventionLabels,
+        paragraph,
+      };
+    }),
   };
 }

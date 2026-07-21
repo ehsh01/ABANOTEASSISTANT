@@ -103,6 +103,22 @@ export async function generateSessionNoteForClient(params: {
     profile,
   });
   if (!assessmentGate.ok) return assessmentGate;
+  if ((profile?.maladaptiveBehaviors ?? []).length === 0) {
+    return {
+      ok: false,
+      status: 422,
+      error: "Approved behaviors required",
+      messages: ["Add at least one approved maladaptive behavior to the client profile."],
+    };
+  }
+  if ((profile?.interventions ?? []).length === 0) {
+    return {
+      ok: false,
+      status: 422,
+      error: "Approved interventions required",
+      messages: ["Add at least one approved intervention to the client profile."],
+    };
+  }
 
   const hints = body.abcHints;
   const inputErrors: string[] = [];
@@ -191,6 +207,12 @@ export async function generateSessionNoteForClient(params: {
     therapySetting: body.therapySetting,
     environmentalChanges: body.environmentalChanges?.trim() ?? "",
     profileBehaviors: profile?.maladaptiveBehaviors ?? [],
+    profileBehaviorTargets: (profile?.maladaptiveBehaviorTargets ?? [])
+      .filter((target) => (profile?.maladaptiveBehaviors ?? []).includes(target.name))
+      .map((target) => ({
+        name: target.name,
+        topography: target.topography?.trim() || null,
+      })),
     profileInterventions: profile?.interventions ?? [],
     reinforcementPreferences:
       profile?.assessmentSummary?.reinforcementPreferences ?? [],

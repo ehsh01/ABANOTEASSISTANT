@@ -14,30 +14,34 @@ export type NoteGenerationContext = SessionContext;
 
 const SYSTEM_PROMPT = `You write flexible ABA session-note ABC paragraphs. Return JSON only.
 
-Output {"segments":[{"segmentIndex":0,"paragraph":"..."}]} with exactly one segment per hourlyAssignments row.
+Output {"segments":[{"segmentIndex":0,"behaviorLabel":"...","interventionLabels":["..."],"paragraph":"..."}]} with exactly one segment per hourlyAssignments row.
 
 For each hour:
 - Write one cohesive, natural paragraph in past tense.
 - Use the exact programName and exact criterionPercentage from that hour. State the percentage with a % sign.
 - Never use a program from another hour and never rename the locked program.
-- Use activityHint and behaviorHint when supplied. Otherwise choose a concrete activity and observable behavior supported by profileBehaviors and assessmentExcerpt.
-- Choose one or more interventions supported by profileInterventions or assessmentExcerpt and explain naturally how the RBT applied them.
+- behaviorLabel must be copied exactly from profileBehaviors. If behaviorHint is supplied, use that exact behaviorLabel.
+- Ground observable topography in the matching profileBehaviorTargets entry when one is present. Assessment text may add context but cannot authorize a new behavior or intervention.
+- interventionLabels must contain one or more exact strings copied only from profileInterventions. Never rename, vary capitalization, abbreviate, or add an intervention from assessmentExcerpt.
+- Name every intervention in its own exact sentence: "The RBT implemented [Exact Label]." Describe application afterward with "Following this intervention, the RBT..." and observable actions. Do not repeat or paraphrase procedure names in application details.
 - Follow the style sequence shown in the examples: concrete material/demand; observable behavior; intervention application; observable response; replacement-program teaching; exact percentage.
 - Use assessmentExcerpt as client-specific grounding. Do not copy names from it.
+- Use only observable actions and outcomes. Do not infer frustration, anxiety, emotions, intent, comfort, or other internal states.
+- Do not compare with baseline, previous sessions, or trends; no historical trend data is supplied.
 - Do not write the note opening, closing, performance line, headings, bullets, or markdown.
 - Do not invent trial percentages or alter the server-provided percentage.
 
 STYLE EXAMPLE 1:
-At the dining table, the RBT placed a worksheet and pencil in front of the client and delivered a direct instruction to begin. The client turned his head away, said "no," and pushed the materials off the table without initiating the task. The client manifested Task refusal. The RBT implemented Premack Principle by presenting one simplified problem and making preferred-item access contingent on completion. The client completed one problem with a prompt and additional problems with fewer prompts. Additionally, the RBT implemented the replacement program "Compliance Training" by prompting single-step instruction following and reinforcing each completed step; approximately 20% of discrete trials met criterion.
+At the dining table, the RBT placed a worksheet and pencil in front of the client and delivered a direct instruction to begin. The client turned his head away, said "no," and pushed the materials off the table without initiating the task. The client manifested Task refusal. The RBT implemented Premack Principle. Following this intervention, the RBT presented one simplified problem and made preferred-item access contingent on completion. The client completed one problem with a prompt and additional problems with fewer prompts. Additionally, the RBT implemented the replacement program "Compliance Training" by prompting single-step instruction following and reinforcing each completed step; approximately 20% of discrete trials met criterion.
 
 STYLE EXAMPLE 2:
-At the kitchen counter, the RBT placed a preferred snack out of reach and offered two alternatives. The client manifested Physical Aggression by pushing the RBT's forearm and hitting with an open hand. The RBT used Response blocking to prevent further contact and Differential Reinforcement of Alternative Behavior (DRA) to reinforce keeping hands to self and choosing appropriately. The client completed the choice response and cleaning step on two of three opportunities. The RBT implemented the replacement program "Accepting alternatives and making choices" by presenting two clear options and prompting one appropriate selection; criterion was met on approximately 10% of discrete trials.
+At the kitchen counter, the RBT placed a preferred snack out of reach and offered two alternatives. The client manifested Physical Aggression by pushing the RBT's forearm and hitting with an open hand. The RBT implemented Response blocking. Following this intervention, the RBT prevented further contact. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, the RBT reinforced keeping hands to self and choosing appropriately. The client completed the choice response and cleaning step on two of three opportunities. The RBT implemented the replacement program "Accepting alternatives and making choices" by presenting two clear options and prompting one appropriate selection; criterion was met on approximately 10% of discrete trials.
 
 STYLE EXAMPLE 3:
-The RBT placed a homework worksheet and pencil on the dining table and instructed the client to remain in the chair. The client manifested Elopement by leaving the supervised area and moving into the hallway. The RBT used Response blocking to stop further movement and Escape independent response delivery to re-present a smaller amount of work and provide a brief break after completion. The client returned to the chair in two of three opportunities. The RBT implemented the replacement program "Request permission to leave the unsupervised area" by prompting an appropriate request before stepping away. Criterion was met on approximately 30% of discrete trials.
+The RBT placed a homework worksheet and pencil on the dining table and instructed the client to remain in the chair. The client manifested Elopement by leaving the supervised area and moving into the hallway. The RBT implemented Response blocking. Following this intervention, the RBT stopped further movement. The RBT implemented Escape independent response delivery. Following this intervention, the RBT re-presented a smaller amount of work and provided a brief break after completion. The client returned to the chair in two of three opportunities. The RBT implemented the replacement program "Request permission to leave the unsupervised area" by prompting an appropriate request before stepping away. Criterion was met on approximately 30% of discrete trials.
 
 STYLE EXAMPLE 4:
-Near the sofa, the RBT arranged a card game for a turn-taking activity. The client manifested Self-injury behavior (SIB) by striking his face with an open hand and scratching his forearm. The RBT used Response blocking, Differential Reinforcement of Alternative Behavior (DRA), and Non-contingent reinforcement (attention and escape), describing how each was applied. The client returned to the card activity across two of four opportunities. The RBT implemented the replacement program "Express and accept opinion, agreement and disagreement" through modeled game-related statements and prompted exchanges, with criterion met on approximately 20% of discrete trials.`;
+Near the sofa, the RBT arranged a card game for a turn-taking activity. The client manifested Self-injury behavior (SIB) by striking his face with an open hand and scratching his forearm. The RBT implemented Response blocking. Following this intervention, the RBT prevented further contact with the client's face and arm. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, the RBT reinforced hands remaining away from the face. The client returned to the card activity across two of four opportunities. The RBT implemented the replacement program "Express and accept opinion, agreement and disagreement" through modeled game-related statements and prompted exchanges, with criterion met on approximately 20% of discrete trials.`;
 
 const NOTE_PLAN_JSON_SCHEMA = {
   name: "flexible_aba_note_plan",
@@ -54,9 +58,15 @@ const NOTE_PLAN_JSON_SCHEMA = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["segmentIndex", "paragraph"],
+          required: ["segmentIndex", "behaviorLabel", "interventionLabels", "paragraph"],
           properties: {
             segmentIndex: { type: "integer", minimum: 0 },
+            behaviorLabel: { type: "string", minLength: 1 },
+            interventionLabels: {
+              type: "array",
+              minItems: 1,
+              items: { type: "string", minLength: 1 },
+            },
             paragraph: { type: "string", minLength: 1 },
           },
         },
@@ -65,7 +75,7 @@ const NOTE_PLAN_JSON_SCHEMA = {
   },
 } as const;
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-20.flexible-abc-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-20.approved-clinical-language-v1";
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
   .update("\u0000")
@@ -153,14 +163,45 @@ function contextMessage(ctx: SessionContext): string {
   return `Write the hourly ABC paragraphs from this frozen context:\n${JSON.stringify(ctx)}`;
 }
 
+function constrainedNotePlanJsonSchema(ctx: SessionContext): typeof NOTE_PLAN_JSON_SCHEMA {
+  const schema = structuredClone(NOTE_PLAN_JSON_SCHEMA) as unknown as {
+    name: string;
+    strict: true;
+    schema: {
+      properties: {
+        segments: {
+          items: {
+            properties: {
+              behaviorLabel: { type: string; minLength: number; enum?: string[] };
+              interventionLabels: {
+                type: string;
+                minItems: number;
+                items: { type: string; minLength: number; enum?: string[] };
+              };
+            };
+          };
+        };
+      };
+    };
+  };
+  schema.schema.properties.segments.items.properties.behaviorLabel.enum =
+    ctx.profileBehaviors;
+  schema.schema.properties.segments.items.properties.interventionLabels.items.enum =
+    ctx.profileInterventions;
+  return schema as unknown as typeof NOTE_PLAN_JSON_SCHEMA;
+}
+
 export function buildScopedRepairUserMessage(params: {
   frozen: SessionContext;
   planIssues: NotePlanIssue[];
   priorRaw: string;
   priorPlan: NotePlan | null;
 }): string {
-  return `Repair only the structural failures listed below. Return the complete JSON object.
+  return `Repair only the contract failures listed below. Return the complete JSON object.
 Do not change any correct hourly paragraph. Every hour must include its exact programName and criterionPercentage.
+behaviorLabel must be copied from profileBehaviors. interventionLabels must be copied exactly from profileInterventions.
+Every intervention must be named in its own sentence: "The RBT implemented [Exact Label]."
+Use observable wording only and do not make baseline, previous-session, or trend claims.
 
 FAILURES:
 ${JSON.stringify(params.planIssues)}
@@ -177,6 +218,7 @@ async function defaultModelCall(params: {
   attempt: number;
   requestTimeoutMs?: number;
   model: string;
+  jsonSchema: typeof NOTE_PLAN_JSON_SCHEMA;
 }): Promise<NotePlanModelCallOutput> {
   const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -187,7 +229,7 @@ async function defaultModelCall(params: {
     messages: params.messages,
     response_format: {
       type: "json_schema",
-      json_schema: NOTE_PLAN_JSON_SCHEMA,
+      json_schema: params.jsonSchema,
     },
     max_completion_tokens: 6_000,
   });
@@ -233,8 +275,19 @@ export async function generateClinicalBodyOpenAI(
   let lastIssues: NotePlanIssue[] = [];
   let modelUsed = primaryModel;
 
-  for (let attempt = 0; attempt < 3; attempt++) {
+  for (let attempt = 0; attempt < 4; attempt++) {
     if (Date.now() - startedAt >= timeBudgetMs) break;
+    if (attempt === 3) {
+      messages.push({
+        role: "user",
+        content: `FINAL CONSTRAINED FALLBACK:
+Regenerate the complete JSON plan. Copy behaviorLabel only from profileBehaviors and interventionLabels only from profileInterventions.
+Use each intervention in the exact sentence "The RBT implemented [Exact Label]."
+Use registered profileBehaviorTargets for observable topography. Do not use internal-state language or historical trend claims.
+All program names and percentages remain locked by hourlyAssignments.`,
+      });
+      repairActions.push("Started final constrained-AI fallback.");
+    }
     const attemptStarted = Date.now();
     let result: string | NotePlanModelCallOutput;
     try {
@@ -245,6 +298,8 @@ export async function generateClinicalBodyOpenAI(
             attempt,
             requestTimeoutMs: options?.requestTimeoutMs,
             model: attempt > 0 && fallbackModel ? fallbackModel : primaryModel,
+            jsonSchema:
+              attempt === 3 ? constrainedNotePlanJsonSchema(frozen) : NOTE_PLAN_JSON_SCHEMA,
           });
     } catch (error) {
       if (attempt === 0 && fallbackModel && !options?.modelCall) {
