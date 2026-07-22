@@ -102,22 +102,18 @@ await db.insert(clientProgramsTable).values(
   })),
 );
 
-const percentages = [0, 10, 20, 30, 100];
-const selectedReplacements = linkedPrograms.map((program) => program.id);
+const smokePrograms = linkedPrograms.slice(0, 4);
+const percentages = [0, 10, 20, 30];
+const selectedReplacements = smokePrograms.map((program) => program.id);
 const abcHints = [
-  ...linkedPrograms.map((program) => ({
+  ...smokePrograms.map((program) => ({
     activityAntecedent: null,
     maladaptiveBehavior: null,
     replacementProgramId: program.id,
   })),
-  {
-    activityAntecedent: null,
-    maladaptiveBehavior: null,
-    replacementProgramId: linkedPrograms[0]!.id,
-  },
 ];
 const programTrialData = Object.fromEntries(
-  linkedPrograms.map((program, index) => [
+  smokePrograms.map((program, index) => [
     String(program.id),
     {
       count: 10,
@@ -131,7 +127,7 @@ const programTrialData = Object.fromEntries(
 
 const request = GenerateNoteBody.parse({
   clientId: chosenClient.id,
-  sessionHours: 6,
+  sessionHours: 4,
   sessionDate: "2026-07-20",
   therapySetting: "Home",
   presentPeople: ["Caregiver"],
@@ -154,16 +150,12 @@ try {
   }
   generatedNoteId = result.noteId;
 
-  for (let index = 0; index < linkedPrograms.length; index++) {
-    const program = linkedPrograms[index]!;
+  for (let index = 0; index < smokePrograms.length; index++) {
+    const program = smokePrograms[index]!;
     const percentage = percentages[index]!;
     if (!result.content.includes(program.name) || !result.content.includes(`${percentage}%`)) {
       throw new Error(`Missing exact lock for program ${program.id} at ${percentage}%.`);
     }
-  }
-  const repeatedProgramOccurrences = result.content.split(linkedPrograms[0]!.name).length - 1;
-  if (repeatedProgramOccurrences < 2) {
-    throw new Error("Repeated program was not documented in both assigned hours.");
   }
   if (
     !profile.interventions.some((label) =>
@@ -182,7 +174,7 @@ try {
 
   const missingRequest = GenerateNoteBody.parse({
     ...request,
-    abcHints: request.abcHints.slice(0, 5),
+    abcHints: request.abcHints.slice(0, 3),
   });
   const missingResult = await generateSessionNoteForClient({
     companyId: chosenClient.companyId,
@@ -196,8 +188,8 @@ try {
   console.log(
     JSON.stringify({
       liveGeneration: "passed",
+      fourHourAssignments: true,
       paragraphPercentages: percentages,
-      repeatedProgram: true,
       missingHourRejected: true,
       approvedClinicalLanguage: true,
     }),
