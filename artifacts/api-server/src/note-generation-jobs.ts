@@ -9,7 +9,6 @@ import {
   type ClientProfileRow,
   type NoteGenerationJobResultData,
 } from "@workspace/db/schema";
-import { normalizeLegacyTherapySetting } from "@workspace/therapy-settings";
 import { withTransientDbRetry } from "./db-transient-retry";
 import { evaluateBilling } from "./billing/service";
 import {
@@ -24,6 +23,10 @@ import {
 } from "./openai-notes";
 import { generateSessionNoteForClient } from "./notes-service";
 import { assessmentGenerationGate } from "./note-readiness";
+import {
+  generateNoteBodyErrorMessages,
+  parseGenerateNoteBody,
+} from "./note-generation-request";
 
 type DraftSlot = { used: number; max: number };
 
@@ -48,20 +51,6 @@ export type PrepareNoteGenerationResult =
   | PrepareNoteGenerationSuccess
   | PrepareNoteGenerationFailure;
 
-function parseGenerateNoteBody(raw: unknown): ReturnType<typeof GenerateNoteBody.parse> {
-  const bodyIn =
-    raw != null && typeof raw === "object"
-      ? {
-          ...(raw as Record<string, unknown>),
-          therapySetting:
-            typeof (raw as { therapySetting?: unknown }).therapySetting === "string"
-              ? normalizeLegacyTherapySetting((raw as { therapySetting: string }).therapySetting)
-              : (raw as { therapySetting?: unknown }).therapySetting,
-        }
-      : raw;
-  return GenerateNoteBody.parse(bodyIn);
-}
-
 /** Shared gates for sync POST /notes/generate and async POST /notes/generate/jobs. */
 export async function prepareNoteGeneration(params: {
   companyId: number;
@@ -73,8 +62,9 @@ export async function prepareNoteGeneration(params: {
   let body: ReturnType<typeof GenerateNoteBody.parse>;
   try {
     body = parseGenerateNoteBody(params.rawBody);
-  } catch {
-    return { ok: false, status: 400, error: "Invalid request body", messages: [] };
+  } catch (error) {
+    const messages = generateNoteBodyErrorMessages(error);
+    return { ok: false, status: 400, error: "Invalid request body", messages };
   }
 
   if (process.env.ENFORCE_COMPLIMENTARY_ACCESS === "true") {

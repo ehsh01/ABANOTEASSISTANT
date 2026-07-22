@@ -83,6 +83,14 @@ export function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | n
       data.programTrialData?.[String(row.replacementProgramId)]?.count != null,
   );
   if (!validAssignments) return null;
+  const assignedProgramIds = new Set(
+    abcHints.flatMap((row) =>
+      row.replacementProgramId == null ? [] : [row.replacementProgramId],
+    ),
+  );
+  if (!data.selectedReplacements.every((id) => assignedProgramIds.has(id))) {
+    return null;
+  }
 
   const programTrialData: NonNullable<GenerateNoteRequest["programTrialData"]> = {};
   for (const row of abcHints) {

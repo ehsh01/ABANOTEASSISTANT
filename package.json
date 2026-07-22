@@ -9,7 +9,7 @@
     "build:frontend": "corepack pnpm run typecheck:libs && corepack pnpm --filter @workspace/abanoteassistant run typecheck && corepack pnpm --filter @workspace/abanoteassistant run build",
     "typecheck:libs": "tsc --build",
     "codegen": "corepack pnpm --filter @workspace/api-spec run codegen",
-    "test:api": "corepack pnpm --filter @workspace/api-server run test && corepack pnpm --filter @workspace/api-server exec tsx --test ../../scripts/note-eval/evaluator.test.ts",
+    "test:api": "corepack pnpm --filter @workspace/api-server run test && corepack pnpm --filter @workspace/abanoteassistant run test && corepack pnpm --filter @workspace/api-server exec tsx --test ../../scripts/note-eval/evaluator.test.ts",
     "eval:notes": "corepack pnpm --filter @workspace/api-server exec tsx ../../scripts/note-eval/run.ts",
     "verify": "corepack pnpm run typecheck:libs && corepack pnpm run codegen && corepack pnpm run typecheck && corepack pnpm run test:api && corepack pnpm run eval:notes",
     "typecheck": "corepack pnpm run typecheck:libs && corepack pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"

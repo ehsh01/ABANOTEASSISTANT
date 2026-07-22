@@ -463,6 +463,9 @@ function expandSharedComplementVerbList(text: string): string[] | null {
   const lastVerb = m[2]!;
   const complement = m[3]!.trim();
   if (!complement || complement.length < 4) return null;
+  if (/^(?:to|on|into|from|during|when|while|for|after|before|at)\b/i.test(complement)) {
+    return null;
+  }
   // Shared complement should look like a target/context, not another action lead.
   if (
     /^(?:flapping|walking|moving|rocking|spinning|pacing|engaging|hitting|kicking)\b/i.test(
@@ -478,6 +481,15 @@ function expandSharedComplementVerbList(text: string): string[] | null {
   ].filter((v) => /^[A-Za-z][A-Za-z'-]{2,}$/.test(v));
 
   if (verbs.length < 2) return null;
+  if (
+    !verbs.every((verb) =>
+      /^(?:hit(?:ting)?|kick(?:ing)?|push(?:ing)?|scratch(?:ing)?|bit(?:ing)?|pinch(?:ing)?|slap(?:ping)?|strik(?:e|ing)|grabb?(?:ing)?|pull(?:ing)?|throw(?:ing)?|rip(?:ping)?|tear(?:ing)?|contact(?:ing)?)$/i.test(
+        verb,
+      ),
+    )
+  ) {
+    return null;
+  }
   return verbs.map((verb) => `${verb} ${complement}`.replace(/\s+/g, " ").trim());
 }
 
@@ -564,7 +576,12 @@ function finalizeActionList(actions: string[]): string[] {
   const seen = new Set<string>();
   for (const raw of actions) {
     const action = normalizeBareMeansInPhrase(raw.replace(/\s+/g, " ").trim()).trim();
-    if (action.length < 8) continue;
+    if (
+      action.length < 8 &&
+      !/^(?:crying|yelling|screaming|kicking|hitting|biting|spitting)$/i.test(action)
+    ) {
+      continue;
+    }
     if (isIncompleteTopographyAction(action)) continue;
     const key = action.toLowerCase();
     if (seen.has(key)) continue;

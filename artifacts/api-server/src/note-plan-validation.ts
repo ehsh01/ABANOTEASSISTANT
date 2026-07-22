@@ -14,8 +14,13 @@ export type NotePlanIssueCode = string;
 export type NotePlanIssue = {
   code: NotePlanIssueCode;
   message: string;
+  severity: "blocking" | "advisory";
   segmentIndex?: number;
 };
+
+export function blockingNotePlanIssues(issues: NotePlanIssue[]): NotePlanIssue[] {
+  return issues.filter((issue) => issue.severity === "blocking");
+}
 
 export function buildFrozenSessionContext(ctx: SessionContext): SessionContext {
   return SessionContextSchema.parse(ctx);
@@ -29,10 +34,6 @@ function percentagePattern(percentage: number): RegExp {
   return new RegExp(`(^|[^0-9])${percentage}\\s*%(?![0-9])`);
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 const MENTALISTIC_PATTERN =
   /\b(?:frustrat(?:ed|ion)|anxious|anxiety|upset|angry|happy|sad|overwhelmed|comfortable|uncomfortable|avoidance|appeared|seemed|visibly)\b/i;
 const UNSUPPORTED_TREND_PATTERN =
@@ -41,19 +42,6 @@ const OUTSIDE_HOME_SETTING_PATTERN =
   /\b(?:(?:in|into|near|along|toward|towards|at)\s+(?:the\s+)?(?:street|sidewalk|roadway|road|parking lot|neighborhood|park|playground|yard|backyard|front yard|driveway|porch|store|restaurant|school|clinic)|outside\s+(?:of\s+)?the\s+home|left\s+the\s+home)\b/i;
 const MEDICATION_PATTERN =
   /\b(?:medicine|medicines|medication|medications|medicate|medicated|prescription|prescriptions|dosage|dosages|pharmaceutical|pharmaceuticals)\b/i;
-const INTERVENTION_CLAIM_PATTERN =
-  /\b(?:implemented|applied|applying|used|utilized|incorporated|followed\s+with|paired\s+with|pairing\s+(?:this\s+)?with)\s+([^.;,]+)/gi;
-function exactApprovedLabelAtClaimStart(
-  claim: string,
-  approvedLabels: string[],
-): string | null {
-  if (/^(?:the\s+)?replacement program\b/i.test(claim.trim()) || /^["“]/.test(claim.trim())) {
-    return "";
-  }
-  return approvedLabels.find((label) =>
-    new RegExp(`^${escapeRegExp(label)}(?:\\b|\\s|\\(|$)`).test(claim.trim()),
-  ) ?? null;
-}
 
 export function validateNotePlan(
   plan: NotePlan,
@@ -63,6 +51,7 @@ export function validateNotePlan(
   if (plan.segments.length !== ctx.sessionHours) {
     issues.push({
       code: "SEGMENT_COUNT",
+      severity: "blocking",
       message: `Expected ${ctx.sessionHours} ABC paragraphs; received ${plan.segments.length}.`,
     });
   }
@@ -72,6 +61,7 @@ export function validateNotePlan(
     if (!segment) {
       issues.push({
         code: "SEGMENT_INDEX",
+        severity: "blocking",
         segmentIndex: assignment.segmentIndex,
         message: `Missing segmentIndex ${assignment.segmentIndex}.`,
       });
@@ -80,6 +70,7 @@ export function validateNotePlan(
     if (!segment.paragraph.includes(assignment.programName)) {
       issues.push({
         code: "PROGRAM_MISSING",
+        severity: "blocking",
         segmentIndex: assignment.segmentIndex,
         message: `Hour ${assignment.segmentIndex + 1} must include exact program "${assignment.programName}".`,
       });
@@ -87,6 +78,7 @@ export function validateNotePlan(
     if (!percentagePattern(assignment.criterionPercentage).test(segment.paragraph)) {
       issues.push({
         code: "PERCENTAGE_MISSING",
+        severity: "blocking",
         segmentIndex: assignment.segmentIndex,
         message: `Hour ${assignment.segmentIndex + 1} must include exact percentage ${assignment.criterionPercentage}%.`,
       });
@@ -94,6 +86,7 @@ export function validateNotePlan(
     if (!ctx.profileBehaviors.includes(segment.behaviorLabel)) {
       issues.push({
         code: "BEHAVIOR_NOT_APPROVED",
+        severity: "advisory",
         segmentIndex: assignment.segmentIndex,
         message: `Hour ${assignment.segmentIndex + 1} uses behavior "${segment.behaviorLabel}", which is not in the client's profile behavior list.`,
       });
@@ -101,6 +94,7 @@ export function validateNotePlan(
     if (assignment.behaviorHint && segment.behaviorLabel !== assignment.behaviorHint) {
       issues.push({
         code: "BEHAVIOR_HINT_MISMATCH",
+        severity: "advisory",
         segmentIndex: assignment.segmentIndex,
         message: `Hour ${assignment.segmentIndex + 1} must use exact behavior hint "${assignment.behaviorHint}".`,
       });
@@ -108,6 +102,7 @@ export function validateNotePlan(
     if (!segment.paragraph.includes(segment.behaviorLabel)) {
       issues.push({
         code: "BEHAVIOR_LABEL_MISSING",
+        severity: "advisory",
         segmentIndex: assignment.segmentIndex,
         message: `Hour ${assignment.segmentIndex + 1} must state exact behavior label "${segment.behaviorLabel}".`,
       });
@@ -116,6 +111,7 @@ export function validateNotePlan(
     if (segment.interventionLabels.length === 0) {
       issues.push({
         code: "INTERVENTION_REQUIRED",
+        severity: "advisory",
         segmentIndex: assignment.segmentIndex,
         message: `Hour ${assignment.segmentIndex + 1} must use at least one approved intervention.`,
       });
@@ -123,6 +119,7 @@ export function validateNotePlan(
     if (uniqueInterventions.size !== segment.interventionLabels.length) {
       issues.push({
         code: "INTERVENTION_DUPLICATE",
+        severity: "advisory",
         segmentIndex: assignment.segmentIndex,
         message: `Hour ${assignment.segmentIndex + 1} repeats an intervention label.`,
       });
@@ -131,6 +128,7 @@ export function validateNotePlan(
       if (!ctx.profileInterventions.includes(label)) {
         issues.push({
           code: "INTERVENTION_NOT_APPROVED",
+          severity: "advisory",
           segmentIndex: assignment.segmentIndex,
           message: `Hour ${assignment.segmentIndex + 1} uses unapproved intervention "${label}".`,
         });
@@ -140,32 +138,16 @@ export function validateNotePlan(
       if (!segment.paragraph.includes(namingSentence)) {
         issues.push({
           code: "INTERVENTION_NAMING",
+          severity: "advisory",
           segmentIndex: assignment.segmentIndex,
           message: `Hour ${assignment.segmentIndex + 1} must name "${label}" exactly as: "${namingSentence}"`,
-        });
-      }
-    }
-    INTERVENTION_CLAIM_PATTERN.lastIndex = 0;
-    for (const match of segment.paragraph.matchAll(INTERVENTION_CLAIM_PATTERN)) {
-      const claim = match[1]?.trim() ?? "";
-      const approvedLabel = exactApprovedLabelAtClaimStart(claim, ctx.profileInterventions);
-      if (approvedLabel === null) {
-        issues.push({
-          code: "UNAPPROVED_INTERVENTION_CLAIM",
-          segmentIndex: assignment.segmentIndex,
-          message: `Hour ${assignment.segmentIndex + 1} contains an intervention-like claim not beginning with an exact approved label: "${claim}".`,
-        });
-      } else if (approvedLabel && !uniqueInterventions.has(approvedLabel)) {
-        issues.push({
-          code: "INTERVENTION_NOT_DECLARED",
-          segmentIndex: assignment.segmentIndex,
-          message: `Hour ${assignment.segmentIndex + 1} names approved intervention "${approvedLabel}" in prose but omits it from interventionLabels.`,
         });
       }
     }
     if (MENTALISTIC_PATTERN.test(segment.paragraph)) {
       issues.push({
         code: "MENTALISTIC_LANGUAGE",
+        severity: "advisory",
         segmentIndex: assignment.segmentIndex,
         message: `Hour ${assignment.segmentIndex + 1} contains inferred emotional or internal-state wording.`,
       });
@@ -173,6 +155,7 @@ export function validateNotePlan(
     if (UNSUPPORTED_TREND_PATTERN.test(segment.paragraph)) {
       issues.push({
         code: "UNSUPPORTED_TREND",
+        severity: "advisory",
         segmentIndex: assignment.segmentIndex,
         message: `Hour ${assignment.segmentIndex + 1} makes an unsupported cross-session or baseline claim.`,
       });
@@ -180,6 +163,7 @@ export function validateNotePlan(
     if (OUTSIDE_HOME_SETTING_PATTERN.test(segment.paragraph)) {
       issues.push({
         code: "SETTING_OUTSIDE_HOME",
+        severity: "advisory",
         segmentIndex: assignment.segmentIndex,
         message: `Hour ${assignment.segmentIndex + 1} places therapy outside the client's home.`,
       });
@@ -187,6 +171,7 @@ export function validateNotePlan(
     if (MEDICATION_PATTERN.test(segment.paragraph)) {
       issues.push({
         code: "MEDICATION_CONTENT",
+        severity: "advisory",
         segmentIndex: assignment.segmentIndex,
         message: `Hour ${assignment.segmentIndex + 1} contains prohibited medicine or medication content.`,
       });
@@ -209,6 +194,7 @@ export function validateNotePlan(
       ) {
         issues.push({
           code: "TOPOGRAPHY_NOT_GROUNDED",
+          severity: "advisory",
           segmentIndex: assignment.segmentIndex,
           message: `Hour ${assignment.segmentIndex + 1} must ground observable topography in the registered description for "${segment.behaviorLabel}".`,
         });
@@ -228,14 +214,26 @@ export function parseAndValidateNotePlan(
   } catch {
     return {
       plan: null,
-      issues: [{ code: "INVALID_JSON", message: "Model output was not valid JSON." }],
+      issues: [
+        {
+          code: "INVALID_JSON",
+          severity: "blocking",
+          message: "Model output was not valid JSON.",
+        },
+      ],
     };
   }
   const parsed = NotePlanSchema.safeParse(decoded);
   if (!parsed.success) {
     return {
       plan: null,
-      issues: [{ code: "INVALID_JSON", message: parsed.error.message }],
+      issues: [
+        {
+          code: "INVALID_JSON",
+          severity: "blocking",
+          message: parsed.error.message,
+        },
+      ],
     };
   }
   return { plan: parsed.data, issues: validateNotePlan(parsed.data, ctx) };

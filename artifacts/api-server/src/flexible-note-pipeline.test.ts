@@ -141,7 +141,7 @@ describe("flexible note contract", () => {
     expect(modelCall).toHaveBeenCalledTimes(2);
   });
 
-  it("rejects Austin-style unapproved, renamed, and mentalistic intervention prose", () => {
+  it("reports Austin-style unapproved, renamed, and mentalistic prose as advisories", () => {
     const plan = validPlan();
     plan.segments[1] = {
       ...plan.segments[1]!,
@@ -158,15 +158,17 @@ describe("flexible note contract", () => {
     };
     const codes = validateNotePlan(plan, context()).map((issue) => issue.code);
     expect(codes).toContain("INTERVENTION_NOT_APPROVED");
-    expect(codes).toContain("UNAPPROVED_INTERVENTION_CLAIM");
     expect(codes).toContain("MENTALISTIC_LANGUAGE");
+    expect(validateNotePlan(plan, context()).every((issue) => issue.severity === "advisory")).toBe(
+      true,
+    );
   });
 
-  it("allows ordinary application details after an exact approved naming sentence", () => {
+  it("allows ordinary application details and the phrase used picture cards", () => {
     const plan = validPlan();
     plan.segments[2]!.paragraph = plan.segments[2]!.paragraph.replace(
       "Following this intervention, the RBT presented one task step before preferred-item access.",
-      "Following this intervention, the RBT arranged accessible materials, offered two communication choices, and delivered a verbal cue.",
+      "Following this intervention, the RBT used picture cards to represent each activity, arranged accessible materials, and delivered a verbal cue.",
     );
     expect(validateNotePlan(plan, context())).toEqual([]);
   });
@@ -253,6 +255,32 @@ describe("flexible note contract", () => {
     expect(result.repairAttempts).toBe(3);
     expect(result.repairActions).toContain("Started final constrained-AI fallback.");
     expect(modelCall).toHaveBeenCalledTimes(4);
+  });
+
+  it("saves structurally valid output with residual advisories after bounded repair", async () => {
+    const advisoryPlan = validPlan();
+    advisoryPlan.segments[1]!.paragraph = advisoryPlan.segments[1]!.paragraph.replace(
+      "pushing materials away",
+      "appearing frustrated and looking toward the window",
+    );
+    const originalFirstHour = advisoryPlan.segments[0]!.paragraph;
+    const modelCall = vi.fn().mockImplementation(({ attempt }: { attempt: number }) => {
+      const next = structuredClone(advisoryPlan);
+      if (attempt > 0) {
+        next.segments[0]!.paragraph = "The model incorrectly rewrote a valid hour.";
+      }
+      return Promise.resolve(JSON.stringify(next));
+    });
+
+    const result = await generateClinicalBodyOpenAI(context(), { modelCall });
+
+    expect(modelCall).toHaveBeenCalledTimes(4);
+    expect(result.body).toContain("appearing frustrated");
+    expect(result.notePlan.segments[0]!.paragraph).toBe(originalFirstHour);
+    expect(result.finalPlanIssues.map((issue) => issue.code)).toEqual(
+      expect.arrayContaining(["MENTALISTIC_LANGUAGE", "TOPOGRAPHY_NOT_GROUNDED"]),
+    );
+    expect(result.warnings).toEqual([]);
   });
 
   it("scrubs client names while retaining assessment grounding", () => {

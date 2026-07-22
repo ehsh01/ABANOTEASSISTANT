@@ -45,7 +45,14 @@ function input(
         latencyMs: 40,
         completionId: "completion-1",
         usage: { promptTokens: 10, completionTokens: 20, totalTokens: 30 },
-        planIssues: [{ code: "BEHAVIOR_ASSIGNMENT", message: SENSITIVE_TEXT, segmentIndex: 0 }],
+        planIssues: [
+          {
+            code: "BEHAVIOR_ASSIGNMENT",
+            message: SENSITIVE_TEXT,
+            severity: "advisory",
+            segmentIndex: 0,
+          },
+        ],
         proseIssues: [
           {
             code: "LANGUAGE_OBJECTIVITY",

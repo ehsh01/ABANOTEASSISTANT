@@ -87,6 +87,32 @@
       "paragraphs": [
         "During a coloring activity, the client manifested Task Refusal by tossing the marker aside and withdrawing from the activity after the cap did not open. The RBT implemented Environmental Manipulation. Following this intervention, the RBT arranged accessible materials. The RBT implemented Prompting. Following this intervention, the RBT delivered a verbal cue for requesting assistance. The RBT implemented offer choices. Following this intervention, the RBT presented gesture, word, and picture communication options. The RBT implemented the replacement program \"Request help\" by reinforcing each help-seeking response; criterion was met on approximately 10% of discrete trials."
       ]
+    },
+    {
+      "id": "four-hour-screenshot-regression",
+      "tags": ["four-hours", "picture-cards", "registered-topographies"],
+      "setting": "Home",
+      "assessmentExcerpt": "The client receives home-based services. Registered behavior descriptions and approved interventions are supplied by the profile.",
+      "profileBehaviors": ["Repetitive Behavior", "Tantrum", "Task Refusal", "Physical Aggression"],
+      "profileBehaviorTargets": [
+        {"name": "Repetitive Behavior", "topography": "continuous hand movements up and down or sideways, or tapping furniture with hands more than three times"},
+        {"name": "Tantrum", "topography": "crying, yelling, or dropping to the floor during a presented demand"},
+        {"name": "Task Refusal", "topography": "pushing task materials away or turning the body away from the presented task"},
+        {"name": "Physical Aggression", "topography": "contacting another person's body with an open hand"}
+      ],
+      "profileInterventions": ["Visual Supports", "Prompting", "Premack Principle", "Response blocking"],
+      "hourlyAssignments": [
+        {"programId": 10, "programName": "Schedule of activities", "criterionPercentage": 10},
+        {"programId": 11, "programName": "Request for Break", "criterionPercentage": 10},
+        {"programId": 12, "programName": "Compliance Training", "criterionPercentage": 10},
+        {"programId": 13, "programName": "Accept alternatives", "criterionPercentage": 10}
+      ],
+      "paragraphs": [
+        "At the living room table, the client manifested Repetitive Behavior through continuous hand movements up and down. The RBT implemented Visual Supports. Following this intervention, the RBT used picture cards to represent each activity. The RBT implemented the replacement program \"Schedule of activities\"; criterion was met on approximately 10% of discrete trials.",
+        "During a matching activity, the client manifested Tantrum by crying during the presented demand. The RBT implemented Prompting. Following this intervention, the RBT delivered a concise verbal direction. The RBT implemented the replacement program \"Request for Break\"; criterion was met on approximately 10% of discrete trials.",
+        "During table work, the client manifested Task Refusal by pushing task materials away. The RBT implemented Premack Principle. Following this intervention, the RBT presented one brief response requirement before documented reinforcement. The RBT implemented the replacement program \"Compliance Training\"; criterion was met on approximately 10% of discrete trials.",
+        "During block play, the client manifested Physical Aggression by contacting the RBT's arm with an open hand. The RBT implemented Response blocking. Following this intervention, the RBT prevented additional contact. The RBT implemented the replacement program \"Accept alternatives\"; criterion was met on approximately 10% of discrete trials."
+      ]
     }
   ]
 }

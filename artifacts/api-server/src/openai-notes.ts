@@ -4,8 +4,10 @@ import type { ChatCompletionMessageParam } from "openai/resources/chat/completio
 import { assembleClinicalBodyFromNotePlan } from "./note-plan-assembly";
 import type { NotePlan, SessionContext } from "./note-plan-schema";
 import {
+  blockingNotePlanIssues,
   buildFrozenSessionContext,
   parseAndValidateNotePlan,
+  validateNotePlan,
   type NotePlanIssue,
 } from "./note-plan-validation";
 
@@ -79,7 +81,7 @@ const NOTE_PLAN_JSON_SCHEMA = {
   },
 } as const;
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-21.home-scope-v3";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-22.reliable-hourly-repair-v4";
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
   .update("\u0000")
@@ -128,6 +130,7 @@ export type GenerateClinicalBodyResult = {
   warnings: string[];
   repairAttempts: number;
   finalIssues: ProseIssue[];
+  finalPlanIssues: NotePlanIssue[];
   attemptHistory: NoteGenerationAttemptTelemetry[];
   rawModelOutputs: string[];
   repairActions: string[];
@@ -201,8 +204,16 @@ export function buildScopedRepairUserMessage(params: {
   priorRaw: string;
   priorPlan: NotePlan | null;
 }): string {
+  const failingIndexes = [
+    ...new Set(
+      params.planIssues.flatMap((issue) =>
+        issue.segmentIndex === undefined ? [] : [issue.segmentIndex],
+      ),
+    ),
+  ];
   return `Repair only the contract failures listed below. Return the complete JSON object.
-Do not change any correct hourly paragraph. Every hour must include its exact programName and criterionPercentage.
+Only rewrite segment indexes ${JSON.stringify(failingIndexes)}. Do not change any other hourly paragraph.
+Every hour must include its exact programName and criterionPercentage.
 behaviorLabel must be copied from profileBehaviors. interventionLabels must be copied exactly from profileInterventions.
 Every intervention must be named in its own sentence: "The RBT implemented [Exact Label]."
 Use one complete registered topography action with its measurable qualifiers.
@@ -279,6 +290,7 @@ export async function generateClinicalBodyOpenAI(
   let priorPlan: NotePlan | null = null;
   let priorRaw = "";
   let lastIssues: NotePlanIssue[] = [];
+  const preservedSegments = new Map<number, NotePlan["segments"][number]>();
   let modelUsed = primaryModel;
 
   for (let attempt = 0; attempt < 4; attempt++) {
@@ -305,8 +317,7 @@ All program names and percentages remain locked by hourlyAssignments.`,
             attempt,
             requestTimeoutMs: options?.requestTimeoutMs,
             model: attempt > 0 && fallbackModel ? fallbackModel : primaryModel,
-            jsonSchema:
-              attempt === 3 ? constrainedNotePlanJsonSchema(frozen) : NOTE_PLAN_JSON_SCHEMA,
+            jsonSchema: constrainedNotePlanJsonSchema(frozen),
           });
     } catch (error) {
       if (attempt === 0 && fallbackModel && !options?.modelCall) {
@@ -324,8 +335,22 @@ All program names and percentages remain locked by hourlyAssignments.`,
     rawModelOutputs.push(priorRaw);
     modelUsed = normalized.model ?? modelUsed;
     const validated = parseAndValidateNotePlan(priorRaw, frozen);
-    priorPlan = validated.plan;
-    lastIssues = validated.issues;
+    priorPlan = validated.plan
+      ? {
+          segments: validated.plan.segments.map(
+            (segment) => preservedSegments.get(segment.segmentIndex) ?? segment,
+          ),
+        }
+      : null;
+    lastIssues = priorPlan ? validateNotePlan(priorPlan, frozen) : validated.issues;
+    if (priorPlan && !lastIssues.some((issue) => issue.segmentIndex === undefined)) {
+      for (const segment of priorPlan.segments) {
+        if (!lastIssues.some((issue) => issue.segmentIndex === segment.segmentIndex)) {
+          preservedSegments.set(segment.segmentIndex, segment);
+        }
+      }
+    }
+    const blockingIssues = blockingNotePlanIssues(lastIssues);
     attemptHistory.push({
       attempt,
       latencyMs: Date.now() - attemptStarted,
@@ -334,16 +359,21 @@ All program names and percentages remain locked by hourlyAssignments.`,
       model: modelUsed,
       planIssues: lastIssues,
       proseIssues: [],
-      passed: lastIssues.length === 0,
+      passed: blockingIssues.length === 0,
     });
 
-    if (priorPlan && lastIssues.length === 0) {
+    if (
+      priorPlan &&
+      (lastIssues.length === 0 || (blockingIssues.length === 0 && attempt === 3))
+    ) {
+      const finalAdvisories = lastIssues.filter((issue) => issue.severity === "advisory");
       return {
         body: assembleClinicalBodyFromNotePlan(priorPlan, frozen),
         notePlan: priorPlan,
         warnings: [],
         repairAttempts: attempt,
         finalIssues: [],
+        finalPlanIssues: finalAdvisories,
         attemptHistory,
         rawModelOutputs,
         repairActions,
@@ -366,8 +396,24 @@ All program names and percentages remain locked by hourlyAssignments.`,
     });
   }
 
+  if (priorPlan && blockingNotePlanIssues(lastIssues).length === 0) {
+    const finalAdvisories = lastIssues.filter((issue) => issue.severity === "advisory");
+    return {
+      body: assembleClinicalBodyFromNotePlan(priorPlan, frozen),
+      notePlan: priorPlan,
+      warnings: [],
+      repairAttempts: Math.max(0, attemptHistory.length - 1),
+      finalIssues: [],
+      finalPlanIssues: finalAdvisories,
+      attemptHistory,
+      rawModelOutputs,
+      repairActions,
+      modelUsed,
+    };
+  }
+
   const error = new Error(
-    `AI note generation did not satisfy the hourly contract: ${lastIssues.map((issue) => issue.message).join(" ")}`,
+    `AI note generation did not satisfy the hourly contract: ${blockingNotePlanIssues(lastIssues).map((issue) => issue.message).join(" ")}`,
   ) as Error & {
     noteGenerationAttemptHistory?: NoteGenerationAttemptTelemetry[];
     noteGenerationRawModelOutputs?: string[];

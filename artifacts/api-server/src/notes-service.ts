@@ -342,7 +342,7 @@ export async function generateSessionNoteForClient(params: {
       repairAttempts: modelGeneration.repairAttempts,
       validatorIssues: [],
       criticalIssues: [],
-      finalValidatorIssues: [],
+      finalValidatorIssues: modelGeneration.finalPlanIssues,
       finalCriticalIssues: [],
       attemptHistory: modelGeneration.attemptHistory,
       repairActions: modelGeneration.repairActions,
@@ -351,7 +351,10 @@ export async function generateSessionNoteForClient(params: {
       clinicalBody: modelGeneration.body,
       finalNoteText: noteContent,
       accuracyReport,
-      finalStatus: warnings.length > 1 ? "saved_with_warnings" : "saved",
+      finalStatus:
+        modelGeneration.finalPlanIssues.length > 0 || warnings.length > 1
+          ? "saved_with_warnings"
+          : "saved",
     }),
   );
 

@@ -1,5 +1,8 @@
 import type { NotePlan, SessionContext } from "./note-plan-schema";
-import { validateNotePlan } from "./note-plan-validation";
+import {
+  blockingNotePlanIssues,
+  validateNotePlan,
+} from "./note-plan-validation";
 
 /** Lossless cleanup: normalize whitespace without changing clinical wording. */
 export function normalizeFlexibleParagraph(paragraph: string): string {
@@ -18,7 +21,7 @@ export function assembleClinicalBodyFromNotePlan(
   plan: NotePlan,
   ctx: SessionContext,
 ): string {
-  const issues = validateNotePlan(plan, ctx);
+  const issues = blockingNotePlanIssues(validateNotePlan(plan, ctx));
   if (issues.length > 0) {
     throw new Error(issues.map((issue) => issue.message).join(" "));
   }

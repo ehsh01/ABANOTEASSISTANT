@@ -103,13 +103,6 @@ function effectiveTrialsForSuccessCount(total: number, successCount: number): nu
   return Array.from({ length: k }, (_, i) => i + 1);
 }
 
-/** Keep in sync with `replacementProgramSlotCount` in `artifacts/api-server/src/note-validation.ts`. */
-function replacementProgramSlotCountWizard(sessionHours: number): number {
-  if (sessionHours <= 0) return 0;
-  if (sessionHours === 2) return 2;
-  return Math.floor(((sessionHours - 1) * 60) / 90) + 1;
-}
-
 // ─── Environmental change options ────────────────────────────────────────────
 const ENV_CHANGE_OPTIONS: { group: string; items: string[] }[] = [
   {
@@ -1497,7 +1490,6 @@ function Step8Review() {
   );
 
   const sh = data.sessionHours ?? 0;
-  const slotNeed = replacementProgramSlotCountWizard(sh);
   const progCount = data.selectedReplacements?.length ?? 0;
 
   return (
@@ -1521,9 +1513,7 @@ function Step8Review() {
               {progCount} selected
               {sh > 0 ? (
                 <span className="block text-xs text-muted-foreground font-normal mt-1">
-                  Server uses {slotNeed} replacement-program slot{slotNeed === 1 ? "" : "s"} for this duration
-                  {progCount < slotNeed ? " (fewer than recommended — extra slots may use other linked programs)" : ""}
-                  .
+                  {sh} hourly ABC assignment{sh === 1 ? "" : "s"} required for this duration.
                 </span>
               ) : null}
             </span>
@@ -1620,15 +1610,19 @@ export default function Wizard() {
         const hours = data.sessionHours ?? 0;
         const selected = data.selectedReplacements ?? [];
         if (hints.length !== hours || hours < 1) return false;
-        return hints.every((row) => {
+        const assignmentsValid = hints.every((row) => {
           const id = row.replacementProgramId;
           if (id == null || !selected.includes(id)) return false;
           const trial = data.programTrialData?.[String(id)];
           return trial?.count != null && trial.count >= 1;
         });
+        return (
+          assignmentsValid &&
+          selected.every((id) => hints.some((row) => row.replacementProgramId === id))
+        );
       }
       case 9: return true; // Next session date — optional
-      case 10: return true;
+      case 10: return toGenerateNoteRequest(data) !== null;
       default: return false;
     }
   };
@@ -1763,7 +1757,7 @@ export default function Wizard() {
             <button
               type="button"
               onClick={handleGenerate}
-              disabled={isGenerating || draftQuotaAtCap}
+              disabled={isGenerating || draftQuotaAtCap || !canProceed()}
               className="w-full sm:w-auto flex items-center justify-center px-10 py-4 rounded-xl bg-gradient-to-r from-primary to-accent text-primary-foreground font-bold text-lg hover:-translate-y-0.5 hover:shadow-xl hover:shadow-primary/30 active:translate-y-0 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:hover:shadow-none"
             >
               <Wand2 className="w-5 h-5 mr-2 pop-icon-white" />

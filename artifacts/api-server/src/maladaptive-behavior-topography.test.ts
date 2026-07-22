@@ -100,6 +100,17 @@ describe("Physical Aggression topography single-action selection", () => {
     expect(pickSingleTopographyActionForSegment(bip, 2)).toBe("pushing another person");
   });
 
+  it("does not attach a posture complement to crying and yelling", () => {
+    const actions = splitTopographyActionAlternatives(
+      "crying, yelling, and dropping to the floor during the presented demand",
+    );
+    expect(actions).not.toContain("crying to the floor during the presented demand");
+    expect(actions).not.toContain("yelling to the floor during the presented demand");
+    expect(actions).toContain("crying");
+    expect(actions).toContain("yelling");
+    expect(actions).toContain("dropping to the floor during the presented demand");
+  });
+
   it("strips 'any instance' frames without leaving incomplete contact phrases", () => {
     const bip =
       "Any instance in which the client contacts any part of another person's body with an open or closed hand or with an object";
