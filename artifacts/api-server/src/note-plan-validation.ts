@@ -53,6 +53,10 @@ const CLIENT_OUTCOME_PATTERN =
   /\bthe client\b.{0,160}\b(?:stopp(?:ed|ing)|decreas(?:ed|ing)|return(?:ed|ing)|complet(?:ed|ing)|engag(?:ed|ing)|us(?:ed|ing)|select(?:ed|ing)|request(?:ed|ing)|walk(?:ed|ing)|sat|kept|remain(?:ed|ing)|approached|moved)\b/i;
 const REINFORCEMENT_DELIVERY_ONLY_PATTERN =
   /\bFollowing this intervention,\s+(?:the RBT\s+)?(?:delivered|provided|gave|reinforced)\b/i;
+const DEFINITIONAL_TOPOGRAPHY_PATTERN =
+  /\b(?:failing to appropriately respond|non-compliance|refusing to (?:conduct|comply)|did not comply|failed to comply)\b/i;
+const PHYSICAL_TOPOGRAPHY_PATTERN =
+  /\b(?:push(?:ed|ing)?|hit(?:ting)?|kick(?:ed|ing)?|toss(?:ed|ing)?|withdraw(?:ing|s|n)?|turn(?:ed|ing)?(?:\s+(?:his|her|the)\s+body)?|left|untouch(?:ed|ing)|hands?|materials?|blocks?|away(?:\s+from)?|mov(?:ed|ing|ements?)|tap(?:ped|ping)?|cry(?:ing|ied)?|cries|whin(?:ed|ing)|yell(?:ed|ing)|scream(?:ed|ing)|stomp(?:ed|ing)|contact(?:ed|ing)?|force|floor|tears|vocalizations?|open hand|both hands|aside|more than \d+|above (?:normal )?conversational)\b/i;
 
 function splitSentences(paragraph: string): string[] {
   return paragraph
@@ -244,6 +248,14 @@ export function validateNotePlan(
         message: `Hour ${assignment.segmentIndex + 1} must use at least one approved intervention.`,
       });
     }
+    if (segment.interventionLabels.length > 1) {
+      issues.push({
+        code: "INTERVENTION_COUNT",
+        severity: "advisory",
+        segmentIndex: assignment.segmentIndex,
+        message: `Hour ${assignment.segmentIndex + 1} must use exactly one intervention so the paragraph remains a single ABC chain.`,
+      });
+    }
     if (uniqueInterventions.size !== segment.interventionLabels.length) {
       issues.push({
         code: "INTERVENTION_DUPLICATE",
@@ -382,6 +394,28 @@ export function validateNotePlan(
           severity: "advisory",
           segmentIndex: assignment.segmentIndex,
           message: `Hour ${assignment.segmentIndex + 1} must ground observable topography in the registered description for "${segment.behaviorLabel}".`,
+        });
+      }
+      if (
+        DEFINITIONAL_TOPOGRAPHY_PATTERN.test(behaviorSentence) &&
+        !PHYSICAL_TOPOGRAPHY_PATTERN.test(behaviorSentence)
+      ) {
+        issues.push({
+          code: "TOPOGRAPHY_TOO_VAGUE",
+          severity: "advisory",
+          segmentIndex: assignment.segmentIndex,
+          message: `Hour ${assignment.segmentIndex + 1} must restate "${segment.behaviorLabel}" with observable physical actions, not only definitional non-compliance wording.`,
+        });
+      }
+      if (
+        !/\b(?:by|through)\b/i.test(behaviorSentence) ||
+        !PHYSICAL_TOPOGRAPHY_PATTERN.test(behaviorSentence)
+      ) {
+        issues.push({
+          code: "TOPOGRAPHY_NOT_RESTATED",
+          severity: "advisory",
+          segmentIndex: assignment.segmentIndex,
+          message: `Hour ${assignment.segmentIndex + 1} must explicitly restate observable topography for "${segment.behaviorLabel}" in the manifested sentence.`,
         });
       }
     }

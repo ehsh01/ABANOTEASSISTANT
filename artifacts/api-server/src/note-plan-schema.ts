@@ -31,7 +31,7 @@ export const SessionContextSchema = z.object({
 export const NotePlanSegmentSchema = z.object({
   segmentIndex: z.number().int().nonnegative(),
   behaviorLabel: z.string().trim().min(1),
-  interventionLabels: z.array(z.string().trim().min(1)).min(1),
+  interventionLabels: z.array(z.string().trim().min(1)).min(1).max(1),
   paragraph: z.string().trim().min(1),
 });
 

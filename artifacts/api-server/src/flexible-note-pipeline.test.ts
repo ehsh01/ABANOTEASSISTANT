@@ -72,12 +72,9 @@ function validPlan(): NotePlan {
       {
         segmentIndex: 1,
         behaviorLabel: "Task refusal",
-        interventionLabels: [
-          "Response blocking",
-          "Differential Reinforcement of Alternative Behavior (DRA)",
-        ],
+        interventionLabels: ["Response blocking"],
         paragraph:
-          "At the kitchen table, the RBT placed matching cards on the table and instructed the client to begin the matching task. The client manifested Task refusal by pushing work materials away. The RBT implemented Response blocking. The RBT blocked further contact with the materials. Following this intervention, the client stopped pushing the cards and kept both hands away from sweeping them off the table. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). The RBT provided behavior-specific praise when the client kept materials on the table. Following this intervention, the client returned to the matching task and completed one card match. The RBT implemented the replacement program Request for Break by prompting a break request before leaving the table; 30% of discrete trials met criterion.",
+          "At the kitchen table, the RBT placed matching cards on the table and instructed the client to begin the matching task. The client manifested Task refusal by pushing work materials away. The RBT implemented Response blocking. The RBT blocked further contact with the materials. Following this intervention, the client stopped pushing the cards and returned to the matching task. The RBT implemented the replacement program Request for Break by prompting a break request before leaving the table; 30% of discrete trials met criterion.",
       },
       {
         segmentIndex: 2,
@@ -119,15 +116,12 @@ describe("flexible note contract", () => {
     expect(codes).toContain("PERCENTAGE_MISSING");
   });
 
-  it("keeps model-authored behavior and multiple interventions unchanged", () => {
+  it("keeps model-authored behavior and a single intervention unchanged", () => {
     const plan = validPlan();
     const paragraph = plan.segments[1]!.paragraph;
     const body = assembleClinicalBodyFromNotePlan(plan, context());
     expect(body).toContain(paragraph);
     expect(body).toContain("The RBT implemented Response blocking.");
-    expect(body).toContain(
-      "The RBT implemented Differential Reinforcement of Alternative Behavior (DRA).",
-    );
   });
 
   it("repairs only structural program/percentage failures", async () => {
@@ -145,16 +139,11 @@ describe("flexible note contract", () => {
     const plan = validPlan();
     plan.segments[1] = {
       ...plan.segments[1]!,
-      interventionLabels: ["Errorless teaching", "redirection"],
-      paragraph: plan.segments[1]!.paragraph
-        .replace(
-          "The RBT implemented Response blocking.",
-          "The RBT applied Errorless teaching with minimal frustration and used redirection to continue.",
-        )
-        .replace(
-          "The RBT implemented Differential Reinforcement of Alternative Behavior (DRA).",
-          "",
-        ),
+      interventionLabels: ["Errorless teaching"],
+      paragraph: plan.segments[1]!.paragraph.replace(
+        "The RBT implemented Response blocking.",
+        "The RBT applied Errorless teaching with minimal frustration and used redirection to continue.",
+      ),
     };
     const codes = validateNotePlan(plan, context()).map((issue) => issue.code);
     expect(codes).toContain("INTERVENTION_NOT_APPROVED");
@@ -162,6 +151,18 @@ describe("flexible note contract", () => {
     expect(validateNotePlan(plan, context()).every((issue) => issue.severity === "advisory")).toBe(
       true,
     );
+  });
+
+  it("flags vague definitional topography and stacked interventions", () => {
+    const plan = validPlan();
+    plan.segments[1]!.interventionLabels = ["Response blocking", "Premack Principle"];
+    plan.segments[1]!.paragraph = plan.segments[1]!.paragraph.replace(
+      "by pushing work materials away",
+      "by failing to appropriately respond to the given instruction",
+    );
+    const codes = validateNotePlan(plan, context()).map((issue) => issue.code);
+    expect(codes).toContain("INTERVENTION_COUNT");
+    expect(codes).toContain("TOPOGRAPHY_TOO_VAGUE");
   });
 
   it("allows ordinary application details and the phrase used picture cards", () => {

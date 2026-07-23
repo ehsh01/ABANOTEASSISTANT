@@ -76,13 +76,16 @@ export function fixtureNotePlan(fixture: NoteRegressionPipelineCase): NotePlan {
       const behaviorLabel =
         fixture.profileBehaviors.find((label) => paragraph.includes(label)) ??
         fixture.profileBehaviors[segmentIndex % fixture.profileBehaviors.length]!;
-      const interventionLabels = fixture.profileInterventions.filter((label) =>
-        paragraph.includes(`The RBT implemented ${label}.`),
-      );
+      const interventionLabels = fixture.profileInterventions
+        .filter((label) => paragraph.includes(`The RBT implemented ${label}.`))
+        .slice(0, 1);
       return {
         segmentIndex,
         behaviorLabel,
-        interventionLabels,
+        interventionLabels:
+          interventionLabels.length > 0
+            ? interventionLabels
+            : [fixture.profileInterventions[0]!],
         paragraph,
       };
     }),

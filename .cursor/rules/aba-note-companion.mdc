@@ -30,8 +30,8 @@ Prompt guidance plus **advisory** validators (non-blocking; repaired when possib
 advisories still save) cover:
 
 - concrete antecedents (not vague activity labels)
-- registered topography grounding when the profile supplies it
-- exact approved intervention naming
+- registered topography grounding when the profile supplies it, with explicit restatement each hour
+- exactly one approved intervention per ABC hour (exact naming)
 - client-focused outcomes after each named intervention
 - specific reinforcer wording in the clinical body when `reinforcementPreferences` are present
 - replacement-program skill alignment for common program classes
