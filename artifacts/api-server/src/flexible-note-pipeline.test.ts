@@ -67,7 +67,7 @@ function validPlan(): NotePlan {
         behaviorLabel: "Physical Aggression",
         interventionLabels: ["Differential Reinforcement of Alternative Behavior (DRA)"],
         paragraph:
-          "The RBT presented a task and the client manifested Physical Aggression by hitting with an open hand. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, the RBT reinforced hands remaining on the table. The RBT implemented the replacement program Compliance Training; 0% of discrete trials met criterion.",
+          "At the dining table, the RBT placed a worksheet in front of the client and delivered a direct instruction to begin. The client manifested Physical Aggression by hitting with an open hand. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). The RBT placed the client's hands on the table and offered access to bubbles for keeping hands down. Following this intervention, the client kept both hands on the table and completed one brief trial. The RBT implemented the replacement program Compliance Training by prompting single-step instruction following; 0% of discrete trials met criterion.",
       },
       {
         segmentIndex: 1,
@@ -77,14 +77,14 @@ function validPlan(): NotePlan {
           "Differential Reinforcement of Alternative Behavior (DRA)",
         ],
         paragraph:
-          "During table work, the client manifested Task refusal by pushing materials away. The RBT implemented Response blocking. Following this intervention, the RBT prevented additional contact with the materials. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). Following this intervention, the RBT reinforced keeping materials on the table. The RBT implemented the replacement program Request for Break; 30% of discrete trials met criterion.",
+          "At the kitchen table, the RBT placed matching cards on the table and instructed the client to begin the matching task. The client manifested Task refusal by pushing work materials away. The RBT implemented Response blocking. The RBT blocked further contact with the materials. Following this intervention, the client stopped pushing the cards and kept both hands away from sweeping them off the table. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). The RBT provided behavior-specific praise when the client kept materials on the table. Following this intervention, the client returned to the matching task and completed one card match. The RBT implemented the replacement program Request for Break by prompting a break request before leaving the table; 30% of discrete trials met criterion.",
       },
       {
         segmentIndex: 2,
         behaviorLabel: "Task refusal",
         interventionLabels: ["Premack Principle"],
         paragraph:
-          "The RBT presented a second task and the client manifested Task refusal by pushing materials away. The RBT implemented Premack Principle. Following this intervention, the RBT presented one task step before preferred-item access. The RBT implemented the replacement program Compliance Training; 100% of discrete trials met criterion.",
+          "At the living room table, the RBT placed puzzle pieces in front of the client and instructed the client to place one piece. The client manifested Task refusal by pushing work materials away. The RBT implemented Premack Principle. The RBT presented one task step before access to bubbles. Following this intervention, the client completed one puzzle piece and returned to the board. The RBT implemented the replacement program Compliance Training by prompting single-step instruction following; 100% of discrete trials met criterion.",
       },
     ],
   };
@@ -167,17 +167,48 @@ describe("flexible note contract", () => {
   it("allows ordinary application details and the phrase used picture cards", () => {
     const plan = validPlan();
     plan.segments[2]!.paragraph = plan.segments[2]!.paragraph.replace(
-      "Following this intervention, the RBT presented one task step before preferred-item access.",
-      "Following this intervention, the RBT used picture cards to represent each activity, arranged accessible materials, and delivered a verbal cue.",
+      "The RBT presented one task step before access to bubbles.",
+      "The RBT used picture cards to represent each activity, arranged accessible materials, and delivered a verbal cue.",
     );
     expect(validateNotePlan(plan, context())).toEqual([]);
+  });
+
+  it("flags vague antecedents, RBT-only outcomes, and generic reinforcement", () => {
+    const plan = validPlan();
+    plan.segments[0]!.paragraph = plan.segments[0]!.paragraph
+      .replace(
+        "At the dining table, the RBT placed a worksheet in front of the client and delivered a direct instruction to begin.",
+        "During play, when access was denied, the RBT presented a worksheet.",
+      )
+      .replace(
+        "The RBT placed the client's hands on the table and offered access to bubbles for keeping hands down. Following this intervention, the client kept both hands on the table and completed one brief trial.",
+        "Following this intervention, the RBT delivered documented reinforcement when hands remained on the table.",
+      );
+    const codes = validateNotePlan(plan, context()).map((issue) => issue.code);
+    expect(codes).toContain("VAGUE_ANTECEDENT");
+    expect(codes).toContain("OUTCOME_NOT_CLIENT_FOCUSED");
+    expect(codes).toContain("GENERIC_REINFORCEMENT");
+  });
+
+  it("flags unclear replacement skill practice for classified programs", () => {
+    const plan = validPlan();
+    plan.segments[1]!.paragraph = plan.segments[1]!.paragraph.replace(
+      "by prompting a break request before leaving the table",
+      "by reviewing materials at the table",
+    );
+    expect(validateNotePlan(plan, context()).map((issue) => issue.code)).toContain(
+      "REPLACEMENT_SKILL_UNCLEAR",
+    );
   });
 
   it("requires registered topography grounding and omits unsupported trends", () => {
     const plan = validPlan();
     plan.segments[1]!.paragraph = plan.segments[1]!.paragraph
-      .replace("pushing materials away", "looking toward the window")
-      .replace("During table work", "Compared with the previous session, during table work");
+      .replace("pushing work materials away", "looking toward the window")
+      .replace(
+        "At the kitchen table, the RBT placed matching cards on the table and instructed the client to begin the matching task.",
+        "Compared with the previous session, at the kitchen table, the RBT placed matching cards on the table and instructed the client to begin the matching task.",
+      );
     const codes = validateNotePlan(plan, context()).map((issue) => issue.code);
     expect(codes).toContain("TOPOGRAPHY_NOT_GROUNDED");
     expect(codes).toContain("UNSUPPORTED_TREND");
@@ -202,7 +233,7 @@ describe("flexible note contract", () => {
           behaviorLabel: "Repetitive Behavior",
           interventionLabels: ["Premack Principle"],
           paragraph:
-            "At the table, the client manifested Repetitive Behavior by looking away and engaging in hand movements. The RBT implemented Premack Principle. Following this intervention, the RBT presented one step before access to a toy. The RBT implemented the replacement program Compliance Training; 0% of discrete trials met criterion.",
+            "At the table, the RBT placed blocks in front of the client and instructed the client to stack one block. The client manifested Repetitive Behavior by looking away and engaging in hand movements. The RBT implemented Premack Principle. The RBT presented one step before access to a toy. Following this intervention, the client stacked one block. The RBT implemented the replacement program Compliance Training; 0% of discrete trials met criterion.",
         },
       ],
     };
@@ -223,10 +254,13 @@ describe("flexible note contract", () => {
   it("rejects off-property therapy settings and medication content", () => {
     const plan = validPlan();
     plan.segments[0]!.paragraph = plan.segments[0]!.paragraph
-      .replace("The RBT presented a task", "In the street area, the RBT presented a task")
       .replace(
-        "Following this intervention,",
-        "The RBT suggested medication before continuing. Following this intervention,",
+        "At the dining table, the RBT placed a worksheet in front of the client and delivered a direct instruction to begin.",
+        "In the street area, the RBT presented a task",
+      )
+      .replace(
+        "Following this intervention, the client kept both hands on the table and completed one brief trial.",
+        "The RBT suggested medication before continuing. Following this intervention, the client kept both hands on the table and completed one brief trial.",
       );
 
     const codes = validateNotePlan(plan, context()).map((issue) => issue.code);
@@ -260,7 +294,7 @@ describe("flexible note contract", () => {
   it("saves structurally valid output with residual advisories after bounded repair", async () => {
     const advisoryPlan = validPlan();
     advisoryPlan.segments[1]!.paragraph = advisoryPlan.segments[1]!.paragraph.replace(
-      "pushing materials away",
+      "pushing work materials away",
       "appearing frustrated and looking toward the window",
     );
     const originalFirstHour = advisoryPlan.segments[0]!.paragraph;

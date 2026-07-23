@@ -23,8 +23,17 @@ alwaysApply: true
 
 ## What is intentionally not a backend rule
 
-There are no backend rules for behavior-function pairing, intervention count/order, safety chains,
-topography wording, subjective-word lists, acquisition-only framing, reinforcer wording inside the
-clinical body, or sentence-by-sentence ABC templates.
+There are no **blocking** backend rules for behavior-function pairing, intervention count/order,
+safety chains, acquisition-only framing, or sentence-by-sentence ABC templates.
+
+Prompt guidance plus **advisory** validators (non-blocking; repaired when possible; residual
+advisories still save) cover:
+
+- concrete antecedents (not vague activity labels)
+- registered topography grounding when the profile supplies it
+- exact approved intervention naming
+- client-focused outcomes after each named intervention
+- specific reinforcer wording in the clinical body when `reinforcementPreferences` are present
+- replacement-program skill alignment for common program classes
 
 The locked shell remains in `aba-note-locked-prose.mdc`.
