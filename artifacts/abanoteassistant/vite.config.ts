@@ -58,6 +58,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff,woff2}"],
+        // Activate updated SW immediately so users do not keep a stale wizard that omits abcHints.
+        skipWaiting: true,
+        clientsClaim: true,
         // Do not cache /api in the service worker: POST /notes/generate often exceeds 10s;
         // NetworkFirst + networkTimeoutSeconds caused failed or confusing behavior after install.
       },
