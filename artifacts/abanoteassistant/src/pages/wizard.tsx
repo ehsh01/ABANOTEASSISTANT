@@ -1575,7 +1575,7 @@ export default function Wizard() {
     const payload = toGenerateNoteRequest(data);
     if (!payload) {
       setGenerateError(
-        "Session data is incomplete. Use Back to confirm client, programs, session hours, date, where therapy took place, environment step, then try again.",
+        "Session data is incomplete. Go back to ABC Builder and assign one selected replacement program to every service hour, confirm each program has trial data, then try again.",
       );
       return;
     }
