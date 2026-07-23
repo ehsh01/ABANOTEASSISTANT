@@ -5,6 +5,44 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
     <title>ABA Note Assistant</title>
 
+    <!-- Emergency: clear Cloudflare-pinned stale service workers before the app boots. -->
+    <script>
+      (function () {
+        var FLAG = "aba-sw-reset-v3";
+        if (!("serviceWorker" in navigator)) return;
+        if (sessionStorage.getItem(FLAG) === "1") return;
+        sessionStorage.setItem(FLAG, "1");
+        Promise.resolve()
+          .then(function () {
+            return navigator.serviceWorker.getRegistrations();
+          })
+          .then(function (regs) {
+            return Promise.all(
+              regs.map(function (reg) {
+                return reg.unregister();
+              }),
+            );
+          })
+          .then(function () {
+            if (!("caches" in window)) return;
+            return caches.keys().then(function (keys) {
+              return Promise.all(
+                keys.map(function (key) {
+                  return caches.delete(key);
+                }),
+              );
+            });
+          })
+          .then(function () {
+            var url = new URL(window.location.href);
+            if (url.searchParams.get("swreset") === "1") return;
+            url.searchParams.set("swreset", "1");
+            window.location.replace(url.toString());
+          })
+          .catch(function () {});
+      })();
+    </script>
+
     <!-- PWA -->
     <meta name="theme-color" content="#C27A8A" />
     <meta name="mobile-web-app-capable" content="yes" />

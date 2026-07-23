@@ -26,6 +26,9 @@ export default defineConfig({
     runtimeErrorOverlay(),
     VitePWA({
       registerType: "autoUpdate",
+      // Keep /sw.js as an emergency unregister script (public/sw.js). The real app SW uses a
+      // versioned filename so Cloudflare year-cache of /sw.js cannot pin an obsolete app shell.
+      filename: "sw-v3.js",
       includeAssets: ["favicon.png", "apple-touch-icon.png", "pwa-192x192.png", "pwa-512x512.png", "images/aba-note-assistant-logo.png"],
       manifest: {
         name: "ABA Note Assistant",
@@ -64,6 +67,7 @@ export default defineConfig({
         // Do not cache /api in the service worker: POST /notes/generate often exceeds 10s;
         // NetworkFirst + networkTimeoutSeconds caused failed or confusing behavior after install.
       },
+      injectRegister: "inline",
     }),
     ...(process.env.NODE_ENV !== "production" &&
     process.env.REPL_ID !== undefined
