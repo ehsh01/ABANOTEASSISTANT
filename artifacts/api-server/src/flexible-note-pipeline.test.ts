@@ -328,8 +328,7 @@ describe("flexible note contract", () => {
   });
 
   it("keeps the locked opening and final sequence byte-stable", () => {
-    const opening = buildLockedOpening(["Mother"], false, "Home", "Anthony");
-    const closing = buildLockedClosingParagraph([]);
+    const opening = buildLockedOpening(["Mother"], false, "Home", "Anthony");    const closing = buildLockedClosingParagraph([]);
     const performance = buildPerformanceSentence(
       1,
       [{ totalTrials: 10, successfulTrialNumbers: [1, 2] }],
@@ -337,7 +336,7 @@ describe("flexible note contract", () => {
     );
     const next = buildNextSessionSentence("2026-12-10");
     expect(opening).toBe(
-      "The RBT met with Anthony and Mother to implement program targets. There have been no environmental changes recently.",
+      "The RBT met with Anthony and Mother at Anthony's home to implement program targets. There have been no environmental changes recently.",
     );
     expect(closing).toContain(
       'praise (e.g., "Good job," "Wow," and "Good attention to detail")',

@@ -9,15 +9,17 @@ alwaysApply: true
 
 Every note begins with exactly two sentences:
 
-`The RBT met with [CLIENT_REFERRAL] and [CaregiverList] to implement program targets.`
+`The RBT met with [CLIENT_REFERRAL] and [CaregiverList] [LocationPhrase] to implement program targets.`
 
 Then exactly one environmental sentence:
 
 - No changes: `There have been no environmental changes recently.`
 - Changes: `There have been environmental changes recently.`
 
-`CLIENT_REFERRAL` is the profile first name when present, otherwise `the client`. The opening does
-not name the meeting place.
+`CLIENT_REFERRAL` is the profile first name when present, otherwise `the client`. `LocationPhrase`
+comes from the app-selected `therapySetting` via `therapySettingLocationPhrase`, personalized for
+home-family labels (for example, Home becomes `at Austin's home` when the first name is present;
+School is `at school`; Community is `in the community`).
 
 ## Clinical body
 

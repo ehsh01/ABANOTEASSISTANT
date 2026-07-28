@@ -180,7 +180,7 @@ export function englishPossessiveFirstName(firstName: string): string {
 /**
  * Applies the client's first name to catalog location phrases that refer to the learner's home
  * (e.g. "at home" → "at Sam's home"). Non-home phrases are unchanged.
- * Kept for callers that still need setting phrases; locked opening no longer inserts a meeting place.
+ * Used by the locked opening to name the session meeting place.
  */
 export function personalizeTherapyLocationPhrase(
   therapySetting: TherapySetting,
@@ -203,20 +203,22 @@ export function personalizeTherapyLocationPhrase(
 }
 
 /**
- * Locked opening: client + caregivers + "to implement program targets" — no session meeting place.
- * `therapySetting` is retained for call-site compatibility; it is not written into the opening.
+ * Locked opening: client + caregivers + session location + "to implement program targets".
+ * Location comes from the app-selected therapy setting, personalized for home-family labels
+ * (e.g. "at Austin's home", "at school", "in the community").
  */
 export function buildLockedOpening(
   presentPeople: string[],
   hasEnvironmentalChanges: boolean,
-  _therapySetting: TherapySetting,
+  therapySetting: TherapySetting,
   clientFirstName?: string | null,
 ): string {
   const caregivers = formatCaregiverList(presentPeople);
   const env = environmentalOpeningSentence(hasEnvironmentalChanges);
   const trimmed = clientFirstName?.trim() ?? "";
   const who = trimmed.length > 0 ? trimmed : SESSION_NOTE_CLIENT_REFERRAL;
-  return `The RBT met with ${who} and ${caregivers} to implement program targets. ${env}`;
+  const where = personalizeTherapyLocationPhrase(therapySetting, clientFirstName);
+  return `The RBT met with ${who} and ${caregivers} ${where} to implement program targets. ${env}`;
 }
 
 /**
