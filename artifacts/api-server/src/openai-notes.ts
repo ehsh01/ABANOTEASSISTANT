@@ -22,8 +22,9 @@ For each hour:
 - Write one cohesive, natural paragraph in past tense.
 - Use the exact programName and exact criterionPercentage from that hour. State the percentage with a % sign.
 - Never use a program from another hour and never rename the locked program.
-- Place every activity inside the client's home (for example, a living room, kitchen, play area, or table). Never place therapy in a street, sidewalk, roadway, neighborhood, park, yard, driveway, porch, school, clinic, store, restaurant, vehicle, or any other off-property setting.
-- Begin with a concrete antecedent: name materials moved, the instruction delivered, or access delayed with specific items. Do not use vague antecedents such as "during a transition activity", "during play", "when access was denied", "after intervention", or "following the previous activity".
+- Do not invent a therapy location inside the paragraph. The locked opening already states the session setting from therapySetting (home, school, community, or other). Never open with or invent room-, furniture-, or area-level places such as living room, kitchen, dining table, play area, sofa, desk, hallway, classroom, cafeteria, or yard.
+- Stay consistent with therapySetting only at that high level. Do not invent a different setting, and never place therapy in a street, sidewalk, roadway, neighborhood, park, driveway, porch, store, restaurant, or vehicle.
+- Begin with a concrete antecedent about materials, the instruction delivered, or access delayed with specific items — not a guessed place in the home or school. Do not use vague antecedents such as "during a transition activity", "during play", "when access was denied", "after intervention", or "following the previous activity".
 - behaviorLabel must be copied exactly from profileBehaviors. If behaviorHint is supplied, use that exact behaviorLabel.
 - For the behavior sentence, write: "The client manifested [Exact Label] by [observable topography]." Copy one complete registered action from profileBehaviorTargets topography, including every measurable qualifier (duration, count, volume, direction, body part, force, or boundary). Never leave topography implied from an earlier hour.
 - Do not use bare definitional wording alone (for example only "failing to appropriately respond", "non-compliance", or "refusing to comply"). Always add what the client physically did in this hour (for example: left materials untouched, turned the body away, kept hands off the materials, cried with tears, yelled above conversational level, stomped feet, pushed with both hands with enough force to move the RBT's arm).
@@ -43,16 +44,16 @@ For each hour:
 - Do not invent trial percentages or alter the server-provided percentage.
 
 STYLE EXAMPLE 1:
-At the dining table, the RBT placed a worksheet and pencil in front of the client and delivered a direct instruction to begin. The client manifested Task refusal by failing to appropriately respond to the given instruction, turning his body away from the worksheet, and leaving the materials untouched. The RBT implemented Premack Principle. The RBT presented one simplified problem and made access to a preferred snack contingent on completion. Following this intervention, the client completed one problem with a prompt and returned to the worksheet. The RBT implemented the replacement program "Compliance Training" by prompting single-step instruction following and providing praise after each completed step; approximately 20% of discrete trials met criterion.
+The RBT placed a worksheet and pencil in front of the client and delivered a direct instruction to begin. The client manifested Task refusal by failing to appropriately respond to the given instruction, turning his body away from the worksheet, and leaving the materials untouched. The RBT implemented Premack Principle. The RBT presented one simplified problem and made access to a preferred snack contingent on completion. Following this intervention, the client completed one problem with a prompt and returned to the worksheet. The RBT implemented the replacement program "Compliance Training" by prompting single-step instruction following and providing praise after each completed step; approximately 20% of discrete trials met criterion.
 
 STYLE EXAMPLE 2:
-At the kitchen counter, the RBT placed a preferred snack out of reach and offered two alternatives. The client manifested Physical Aggression by pushing the RBT's forearm with both hands with enough force to move the RBT's arm. The RBT implemented Response blocking. The RBT blocked further contact with an open palm. Following this intervention, the client stopped pushing and kept both hands away from the RBT. The RBT implemented the replacement program "Accepting alternatives and making choices" by presenting two clear options and prompting one selection; criterion was met on approximately 10% of discrete trials.
+The RBT placed a preferred snack out of reach and offered two alternatives. The client manifested Physical Aggression by pushing the RBT's forearm with both hands with enough force to move the RBT's arm. The RBT implemented Response blocking. The RBT blocked further contact with an open palm. Following this intervention, the client stopped pushing and kept both hands away from the RBT. The RBT implemented the replacement program "Accepting alternatives and making choices" by presenting two clear options and prompting one selection; criterion was met on approximately 10% of discrete trials.
 
 STYLE EXAMPLE 3:
-The RBT placed a homework worksheet and pencil on the dining table and instructed the client to remain in the chair. The client manifested Elopement by leaving the supervised area and moving into the hallway. The RBT implemented Response blocking. The RBT stepped to the doorway and stopped further movement into the hall. Following this intervention, the client stopped advancing and turned back toward the table. The RBT implemented the replacement program "Request permission to leave the unsupervised area" by prompting an appropriate request before stepping away. Criterion was met on approximately 30% of discrete trials.
+The RBT placed a homework worksheet and pencil in front of the client and instructed the client to remain seated. The client manifested Elopement by leaving the supervised area and moving away from the work materials. The RBT implemented Response blocking. The RBT stepped into the client's path and stopped further movement away from the work area. Following this intervention, the client stopped advancing and turned back toward the materials. The RBT implemented the replacement program "Request permission to leave the unsupervised area" by prompting an appropriate request before stepping away. Criterion was met on approximately 30% of discrete trials.
 
 STYLE EXAMPLE 4:
-Near the sofa, the RBT arranged a card game for a turn-taking activity. The client manifested Self-injury behavior (SIB) by striking his face with an open hand and scratching his forearm. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). The RBT provided brief access to a preferred toy when both hands remained away from the face. Following this intervention, the client returned to the card activity across two of four opportunities. The RBT implemented the replacement program "Express and accept opinion, agreement and disagreement" through modeled game-related statements and prompted exchanges, with criterion met on approximately 20% of discrete trials.`;
+The RBT arranged a card game for a turn-taking activity. The client manifested Self-injury behavior (SIB) by striking his face with an open hand and scratching his forearm. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). The RBT provided brief access to a preferred toy when both hands remained away from the face. Following this intervention, the client returned to the card activity across two of four opportunities. The RBT implemented the replacement program "Express and accept opinion, agreement and disagreement" through modeled game-related statements and prompted exchanges, with criterion met on approximately 20% of discrete trials.`;
 
 const NOTE_PLAN_JSON_SCHEMA = {
   name: "flexible_aba_note_plan",
@@ -87,7 +88,7 @@ const NOTE_PLAN_JSON_SCHEMA = {
   },
 } as const;
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-23.single-intervention-topo-v2";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-30.no-invented-rooms-v1";
 
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
@@ -230,7 +231,7 @@ Use a concrete antecedent; do not use vague phrases such as "during play" or "wh
 When reinforcementPreferences are present, name a concrete reinforcer instead of only "documented reinforcement".
 Explain the replacement skill practiced in a way that matches the assigned program.
 Use observable wording only and do not make baseline, previous-session, or trend claims.
-Keep all activities inside the client's home and omit all medicine or medication content.
+Do not invent room- or furniture-level locations; the locked opening already states therapySetting. Omit all medicine or medication content.
 
 FAILURES:
 ${JSON.stringify(params.planIssues)}
@@ -314,7 +315,7 @@ export async function generateClinicalBodyOpenAI(
 Regenerate the complete JSON plan. Copy behaviorLabel only from profileBehaviors and interventionLabels only from profileInterventions.
 Use each intervention in the exact sentence "The RBT implemented [Exact Label]."
 Use one complete action from registered profileBehaviorTargets, including measurable qualifiers. Do not use internal-state language or historical trend claims.
-Keep all activities inside the client's home. Do not mention medicine or medication.
+Do not invent room- or furniture-level locations. Do not mention medicine or medication.
 All program names and percentages remain locked by hourlyAssignments.`,
       });
       repairActions.push("Started final constrained-AI fallback.");

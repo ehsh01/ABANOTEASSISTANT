@@ -39,7 +39,9 @@ const MENTALISTIC_PATTERN =
 const UNSUPPORTED_TREND_PATTERN =
   /\b(?:baseline|previous session|prior session|improving|regressing|regression|maintaining|trend data)\b/i;
 const OUTSIDE_HOME_SETTING_PATTERN =
-  /\b(?:(?:in|into|near|along|toward|towards|at)\s+(?:the\s+)?(?:street|sidewalk|roadway|road|parking lot|neighborhood|park|playground|yard|backyard|front yard|driveway|porch|store|restaurant|school|clinic)|outside\s+(?:of\s+)?the\s+home|left\s+the\s+home)\b/i;
+  /\b(?:(?:in|into|near|along|toward|towards|at)\s+(?:the\s+)?(?:street|sidewalk|roadway|road|parking lot|neighborhood|park|playground|yard|backyard|front yard|driveway|porch|store|restaurant)|outside\s+(?:of\s+)?the\s+home|left\s+the\s+home)\b/i;
+const INVENTED_INDOOR_LOCATION_PATTERN =
+  /\b(?:(?:at|in|near|inside)\s+(?:the\s+)?(?:living\s+room(?:\s+table)?|dining\s+(?:room|table)|kitchen(?:\s+(?:table|counter))?|bedroom|bathroom|play\s+area|home\s+play\s+area|sofa|couch|counter|desk|hallway|laundry\s+basket|coloring\s+table|matching\s+table|block\s+table|classroom|cafeteria)|at\s+the\s+table|on\s+the\s+dining\s+table)\b/i;
 const MEDICATION_PATTERN =
   /\b(?:medicine|medicines|medication|medications|medicate|medicated|prescription|prescriptions|dosage|dosages|pharmaceutical|pharmaceuticals)\b/i;
 const VAGUE_ANTECEDENT_PATTERN =
@@ -362,7 +364,15 @@ export function validateNotePlan(
         code: "SETTING_OUTSIDE_HOME",
         severity: "advisory",
         segmentIndex: assignment.segmentIndex,
-        message: `Hour ${assignment.segmentIndex + 1} places therapy outside the client's home.`,
+        message: `Hour ${assignment.segmentIndex + 1} places therapy outside the selected session setting.`,
+      });
+    }
+    if (INVENTED_INDOOR_LOCATION_PATTERN.test(segment.paragraph)) {
+      issues.push({
+        code: "INVENTED_INDOOR_LOCATION",
+        severity: "advisory",
+        segmentIndex: assignment.segmentIndex,
+        message: `Hour ${assignment.segmentIndex + 1} invents a room or furniture location; keep location only in the locked opening from therapySetting.`,
       });
     }
     if (MEDICATION_PATTERN.test(segment.paragraph)) {

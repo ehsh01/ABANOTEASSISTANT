@@ -30,6 +30,7 @@ Prompt guidance plus **advisory** validators (non-blocking; repaired when possib
 advisories still save) cover:
 
 - concrete antecedents (not vague activity labels)
+- no invented room/furniture locations in ABC paragraphs (session place stays in the locked opening)
 - registered topography grounding when the profile supplies it, with explicit restatement each hour
 - exactly one approved intervention per ABC hour (exact naming)
 - client-focused outcomes after each named intervention
