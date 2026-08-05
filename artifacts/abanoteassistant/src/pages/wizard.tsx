@@ -12,6 +12,7 @@ import type {
 } from "@workspace/api-client-react";
 import { useWizardStore, type WizardData } from "@/store/wizard-store";
 import {
+  describeGenerateNoteBlockers,
   formatGenerateNoteFailure,
   isDraftQuotaError,
   isDraftQuotaMessage,
@@ -529,8 +530,12 @@ function Step1Client() {
 }
 
 function Step2Hours() {
-  const { data, updateData } = useWizardStore();
+  const { data, updateData, setStep } = useWizardStore();
   const hours = [1, 2, 3, 4, 5, 6, 7, 8];
+  const selectedCount = data.selectedReplacements?.length ?? 0;
+  const chosenHours = data.sessionHours ?? 0;
+  // One hour documents one program, so more programs than hours can never be assigned.
+  const tooManyPrograms = chosenHours >= 1 && selectedCount > chosenHours;
 
   return (
     <div className="space-y-8 max-w-xl mx-auto">
@@ -556,6 +561,29 @@ function Step2Hours() {
         ))}
       </div>
       
+      {tooManyPrograms && (
+        <div
+          role="alert"
+          className="rounded-xl border border-amber-400/60 bg-amber-50/60 p-4 text-sm text-amber-900"
+        >
+          <p className="font-semibold mb-1">More programs than hours</p>
+          <p className="leading-snug">
+            You selected {selectedCount} programs but this session is {chosenHours} hour
+            {chosenHours === 1 ? "" : "s"} long. Each hour documents one program, so choose a longer
+            session or{" "}
+            <button
+              type="button"
+              onClick={() => setStep(2)}
+              className="font-semibold underline hover:no-underline"
+            >
+              deselect {selectedCount - chosenHours} program
+              {selectedCount - chosenHours === 1 ? "" : "s"}
+            </button>
+            .
+          </p>
+        </div>
+      )}
+
       {data.sessionHours && (
         <p className="text-center text-sm text-muted-foreground bg-secondary/50 p-4 rounded-xl">
           One ABC block per hour. Select at least one replacement program in the next step; you can assign a{" "}
@@ -1183,13 +1211,18 @@ function Step6Programs() {
                       }}
                       className="w-full text-sm rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                     >
-                      <option value="">Optional</option>
+                      <option value="">Select a percentage…</option>
                       {CRITERION_MET_PERCENT_OPTIONS.map((pct) => (
                         <option key={pct} value={pct}>
                           {pct}%
                         </option>
                       ))}
                     </select>
+                    {criterionPercent == null && (
+                      <p className="text-[11px] font-semibold text-amber-600">
+                        Required — the note cannot be generated until this program has a percentage.
+                      </p>
+                    )}
                     <p className="text-[11px] text-muted-foreground">
                       Each percent maps to {TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT} trials (e.g. 70% = 7 of{" "}
                       {TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT} met criterion). Note generation uses the same rollup the
@@ -1301,7 +1334,10 @@ function StepAbcBuilder() {
         <div className="space-y-3">
           {hints.map((row, i) => {
             const pid = row.replacementProgramId;
-            const isComplete = typeof pid === "number" && selectedIds.includes(pid);
+            const programChosen = typeof pid === "number" && selectedIds.includes(pid);
+            const missingPercentage =
+              programChosen && (data.programTrialData?.[String(pid)]?.count ?? null) == null;
+            const isComplete = programChosen && !missingPercentage;
             return (
               <div
                 key={i}
@@ -1337,9 +1373,15 @@ function StepAbcBuilder() {
                       ))}
                     </SelectContent>
                   </Select>
-                  {!isComplete && (
+                  {!programChosen && (
                     <p className="text-xs text-amber-600 mt-1.5">
                       Choose one of the selected session programs for this hour.
+                    </p>
+                  )}
+                  {missingPercentage && (
+                    <p className="text-xs text-amber-600 mt-1.5">
+                      This program has no criterion percentage yet. Set it on the Replacement
+                      Programs step before generating.
                     </p>
                   )}
                 </div>
@@ -1546,6 +1588,12 @@ export default function Wizard() {
     step === totalSteps &&
     (draftQuotaAtCap || (generateError != null && isDraftQuotaMessage(generateError)));
 
+  const { data: wizardProgramsRes } = useClientPrograms(data.clientId);
+  const programLabel = (id: number) =>
+    wizardProgramsRes?.data?.find((p) => p.id === id)?.name ?? `Program ${id}`;
+  const blockers = describeGenerateNoteBlockers(data, programLabel);
+  const showBlockers = (step === 8 || step === totalSteps) && blockers.length > 0;
+
   useEffect(() => {
     resetWizardForm();
     generateMutation.reset();
@@ -1604,25 +1652,11 @@ export default function Wizard() {
       case 6:
         return typeof data.therapySetting === "string" && isTherapySetting(data.therapySetting);
       case 7: return data.hasEnvironmentalChanges === false || (data.hasEnvironmentalChanges === true && !!data.environmentalChanges?.trim());
-      case 8: {
-        // One explicit selected program and percentage per service hour.
-        const hints = data.abcHints ?? [];
-        const hours = data.sessionHours ?? 0;
-        const selected = data.selectedReplacements ?? [];
-        if (hints.length !== hours || hours < 1) return false;
-        const assignmentsValid = hints.every((row) => {
-          const id = row.replacementProgramId;
-          if (id == null || !selected.includes(id)) return false;
-          const trial = data.programTrialData?.[String(id)];
-          return trial?.count != null && trial.count >= 1;
-        });
-        return (
-          assignmentsValid &&
-          selected.every((id) => hints.some((row) => row.replacementProgramId === id))
-        );
-      }
+      // One explicit selected program and percentage per service hour. Blockers are listed in
+      // the footer so the button is never disabled without an explanation.
+      case 8: return blockers.length === 0;
       case 9: return true; // Next session date — optional
-      case 10: return toGenerateNoteRequest(data) !== null;
+      case 10: return blockers.length === 0;
       default: return false;
     }
   };
@@ -1722,6 +1756,32 @@ export default function Wizard() {
           >
             <div className="font-semibold text-destructive mb-1">{t.wizard.generateFailedTitle}</div>
             <p className="text-destructive/90 leading-snug">{generateError}</p>
+          </div>
+        )}
+        {showBlockers && (
+          <div
+            role="alert"
+            className="max-w-4xl mx-auto mb-4 rounded-xl border border-amber-400/60 bg-amber-50/60 px-4 py-3 text-sm"
+          >
+            <div className="font-semibold text-amber-900 mb-1">
+              {step === totalSteps ? "Cannot generate yet" : "Cannot continue yet"}
+            </div>
+            <ul className="list-disc pl-5 space-y-1 text-amber-900/90 leading-snug">
+              {blockers.map((blocker, i) => (
+                <li key={`${blocker.step}-${i}`}>
+                  {blocker.message}{" "}
+                  {blocker.step !== step && (
+                    <button
+                      type="button"
+                      onClick={() => setStep(blocker.step)}
+                      className="font-semibold underline hover:no-underline"
+                    >
+                      Go to step {blocker.step}
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
           </div>
         )}
         {showDraftQuotaRecovery && (

@@ -52,6 +52,95 @@ export function normalizeProgramTrialEntry(
   return { count, effectiveTrials };
 }
 
+export type GenerateNoteBlocker = {
+  /** Wizard step the RBT must return to in order to clear this blocker. */
+  step: number;
+  message: string;
+};
+
+/**
+ * Human-readable reasons the generate request cannot be built yet, in wizard order.
+ * Mirrors the server contract in `notes-service.ts` so Continue/Generate is never
+ * disabled without telling the RBT which selection to fix.
+ */
+export function describeGenerateNoteBlockers(
+  data: WizardData,
+  programLabel: (id: number) => string = (id) => `Program ${id}`,
+): GenerateNoteBlocker[] {
+  const blockers: GenerateNoteBlocker[] = [];
+  const hours = data.sessionHours ?? 0;
+  const selected = data.selectedReplacements ?? [];
+  const hints = data.abcHints ?? [];
+  const trials = data.programTrialData ?? {};
+
+  if (data.clientId == null) {
+    blockers.push({ step: 1, message: "Select a client." });
+  }
+  if (selected.length === 0) {
+    blockers.push({ step: 2, message: "Select at least one replacement program." });
+  }
+  if (hours < 1) {
+    blockers.push({ step: 3, message: "Choose the session length." });
+  }
+  if (typeof data.sessionDate !== "string" || !data.sessionDate.trim()) {
+    blockers.push({ step: 4, message: "Choose the session date." });
+  }
+  if (typeof data.therapySetting !== "string" || !isTherapySetting(data.therapySetting)) {
+    blockers.push({ step: 6, message: "Choose where the session took place." });
+  }
+  if (typeof data.hasEnvironmentalChanges !== "boolean") {
+    blockers.push({ step: 7, message: "Answer the environmental changes question." });
+  }
+  if (hours < 1 || selected.length === 0) {
+    return blockers;
+  }
+
+  // Each hour documents exactly one program, so more programs than hours can never be assigned.
+  if (selected.length > hours) {
+    const extra = selected.length - hours;
+    blockers.push({
+      step: 2,
+      message: `${selected.length} programs are selected but the session is ${hours} hour${hours === 1 ? "" : "s"} long. Each hour documents one program, so deselect ${extra} program${extra === 1 ? "" : "s"} or increase the session length.`,
+    });
+  }
+  if (hints.length !== hours) {
+    blockers.push({
+      step: 8,
+      message: `ABC Builder needs one row per service hour (${hours} required, ${hints.length} present). Open ABC Builder to rebuild the rows.`,
+    });
+  }
+
+  const assigned = new Set<number>();
+  for (let hour = 0; hour < Math.min(hours, hints.length); hour++) {
+    const id = hints[hour]?.replacementProgramId ?? null;
+    if (id == null || !selected.includes(id)) {
+      blockers.push({ step: 8, message: `Hour ${hour + 1} needs one of the selected programs.` });
+      continue;
+    }
+    assigned.add(id);
+  }
+  for (const id of assigned) {
+    const count = trials[String(id)]?.count;
+    if (count == null || count < 1) {
+      blockers.push({
+        step: 2,
+        message: `"${programLabel(id)}" has no criterion percentage. Set "How many trials met criterion?" on the Replacement Programs step.`,
+      });
+    }
+  }
+  if (selected.length <= hours) {
+    for (const id of selected) {
+      if (!assigned.has(id)) {
+        blockers.push({
+          step: 8,
+          message: `"${programLabel(id)}" is selected but not assigned to any hour. Assign it in ABC Builder or deselect it.`,
+        });
+      }
+    }
+  }
+  return blockers;
+}
+
 /** Build the POST /notes/generate body from wizard store data (shared by wizard + result regenerate). */
 export function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | null {
   if (
