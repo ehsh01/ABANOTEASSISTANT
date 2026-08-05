@@ -18,6 +18,7 @@ import {
   isDraftQuotaMessage,
   MAX_PROGRAM_TRIALS,
   normalizeProgramTrialEntry,
+  resolveHourlyProgramIds,
   toGenerateNoteRequest,
 } from "@/lib/generate-note-payload";
 import { THERAPY_SETTINGS_ORDERED, isTherapySetting, type TherapySetting } from "@workspace/therapy-settings";
@@ -1056,9 +1057,10 @@ function Step6Programs() {
       <div className="text-center mb-8">
         <h2 className="text-3xl font-display font-bold text-foreground">Replacement Programs</h2>
         <p className="text-muted-foreground mt-2">
-          Choose the programs used during this session and select the exact criterion percentage for
-          each one. In ABC Builder, assign one selected program to every service hour. Extra
-          selected programs beyond the hours are fine — they are simply left unused.
+          Choose at least one program used during this session. Criterion percentage is optional —
+          leave it blank when the program did not meet criterion (recorded as 0%). If you select
+          fewer programs than session hours, ABC Builder fills the remaining hours from the
+          client's linked programs.
         </p>
       </div>
 
@@ -1184,22 +1186,17 @@ function Step6Programs() {
                       }}
                       className="w-full text-sm rounded-lg border border-border bg-background px-2 py-1.5 text-foreground focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
                     >
-                      <option value="">Select a percentage…</option>
+                      <option value="">Did not meet criterion (0%)</option>
                       {CRITERION_MET_PERCENT_OPTIONS.map((pct) => (
                         <option key={pct} value={pct}>
                           {pct}%
                         </option>
                       ))}
                     </select>
-                    {criterionPercent == null && (
-                      <p className="text-[11px] font-semibold text-amber-600">
-                        Required — the note cannot be generated until this program has a percentage.
-                      </p>
-                    )}
                     <p className="text-[11px] text-muted-foreground">
-                      Each percent maps to {TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT} trials (e.g. 70% = 7 of{" "}
-                      {TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT} met criterion). Note generation uses the same rollup the
-                      server already expects.
+                      Leave blank if criterion was not met — the note will say 0% calmly. Each other
+                      percent maps to {TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT} trials (e.g. 70% = 7 of{" "}
+                      {TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT} met criterion).
                     </p>
                   </div>
                 </div>
@@ -1231,25 +1228,31 @@ function StepAbcBuilder() {
   const activities = activitiesRes?.data?.activities ?? [];
   const maladaptiveBehaviors: string[] = clientRes?.data?.profile?.maladaptiveBehaviors ?? [];
   const linkedPrograms: Program[] = programsRes?.data ?? [];
-  const programsForHourPicker = linkedPrograms.filter((p) => selectedIds.includes(p.id));
+  const linkedIds = linkedPrograms.map((p) => p.id);
+  // Show selected programs plus any other linked ones used to fill remaining hours.
+  const programsForHourPicker =
+    selectedIds.length >= maxRows
+      ? linkedPrograms.filter((p) => selectedIds.includes(p.id))
+      : linkedPrograms;
 
   useEffect(() => {
     const want = Math.min(sessionHours, 8);
     const cur = useWizardStore.getState().data.abcHints ?? [];
-    const next = Array.from({ length: want }, (_, i) => {
-      const existing = cur[i] ?? ABC_EMPTY_ROW();
-      const valid =
-        existing.replacementProgramId != null &&
-        selectedIds.includes(existing.replacementProgramId);
-      return {
-        ...existing,
-        replacementProgramId: valid
-          ? existing.replacementProgramId
-          : (selectedIds[i % Math.max(1, selectedIds.length)] ?? null),
-      };
+    const selected = useWizardStore.getState().data.selectedReplacements ?? [];
+    if (selected.length === 0 || linkedIds.length === 0) return;
+
+    const resolved = resolveHourlyProgramIds({
+      sessionHours: want,
+      hintProgramIds: Array.from({ length: want }, (_, i) => cur[i]?.replacementProgramId),
+      selectedIds: selected,
+      linkedIds,
     });
+    const next = Array.from({ length: want }, (_, i) => ({
+      ...(cur[i] ?? ABC_EMPTY_ROW()),
+      replacementProgramId: resolved[i] ?? null,
+    }));
     useWizardStore.getState().updateData({ abcHints: next });
-  }, [sessionHours, selectedIds.join(",")]);
+  }, [sessionHours, selectedIds.join(","), linkedIds.join(",")]);
 
   const rawHints = data.abcHints ?? [];
   const hints: AbcHintEntry[] = Array.from({ length: maxRows }, (_, i) => rawHints[i] ?? ABC_EMPTY_ROW());
@@ -1287,15 +1290,19 @@ function StepAbcBuilder() {
     <div className="space-y-6 max-w-3xl mx-auto">
       <div className="text-center mb-8">
         <h2 className="text-3xl font-display font-bold text-foreground">ABC Builder</h2>
-        <p className="text-muted-foreground mt-2">Assign one selected program to every service hour.</p>
+        <p className="text-muted-foreground mt-2">
+          One program per service hour. Extra selected programs are unused; if you selected fewer
+          programs than hours, additional programs from the client list are filled in automatically.
+        </p>
       </div>
 
       <div className="bg-primary/5 border border-primary/20 rounded-xl p-4 text-sm text-muted-foreground leading-relaxed space-y-2">
         <p className="font-semibold text-foreground">How it works</p>
         <p>
           Each row is one service hour. Program assignment is required and the server never changes
-          it. Activity and behavior are optional hints; when blank, the AI chooses them from the
-          client profile and assessment.
+          an explicit choice you make here. Activity and behavior are optional hints; when blank, the
+          AI chooses them from the client profile and assessment. A blank criterion percentage is
+          recorded as not meeting criterion (0%).
         </p>
       </div>
 
@@ -1307,10 +1314,10 @@ function StepAbcBuilder() {
         <div className="space-y-3">
           {hints.map((row, i) => {
             const pid = row.replacementProgramId;
-            const programChosen = typeof pid === "number" && selectedIds.includes(pid);
-            const missingPercentage =
-              programChosen && (data.programTrialData?.[String(pid)]?.count ?? null) == null;
-            const isComplete = programChosen && !missingPercentage;
+            const programChosen =
+              typeof pid === "number" &&
+              (selectedIds.includes(pid) || linkedIds.includes(pid));
+            const isComplete = programChosen;
             return (
               <div
                 key={i}
@@ -1348,13 +1355,7 @@ function StepAbcBuilder() {
                   </Select>
                   {!programChosen && (
                     <p className="text-xs text-amber-600 mt-1.5">
-                      Choose one of the selected session programs for this hour.
-                    </p>
-                  )}
-                  {missingPercentage && (
-                    <p className="text-xs text-amber-600 mt-1.5">
-                      This program has no criterion percentage yet. Set it on the Replacement
-                      Programs step before generating.
+                      Choose a program for this hour, or leave it for auto-fill from the client list.
                     </p>
                   )}
                 </div>
@@ -1562,9 +1563,10 @@ export default function Wizard() {
     (draftQuotaAtCap || (generateError != null && isDraftQuotaMessage(generateError)));
 
   const { data: wizardProgramsRes } = useClientPrograms(data.clientId);
+  const linkedProgramIds = wizardProgramsRes?.data?.map((p) => p.id) ?? [];
   const programLabel = (id: number) =>
     wizardProgramsRes?.data?.find((p) => p.id === id)?.name ?? `Program ${id}`;
-  const blockers = describeGenerateNoteBlockers(data, programLabel);
+  const blockers = describeGenerateNoteBlockers(data, programLabel, linkedProgramIds);
   const showBlockers = (step === 8 || step === totalSteps) && blockers.length > 0;
 
   useEffect(() => {
@@ -1593,10 +1595,10 @@ export default function Wizard() {
 
   const handleGenerate = () => {
     setGenerateError(null);
-    const payload = toGenerateNoteRequest(data);
+    const payload = toGenerateNoteRequest(data, linkedProgramIds);
     if (!payload) {
       setGenerateError(
-        "Session data is incomplete. Go back to ABC Builder and assign one selected replacement program to every service hour, confirm each program has trial data, then try again.",
+        "Session data is incomplete. Select at least one program, set the session length and date, and open ABC Builder so each hour has a program assignment.",
       );
       return;
     }

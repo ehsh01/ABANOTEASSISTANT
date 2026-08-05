@@ -10,8 +10,11 @@ The backend owns only these invariants:
 1. The final note uses the locked opening and end-of-note sequence defined in
    `aba-note-locked-prose.mdc` and implemented by `artifacts/api-server/src/note-assembly.ts`.
 2. The clinical body contains exactly one ABC paragraph per billable session hour.
-3. Each hour uses the replacement program explicitly selected in the app for that hour.
-4. Each hour states the exact percentage manually selected in the app for that program.
+3. Each hour uses a replacement program from the client's linked list. App-selected programs are
+   preferred; when fewer programs are selected than session hours, remaining hours are filled from
+   other linked programs. Extra selected programs beyond the hours are unused.
+4. Each hour states a criterion percentage. When the RBT left percentage blank, use 0% (did not
+   meet criterion) with kind wording — never harsh failure language.
 5. The client profile and the client's uploaded assessment are included as model context.
 
 Everything else in the clinical body is model-written. The backend must not rotate behaviors,

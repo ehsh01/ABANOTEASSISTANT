@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { describeGenerateNoteBlockers, toGenerateNoteRequest } from "./generate-note-payload";
+import {
+  describeGenerateNoteBlockers,
+  resolveHourlyProgramIds,
+  toGenerateNoteRequest,
+  ZERO_CRITERION_TRIAL_ENTRY,
+} from "./generate-note-payload";
 
 function wizardData() {
   return {
@@ -24,6 +29,41 @@ function wizardData() {
   };
 }
 
+describe("resolveHourlyProgramIds", () => {
+  it("fills remaining hours from the client list when fewer programs are selected", () => {
+    expect(
+      resolveHourlyProgramIds({
+        sessionHours: 4,
+        hintProgramIds: [10, 11, null, null],
+        selectedIds: [10, 11],
+        linkedIds: [10, 11, 12, 13, 14],
+      }),
+    ).toEqual([10, 11, 12, 13]);
+  });
+
+  it("replaces later duplicates with unused linked programs", () => {
+    expect(
+      resolveHourlyProgramIds({
+        sessionHours: 4,
+        hintProgramIds: [10, 11, 10, 11],
+        selectedIds: [10, 11],
+        linkedIds: [10, 11, 20, 21],
+      }),
+    ).toEqual([10, 11, 20, 21]);
+  });
+
+  it("keeps the first occurrence when diversifying duplicates", () => {
+    expect(
+      resolveHourlyProgramIds({
+        sessionHours: 3,
+        hintProgramIds: [5, 5, 5],
+        selectedIds: [5],
+        linkedIds: [5, 6, 7],
+      }),
+    ).toEqual([5, 6, 7]);
+  });
+});
+
 describe("four-hour note payload", () => {
   it("builds a valid request for four selected and assigned programs", () => {
     const payload = toGenerateNoteRequest(wizardData());
@@ -37,19 +77,36 @@ describe("four-hour note payload", () => {
     data.selectedReplacements = [10, 11, 12, 13, 14, 15];
     data.programTrialData["14"] = { count: 10, effectiveTrials: [1] };
     data.programTrialData["15"] = { count: 10, effectiveTrials: [1] };
-    // Hours 1–4 still use 10–13; 14 and 15 are unused extras.
-    const payload = toGenerateNoteRequest(data);
+    const payload = toGenerateNoteRequest(data, [10, 11, 12, 13, 14, 15]);
     expect(payload).not.toBeNull();
     expect(payload?.abcHints.map((h) => h.replacementProgramId)).toEqual([10, 11, 12, 13]);
-    expect(payload?.selectedReplacements).toEqual([10, 11, 12, 13, 14, 15]);
   });
 
-  it("allows repeating a program across hours and leaving another selected unused", () => {
+  it("auto-fills from the client list when only two programs are selected for four hours", () => {
     const data = wizardData();
-    data.abcHints[3]!.replacementProgramId = 10;
+    data.selectedReplacements = [10, 11];
+    data.abcHints = [
+      { activityAntecedent: null, maladaptiveBehavior: null, replacementProgramId: 10 },
+      { activityAntecedent: null, maladaptiveBehavior: null, replacementProgramId: 11 },
+      { activityAntecedent: null, maladaptiveBehavior: null, replacementProgramId: 10 },
+      { activityAntecedent: null, maladaptiveBehavior: null, replacementProgramId: 11 },
+    ];
+    delete data.programTrialData["12"];
+    delete data.programTrialData["13"];
+
+    const payload = toGenerateNoteRequest(data, [10, 11, 12, 13]);
+    expect(payload).not.toBeNull();
+    expect(payload?.abcHints.map((h) => h.replacementProgramId)).toEqual([10, 11, 12, 13]);
+    expect(payload?.selectedReplacements).toEqual([10, 11, 12, 13]);
+    expect(payload?.programTrialData["12"]).toEqual(ZERO_CRITERION_TRIAL_ENTRY);
+  });
+
+  it("defaults a blank percentage to did-not-meet-criterion (0%)", () => {
+    const data = wizardData();
+    delete data.programTrialData["12"];
     const payload = toGenerateNoteRequest(data);
     expect(payload).not.toBeNull();
-    expect(payload?.abcHints.map((h) => h.replacementProgramId)).toEqual([10, 11, 12, 10]);
+    expect(payload?.programTrialData["12"]).toEqual(ZERO_CRITERION_TRIAL_ENTRY);
   });
 });
 
@@ -66,14 +123,10 @@ describe("generate blockers", () => {
     expect(toGenerateNoteRequest(data)).not.toBeNull();
   });
 
-  it("names the program that is missing a criterion percentage", () => {
+  it("does not block when a criterion percentage is blank", () => {
     const data = wizardData();
     delete data.programTrialData["12"];
-
-    const blockers = describeGenerateNoteBlockers(data, (id) => `Program ${id} name`);
-    expect(blockers).toHaveLength(1);
-    expect(blockers[0]!.step).toBe(2);
-    expect(blockers[0]!.message).toContain("Program 12 name");
+    expect(describeGenerateNoteBlockers(data)).toEqual([]);
   });
 
   it("does not require every selected program to be assigned", () => {
@@ -82,18 +135,11 @@ describe("generate blockers", () => {
     expect(describeGenerateNoteBlockers(data)).toEqual([]);
   });
 
-  it("flags an hour with no program", () => {
+  it("blocks when no program is selected", () => {
     const data = wizardData();
-    data.abcHints[1]!.replacementProgramId = null;
-
-    const messages = describeGenerateNoteBlockers(data).map((b) => b.message);
-    expect(messages).toContain("Hour 2 needs one of the selected programs.");
-  });
-
-  it("blocks whenever the payload cannot be built", () => {
-    const data = wizardData();
-    data.abcHints[1]!.replacementProgramId = null;
-    expect(toGenerateNoteRequest(data)).toBeNull();
-    expect(describeGenerateNoteBlockers(data).length).toBeGreaterThan(0);
+    data.selectedReplacements = [];
+    expect(describeGenerateNoteBlockers(data).map((b) => b.message)).toContain(
+      "Select at least one replacement program.",
+    );
   });
 });

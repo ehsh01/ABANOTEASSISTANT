@@ -21,6 +21,7 @@ Output {"segments":[{"segmentIndex":0,"behaviorLabel":"...","interventionLabels"
 For each hour:
 - Write one cohesive, natural paragraph in past tense.
 - Use the exact programName and exact criterionPercentage from that hour. State the percentage with a % sign.
+- When criterionPercentage is 0, write calmly that criterion was not met (for example: "criterion was not met; 0% of discrete trials met criterion"). Do not use harsh or judgmental wording about the client failing, doing it wrong, or being unsuccessful.
 - Never use a program from another hour and never rename the locked program.
 - Place every ABC activity in a specific indoor area consistent with therapySetting (for Home: living room, kitchen, play area, dining table, or similar). The locked opening already names the overall setting; each ABC paragraph should still name the specific place where that hour's activity occurred. Never place therapy in a street, sidewalk, roadway, neighborhood, park, yard, driveway, porch, school, clinic, store, restaurant, vehicle, or any other off-property setting.
 - Begin with a concrete antecedent: name the specific place, materials moved, the instruction delivered, or access delayed with specific items. Do not use vague antecedents such as "during a transition activity", "during play", "when access was denied", "after intervention", or "following the previous activity".
@@ -87,7 +88,7 @@ const NOTE_PLAN_JSON_SCHEMA = {
   },
 } as const;
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-07-30.abc-specific-locations-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-08-05.kind-zero-criterion-v1";
 
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)

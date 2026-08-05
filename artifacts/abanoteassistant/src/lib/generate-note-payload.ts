@@ -10,6 +10,12 @@ import type { WizardData } from "@/store/wizard-store";
 /** Wizard + generate request: total trials and per-trial indices are capped at 10. */
 export const MAX_PROGRAM_TRIALS = 10;
 
+/** Blank criterion percentage → 0 of 10 trials met criterion. */
+export const ZERO_CRITERION_TRIAL_ENTRY: ProgramTrialDataEntry = {
+  count: 10,
+  effectiveTrials: [],
+};
+
 export function formatGenerateNoteFailure(err: unknown): string {
   if (err instanceof ApiError && err.data && typeof err.data === "object") {
     const d = err.data as { error?: string; messages?: string[] };
@@ -52,6 +58,46 @@ export function normalizeProgramTrialEntry(
   return { count, effectiveTrials };
 }
 
+/**
+ * Prefer one distinct program per hour: selected programs first, then other linked
+ * client programs. Later duplicate hours are replaced with unused linked programs
+ * when the catalog has extras.
+ */
+export function resolveHourlyProgramIds(params: {
+  sessionHours: number;
+  hintProgramIds: (number | null | undefined)[];
+  selectedIds: number[];
+  linkedIds: number[];
+}): number[] {
+  const linkedSet = new Set(params.linkedIds);
+  const selectedLinked = params.selectedIds.filter((id) => linkedSet.has(id));
+  const otherLinked = params.linkedIds.filter((id) => !selectedLinked.includes(id));
+  const fillPool = [...selectedLinked, ...otherLinked];
+  if (fillPool.length === 0) return [];
+
+  const resolved: number[] = [];
+  for (let hour = 0; hour < params.sessionHours; hour++) {
+    const hinted = params.hintProgramIds[hour] ?? null;
+    if (hinted != null && linkedSet.has(hinted)) {
+      resolved.push(hinted);
+      continue;
+    }
+    const used = new Set(resolved);
+    const unused = fillPool.find((id) => !used.has(id));
+    resolved.push(unused ?? fillPool[hour % fillPool.length]!);
+  }
+
+  const unused = fillPool.filter((id) => !resolved.includes(id));
+  for (let hour = 0; hour < resolved.length && unused.length > 0; hour++) {
+    const id = resolved[hour]!;
+    const firstIndex = resolved.indexOf(id);
+    if (hour !== firstIndex) {
+      resolved[hour] = unused.shift()!;
+    }
+  }
+  return resolved;
+}
+
 export type GenerateNoteBlocker = {
   /** Wizard step the RBT must return to in order to clear this blocker. */
   step: number;
@@ -60,18 +106,17 @@ export type GenerateNoteBlocker = {
 
 /**
  * Human-readable reasons the generate request cannot be built yet, in wizard order.
- * Mirrors the server contract in `notes-service.ts` so Continue/Generate is never
- * disabled without telling the RBT which selection to fix.
+ * Missing percentages are not blockers — they default to "did not meet criterion" (0%).
  */
 export function describeGenerateNoteBlockers(
   data: WizardData,
-  programLabel: (id: number) => string = (id) => `Program ${id}`,
+  _programLabel: (id: number) => string = (id) => `Program ${id}`,
+  linkedProgramIds: number[] = [],
 ): GenerateNoteBlocker[] {
   const blockers: GenerateNoteBlocker[] = [];
   const hours = data.sessionHours ?? 0;
   const selected = data.selectedReplacements ?? [];
   const hints = data.abcHints ?? [];
-  const trials = data.programTrialData ?? {};
 
   if (data.clientId == null) {
     blockers.push({ step: 1, message: "Select a client." });
@@ -102,22 +147,16 @@ export function describeGenerateNoteBlockers(
     });
   }
 
-  const assigned = new Set<number>();
+  const linkedSet = new Set(
+    linkedProgramIds.length > 0 ? linkedProgramIds : selected,
+  );
   for (let hour = 0; hour < Math.min(hours, hints.length); hour++) {
     const id = hints[hour]?.replacementProgramId ?? null;
-    if (id == null || !selected.includes(id)) {
-      blockers.push({ step: 8, message: `Hour ${hour + 1} needs one of the selected programs.` });
-      continue;
-    }
-    assigned.add(id);
-  }
-  // Extra selected programs beyond the hours are ignored — only assigned hours matter.
-  for (const id of assigned) {
-    const count = trials[String(id)]?.count;
-    if (count == null || count < 1) {
+    // Null is fine — generation auto-fills from the client program list.
+    if (id != null && !linkedSet.has(id) && !selected.includes(id)) {
       blockers.push({
-        step: 2,
-        message: `"${programLabel(id)}" has no criterion percentage. Set "How many trials met criterion?" on the Replacement Programs step.`,
+        step: 8,
+        message: `Hour ${hour + 1} has a program that is not linked to this client.`,
       });
     }
   }
@@ -125,7 +164,10 @@ export function describeGenerateNoteBlockers(
 }
 
 /** Build the POST /notes/generate body from wizard store data (shared by wizard + result regenerate). */
-export function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | null {
+export function toGenerateNoteRequest(
+  data: WizardData,
+  linkedProgramIds: number[] = [],
+): GenerateNoteRequest | null {
   if (
     data.clientId == null ||
     data.sessionHours == null ||
@@ -134,33 +176,45 @@ export function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | n
     typeof data.hasEnvironmentalChanges !== "boolean" ||
     !Array.isArray(data.presentPeople) ||
     !Array.isArray(data.selectedReplacements) ||
+    data.selectedReplacements.length === 0 ||
     !Array.isArray(data.abcHints) ||
     data.abcHints.length !== data.sessionHours ||
-    data.programTrialData == null ||
     data.therapySetting == null ||
     !isTherapySetting(data.therapySetting)
   ) {
     return null;
   }
 
-  const abcHints: AbcHintEntry[] = data.abcHints.map((row) => ({
+  const linkedIds =
+    linkedProgramIds.length > 0 ? linkedProgramIds : data.selectedReplacements;
+  const resolvedIds = resolveHourlyProgramIds({
+    sessionHours: data.sessionHours,
+    hintProgramIds: data.abcHints.map((row) => row.replacementProgramId),
+    selectedIds: data.selectedReplacements,
+    linkedIds,
+  });
+  if (resolvedIds.length !== data.sessionHours) return null;
+
+  const abcHints: AbcHintEntry[] = data.abcHints.map((row, i) => ({
     activityAntecedent: row.activityAntecedent?.trim() || null,
     maladaptiveBehavior: row.maladaptiveBehavior?.trim() || null,
-    replacementProgramId: row.replacementProgramId,
+    replacementProgramId: resolvedIds[i]!,
   }));
-  const validAssignments = abcHints.every(
-    (row) =>
-      row.replacementProgramId != null &&
-      data.selectedReplacements!.includes(row.replacementProgramId) &&
-      data.programTrialData?.[String(row.replacementProgramId)]?.count != null,
-  );
-  if (!validAssignments) return null;
-  // Extra selected programs with no hourly row are fine — generation uses abcHints only.
+
+  const selectedReplacements = [
+    ...new Set([...data.selectedReplacements, ...resolvedIds]),
+  ];
 
   const programTrialData: NonNullable<GenerateNoteRequest["programTrialData"]> = {};
-  for (const row of abcHints) {
-    const id = row.replacementProgramId!;
-    programTrialData[String(id)] = normalizeProgramTrialEntry(data.programTrialData[String(id)]!);
+  for (const id of resolvedIds) {
+    const raw = data.programTrialData?.[String(id)];
+    programTrialData[String(id)] = raw
+      ? normalizeProgramTrialEntry(raw)
+      : { ...ZERO_CRITERION_TRIAL_ENTRY };
+    // Blank count → treat as did not meet criterion.
+    if (programTrialData[String(id)]!.count == null) {
+      programTrialData[String(id)] = { ...ZERO_CRITERION_TRIAL_ENTRY };
+    }
   }
 
   const body: GenerateNoteRequest = {
@@ -170,7 +224,7 @@ export function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | n
     therapySetting: data.therapySetting,
     presentPeople: data.presentPeople,
     hasEnvironmentalChanges: data.hasEnvironmentalChanges,
-    selectedReplacements: data.selectedReplacements,
+    selectedReplacements,
     abcHints,
     programTrialData,
   };

@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { GenerateNoteBody } from "@workspace/api-zod";
 import { db } from "@workspace/db";
 import {
@@ -34,7 +34,7 @@ import {
   buildNoteAccuracyReport,
   type NoteAccuracyReport,
 } from "./note-accuracy-report";
-import { criterionPercentage, scrubAssessmentNames } from "./flexible-note-input";
+import { criterionPercentageOrZero, resolveHourlyProgramIds, scrubAssessmentNames, ZERO_CRITERION_TRIAL_ENTRY } from "./flexible-note-input";
 
 type ClientRow = typeof clientsTable.$inferSelect;
 type GenerateNoteInput = ReturnType<typeof GenerateNoteBody.parse>;
@@ -128,23 +128,6 @@ export async function generateSessionNoteForClient(params: {
   if (body.selectedReplacements.length === 0) {
     inputErrors.push("Select at least one replacement program.");
   }
-
-  const assignedIds: number[] = [];
-  for (let hour = 0; hour < body.sessionHours; hour++) {
-    const id = hints[hour]?.replacementProgramId;
-    if (id == null || !body.selectedReplacements.includes(id)) {
-      inputErrors.push(
-        `Hour ${hour + 1} must assign a replacementProgramId from selectedReplacements.`,
-      );
-      continue;
-    }
-    assignedIds.push(id);
-    const trialEntry = body.programTrialData[String(id)];
-    if (!trialEntry || criterionPercentage(trialEntry) == null) {
-      inputErrors.push(`Hour ${hour + 1} program ${id} requires a valid selected percentage.`);
-    }
-  }
-  // Extra selected programs beyond session hours are fine — only hourly abcHints are used.
   if (inputErrors.length > 0) {
     return {
       ok: false,
@@ -154,7 +137,7 @@ export async function generateSessionNoteForClient(params: {
     };
   }
 
-  const linkedPrograms = await db
+  const allLinkedPrograms = await db
     .select({ id: programsTable.id, name: programsTable.name })
     .from(clientProgramsTable)
     .innerJoin(programsTable, eq(clientProgramsTable.programId, programsTable.id))
@@ -162,37 +145,53 @@ export async function generateSessionNoteForClient(params: {
       and(
         eq(clientProgramsTable.clientId, client.id),
         eq(programsTable.companyId, companyId),
-        inArray(programsTable.id, [...new Set(assignedIds)]),
       ),
     );
-  const programNameById = new Map(linkedPrograms.map((program) => [program.id, program.name]));
-  const missingLinked = [...new Set(assignedIds)].filter((id) => !programNameById.has(id));
-  if (missingLinked.length > 0) {
+  const programNameById = new Map(allLinkedPrograms.map((program) => [program.id, program.name]));
+  const linkedIds = allLinkedPrograms.map((program) => program.id);
+  if (linkedIds.length === 0) {
     return {
       ok: false,
       status: 400,
       error: "Invalid hourly program assignments",
-      messages: missingLinked.map(
-        (id) => `Program ${id} is not linked to this client and company.`,
-      ),
+      messages: ["This client has no linked replacement programs."],
     };
   }
+
+  const assignedIds = resolveHourlyProgramIds({
+    sessionHours: body.sessionHours,
+    hintProgramIds: hints.map((hint) => hint.replacementProgramId),
+    selectedIds: body.selectedReplacements,
+    linkedIds,
+  });
+  if (assignedIds.length !== body.sessionHours) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Invalid hourly program assignments",
+      messages: ["Could not assign one replacement program to every service hour."],
+    };
+  }
+
+  const hourlyAssignments = assignedIds.map((programId, segmentIndex) => {
+    const hint = hints[segmentIndex];
+    const trialEntry =
+      body.programTrialData[String(programId)] ?? ZERO_CRITERION_TRIAL_ENTRY;
+    return {
+      segmentIndex,
+      programId,
+      programName: programNameById.get(programId)!,
+      // Blank percentage means the program did not meet criterion.
+      criterionPercentage: criterionPercentageOrZero(trialEntry),
+      activityHint: hint?.activityAntecedent?.trim() || null,
+      behaviorHint: hint?.maladaptiveBehavior?.trim() || null,
+    };
+  });
 
   const rawAssessment = profile?.assessmentTextSnapshot?.trim() ?? "";
   const { text: truncatedAssessment, truncated } =
     truncateAssessmentTextForNoteContext(rawAssessment);
   const assessmentExcerpt = scrubAssessmentNames(truncatedAssessment, profile);
-  const hourlyAssignments = hints.map((hint, segmentIndex) => {
-    const programId = hint.replacementProgramId!;
-    return {
-      segmentIndex,
-      programId,
-      programName: programNameById.get(programId)!,
-      criterionPercentage: criterionPercentage(body.programTrialData[String(programId)]!)!,
-      activityHint: hint.activityAntecedent?.trim() || null,
-      behaviorHint: hint.maladaptiveBehavior?.trim() || null,
-    };
-  });
 
   const context: NoteGenerationContext = {
     sessionHours: body.sessionHours,
@@ -283,10 +282,11 @@ export async function generateSessionNoteForClient(params: {
   warnings.push(`Clinical narrative generated via ${openaiNoteGenerationLabel()}.`);
   warnings.push(...modelGeneration.warnings);
   const trialSummaries = hourlyAssignments.map((assignment) => {
-    const entry = body.programTrialData[String(assignment.programId)]!;
+    const entry =
+      body.programTrialData[String(assignment.programId)] ?? ZERO_CRITERION_TRIAL_ENTRY;
     return {
-      totalTrials: entry.count!,
-      successfulTrialNumbers: [...entry.effectiveTrials],
+      totalTrials: entry.count ?? ZERO_CRITERION_TRIAL_ENTRY.count,
+      successfulTrialNumbers: [...(entry.effectiveTrials ?? [])],
     };
   });
   const closingPreferences = profile?.assessmentSummary?.reinforcementPreferences ?? [];

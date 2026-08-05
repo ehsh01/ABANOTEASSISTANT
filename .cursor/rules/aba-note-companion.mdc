@@ -20,6 +20,9 @@ alwaysApply: true
 - Never recalculate or substitute the app-selected percentage; reproduce it exactly.
 - The same program may be assigned to multiple hours.
 - Extra programs in `selectedReplacements` beyond the hourly assignments are ignored.
+- When fewer programs are selected than session hours, remaining hours are filled from the
+  client's linked program list (preferring unused programs so each hour can use a distinct one).
+- A blank criterion percentage means the program did not meet criterion (0%); wording stays kind.
 - `sessionHours` equals the required number of ABC paragraphs.
 
 ## What is intentionally not a backend rule
