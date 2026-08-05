@@ -32,10 +32,24 @@ describe("four-hour note payload", () => {
     expect(payload?.selectedReplacements).toEqual([10, 11, 12, 13]);
   });
 
-  it("does not submit when a selected program has no hourly assignment", () => {
+  it("allows extra selected programs beyond session hours", () => {
+    const data = wizardData();
+    data.selectedReplacements = [10, 11, 12, 13, 14, 15];
+    data.programTrialData["14"] = { count: 10, effectiveTrials: [1] };
+    data.programTrialData["15"] = { count: 10, effectiveTrials: [1] };
+    // Hours 1–4 still use 10–13; 14 and 15 are unused extras.
+    const payload = toGenerateNoteRequest(data);
+    expect(payload).not.toBeNull();
+    expect(payload?.abcHints.map((h) => h.replacementProgramId)).toEqual([10, 11, 12, 13]);
+    expect(payload?.selectedReplacements).toEqual([10, 11, 12, 13, 14, 15]);
+  });
+
+  it("allows repeating a program across hours and leaving another selected unused", () => {
     const data = wizardData();
     data.abcHints[3]!.replacementProgramId = 10;
-    expect(toGenerateNoteRequest(data)).toBeNull();
+    const payload = toGenerateNoteRequest(data);
+    expect(payload).not.toBeNull();
+    expect(payload?.abcHints.map((h) => h.replacementProgramId)).toEqual([10, 11, 12, 10]);
   });
 });
 
@@ -44,17 +58,12 @@ describe("generate blockers", () => {
     expect(describeGenerateNoteBlockers(wizardData())).toEqual([]);
   });
 
-  it("explains selecting more programs than session hours", () => {
+  it("does not block when more programs are selected than hours", () => {
     const data = wizardData();
     data.sessionHours = 2;
     data.abcHints = data.abcHints.slice(0, 2);
-
-    const messages = describeGenerateNoteBlockers(data).map((b) => b.message);
-    expect(messages.some((m) => m.includes("4 programs are selected but the session is 2 hours"))).toBe(
-      true,
-    );
-    // The impossible state is reported once, not repeated per unassignable program.
-    expect(messages.some((m) => m.includes("not assigned to any hour"))).toBe(false);
+    expect(describeGenerateNoteBlockers(data)).toEqual([]);
+    expect(toGenerateNoteRequest(data)).not.toBeNull();
   });
 
   it("names the program that is missing a criterion percentage", () => {
@@ -67,14 +76,10 @@ describe("generate blockers", () => {
     expect(blockers[0]!.message).toContain("Program 12 name");
   });
 
-  it("flags a selected program left unassigned when hours allow it", () => {
+  it("does not require every selected program to be assigned", () => {
     const data = wizardData();
     data.abcHints[3]!.replacementProgramId = 10;
-
-    const blockers = describeGenerateNoteBlockers(data, (id) => `P${id}`);
-    expect(blockers.map((b) => b.message)).toEqual([
-      '"P13" is selected but not assigned to any hour. Assign it in ABC Builder or deselect it.',
-    ]);
+    expect(describeGenerateNoteBlockers(data)).toEqual([]);
   });
 
   it("flags an hour with no program", () => {

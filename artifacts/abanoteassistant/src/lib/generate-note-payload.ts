@@ -95,14 +95,6 @@ export function describeGenerateNoteBlockers(
     return blockers;
   }
 
-  // Each hour documents exactly one program, so more programs than hours can never be assigned.
-  if (selected.length > hours) {
-    const extra = selected.length - hours;
-    blockers.push({
-      step: 2,
-      message: `${selected.length} programs are selected but the session is ${hours} hour${hours === 1 ? "" : "s"} long. Each hour documents one program, so deselect ${extra} program${extra === 1 ? "" : "s"} or increase the session length.`,
-    });
-  }
   if (hints.length !== hours) {
     blockers.push({
       step: 8,
@@ -119,6 +111,7 @@ export function describeGenerateNoteBlockers(
     }
     assigned.add(id);
   }
+  // Extra selected programs beyond the hours are ignored — only assigned hours matter.
   for (const id of assigned) {
     const count = trials[String(id)]?.count;
     if (count == null || count < 1) {
@@ -126,16 +119,6 @@ export function describeGenerateNoteBlockers(
         step: 2,
         message: `"${programLabel(id)}" has no criterion percentage. Set "How many trials met criterion?" on the Replacement Programs step.`,
       });
-    }
-  }
-  if (selected.length <= hours) {
-    for (const id of selected) {
-      if (!assigned.has(id)) {
-        blockers.push({
-          step: 8,
-          message: `"${programLabel(id)}" is selected but not assigned to any hour. Assign it in ABC Builder or deselect it.`,
-        });
-      }
     }
   }
   return blockers;
@@ -172,14 +155,7 @@ export function toGenerateNoteRequest(data: WizardData): GenerateNoteRequest | n
       data.programTrialData?.[String(row.replacementProgramId)]?.count != null,
   );
   if (!validAssignments) return null;
-  const assignedProgramIds = new Set(
-    abcHints.flatMap((row) =>
-      row.replacementProgramId == null ? [] : [row.replacementProgramId],
-    ),
-  );
-  if (!data.selectedReplacements.every((id) => assignedProgramIds.has(id))) {
-    return null;
-  }
+  // Extra selected programs with no hourly row are fine — generation uses abcHints only.
 
   const programTrialData: NonNullable<GenerateNoteRequest["programTrialData"]> = {};
   for (const row of abcHints) {

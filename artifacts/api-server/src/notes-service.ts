@@ -144,14 +144,7 @@ export async function generateSessionNoteForClient(params: {
       inputErrors.push(`Hour ${hour + 1} program ${id} requires a valid selected percentage.`);
     }
   }
-  const assignedSet = new Set(assignedIds);
-  for (const selectedId of body.selectedReplacements) {
-    if (!assignedSet.has(selectedId)) {
-      inputErrors.push(
-        `Selected program ${selectedId} must be assigned to at least one service hour.`,
-      );
-    }
-  }
+  // Extra selected programs beyond session hours are fine — only hourly abcHints are used.
   if (inputErrors.length > 0) {
     return {
       ok: false,

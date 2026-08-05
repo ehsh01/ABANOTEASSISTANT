@@ -530,12 +530,8 @@ function Step1Client() {
 }
 
 function Step2Hours() {
-  const { data, updateData, setStep } = useWizardStore();
+  const { data, updateData } = useWizardStore();
   const hours = [1, 2, 3, 4, 5, 6, 7, 8];
-  const selectedCount = data.selectedReplacements?.length ?? 0;
-  const chosenHours = data.sessionHours ?? 0;
-  // One hour documents one program, so more programs than hours can never be assigned.
-  const tooManyPrograms = chosenHours >= 1 && selectedCount > chosenHours;
 
   return (
     <div className="space-y-8 max-w-xl mx-auto">
@@ -560,35 +556,11 @@ function Step2Hours() {
           </button>
         ))}
       </div>
-      
-      {tooManyPrograms && (
-        <div
-          role="alert"
-          className="rounded-xl border border-amber-400/60 bg-amber-50/60 p-4 text-sm text-amber-900"
-        >
-          <p className="font-semibold mb-1">More programs than hours</p>
-          <p className="leading-snug">
-            You selected {selectedCount} programs but this session is {chosenHours} hour
-            {chosenHours === 1 ? "" : "s"} long. Each hour documents one program, so choose a longer
-            session or{" "}
-            <button
-              type="button"
-              onClick={() => setStep(2)}
-              className="font-semibold underline hover:no-underline"
-            >
-              deselect {selectedCount - chosenHours} program
-              {selectedCount - chosenHours === 1 ? "" : "s"}
-            </button>
-            .
-          </p>
-        </div>
-      )}
 
       {data.sessionHours && (
         <p className="text-center text-sm text-muted-foreground bg-secondary/50 p-4 rounded-xl">
-          One ABC block per hour. Select at least one replacement program in the next step; you can assign a{" "}
-          <strong className="text-foreground">different linked program per hour</strong> later in ABC Builder when the
-          session mixed multiple targets.
+          One ABC block per hour. You can select more programs than hours — ABC Builder assigns one
+          program per hour, and any extras are left unused.
         </p>
       )}
     </div>
@@ -1085,7 +1057,8 @@ function Step6Programs() {
         <h2 className="text-3xl font-display font-bold text-foreground">Replacement Programs</h2>
         <p className="text-muted-foreground mt-2">
           Choose the programs used during this session and select the exact criterion percentage for
-          each one. In ABC Builder, assign one selected program to every service hour.
+          each one. In ABC Builder, assign one selected program to every service hour. Extra
+          selected programs beyond the hours are fine — they are simply left unused.
         </p>
       </div>
 

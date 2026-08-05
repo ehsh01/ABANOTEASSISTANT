@@ -19,6 +19,7 @@ alwaysApply: true
 - Never replace, reorder, rotate, or auto-fill an hourly program selected in the app.
 - Never recalculate or substitute the app-selected percentage; reproduce it exactly.
 - The same program may be assigned to multiple hours.
+- Extra programs in `selectedReplacements` beyond the hourly assignments are ignored.
 - `sessionHours` equals the required number of ABC paragraphs.
 
 ## What is intentionally not a backend rule
