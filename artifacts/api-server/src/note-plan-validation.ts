@@ -45,6 +45,7 @@ const MEDICATION_PATTERN =
 const VAGUE_ANTECEDENT_PATTERN =
   /\b(?:during a transition activity|during play|when access was denied|after intervention|following the previous activity)\b/i;
 const GENERIC_REINFORCEMENT_PATTERN = /\bdocumented reinforcement\b/i;
+const DOLL_ACTIVITY_PATTERN = /\bdolls?\b|\bdoll\s+play\b/i;
 const FOLLOWING_INTERVENTION_RBT_PATTERN =
   /\bFollowing this intervention,\s+the RBT\b/i;
 const FOLLOWING_INTERVENTION_CLIENT_PATTERN =
@@ -356,6 +357,17 @@ export function validateNotePlan(
         severity: "advisory",
         segmentIndex: assignment.segmentIndex,
         message: `Hour ${assignment.segmentIndex + 1} should name a concrete reinforcer from the client's preferences instead of only "documented reinforcement".`,
+      });
+    }
+    if (
+      DOLL_ACTIVITY_PATTERN.test(segment.paragraph) &&
+      !ctx.reinforcementPreferences.some((preference) => DOLL_ACTIVITY_PATTERN.test(preference))
+    ) {
+      issues.push({
+        code: "UNDOCUMENTED_PREFERENCE",
+        severity: "advisory",
+        segmentIndex: assignment.segmentIndex,
+        message: `Hour ${assignment.segmentIndex + 1} uses dolls or doll play, but that activity is not listed in the client's documented reinforcement preferences; use a documented preference instead.`,
       });
     }
     const skillClass = replacementSkillClass(assignment.programName);

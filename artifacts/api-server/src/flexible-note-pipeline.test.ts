@@ -231,6 +231,30 @@ describe("flexible note contract", () => {
     expect(codes).toContain("GENERIC_REINFORCEMENT");
   });
 
+  it("flags doll play when it is absent from documented reinforcement preferences", () => {
+    const plan = validPlan();
+    plan.segments[0]!.paragraph = plan.segments[0]!.paragraph.replace(
+      "offered access to bubbles",
+      "offered access to doll play",
+    );
+    expect(validateNotePlan(plan, context()).map((issue) => issue.code)).toContain(
+      "UNDOCUMENTED_PREFERENCE",
+    );
+  });
+
+  it("allows doll play when it is a documented reinforcement preference", () => {
+    const plan = validPlan();
+    plan.segments[0]!.paragraph = plan.segments[0]!.paragraph.replace(
+      "offered access to bubbles",
+      "offered access to doll play",
+    );
+    const ctx = context();
+    ctx.reinforcementPreferences = ["Playing with dolls"];
+    expect(validateNotePlan(plan, ctx).map((issue) => issue.code)).not.toContain(
+      "UNDOCUMENTED_PREFERENCE",
+    );
+  });
+
   it("flags unclear replacement skill practice for classified programs", () => {
     const plan = validPlan();
     plan.segments[1]!.paragraph = plan.segments[1]!.paragraph.replace(

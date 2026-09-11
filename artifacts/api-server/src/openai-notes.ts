@@ -33,7 +33,7 @@ For each hour:
 - Name that intervention in its own exact sentence: "The RBT implemented [Exact Label]." Then write one brief sentence describing what the RBT visibly did (application). Do not start that application sentence with "Following this intervention".
 - After the intervention application, write a client outcome that starts with "Following this intervention, the client ..." and states an observable result (behavior stopped or decreased, replacement response used, returned to the activity, or completed part of the task). Never write the outcome as the next intervention step, only what the RBT delivered, or only a reinforcement contingency.
 - Do not use intervention labels as verbs or modified phrases (for example "prompting," "Pivot Praise," or "Priming Interventions"). Do not introduce cue types as additional interventions.
-- When reinforcementPreferences lists preferred items or activities, name a concrete reinforcer from that list (or behavior-specific praise) instead of writing only "documented reinforcement". The server-authored closing also lists approved reinforcers.
+- When reinforcementPreferences lists preferred items or activities, name a concrete reinforcer from that list (or behavior-specific praise) instead of writing only "documented reinforcement". Ground optional leisure activities and preferred materials in that documented list; do not invent client preferences based on age or gender. In particular, never use dolls or doll play unless reinforcementPreferences explicitly documents dolls. The server-authored closing also lists approved reinforcers.
 - In the replacement-program sentence, explain the skill practiced in a way that matches the assigned program (for example: FCT teaches a request; Request help involves needing assistance; walk/safety skill involves staying near an adult; transition programs involve movement between locations; time on task involves remaining engaged with materials).
 - Follow the style sequence shown in the examples: concrete antecedent; observable behavior with restated topography; one intervention (naming, RBT application, client outcome); replacement-program teaching; exact percentage.
 - Use assessmentExcerpt as client-specific grounding. Do not copy names from it.
@@ -89,7 +89,7 @@ const NOTE_PLAN_JSON_SCHEMA = {
   },
 } as const;
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-09-11.no-calm-wording-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-09-11.documented-preferences-v1";
 
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
@@ -229,7 +229,7 @@ After the naming sentence, describe RBT application without starting with "Follo
 Then write "Following this intervention, the client ..." with an observable client outcome (stopped/decreased topography, used a replacement response, returned to the activity, or completed part of the task).
 Restate observable topography in the manifested sentence with measurable qualifiers; do not rely on earlier hours. Never use only "failing to appropriately respond" or "non-compliance" without physical actions.
 Use a concrete antecedent; do not use vague phrases such as "during play" or "when access was denied".
-When reinforcementPreferences are present, name a concrete reinforcer instead of only "documented reinforcement".
+When reinforcementPreferences are present, name a concrete reinforcer from that list instead of only "documented reinforcement". Do not invent dolls, doll play, or other optional leisure preferences absent from that list.
 Explain the replacement skill practiced in a way that matches the assigned program.
 Use observable wording only and do not make baseline, previous-session, or trend claims. Never use "calm" or "calmly" as your own wording; state the observable action instead.
 Keep all activities inside the client's home with a specific indoor place named, and omit all medicine or medication content.
