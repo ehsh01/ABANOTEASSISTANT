@@ -35,7 +35,7 @@ function percentagePattern(percentage: number): RegExp {
 }
 
 const MENTALISTIC_PATTERN =
-  /\b(?:frustrat(?:ed|ion)|anxious|anxiety|upset|angry|happy|sad|overwhelmed|comfortable|uncomfortable|avoidance|appeared|seemed|visibly)\b/i;
+  /\b(?:frustrat(?:ed|ion)|anxious|anxiety|upset|angry|happy|sad|overwhelmed|comfortable|uncomfortable|avoidance|appeared|seemed|visibly|calm(?:ly|ness|ed|ing)?)\b/i;
 const UNSUPPORTED_TREND_PATTERN =
   /\b(?:baseline|previous session|prior session|improving|regressing|regression|maintaining|trend data)\b/i;
 const OUTSIDE_HOME_SETTING_PATTERN =
@@ -57,6 +57,35 @@ const DEFINITIONAL_TOPOGRAPHY_PATTERN =
   /\b(?:failing to appropriately respond|non-compliance|refusing to (?:conduct|comply)|did not comply|failed to comply)\b/i;
 const PHYSICAL_TOPOGRAPHY_PATTERN =
   /\b(?:push(?:ed|ing)?|hit(?:ting)?|kick(?:ed|ing)?|toss(?:ed|ing)?|withdraw(?:ing|s|n)?|turn(?:ed|ing)?(?:\s+(?:his|her|the)\s+body)?|left|untouch(?:ed|ing)|hands?|materials?|blocks?|away(?:\s+from)?|mov(?:ed|ing|ements?)|tap(?:ped|ping)?|cry(?:ing|ied)?|cries|whin(?:ed|ing)|yell(?:ed|ing)|scream(?:ed|ing)|stomp(?:ed|ing)|contact(?:ed|ing)?|force|floor|tears|vocalizations?|open hand|both hands|aside|more than \d+|above (?:normal )?conversational)\b/i;
+
+/**
+ * Registered names are reproduced verbatim in the note, so a flagged word inside a program,
+ * behavior, topography, or intervention name is not the model's own wording.
+ */
+function withoutRegisteredNames(
+  paragraph: string,
+  ctx: SessionContext,
+  programName: string,
+): string {
+  const registered = [
+    programName,
+    ...ctx.profileBehaviors,
+    ...ctx.profileInterventions,
+    ...ctx.profileBehaviorTargets.flatMap((target) =>
+      target.topography ? [target.name, target.topography] : [target.name],
+    ),
+  ]
+    .map((name) => name.trim())
+    .filter((name) => name.length > 0)
+    .sort((a, b) => b.length - a.length);
+
+  let masked = paragraph;
+  for (const name of registered) {
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    masked = masked.replace(new RegExp(escaped, "gi"), " ");
+  }
+  return masked;
+}
 
 function splitSentences(paragraph: string): string[] {
   return paragraph
@@ -341,12 +370,15 @@ export function validateNotePlan(
         message: `Hour ${assignment.segmentIndex + 1} should explain the skill practiced for "${assignment.programName}".`,
       });
     }
-    if (MENTALISTIC_PATTERN.test(segment.paragraph)) {
+    const mentalistic = MENTALISTIC_PATTERN.exec(
+      withoutRegisteredNames(segment.paragraph, ctx, assignment.programName),
+    );
+    if (mentalistic) {
       issues.push({
         code: "MENTALISTIC_LANGUAGE",
         severity: "advisory",
         segmentIndex: assignment.segmentIndex,
-        message: `Hour ${assignment.segmentIndex + 1} contains inferred emotional or internal-state wording.`,
+        message: `Hour ${assignment.segmentIndex + 1} uses internal-state wording ("${mentalistic[0]}"); describe what the client did instead.`,
       });
     }
     if (UNSUPPORTED_TREND_PATTERN.test(segment.paragraph)) {

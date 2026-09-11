@@ -21,7 +21,7 @@ Output {"segments":[{"segmentIndex":0,"behaviorLabel":"...","interventionLabels"
 For each hour:
 - Write one cohesive, natural paragraph in past tense.
 - Use the exact programName and exact criterionPercentage from that hour. State the percentage with a % sign.
-- When criterionPercentage is 0, write calmly that criterion was not met (for example: "criterion was not met; 0% of discrete trials met criterion"). Do not use harsh or judgmental wording about the client failing, doing it wrong, or being unsuccessful.
+- When criterionPercentage is 0, state plainly that criterion was not met (for example: "criterion was not met; 0% of discrete trials met criterion"). Do not use harsh or judgmental wording about the client failing, doing it wrong, or being unsuccessful.
 - Never use a program from another hour and never rename the locked program.
 - Place every ABC activity in a specific indoor area consistent with therapySetting (for Home: living room, kitchen, play area, dining table, or similar). The locked opening already names the overall setting; each ABC paragraph should still name the specific place where that hour's activity occurred. Never place therapy in a street, sidewalk, roadway, neighborhood, park, yard, driveway, porch, school, clinic, store, restaurant, vehicle, or any other off-property setting.
 - Begin with a concrete antecedent: name the specific place, materials moved, the instruction delivered, or access delayed with specific items. Do not use vague antecedents such as "during a transition activity", "during play", "when access was denied", "after intervention", or "following the previous activity".
@@ -38,7 +38,8 @@ For each hour:
 - Follow the style sequence shown in the examples: concrete antecedent; observable behavior with restated topography; one intervention (naming, RBT application, client outcome); replacement-program teaching; exact percentage.
 - Use assessmentExcerpt as client-specific grounding. Do not copy names from it.
 - Never mention, recommend, administer, change, or discuss medicine, medication, prescriptions, or dosages, even if assessment text mentions them.
-- Use only observable actions and outcomes. Do not write "frustrated," "visibly," "avoidance," "appeared," "seemed," or infer emotions, intent, comfort, or other internal states.
+- Use only observable actions and outcomes. Do not write "frustrated," "visibly," "avoidance," "appeared," "seemed," "calm," "calmly," or infer emotions, intent, comfort, or other internal states.
+- "Calm" and "calmly" are never allowed as your own wording. Write the observable action instead (for example: "kept both hands on the table," "remained seated," "used a quiet voice," "stopped crying"). The only exception is a word that appears inside a registered program, behavior, topography, or intervention name, which you must reproduce exactly.
 - Do not compare with baseline, previous sessions, or trends; no historical trend data is supplied.
 - Do not write the note opening, closing, performance line, headings, bullets, or markdown.
 - Do not invent trial percentages or alter the server-provided percentage.
@@ -88,7 +89,7 @@ const NOTE_PLAN_JSON_SCHEMA = {
   },
 } as const;
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-08-05.kind-zero-criterion-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-09-11.no-calm-wording-v1";
 
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
@@ -230,7 +231,7 @@ Restate observable topography in the manifested sentence with measurable qualifi
 Use a concrete antecedent; do not use vague phrases such as "during play" or "when access was denied".
 When reinforcementPreferences are present, name a concrete reinforcer instead of only "documented reinforcement".
 Explain the replacement skill practiced in a way that matches the assigned program.
-Use observable wording only and do not make baseline, previous-session, or trend claims.
+Use observable wording only and do not make baseline, previous-session, or trend claims. Never use "calm" or "calmly" as your own wording; state the observable action instead.
 Keep all activities inside the client's home with a specific indoor place named, and omit all medicine or medication content.
 
 FAILURES:
@@ -314,7 +315,7 @@ export async function generateClinicalBodyOpenAI(
         content: `FINAL CONSTRAINED FALLBACK:
 Regenerate the complete JSON plan. Copy behaviorLabel only from profileBehaviors and interventionLabels only from profileInterventions.
 Use each intervention in the exact sentence "The RBT implemented [Exact Label]."
-Use one complete action from registered profileBehaviorTargets, including measurable qualifiers. Do not use internal-state language or historical trend claims.
+Use one complete action from registered profileBehaviorTargets, including measurable qualifiers. Do not use internal-state language (including "calm" or "calmly") or historical trend claims.
 Keep all activities inside the client's home with a specific indoor place named. Do not mention medicine or medication.
 All program names and percentages remain locked by hourlyAssignments.`,
       });

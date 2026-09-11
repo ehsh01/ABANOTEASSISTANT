@@ -64,7 +64,7 @@ export function enrichTeachingOrPromptingForProgram(
     return "presenting a brief demand, prompting the client to use the designated break request, and delivering a short break contingent on the communication response";
   }
   if (/\baccept\s+['"]?no['"]?\s+as\s+an\s+answer\b/.test(n)) {
-    return "stating that the preferred item or activity was unavailable, prompting an appropriate acceptance response, and reinforcing calm acceptance without escalation";
+    return "stating that the preferred item or activity was unavailable, prompting an appropriate acceptance response, and reinforcing the acceptance response without escalation";
   }
   if (/\btransition\s+compatible\s+with\s+ablls/i.test(n)) {
     return "signaling the upcoming transition, prompting the client to leave the current activity and move to the next designated area, and reinforcing an appropriate transition";

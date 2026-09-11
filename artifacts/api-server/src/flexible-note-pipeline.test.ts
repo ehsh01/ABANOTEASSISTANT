@@ -153,6 +153,46 @@ describe("flexible note contract", () => {
     );
   });
 
+  it("flags calm and calmly as internal-state wording", () => {
+    for (const wording of [
+      "Following this intervention, the client calmly returned to the worksheet.",
+      "Following this intervention, the client stayed calm and returned to the worksheet.",
+    ]) {
+      const plan = validPlan();
+      plan.segments[0]!.paragraph = plan.segments[0]!.paragraph.replace(
+        "Following this intervention, the client kept both hands on the table and completed one brief trial.",
+        wording,
+      );
+      const issue = validateNotePlan(plan, context()).find(
+        (candidate) => candidate.code === "MENTALISTIC_LANGUAGE",
+      );
+      expect(issue?.severity).toBe("advisory");
+      expect(issue?.message).toMatch(/calm/i);
+    }
+  });
+
+  it("allows calm inside a registered program, behavior, or intervention name", () => {
+    const ctx = context();
+    ctx.sessionHours = 1;
+    ctx.hourlyAssignments = [
+      { ...ctx.hourlyAssignments[0]!, programName: "Remain calm during transitions" },
+    ];
+    const plan: NotePlan = {
+      segments: [
+        {
+          segmentIndex: 0,
+          behaviorLabel: "Task refusal",
+          interventionLabels: ["Response blocking"],
+          paragraph:
+            "At the kitchen table, the RBT placed matching cards on the table and instructed the client to begin. The client manifested Task refusal by pushing work materials away. The RBT implemented Response blocking. The RBT blocked further contact with the materials. Following this intervention, the client stopped pushing the cards and returned to the task. The RBT implemented the replacement program Remain calm during transitions by prompting one short transition; 0% of discrete trials met criterion.",
+        },
+      ],
+    };
+    expect(validateNotePlan(plan, ctx).map((issue) => issue.code)).not.toContain(
+      "MENTALISTIC_LANGUAGE",
+    );
+  });
+
   it("flags vague definitional topography and stacked interventions", () => {
     const plan = validPlan();
     plan.segments[1]!.interventionLabels = ["Response blocking", "Premack Principle"];

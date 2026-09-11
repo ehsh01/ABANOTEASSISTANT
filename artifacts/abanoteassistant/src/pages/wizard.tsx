@@ -1194,9 +1194,9 @@ function Step6Programs() {
                       ))}
                     </select>
                     <p className="text-[11px] text-muted-foreground">
-                      Leave blank if criterion was not met — the note will say 0% calmly. Each other
-                      percent maps to {TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT} trials (e.g. 70% = 7 of{" "}
-                      {TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT} met criterion).
+                      Leave blank if criterion was not met — the note records 0% without harsh
+                      wording. Each other percent maps to {TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT}{" "}
+                      trials (e.g. 70% = 7 of {TRIALS_DENOMINATOR_FOR_WIZARD_PERCENT} met criterion).
                     </p>
                   </div>
                 </div>
