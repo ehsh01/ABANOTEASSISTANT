@@ -153,6 +153,50 @@ describe("flexible note contract", () => {
     );
   });
 
+  it("flags supervised as session-supervision wording", () => {
+    const plan = validPlan();
+    plan.segments[0]!.paragraph = plan.segments[0]!.paragraph.replace(
+      "The RBT placed the client's hands on the table",
+      "The RBT supervised the client and placed the client's hands on the table",
+    );
+    const issue = validateNotePlan(plan, context()).find(
+      (candidate) => candidate.code === "SUPERVISION_LANGUAGE",
+    );
+    expect(issue?.severity).toBe("advisory");
+    expect(issue?.message).toMatch(/supervised/i);
+  });
+
+  it("allows supervised only inside a registered program name", () => {
+    const ctx = context();
+    ctx.sessionHours = 1;
+    ctx.hourlyAssignments = [
+      { ...ctx.hourlyAssignments[0]!, programName: "Remain in the supervised work area" },
+    ];
+    const plan: NotePlan = {
+      segments: [
+        {
+          segmentIndex: 0,
+          behaviorLabel: "Task refusal",
+          interventionLabels: ["Response blocking"],
+          paragraph:
+            "At the kitchen table, the technician placed matching cards on the table and instructed the client to begin. The client manifested Task refusal by pushing work materials away. Response blocking was used to stop further contact with the materials. After that guidance, the client stopped pushing the cards and returned to the task. Remain in the supervised work area was practiced by prompting one short stay at the table; 0% of discrete trials met criterion.",
+        },
+      ],
+    };
+    expect(validateNotePlan(plan, ctx).map((issue) => issue.code)).not.toContain(
+      "SUPERVISION_LANGUAGE",
+    );
+  });
+
+  it("accepts varied ABC frames when exact registered names remain", () => {
+    const plan = validPlan();
+    plan.segments[0]!.paragraph =
+      "At the dining table, the technician placed a worksheet in front of the client and delivered a direct instruction to begin. Physical Aggression occurred as hitting with an open hand. Differential Reinforcement of Alternative Behavior (DRA) was used; the technician placed the client's hands on the table and offered access to bubbles for keeping hands down. After that clinical direction, the client kept both hands on the table and completed one brief trial. Compliance Training was practiced by prompting single-step instruction following; 0% of discrete trials met criterion.";
+    expect(validateNotePlan(plan, context()).filter((issue) => issue.segmentIndex === 0)).toEqual(
+      [],
+    );
+  });
+
   it("flags calm and calmly as internal-state wording", () => {
     for (const wording of [
       "Following this intervention, the client calmly returned to the worksheet.",

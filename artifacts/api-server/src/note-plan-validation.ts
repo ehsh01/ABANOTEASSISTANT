@@ -46,6 +46,7 @@ const VAGUE_ANTECEDENT_PATTERN =
   /\b(?:during a transition activity|during play|when access was denied|after intervention|following the previous activity)\b/i;
 const GENERIC_REINFORCEMENT_PATTERN = /\bdocumented reinforcement\b/i;
 const DOLL_ACTIVITY_PATTERN = /\bdolls?\b|\bdoll\s+play\b/i;
+const SUPERVISION_PATTERN = /\b(?:supervised|supervision)\b/i;
 const FOLLOWING_INTERVENTION_RBT_PATTERN =
   /\bFollowing this intervention,\s+the RBT\b/i;
 const FOLLOWING_INTERVENTION_CLIENT_PATTERN =
@@ -104,11 +105,11 @@ function interventionFollowUpWindow(
   for (let i = namingIndex + 1; i < sentences.length; i += 1) {
     const sentence = sentences[i]!;
     if (
-      interventionLabels.some((label) => sentence.includes(`The RBT implemented ${label}.`))
+      interventionLabels.some((candidate) => sentence.includes(`The RBT implemented ${candidate}.`))
     ) {
       break;
     }
-    if (/\b(?:replacement program|implemented the replacement)\b/i.test(sentence)) {
+    if (/\b(?:replacement program|implemented the replacement|was practiced|was taught)\b/i.test(sentence)) {
       break;
     }
     window.push(sentence);
@@ -304,13 +305,12 @@ export function validateNotePlan(
         });
         continue;
       }
-      const namingSentence = `The RBT implemented ${label}.`;
-      if (!segment.paragraph.includes(namingSentence)) {
+      if (!segment.paragraph.includes(label)) {
         issues.push({
           code: "INTERVENTION_NAMING",
           severity: "advisory",
           segmentIndex: assignment.segmentIndex,
-          message: `Hour ${assignment.segmentIndex + 1} must name "${label}" exactly as: "${namingSentence}"`,
+          message: `Hour ${assignment.segmentIndex + 1} must include the exact intervention name "${label}".`,
         });
       }
     }
@@ -318,8 +318,7 @@ export function validateNotePlan(
     const sentences = splitSentences(segment.paragraph);
     for (const label of uniqueInterventions) {
       if (!ctx.profileInterventions.includes(label)) continue;
-      const namingSentence = `The RBT implemented ${label}.`;
-      const namingIndex = sentences.findIndex((sentence) => sentence.includes(namingSentence));
+      const namingIndex = sentences.findIndex((sentence) => sentence.includes(label));
       if (namingIndex < 0) continue;
       const followUp = interventionFollowUpWindow(
         sentences,
@@ -380,6 +379,17 @@ export function validateNotePlan(
         severity: "advisory",
         segmentIndex: assignment.segmentIndex,
         message: `Hour ${assignment.segmentIndex + 1} should explain the skill practiced for "${assignment.programName}".`,
+      });
+    }
+    const supervision = SUPERVISION_PATTERN.exec(
+      withoutRegisteredNames(segment.paragraph, ctx, assignment.programName),
+    );
+    if (supervision) {
+      issues.push({
+        code: "SUPERVISION_LANGUAGE",
+        severity: "advisory",
+        segmentIndex: assignment.segmentIndex,
+        message: `Hour ${assignment.segmentIndex + 1} documents the session as supervision ("${supervision[0]}"); use clinical direction, guidance, feedback, the directing analyst, or the technician instead.`,
       });
     }
     const mentalistic = MENTALISTIC_PATTERN.exec(
@@ -451,15 +461,12 @@ export function validateNotePlan(
           message: `Hour ${assignment.segmentIndex + 1} must restate "${segment.behaviorLabel}" with observable physical actions, not only definitional non-compliance wording.`,
         });
       }
-      if (
-        !/\b(?:by|through)\b/i.test(behaviorSentence) ||
-        !PHYSICAL_TOPOGRAPHY_PATTERN.test(behaviorSentence)
-      ) {
+      if (!PHYSICAL_TOPOGRAPHY_PATTERN.test(behaviorSentence)) {
         issues.push({
           code: "TOPOGRAPHY_NOT_RESTATED",
           severity: "advisory",
           segmentIndex: assignment.segmentIndex,
-          message: `Hour ${assignment.segmentIndex + 1} must explicitly restate observable topography for "${segment.behaviorLabel}" in the manifested sentence.`,
+          message: `Hour ${assignment.segmentIndex + 1} must explicitly restate observable topography for "${segment.behaviorLabel}".`,
         });
       }
     }

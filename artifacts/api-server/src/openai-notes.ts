@@ -26,35 +26,37 @@ For each hour:
 - Place every ABC activity in a specific indoor area consistent with therapySetting (for Home: living room, kitchen, play area, dining table, or similar). The locked opening already names the overall setting; each ABC paragraph should still name the specific place where that hour's activity occurred. Never place therapy in a street, sidewalk, roadway, neighborhood, park, yard, driveway, porch, school, clinic, store, restaurant, vehicle, or any other off-property setting.
 - Begin with a concrete antecedent: name the specific place, materials moved, the instruction delivered, or access delayed with specific items. Do not use vague antecedents such as "during a transition activity", "during play", "when access was denied", "after intervention", or "following the previous activity".
 - behaviorLabel must be copied exactly from profileBehaviors. If behaviorHint is supplied, use that exact behaviorLabel.
-- For the behavior sentence, write: "The client manifested [Exact Label] by [observable topography]." Copy one complete registered action from profileBehaviorTargets topography, including every measurable qualifier (duration, count, volume, direction, body part, force, or boundary). Never leave topography implied from an earlier hour.
+- State the exact behavior label and copy one complete registered action from profileBehaviorTargets topography, including every measurable qualifier (duration, count, volume, direction, body part, force, or boundary). Never leave topography implied from an earlier hour. Surrounding wording may vary (for example "manifested X by…", "X occurred as…", or "the client showed X when…").
 - Do not use bare definitional wording alone (for example only "failing to appropriately respond", "non-compliance", or "refusing to comply"). Always add what the client physically did in this hour (for example: left materials untouched, turned the body away, kept hands off the materials, cried with tears, yelled above conversational level, stomped feet, pushed with both hands with enough force to move the RBT's arm).
 - Use exactly one intervention from profileInterventions for each hour. Do not stack multiple interventions in the same ABC paragraph; auditors count each intervention sequence as a separate chain.
 - interventionLabels must contain exactly one exact string copied only from profileInterventions. Never rename, vary capitalization, abbreviate, or add an intervention from assessmentExcerpt.
-- Name that intervention in its own exact sentence: "The RBT implemented [Exact Label]." Then write one brief sentence describing what the RBT visibly did (application). Do not start that application sentence with "Following this intervention".
-- After the intervention application, write a client outcome that starts with "Following this intervention, the client ..." and states an observable result (behavior stopped or decreased, replacement response used, returned to the activity, or completed part of the task). Never write the outcome as the next intervention step, only what the RBT delivered, or only a reinforcement contingency.
+- Name that exact intervention label in the paragraph, then write one brief sentence describing what the technician visibly did (application). Do not write the outcome as only the next technician step or only a reinforcement contingency.
+- After the intervention application, write an observable client outcome (behavior stopped or decreased, replacement response used, returned to the activity, or completed part of the task). Vary the connector; do not start every hour with "Following this intervention, the client".
+- Across hours, vary sentence frames and connectors so the note reads as a person recounting the session. Registered program, behavior, topography, and intervention names stay exact; everything around them can vary. Do not repeat the same three templates in every ABC paragraph ("the client manifested [label] by…"; "following this intervention, the client…"; "the RBT implemented the replacement…").
 - Do not use intervention labels as verbs or modified phrases (for example "prompting," "Pivot Praise," or "Priming Interventions"). Do not introduce cue types as additional interventions.
 - When reinforcementPreferences lists preferred items or activities, name a concrete reinforcer from that list (or behavior-specific praise) instead of writing only "documented reinforcement". Ground optional leisure activities and preferred materials in that documented list; do not invent client preferences based on age or gender. In particular, never use dolls or doll play unless reinforcementPreferences explicitly documents dolls. The server-authored closing also lists approved reinforcers.
-- In the replacement-program sentence, explain the skill practiced in a way that matches the assigned program (for example: FCT teaches a request; Request help involves needing assistance; walk/safety skill involves staying near an adult; transition programs involve movement between locations; time on task involves remaining engaged with materials).
-- Follow the style sequence shown in the examples: concrete antecedent; observable behavior with restated topography; one intervention (naming, RBT application, client outcome); replacement-program teaching; exact percentage.
+- In the replacement-program sentence, keep the exact programName and explain the skill practiced in a way that matches the assigned program (for example: FCT teaches a request; Request help involves needing assistance; walk/safety skill involves staying near an adult; transition programs involve movement between locations; time on task involves remaining engaged with materials). The connector around that name may vary.
+- Follow the clinical sequence shown in the examples: concrete antecedent; observable behavior with restated topography; one intervention (exact name, application, client outcome); replacement-program teaching; exact percentage. Vary the wording of that sequence from hour to hour.
 - Use assessmentExcerpt as client-specific grounding. Do not copy names from it.
 - Never mention, recommend, administer, change, or discuss medicine, medication, prescriptions, or dosages, even if assessment text mentions them.
 - Use only observable actions and outcomes. Do not write "frustrated," "visibly," "avoidance," "appeared," "seemed," "calm," "calmly," or infer emotions, intent, comfort, or other internal states.
 - "Calm" and "calmly" are never allowed as your own wording. Write the observable action instead (for example: "kept both hands on the table," "remained seated," "used a quiet voice," "stopped crying"). The only exception is a word that appears inside a registered program, behavior, topography, or intervention name, which you must reproduce exactly.
+- Never describe the session as supervision. Do not write "supervised" or "supervision". This visit is clinical direction. Prefer "clinical direction", "guidance", "feedback", "the directing analyst", or "the technician". Copy "supervised" or "supervision" only when those words appear inside a registered program, behavior, topography, or intervention name.
 - Do not compare with baseline, previous sessions, or trends; no historical trend data is supplied.
 - Do not write the note opening, closing, performance line, headings, bullets, or markdown.
 - Do not invent trial percentages or alter the server-provided percentage.
 
 STYLE EXAMPLE 1:
-At the dining table, the RBT placed a worksheet and pencil in front of the client and delivered a direct instruction to begin. The client manifested Task refusal by failing to appropriately respond to the given instruction, turning his body away from the worksheet, and leaving the materials untouched. The RBT implemented Premack Principle. The RBT presented one simplified problem and made access to a preferred snack contingent on completion. Following this intervention, the client completed one problem with a prompt and returned to the worksheet. The RBT implemented the replacement program "Compliance Training" by prompting single-step instruction following and providing praise after each completed step; approximately 20% of discrete trials met criterion.
+At the dining table, the technician placed a worksheet and pencil in front of the client and delivered a direct instruction to begin. The client manifested Task refusal by failing to appropriately respond to the given instruction, turning his body away from the worksheet, and leaving the materials untouched. Premack Principle was used: the technician presented one simplified problem and made access to a preferred snack contingent on completion. After that guidance, the client completed one problem with a prompt and returned to the worksheet. Compliance Training was practiced by prompting single-step instruction following and providing praise after each completed step; approximately 20% of discrete trials met criterion.
 
 STYLE EXAMPLE 2:
-At the kitchen counter, the RBT placed a preferred snack out of reach and offered two alternatives. The client manifested Physical Aggression by pushing the RBT's forearm with both hands with enough force to move the RBT's arm. The RBT implemented Response blocking. The RBT blocked further contact with an open palm. Following this intervention, the client stopped pushing and kept both hands away from the RBT. The RBT implemented the replacement program "Accepting alternatives and making choices" by presenting two clear options and prompting one selection; criterion was met on approximately 10% of discrete trials.
+At the kitchen counter, the technician placed a preferred snack out of reach and offered two alternatives. Physical Aggression occurred as pushing the RBT's forearm with both hands with enough force to move the RBT's arm. The technician applied Response blocking with an open palm to stop further contact. The client then stopped pushing and kept both hands away from the technician. Work on "Accepting alternatives and making choices" continued by presenting two clear options and prompting one selection; criterion was met on approximately 10% of discrete trials.
 
 STYLE EXAMPLE 3:
-The RBT placed a homework worksheet and pencil on the dining table and instructed the client to remain in the chair. The client manifested Elopement by leaving the supervised area and moving into the hallway. The RBT implemented Response blocking. The RBT stepped to the doorway and stopped further movement into the hall. Following this intervention, the client stopped advancing and turned back toward the table. The RBT implemented the replacement program "Request permission to leave the unsupervised area" by prompting an appropriate request before stepping away. Criterion was met on approximately 30% of discrete trials.
+The technician placed a homework worksheet and pencil on the dining table and instructed the client to remain in the chair. Elopement occurred when the client left the designated work area and moved into the hallway. Response blocking followed: the technician stepped to the doorway and stopped further movement into the hall. With that clinical direction, the client stopped advancing and turned back toward the table. The directing analyst's target "Request permission to leave the unsupervised area" was taught by prompting an appropriate request before stepping away. Criterion was met on approximately 30% of discrete trials.
 
 STYLE EXAMPLE 4:
-Near the sofa, the RBT arranged a card game for a turn-taking activity. The client manifested Self-injury behavior (SIB) by striking his face with an open hand and scratching his forearm. The RBT implemented Differential Reinforcement of Alternative Behavior (DRA). The RBT provided brief access to a preferred toy when both hands remained away from the face. Following this intervention, the client returned to the card activity across two of four opportunities. The RBT implemented the replacement program "Express and accept opinion, agreement and disagreement" through modeled game-related statements and prompted exchanges, with criterion met on approximately 20% of discrete trials.`;
+Near the sofa, the technician arranged a card game for a turn-taking activity. The client showed Self-injury behavior (SIB) by striking his face with an open hand and scratching his forearm. Differential Reinforcement of Alternative Behavior (DRA) was delivered as brief access to a preferred toy when both hands remained away from the face. After that feedback, the client returned to the card activity across two of four opportunities. "Express and accept opinion, agreement and disagreement" was modeled through game-related statements and prompted exchanges, with criterion met on approximately 20% of discrete trials.`;
 
 const NOTE_PLAN_JSON_SCHEMA = {
   name: "flexible_aba_note_plan",
@@ -89,7 +91,7 @@ const NOTE_PLAN_JSON_SCHEMA = {
   },
 } as const;
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-09-11.documented-preferences-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-09-11.clinical-direction-varied-frames-v1";
 
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
@@ -224,14 +226,14 @@ export function buildScopedRepairUserMessage(params: {
 Only rewrite segment indexes ${JSON.stringify(failingIndexes)}. Do not change any other hourly paragraph.
 Every hour must include its exact programName and criterionPercentage.
 behaviorLabel must be copied from profileBehaviors. interventionLabels must contain exactly one label copied exactly from profileInterventions.
-Every intervention must be named in its own sentence: "The RBT implemented [Exact Label]."
-After the naming sentence, describe RBT application without starting with "Following this intervention".
-Then write "Following this intervention, the client ..." with an observable client outcome (stopped/decreased topography, used a replacement response, returned to the activity, or completed part of the task).
-Restate observable topography in the manifested sentence with measurable qualifiers; do not rely on earlier hours. Never use only "failing to appropriately respond" or "non-compliance" without physical actions.
+Name each intervention with its exact catalog string; surrounding wording may vary.
+After naming it, describe technician application, then an observable client outcome. Vary connectors across hours; do not reuse the same "Following this intervention, the client" frame in every paragraph.
+Restate observable topography with measurable qualifiers; do not rely on earlier hours. Never use only "failing to appropriately respond" or "non-compliance" without physical actions.
 Use a concrete antecedent; do not use vague phrases such as "during play" or "when access was denied".
 When reinforcementPreferences are present, name a concrete reinforcer from that list instead of only "documented reinforcement". Do not invent dolls, doll play, or other optional leisure preferences absent from that list.
-Explain the replacement skill practiced in a way that matches the assigned program.
+Keep the exact programName and explain the replacement skill practiced in a way that matches the assigned program.
 Use observable wording only and do not make baseline, previous-session, or trend claims. Never use "calm" or "calmly" as your own wording; state the observable action instead.
+Never write "supervised" or "supervision" unless those words are inside a registered name. Prefer clinical direction, guidance, feedback, the directing analyst, or the technician.
 Keep all activities inside the client's home with a specific indoor place named, and omit all medicine or medication content.
 
 FAILURES:
@@ -314,8 +316,8 @@ export async function generateClinicalBodyOpenAI(
         role: "user",
         content: `FINAL CONSTRAINED FALLBACK:
 Regenerate the complete JSON plan. Copy behaviorLabel only from profileBehaviors and interventionLabels only from profileInterventions.
-Use each intervention in the exact sentence "The RBT implemented [Exact Label]."
-Use one complete action from registered profileBehaviorTargets, including measurable qualifiers. Do not use internal-state language (including "calm" or "calmly") or historical trend claims.
+Copy each intervention's exact catalog string into the paragraph; surrounding wording may vary from hour to hour.
+Use one complete action from registered profileBehaviorTargets, including measurable qualifiers. Do not use internal-state language (including "calm" or "calmly"), "supervised"/"supervision", or historical trend claims.
 Keep all activities inside the client's home with a specific indoor place named. Do not mention medicine or medication.
 All program names and percentages remain locked by hourlyAssignments.`,
       });
