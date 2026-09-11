@@ -39,7 +39,8 @@ For each hour:
 - Follow the clinical sequence shown in the examples: concrete antecedent; observable behavior with restated topography; one intervention (exact name, application, client outcome); replacement-program teaching; exact percentage. Vary the wording of that sequence from hour to hour.
 - Use assessmentExcerpt as client-specific grounding. Do not copy names from it.
 - Never mention, recommend, administer, change, or discuss medicine, medication, prescriptions, or dosages, even if assessment text mentions them.
-- Use only observable actions and outcomes. Do not write "frustrated," "visibly," "avoidance," "appeared," "seemed," "calm," "calmly," or infer emotions, intent, comfort, or other internal states.
+- Use only observable actions and outcomes. Do not write "frustrated," "visibly," "avoidance," "appeared," "seemed," "calm," "calmly," "wanted," or infer emotions, intent, comfort, or other internal states.
+- Never state what the client wanted, liked, preferred, tried, or intended. "Want," "wanted," "wants," and "wanting" are opinion wording. Write the observable event instead (for example: instead of "the client wanted the tablet," write "the client reached for the tablet" or "the client pointed to the tablet"). Reproduce these words only when they appear inside a registered name or the supplied activityHint.
 - "Calm" and "calmly" are never allowed as your own wording. Write the observable action instead (for example: "kept both hands on the table," "remained seated," "used a quiet voice," "stopped crying"). The only exception is a word that appears inside a registered program, behavior, topography, or intervention name, which you must reproduce exactly.
 - Never describe the session as supervision. Do not write "supervised" or "supervision". This visit is clinical direction. Prefer "clinical direction", "guidance", "feedback", "the directing analyst", or "the technician". Copy "supervised" or "supervision" only when those words appear inside a registered program, behavior, topography, or intervention name.
 - Do not compare with baseline, previous sessions, or trends; no historical trend data is supplied.
@@ -91,7 +92,7 @@ const NOTE_PLAN_JSON_SCHEMA = {
   },
 } as const;
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-09-11.clinical-direction-varied-frames-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-09-11.no-inference-wording-v1";
 
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
@@ -232,7 +233,7 @@ Restate observable topography with measurable qualifiers; do not rely on earlier
 Use a concrete antecedent; do not use vague phrases such as "during play" or "when access was denied".
 When reinforcementPreferences are present, name a concrete reinforcer from that list instead of only "documented reinforcement". Do not invent dolls, doll play, or other optional leisure preferences absent from that list.
 Keep the exact programName and explain the replacement skill practiced in a way that matches the assigned program.
-Use observable wording only and do not make baseline, previous-session, or trend claims. Never use "calm" or "calmly" as your own wording; state the observable action instead.
+Use observable wording only and do not make baseline, previous-session, or trend claims. Never use "calm", "calmly", or "wanted" as your own wording; state the observable action instead (for example "reached for" or "pointed to" rather than "wanted").
 Never write "supervised" or "supervision" unless those words are inside a registered name. Prefer clinical direction, guidance, feedback, the directing analyst, or the technician.
 Keep all activities inside the client's home with a specific indoor place named, and omit all medicine or medication content.
 
@@ -317,7 +318,7 @@ export async function generateClinicalBodyOpenAI(
         content: `FINAL CONSTRAINED FALLBACK:
 Regenerate the complete JSON plan. Copy behaviorLabel only from profileBehaviors and interventionLabels only from profileInterventions.
 Copy each intervention's exact catalog string into the paragraph; surrounding wording may vary from hour to hour.
-Use one complete action from registered profileBehaviorTargets, including measurable qualifiers. Do not use internal-state language (including "calm" or "calmly"), "supervised"/"supervision", or historical trend claims.
+Use one complete action from registered profileBehaviorTargets, including measurable qualifiers. Do not use internal-state or opinion language (including "calm", "calmly", and "wanted"), "supervised"/"supervision", or historical trend claims.
 Keep all activities inside the client's home with a specific indoor place named. Do not mention medicine or medication.
 All program names and percentages remain locked by hourlyAssignments.`,
       });

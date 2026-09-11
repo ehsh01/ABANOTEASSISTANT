@@ -38,6 +38,7 @@ advisories still save) cover:
 - exactly one approved intervention per ABC hour (exact catalog name; surrounding sentence frames may vary)
 - client-focused outcomes after each named intervention
 - no session-as-supervision wording ("supervised"/"supervision"); prefer clinical direction, guidance, feedback, the directing analyst, or the technician
+- no internal-state or opinion wording (for example "calm"/"calmly", "wanted"); state the observable action. Registered names and the app-selected activity/behavior hints are exempt because the note reproduces them verbatim
 - varied ABC connectors so hours do not repeat the same sentence templates
 - specific reinforcer wording in the clinical body when `reinforcementPreferences` are present
 - replacement-program skill alignment for common program classes

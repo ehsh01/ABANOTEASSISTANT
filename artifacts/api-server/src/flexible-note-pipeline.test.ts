@@ -215,6 +215,35 @@ describe("flexible note contract", () => {
     }
   });
 
+  it("flags wanted as opinion wording", () => {
+    const plan = validPlan();
+    plan.segments[0]!.paragraph = plan.segments[0]!.paragraph.replace(
+      "Following this intervention, the client kept both hands on the table and completed one brief trial.",
+      "Following this intervention, the client wanted the bubbles and kept both hands on the table.",
+    );
+    const issue = validateNotePlan(plan, context()).find(
+      (candidate) => candidate.code === "MENTALISTIC_LANGUAGE",
+    );
+    expect(issue?.severity).toBe("advisory");
+    expect(issue?.message).toMatch(/wanted/i);
+  });
+
+  it("allows want inside the app-selected activity hint", () => {
+    const ctx = context();
+    ctx.hourlyAssignments[0] = {
+      ...ctx.hourlyAssignments[0]!,
+      activityHint: 'RBT prompted the client with a question - "What do you want?"',
+    };
+    const plan = validPlan();
+    plan.segments[0]!.paragraph = plan.segments[0]!.paragraph.replace(
+      "At the dining table, the RBT placed a worksheet in front of the client and delivered a direct instruction to begin.",
+      'At the dining table, RBT prompted the client with a question - "What do you want?"',
+    );
+    expect(validateNotePlan(plan, ctx).map((issue) => issue.code)).not.toContain(
+      "MENTALISTIC_LANGUAGE",
+    );
+  });
+
   it("allows calm inside a registered program, behavior, or intervention name", () => {
     const ctx = context();
     ctx.sessionHours = 1;

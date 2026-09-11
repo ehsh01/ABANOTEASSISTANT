@@ -35,7 +35,7 @@ function percentagePattern(percentage: number): RegExp {
 }
 
 const MENTALISTIC_PATTERN =
-  /\b(?:frustrat(?:ed|ion)|anxious|anxiety|upset|angry|happy|sad|overwhelmed|comfortable|uncomfortable|avoidance|appeared|seemed|visibly|calm(?:ly|ness|ed|ing)?)\b/i;
+  /\b(?:frustrat(?:ed|ion)|anxious|anxiety|upset|angry|happy|sad|overwhelmed|comfortable|uncomfortable|avoidance|appeared|seemed|visibly|calm(?:ly|ness|ed|ing)?|want(?:ed|s|ing)?)\b/i;
 const UNSUPPORTED_TREND_PATTERN =
   /\b(?:baseline|previous session|prior session|improving|regressing|regression|maintaining|trend data)\b/i;
 const OUTSIDE_HOME_SETTING_PATTERN =
@@ -61,16 +61,19 @@ const PHYSICAL_TOPOGRAPHY_PATTERN =
   /\b(?:push(?:ed|ing)?|hit(?:ting)?|kick(?:ed|ing)?|toss(?:ed|ing)?|withdraw(?:ing|s|n)?|turn(?:ed|ing)?(?:\s+(?:his|her|the)\s+body)?|left|untouch(?:ed|ing)|hands?|materials?|blocks?|away(?:\s+from)?|mov(?:ed|ing|ements?)|tap(?:ped|ping)?|cry(?:ing|ied)?|cries|whin(?:ed|ing)|yell(?:ed|ing)|scream(?:ed|ing)|stomp(?:ed|ing)|contact(?:ed|ing)?|force|floor|tears|vocalizations?|open hand|both hands|aside|more than \d+|above (?:normal )?conversational)\b/i;
 
 /**
- * Registered names are reproduced verbatim in the note, so a flagged word inside a program,
- * behavior, topography, or intervention name is not the model's own wording.
+ * Registered text is reproduced verbatim in the note, so a flagged word inside a program,
+ * behavior, topography, or intervention name — or inside the app-selected activity or behavior
+ * hint for that hour — is not the model's own wording.
  */
 function withoutRegisteredNames(
   paragraph: string,
   ctx: SessionContext,
-  programName: string,
+  assignment: SessionContext["hourlyAssignments"][number],
 ): string {
   const registered = [
-    programName,
+    assignment.programName,
+    assignment.activityHint ?? "",
+    assignment.behaviorHint ?? "",
     ...ctx.profileBehaviors,
     ...ctx.profileInterventions,
     ...ctx.profileBehaviorTargets.flatMap((target) =>
@@ -381,9 +384,8 @@ export function validateNotePlan(
         message: `Hour ${assignment.segmentIndex + 1} should explain the skill practiced for "${assignment.programName}".`,
       });
     }
-    const supervision = SUPERVISION_PATTERN.exec(
-      withoutRegisteredNames(segment.paragraph, ctx, assignment.programName),
-    );
+    const modelWording = withoutRegisteredNames(segment.paragraph, ctx, assignment);
+    const supervision = SUPERVISION_PATTERN.exec(modelWording);
     if (supervision) {
       issues.push({
         code: "SUPERVISION_LANGUAGE",
@@ -392,9 +394,7 @@ export function validateNotePlan(
         message: `Hour ${assignment.segmentIndex + 1} documents the session as supervision ("${supervision[0]}"); use clinical direction, guidance, feedback, the directing analyst, or the technician instead.`,
       });
     }
-    const mentalistic = MENTALISTIC_PATTERN.exec(
-      withoutRegisteredNames(segment.paragraph, ctx, assignment.programName),
-    );
+    const mentalistic = MENTALISTIC_PATTERN.exec(modelWording);
     if (mentalistic) {
       issues.push({
         code: "MENTALISTIC_LANGUAGE",
