@@ -29,6 +29,7 @@ import {
   writeNoteGenerationAudit,
 } from "./note-generation-audit";
 import { ageYearsFromDateOfBirth } from "./avatar-generation";
+import { filterReinforcementPreferencesForNote } from "./reinforcer-preferences";
 import { assessmentGenerationGate } from "./note-readiness";
 import { truncateAssessmentTextForNoteContext } from "./assessment-extract";
 import {
@@ -210,8 +211,11 @@ export async function generateSessionNoteForClient(params: {
         topography: target.topography?.trim() || null,
       })),
     profileInterventions: profile?.interventions ?? [],
-    reinforcementPreferences:
+    // Age- and role-filtered so the model never sees an age-inconsistent item as usable.
+    reinforcementPreferences: filterReinforcementPreferencesForNote(
       profile?.assessmentSummary?.reinforcementPreferences ?? [],
+      { clientAgeYears },
+    ),
     assessmentExcerpt,
     assessmentReferenceFileName: profile?.assessmentFileName ?? null,
     hourlyAssignments,

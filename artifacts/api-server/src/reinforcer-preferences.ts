@@ -23,6 +23,27 @@ export function isYouTubeBannedForAge(clientAgeYears: number | null | undefined)
   return clientAgeYears != null && clientAgeYears >= 0 && clientAgeYears < YOUTUBE_MIN_AGE_YEARS;
 }
 
+/** Age at which young-child items stop being usable reinforcers, even when the BIP lists them. */
+export const AGE_INCONSISTENT_ITEM_MIN_AGE_YEARS = 13;
+
+const YOUNG_CHILD_ITEM_RE =
+  /\b(?:dolls?|doll\s+play|stuffed\s+animals?|plush(?:\s+toys?)?|teddy\s+bears?|rattles?|baby\s+toys?|toddler\s+toys?)\b/i;
+
+/**
+ * Young-child items (dolls, stuffed animals, rattles) must not appear for an adolescent or older
+ * client. Unlike the other filters here, a documented preference does not override this: an
+ * outdated BIP list is not a reason to write age-inconsistent activities into a teenager's note.
+ */
+export function isAgeInconsistentPreference(
+  name: string,
+  clientAgeYears: number | null | undefined,
+): boolean {
+  if (clientAgeYears == null || clientAgeYears < AGE_INCONSISTENT_ITEM_MIN_AGE_YEARS) {
+    return false;
+  }
+  return YOUNG_CHILD_ITEM_RE.test(name);
+}
+
 function normalizePreferenceLabel(raw: string): string {
   return raw
     .trim()
@@ -168,8 +189,8 @@ export function concreteToyPreferences(prefs: string[]): string[] {
 
 /**
  * Preferences safe to surface in the model context and locked closing for this client/session.
- * Drops caregiver role labels, YouTube when age < 14, and umbrella "Preferred toys" when
- * more specific toy prefs are available.
+ * Drops caregiver role labels, YouTube when age < 14, young-child items from age 13, and umbrella
+ * "Preferred toys" when more specific toy prefs are available.
  */
 export function filterReinforcementPreferencesForNote(
   prefs: string[] | null | undefined,
@@ -183,6 +204,7 @@ export function filterReinforcementPreferencesForNote(
     if (!p) continue;
     if (isPersonRolePreference(p)) continue;
     if (youtubeBanned && isYouTubePreference(p)) continue;
+    if (isAgeInconsistentPreference(p, age)) continue;
     if (isBipReinforcerDumpLine(p)) {
       expanded.push(...expandBipReinforcerDump(p));
       continue;
@@ -192,6 +214,7 @@ export function filterReinforcementPreferencesForNote(
   const cleaned = [...new Set(expanded.map((s) => s.trim()).filter(Boolean))].filter((p) => {
     if (isPersonRolePreference(p)) return false;
     if (youtubeBanned && isYouTubePreference(p)) return false;
+    if (isAgeInconsistentPreference(p, age)) return false;
     if (isBipReinforcerDumpLine(p)) return false;
     // OCR/garbled tokens that must never reach the locked closing (standalone or mid-list).
     if (/\bpop\s+start\b/i.test(p)) return false;

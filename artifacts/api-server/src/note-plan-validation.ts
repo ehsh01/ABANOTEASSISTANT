@@ -8,6 +8,7 @@ import {
   paragraphReflectsStoredTopography,
   splitTopographyActionAlternatives,
 } from "./maladaptive-behavior-topography";
+import { isAgeInconsistentPreference } from "./reinforcer-preferences";
 
 export type NotePlanIssueCode = string;
 
@@ -385,27 +386,39 @@ export function validateNotePlan(
       });
     }
     const documentedItems = documentedChildTypicalItems(ctx.reinforcementPreferences);
-    const undocumentedItem = [...segment.paragraph.matchAll(CHILD_TYPICAL_ITEM_PATTERN)]
-      .map((match) => match[0])
-      .find((item) => !documentedItems.has(childTypicalItemStem(item)));
-    if (undocumentedItem) {
-      const isDoll = /^doll/i.test(undocumentedItem);
-      const isAdolescentOrOlder =
-        ctx.clientAgeYears !== null && ctx.clientAgeYears >= ADOLESCENT_MIN_AGE_YEARS;
-      if (isDoll) {
-        issues.push({
-          code: "UNDOCUMENTED_PREFERENCE",
-          severity: "advisory",
-          segmentIndex: assignment.segmentIndex,
-          message: `Hour ${assignment.segmentIndex + 1} uses "${undocumentedItem}", which is not listed in the client's documented reinforcement preferences; use a documented preference instead.`,
-        });
-      } else if (isAdolescentOrOlder) {
+    const isAdolescentOrOlder =
+      ctx.clientAgeYears !== null && ctx.clientAgeYears >= ADOLESCENT_MIN_AGE_YEARS;
+    for (const match of segment.paragraph.matchAll(CHILD_TYPICAL_ITEM_PATTERN)) {
+      const item = match[0];
+      const documented = documentedItems.has(childTypicalItemStem(item));
+      // A documented preference never justifies a young-child item for a teenager.
+      if (isAdolescentOrOlder && isAgeInconsistentPreference(item, ctx.clientAgeYears)) {
         issues.push({
           code: "AGE_INCONSISTENT_ACTIVITY",
           severity: "advisory",
           segmentIndex: assignment.segmentIndex,
-          message: `Hour ${assignment.segmentIndex + 1} uses "${undocumentedItem}", which reads as a young-child material for a ${ctx.clientAgeYears}-year-old client and is not in the documented reinforcement preferences; use an age-appropriate documented preference instead.`,
+          message: `Hour ${assignment.segmentIndex + 1} uses "${item}", which is not age-appropriate for a ${ctx.clientAgeYears}-year-old client; use an age-appropriate activity even if the assessment lists this item.`,
         });
+        break;
+      }
+      if (documented) continue;
+      if (/^doll/i.test(item)) {
+        issues.push({
+          code: "UNDOCUMENTED_PREFERENCE",
+          severity: "advisory",
+          segmentIndex: assignment.segmentIndex,
+          message: `Hour ${assignment.segmentIndex + 1} uses "${item}", which is not listed in the client's documented reinforcement preferences; use a documented preference instead.`,
+        });
+        break;
+      }
+      if (isAdolescentOrOlder) {
+        issues.push({
+          code: "AGE_INCONSISTENT_ACTIVITY",
+          severity: "advisory",
+          segmentIndex: assignment.segmentIndex,
+          message: `Hour ${assignment.segmentIndex + 1} uses "${item}", which reads as a young-child material for a ${ctx.clientAgeYears}-year-old client and is not in the documented reinforcement preferences; use an age-appropriate documented preference instead.`,
+        });
+        break;
       }
     }
     const skillClass = replacementSkillClass(assignment.programName);

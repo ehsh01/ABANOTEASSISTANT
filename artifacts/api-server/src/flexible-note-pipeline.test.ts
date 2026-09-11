@@ -361,6 +361,31 @@ describe("flexible note contract", () => {
     );
   });
 
+  it("keeps dolls out of the locked closing for a 16-year-old client", () => {
+    const closing = buildLockedClosingParagraph(
+      ["watching TV", "going to the park", "tablet", "dolls", "access to tangibles"],
+      { clientAgeYears: 16 },
+    );
+    expect(closing).not.toMatch(/dolls?/i);
+    expect(closing).toContain("tablet");
+  });
+
+  it("flags documented dolls for an adolescent client", () => {
+    const ctx = context();
+    ctx.clientAgeYears = 16;
+    ctx.reinforcementPreferences = ["dolls", "tablet"];
+    const plan = validPlan();
+    plan.segments[0]!.paragraph = plan.segments[0]!.paragraph.replace(
+      "offered access to bubbles",
+      "offered access to dolls",
+    );
+    const issue = validateNotePlan(plan, ctx).find(
+      (candidate) => candidate.code === "AGE_INCONSISTENT_ACTIVITY",
+    );
+    expect(issue?.severity).toBe("advisory");
+    expect(issue?.message).toMatch(/dolls/i);
+  });
+
   it("allows doll play when it is a documented reinforcement preference", () => {
     const plan = validPlan();
     plan.segments[0]!.paragraph = plan.segments[0]!.paragraph.replace(

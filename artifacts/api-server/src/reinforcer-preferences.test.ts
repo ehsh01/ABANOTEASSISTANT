@@ -42,6 +42,32 @@ describe("reinforcer preferences helpers", () => {
     );
   });
 
+  test("drops dolls and other young-child items for a 16-year-old client", () => {
+    const filtered = filterReinforcementPreferencesForNote(
+      [
+        "watching TV",
+        "playing with toys",
+        "going to the park",
+        "tablet",
+        "dolls",
+        "stuffed animals",
+        "access to tangibles",
+      ],
+      { clientAgeYears: 16 },
+    );
+    expect(filtered).not.toContain("dolls");
+    expect(filtered).not.toContain("stuffed animals");
+    expect(filtered).toContain("tablet");
+    expect(filtered).toContain("watching TV");
+  });
+
+  test("keeps dolls for a young child whose assessment lists them", () => {
+    const filtered = filterReinforcementPreferencesForNote(["dolls", "Tablet"], {
+      clientAgeYears: 5,
+    });
+    expect(filtered).toContain("dolls");
+  });
+
   test("keeps Preferred toys when no concrete toy preference exists", () => {
     const filtered = filterReinforcementPreferencesForNote(
       ["Preferred toys", "Tablet", "YouTube videos"],
