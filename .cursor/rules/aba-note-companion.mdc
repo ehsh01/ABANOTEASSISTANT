@@ -41,6 +41,9 @@ advisories still save) cover:
 - no internal-state or opinion wording (for example "calm"/"calmly", "wanted"); state the observable action. Registered names and the app-selected activity/behavior hints are exempt because the note reproduces them verbatim
 - varied ABC connectors so hours do not repeat the same sentence templates
 - specific reinforcer wording in the clinical body when `reinforcementPreferences` are present
+- age-appropriate toys, materials, and activities. `clientAgeYears` (from the profile date of birth)
+  is part of `SessionContext`; young-child materials need a documented preference, and dolls are
+  never invented at any age
 - replacement-program skill alignment for common program classes
 
 The locked shell remains in `aba-note-locked-prose.mdc`.

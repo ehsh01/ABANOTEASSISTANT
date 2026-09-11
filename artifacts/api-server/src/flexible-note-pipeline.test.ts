@@ -28,6 +28,7 @@ function context(): SessionContext {
       "Differential Reinforcement of Alternative Behavior (DRA)",
     ],
     reinforcementPreferences: ["bubbles"],
+    clientAgeYears: null,
     assessmentExcerpt: "The client pushes materials away during work.",
     assessmentReferenceFileName: "assessment.pdf",
     hourlyAssignments: [
@@ -312,6 +313,51 @@ describe("flexible note contract", () => {
     );
     expect(validateNotePlan(plan, context()).map((issue) => issue.code)).toContain(
       "UNDOCUMENTED_PREFERENCE",
+    );
+  });
+
+  it("flags young-child materials for an adolescent client", () => {
+    const ctx = context();
+    ctx.clientAgeYears = 16;
+    ctx.reinforcementPreferences = ["Playing with playdough", "Playing the keyboard"];
+    const plan = validPlan();
+    plan.segments[0]!.paragraph = plan.segments[0]!.paragraph.replace(
+      "offered access to bubbles",
+      "offered access to stuffed animals",
+    );
+    const issue = validateNotePlan(plan, ctx).find(
+      (candidate) => candidate.code === "AGE_INCONSISTENT_ACTIVITY",
+    );
+    expect(issue?.severity).toBe("advisory");
+    expect(issue?.message).toMatch(/stuffed animals/i);
+    expect(issue?.message).toMatch(/16-year-old/);
+  });
+
+  it("allows an adolescent client's documented age-appropriate materials", () => {
+    const ctx = context();
+    ctx.clientAgeYears = 16;
+    ctx.reinforcementPreferences = ["Playing with playdough", "Playing the keyboard"];
+    const plan = validPlan();
+    for (const segment of plan.segments) {
+      segment.paragraph = segment.paragraph
+        .replace("offered access to bubbles", "offered access to the keyboard")
+        .replace("before access to bubbles", "before access to playdough");
+    }
+    const codes = validateNotePlan(plan, ctx).map((issue) => issue.code);
+    expect(codes).not.toContain("AGE_INCONSISTENT_ACTIVITY");
+    expect(codes).not.toContain("UNDOCUMENTED_PREFERENCE");
+  });
+
+  it("leaves young-child materials alone when the client is a young child", () => {
+    const ctx = context();
+    ctx.clientAgeYears = 6;
+    const plan = validPlan();
+    plan.segments[0]!.paragraph = plan.segments[0]!.paragraph.replace(
+      "offered access to bubbles",
+      "offered access to building blocks",
+    );
+    expect(validateNotePlan(plan, ctx).map((issue) => issue.code)).not.toContain(
+      "AGE_INCONSISTENT_ACTIVITY",
     );
   });
 

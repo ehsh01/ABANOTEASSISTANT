@@ -35,6 +35,7 @@ For each hour:
 - Across hours, vary sentence frames and connectors so the note reads as a person recounting the session. Registered program, behavior, topography, and intervention names stay exact; everything around them can vary. Do not repeat the same three templates in every ABC paragraph ("the client manifested [label] by…"; "following this intervention, the client…"; "the RBT implemented the replacement…").
 - Do not use intervention labels as verbs or modified phrases (for example "prompting," "Pivot Praise," or "Priming Interventions"). Do not introduce cue types as additional interventions.
 - When reinforcementPreferences lists preferred items or activities, name a concrete reinforcer from that list (or behavior-specific praise) instead of writing only "documented reinforcement". Ground optional leisure activities and preferred materials in that documented list; do not invent client preferences based on age or gender. In particular, never use dolls or doll play unless reinforcementPreferences explicitly documents dolls. The server-authored closing also lists approved reinforcers.
+- Every toy, material, and leisure activity must suit clientAgeYears. When clientAgeYears is 13 or older, do not use young-child materials (dolls, stuffed animals, plush toys, rattles, baby or toddler toys, bubbles, building blocks, shape sorters, stacking rings, playdough, coloring books, crayons, action figures, toy cars) unless reinforcementPreferences documents that exact item. Prefer the documented preferences and age-appropriate work materials (for example a keyboard, tablet, worksheets, index cards, a task list, household chores, or a board or card game). When clientAgeYears is null, still choose materials that match the assessment rather than assuming a young child.
 - In the replacement-program sentence, keep the exact programName and explain the skill practiced in a way that matches the assigned program (for example: FCT teaches a request; Request help involves needing assistance; walk/safety skill involves staying near an adult; transition programs involve movement between locations; time on task involves remaining engaged with materials). The connector around that name may vary.
 - Follow the clinical sequence shown in the examples: concrete antecedent; observable behavior with restated topography; one intervention (exact name, application, client outcome); replacement-program teaching; exact percentage. Vary the wording of that sequence from hour to hour.
 - Use assessmentExcerpt as client-specific grounding. Do not copy names from it.
@@ -92,7 +93,7 @@ const NOTE_PLAN_JSON_SCHEMA = {
   },
 } as const;
 
-export const CLINICAL_BODY_PROMPT_VERSION = "2026-09-11.no-inference-wording-v1";
+export const CLINICAL_BODY_PROMPT_VERSION = "2026-09-11.age-appropriate-materials-v1";
 
 export const CLINICAL_BODY_PROMPT_HASH = createHash("sha256")
   .update(SYSTEM_PROMPT)
@@ -232,6 +233,7 @@ After naming it, describe technician application, then an observable client outc
 Restate observable topography with measurable qualifiers; do not rely on earlier hours. Never use only "failing to appropriately respond" or "non-compliance" without physical actions.
 Use a concrete antecedent; do not use vague phrases such as "during play" or "when access was denied".
 When reinforcementPreferences are present, name a concrete reinforcer from that list instead of only "documented reinforcement". Do not invent dolls, doll play, or other optional leisure preferences absent from that list.
+Keep every toy, material, and activity consistent with clientAgeYears. For a client 13 or older, do not use young-child materials (dolls, stuffed animals, bubbles, blocks, playdough, crayons, toy cars, and similar) unless that exact item is documented.
 Keep the exact programName and explain the replacement skill practiced in a way that matches the assigned program.
 Use observable wording only and do not make baseline, previous-session, or trend claims. Never use "calm", "calmly", or "wanted" as your own wording; state the observable action instead (for example "reached for" or "pointed to" rather than "wanted").
 Never write "supervised" or "supervision" unless those words are inside a registered name. Prefer clinical direction, guidance, feedback, the directing analyst, or the technician.

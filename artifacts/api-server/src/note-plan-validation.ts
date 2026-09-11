@@ -45,7 +45,30 @@ const MEDICATION_PATTERN =
 const VAGUE_ANTECEDENT_PATTERN =
   /\b(?:during a transition activity|during play|when access was denied|after intervention|following the previous activity)\b/i;
 const GENERIC_REINFORCEMENT_PATTERN = /\bdocumented reinforcement\b/i;
-const DOLL_ACTIVITY_PATTERN = /\bdolls?\b|\bdoll\s+play\b/i;
+/**
+ * Items that read as young-child materials. They are acceptable at any age when the client's
+ * documented reinforcement preferences list them; otherwise dolls are never invented, and for an
+ * adolescent or older client none of them may be invented.
+ */
+const CHILD_TYPICAL_ITEM_PATTERN =
+  /\b(?:dolls?|doll\s+play|stuffed\s+animals?|plush(?:\s+toys?)?|teddy\s+bears?|rattles?|baby\s+toys?|toddler\s+toys?|bubbles?|building\s+blocks?|blocks?|shape\s+sorter|stacking\s+rings?|play-?dough|coloring\s+books?|crayons?|finger\s+paints?|action\s+figures?|toy\s+cars?)\b/gi;
+
+/** Age at which young-child materials need documented support to appear in a note. */
+const ADOLESCENT_MIN_AGE_YEARS = 13;
+
+function childTypicalItemStem(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, " ").replace(/s$/, "");
+}
+
+function documentedChildTypicalItems(preferences: string[]): Set<string> {
+  const stems = new Set<string>();
+  for (const preference of preferences) {
+    for (const match of preference.matchAll(CHILD_TYPICAL_ITEM_PATTERN)) {
+      stems.add(childTypicalItemStem(match[0]));
+    }
+  }
+  return stems;
+}
 const SUPERVISION_PATTERN = /\b(?:supervised|supervision)\b/i;
 const FOLLOWING_INTERVENTION_RBT_PATTERN =
   /\bFollowing this intervention,\s+the RBT\b/i;
@@ -361,16 +384,29 @@ export function validateNotePlan(
         message: `Hour ${assignment.segmentIndex + 1} should name a concrete reinforcer from the client's preferences instead of only "documented reinforcement".`,
       });
     }
-    if (
-      DOLL_ACTIVITY_PATTERN.test(segment.paragraph) &&
-      !ctx.reinforcementPreferences.some((preference) => DOLL_ACTIVITY_PATTERN.test(preference))
-    ) {
-      issues.push({
-        code: "UNDOCUMENTED_PREFERENCE",
-        severity: "advisory",
-        segmentIndex: assignment.segmentIndex,
-        message: `Hour ${assignment.segmentIndex + 1} uses dolls or doll play, but that activity is not listed in the client's documented reinforcement preferences; use a documented preference instead.`,
-      });
+    const documentedItems = documentedChildTypicalItems(ctx.reinforcementPreferences);
+    const undocumentedItem = [...segment.paragraph.matchAll(CHILD_TYPICAL_ITEM_PATTERN)]
+      .map((match) => match[0])
+      .find((item) => !documentedItems.has(childTypicalItemStem(item)));
+    if (undocumentedItem) {
+      const isDoll = /^doll/i.test(undocumentedItem);
+      const isAdolescentOrOlder =
+        ctx.clientAgeYears !== null && ctx.clientAgeYears >= ADOLESCENT_MIN_AGE_YEARS;
+      if (isDoll) {
+        issues.push({
+          code: "UNDOCUMENTED_PREFERENCE",
+          severity: "advisory",
+          segmentIndex: assignment.segmentIndex,
+          message: `Hour ${assignment.segmentIndex + 1} uses "${undocumentedItem}", which is not listed in the client's documented reinforcement preferences; use a documented preference instead.`,
+        });
+      } else if (isAdolescentOrOlder) {
+        issues.push({
+          code: "AGE_INCONSISTENT_ACTIVITY",
+          severity: "advisory",
+          segmentIndex: assignment.segmentIndex,
+          message: `Hour ${assignment.segmentIndex + 1} uses "${undocumentedItem}", which reads as a young-child material for a ${ctx.clientAgeYears}-year-old client and is not in the documented reinforcement preferences; use an age-appropriate documented preference instead.`,
+        });
+      }
     }
     const skillClass = replacementSkillClass(assignment.programName);
     if (

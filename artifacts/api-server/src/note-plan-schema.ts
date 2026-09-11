@@ -18,6 +18,8 @@ export const SessionContextSchema = z.object({
   sessionHours: z.number().int().min(1).max(8),
   sessionDate: z.string().min(1),
   therapySetting: z.string().min(1),
+  /** Client age in years from the profile date of birth; null when the DOB is missing or unparseable. */
+  clientAgeYears: z.number().int().min(0).max(120).nullable(),
   environmentalChanges: z.string(),
   profileBehaviors: z.array(z.string()),
   profileBehaviorTargets: z.array(ProfileBehaviorTargetSchema),

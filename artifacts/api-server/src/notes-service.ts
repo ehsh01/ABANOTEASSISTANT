@@ -28,6 +28,7 @@ import {
   hashNoteGenerationContext,
   writeNoteGenerationAudit,
 } from "./note-generation-audit";
+import { ageYearsFromDateOfBirth } from "./avatar-generation";
 import { assessmentGenerationGate } from "./note-readiness";
 import { truncateAssessmentTextForNoteContext } from "./assessment-extract";
 import {
@@ -193,10 +194,13 @@ export async function generateSessionNoteForClient(params: {
     truncateAssessmentTextForNoteContext(rawAssessment);
   const assessmentExcerpt = scrubAssessmentNames(truncatedAssessment, profile);
 
+  const clientAgeYears = ageYearsFromDateOfBirth(profile?.dateOfBirth ?? null);
+
   const context: NoteGenerationContext = {
     sessionHours: body.sessionHours,
     sessionDate: body.sessionDate,
     therapySetting: body.therapySetting,
+    clientAgeYears,
     environmentalChanges: body.environmentalChanges?.trim() ?? "",
     profileBehaviors: profile?.maladaptiveBehaviors ?? [],
     profileBehaviorTargets: (profile?.maladaptiveBehaviorTargets ?? [])
@@ -298,7 +302,7 @@ export async function generateSessionNoteForClient(params: {
       profile?.firstName,
     ),
     clinicalBody: modelGeneration.body,
-    closing: buildLockedClosingParagraph(closingPreferences),
+    closing: buildLockedClosingParagraph(closingPreferences, { clientAgeYears }),
     performance: buildPerformanceSentence(
       body.sessionHours,
       trialSummaries,

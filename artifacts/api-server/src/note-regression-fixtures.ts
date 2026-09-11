@@ -57,6 +57,7 @@ export function fixtureSessionContext(fixture: NoteRegressionPipelineCase): Sess
     profileBehaviorTargets: fixture.profileBehaviorTargets ?? [],
     profileInterventions: fixture.profileInterventions,
     reinforcementPreferences: [],
+    clientAgeYears: null,
     assessmentExcerpt: fixture.assessmentExcerpt,
     assessmentReferenceFileName: "deidentified-assessment.pdf",
     hourlyAssignments: fixture.hourlyAssignments.map((assignment, segmentIndex) => ({
