@@ -5,7 +5,11 @@ import {
   buildNextSessionSentence,
   buildPerformanceSentence,
 } from "./note-assembly";
-import { assembleClinicalBodyFromNotePlan, countClinicalParagraphs } from "./note-plan-assembly";
+import {
+  assembleClinicalBodyFromNotePlan,
+  countClinicalParagraphs,
+  replaceDashPunctuation,
+} from "./note-plan-assembly";
 import type { NotePlan, SessionContext } from "./note-plan-schema";
 import { validateNotePlan } from "./note-plan-validation";
 import { generateClinicalBodyOpenAI } from "./openai-notes";
@@ -196,6 +200,29 @@ describe("flexible note contract", () => {
     expect(validateNotePlan(plan, context()).filter((issue) => issue.segmentIndex === 0)).toEqual(
       [],
     );
+  });
+
+  it("flags dash punctuation and assembles the paragraph with commas instead", () => {
+    const plan = validPlan();
+    plan.segments[0]!.paragraph = plan.segments[0]!.paragraph.replace(
+      "The RBT placed the client's hands on the table",
+      "The RBT provided guidance — the client placed both hands on the table",
+    );
+    expect(validateNotePlan(plan, context()).map((issue) => issue.code)).toContain(
+      "DASH_PUNCTUATION",
+    );
+    const body = assembleClinicalBodyFromNotePlan(plan, context());
+    expect(body).not.toMatch(/[—–]/);
+    expect(body).toContain("provided guidance, the client");
+  });
+
+  it("preserves dashes that are part of a registered name", () => {
+    expect(
+      replaceDashPunctuation(
+        "The RBT used High–Probability Request Sequence — the client returned.",
+        ["High–Probability Request Sequence"],
+      ),
+    ).toBe("The RBT used High–Probability Request Sequence, the client returned.");
   });
 
   it("flags calm and calmly as internal-state wording", () => {

@@ -23,6 +23,7 @@ import {
   buildNextSessionSentence,
   buildPerformanceSentence,
 } from "./note-assembly";
+import { replaceDashPunctuation } from "./note-plan-assembly";
 import {
   buildNoteGenerationAuditEntry,
   hashNoteGenerationContext,
@@ -75,11 +76,11 @@ function assembleSessionNote(params: {
   nextSession: string;
 }): string {
   return [
-    params.opening.trim(),
+    replaceDashPunctuation(params.opening).trim(),
     params.clinicalBody.trim(),
-    params.closing.trim(),
-    params.performance.trim(),
-    params.nextSession.trim(),
+    replaceDashPunctuation(params.closing).trim(),
+    replaceDashPunctuation(params.performance).trim(),
+    replaceDashPunctuation(params.nextSession).trim(),
   ].join("\n\n");
 }
 

@@ -43,6 +43,7 @@ const OUTSIDE_HOME_SETTING_PATTERN =
   /\b(?:(?:in|into|near|along|toward|towards|at)\s+(?:the\s+)?(?:street|sidewalk|roadway|road|parking lot|neighborhood|park|playground|yard|backyard|front yard|driveway|porch|store|restaurant|school|clinic)|outside\s+(?:of\s+)?the\s+home|left\s+the\s+home)\b/i;
 const MEDICATION_PATTERN =
   /\b(?:medicine|medicines|medication|medications|medicate|medicated|prescription|prescriptions|dosage|dosages|pharmaceutical|pharmaceuticals)\b/i;
+const DASH_PUNCTUATION_PATTERN = /[\u2013\u2014]|\s-\s/;
 const VAGUE_ANTECEDENT_PATTERN =
   /\b(?:during a transition activity|during play|when access was denied|after intervention|following the previous activity)\b/i;
 const GENERIC_REINFORCEMENT_PATTERN = /\bdocumented reinforcement\b/i;
@@ -434,6 +435,14 @@ export function validateNotePlan(
       });
     }
     const modelWording = withoutRegisteredNames(segment.paragraph, ctx, assignment);
+    if (DASH_PUNCTUATION_PATTERN.test(modelWording)) {
+      issues.push({
+        code: "DASH_PUNCTUATION",
+        severity: "advisory",
+        segmentIndex: assignment.segmentIndex,
+        message: `Hour ${assignment.segmentIndex + 1} uses dash punctuation; replace it with a comma or a normal sentence break.`,
+      });
+    }
     const supervision = SUPERVISION_PATTERN.exec(modelWording);
     if (supervision) {
       issues.push({

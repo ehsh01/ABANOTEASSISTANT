@@ -43,6 +43,7 @@ import {
   validateAssessmentStructured,
 } from "../assessment-structured";
 import { sanitizeClientAssessmentSummary } from "../client-assessment-summary";
+import { dedupeImportedProgramLists, dedupeProgramNames } from "../program-name-dedup";
 import { computeClinicalRecommendation } from "../recommendation-engine";
 import { z } from "zod";
 
@@ -64,13 +65,7 @@ function replacementProgramNamesFromProfile(profile: unknown): string[] {
   }
   const raw = (profile as { replacementPrograms?: unknown }).replacementPrograms;
   if (Array.isArray(raw)) {
-    return [
-      ...new Set(
-        raw
-          .map((n) => String(n).trim())
-          .filter((n) => n.length > 0),
-      ),
-    ];
+    return dedupeProgramNames(raw.map((n) => String(n)));
   }
   if (typeof raw === "string" && raw.trim()) {
     return [raw.trim()];
@@ -449,6 +444,10 @@ router.post("/clients", async (req, res) => {
       behaviorsInput: body.maladaptiveBehaviors,
       targetsInput: body.maladaptiveBehaviorTargets,
     });
+    const programs = dedupeImportedProgramLists({
+      replacementPrograms: body.replacementPrograms,
+      skillAcquisitionPrograms: body.skillAcquisitionPrograms ?? [],
+    });
     const profile: ClientProfileRow = {
       firstName: body.firstName.trim(),
       lastName: body.lastName.trim(),
@@ -456,8 +455,8 @@ router.post("/clients", async (req, res) => {
       gender: body.gender,
       maladaptiveBehaviors: mal.maladaptiveBehaviors,
       maladaptiveBehaviorTargets: mal.maladaptiveBehaviorTargets,
-      replacementPrograms: body.replacementPrograms,
-      skillAcquisitionPrograms: body.skillAcquisitionPrograms ?? [],
+      replacementPrograms: programs.replacementPrograms,
+      skillAcquisitionPrograms: programs.skillAcquisitionPrograms,
       interventions: body.interventions,
       assessmentFileName: body.assessmentFileName ?? undefined,
       assessmentAuthorizationExpiresOn:
@@ -1239,6 +1238,11 @@ router.patch("/clients/:clientId", async (req, res) => {
       body.assessmentSummary === null ? null : sanitizeClientAssessmentSummary(body.assessmentSummary);
   }
 
+  const programs = dedupeImportedProgramLists({
+    replacementPrograms: body.replacementPrograms ?? base.replacementPrograms,
+    skillAcquisitionPrograms:
+      body.skillAcquisitionPrograms ?? base.skillAcquisitionPrograms ?? [],
+  });
   const nextProfile: ClientProfileRow = {
     ...base,
     firstName: body.firstName?.trim() ?? base.firstName,
@@ -1247,8 +1251,8 @@ router.patch("/clients/:clientId", async (req, res) => {
     gender: body.gender ?? base.gender,
     maladaptiveBehaviors,
     maladaptiveBehaviorTargets,
-    replacementPrograms: body.replacementPrograms ?? base.replacementPrograms,
-    skillAcquisitionPrograms: body.skillAcquisitionPrograms ?? base.skillAcquisitionPrograms ?? [],
+    replacementPrograms: programs.replacementPrograms,
+    skillAcquisitionPrograms: programs.skillAcquisitionPrograms,
     interventions: body.interventions ?? base.interventions,
     assessmentFileName,
     assessmentStructured: assessmentStructuredNext,

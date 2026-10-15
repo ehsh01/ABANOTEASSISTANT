@@ -16,6 +16,7 @@ import {
   sanitizeClinicalFunctionsInput,
 } from "./clinical-behavior-function";
 import { isUnusableStoredTopography } from "./maladaptive-behavior-topography";
+import { dedupeImportedProgramLists } from "./program-name-dedup";
 import type { ClinicalFunction } from "@workspace/db/schema";
 
 const ClinicalFunctionExtractEnum = z.enum(["escape", "attention", "tangible", "automatic"]);
@@ -482,9 +483,13 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
 
   const assessmentSummary = sanitizeClientAssessmentSummary(extracted.assessmentSummary ?? null);
 
-  const dedupedReplacements = [
-    ...new Set(extracted.replacementPrograms.map((s) => s.trim()).filter(Boolean)),
-  ];
+  const {
+    replacementPrograms: dedupedReplacements,
+    skillAcquisitionPrograms: dedupedSkillAcquisitionPrograms,
+  } = dedupeImportedProgramLists({
+    replacementPrograms: extracted.replacementPrograms,
+    skillAcquisitionPrograms,
+  });
   const dedupedInterventions = [
     ...new Set(extracted.interventions.map((s) => s.trim()).filter(Boolean)),
   ];
@@ -512,7 +517,7 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
       maladaptiveBehaviors: dedupedBehaviors,
       maladaptiveBehaviorTopographies: topographies,
       replacementPrograms: dedupedReplacements,
-      skillAcquisitionPrograms,
+      skillAcquisitionPrograms: dedupedSkillAcquisitionPrograms,
       interventions: dedupedInterventions,
       behaviorReplacementMap:
         Object.keys(behaviorReplacementMap).length > 0 ? behaviorReplacementMap : undefined,
