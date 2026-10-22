@@ -20,8 +20,6 @@ import {
   resolveBackgroundNoteGenerationTimeBudgetMs,
   resolveBackgroundOpenAIRequestTimeoutMs,
 } from "./openai-notes";
-import { aiHttpError, assertAiProviderConfigured } from "./ai-config";
-import { assertAiUsageAllowed } from "./ai-usage";
 import { generateSessionNoteForClient } from "./notes-service";
 import { assessmentGenerationGate } from "./note-readiness";
 import {
@@ -94,18 +92,6 @@ export async function prepareNoteGeneration(params: {
     };
   }
 
-  try {
-    assertAiProviderConfigured("note");
-  } catch (error) {
-    const aiError = aiHttpError(error);
-    return {
-      ok: false,
-      status: aiError.status ?? 503,
-      error: aiError.error,
-      messages: [],
-    };
-  }
-
   const [client] = await withTransientDbRetry(
     () =>
       db
@@ -126,18 +112,6 @@ export async function prepareNoteGeneration(params: {
     profile: client.profile as ClientProfileRow | null | undefined,
   });
   if (!assessmentGate.ok) return assessmentGate;
-
-  try {
-    await assertAiUsageAllowed("note", { userId, companyId });
-  } catch (error) {
-    const aiError = aiHttpError(error);
-    return {
-      ok: false,
-      status: aiError.status ?? 503,
-      error: aiError.error,
-      messages: [],
-    };
-  }
 
   const [companyForCap] = await withTransientDbRetry(
     () =>

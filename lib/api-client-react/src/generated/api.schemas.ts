@@ -733,6 +733,8 @@ export interface GenerateNoteRequest {
   /** Required. Maps every hourly replacement program id to the percentage manually selected in the app, encoded as count + effectiveTrials. The server freezes the corresponding integer percentage and requires that exact value in every hour assigned to the program.
    */
   programTrialData: GenerateNoteRequestProgramTrialData;
+  /** Bypass a matching note-response cache entry and generate fresh model prose. */
+  forceRegenerate?: boolean;
 }
 
 export type AbcActivityAntecedentListResponseData = {
@@ -1222,6 +1224,8 @@ export interface BillingPortalResponse {
 export type ExtractAssessmentFromPdfWithAiBody = {
   /** Assessment PDF (field name must be `file`) */
   file: Blob;
+  /** Bypass a matching cached extraction and call the provider again. */
+  force?: boolean;
 };
 
 export type ExtractAssessmentFromPdfWithAi200Data = { [key: string]: unknown };

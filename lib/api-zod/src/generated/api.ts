@@ -1176,9 +1176,17 @@ export const DeleteClientResponse = zod.object({
 
  * @summary Extract structured assessment fields with AI
  */
+export const extractAssessmentFromPdfWithAiBodyForceDefault = false;
+
 export const ExtractAssessmentFromPdfWithAiBody = zod.object({
   file: zod.unknown()
     .describe("Assessment PDF (field name must be `file`)"),
+  force: zod
+    .boolean()
+    .default(extractAssessmentFromPdfWithAiBodyForceDefault)
+    .describe(
+      "Bypass a matching cached extraction and call the provider again.",
+    ),
 });
 
 export const ExtractAssessmentFromPdfWithAiResponse = zod.object({
@@ -2029,6 +2037,8 @@ export const generateNoteBodyAbcHintsMax = 8;
 
 export const generateNoteBodyProgramTrialDataCountMax = 10;
 
+export const generateNoteBodyForceRegenerateDefault = false;
+
 export const GenerateNoteBody = zod.object({
   clientId: zod.number(),
   sessionHours: zod.number().min(1).max(generateNoteBodySessionHoursMax),
@@ -2125,6 +2135,12 @@ export const GenerateNoteBody = zod.object({
     )
     .describe(
       "Required. Maps every hourly replacement program id to the percentage manually selected in the app, encoded as count + effectiveTrials. The server freezes the corresponding integer percentage and requires that exact value in every hour assigned to the program.\n",
+    ),
+  forceRegenerate: zod
+    .boolean()
+    .default(generateNoteBodyForceRegenerateDefault)
+    .describe(
+      "Bypass a matching note-response cache entry and generate fresh model prose.",
     ),
 });
 
@@ -2300,6 +2316,8 @@ export const createNoteGenerationJobBodyAbcHintsMax = 8;
 
 export const createNoteGenerationJobBodyProgramTrialDataCountMax = 10;
 
+export const createNoteGenerationJobBodyForceRegenerateDefault = false;
+
 export const CreateNoteGenerationJobBody = zod.object({
   clientId: zod.number(),
   sessionHours: zod
@@ -2399,6 +2417,12 @@ export const CreateNoteGenerationJobBody = zod.object({
     )
     .describe(
       "Required. Maps every hourly replacement program id to the percentage manually selected in the app, encoded as count + effectiveTrials. The server freezes the corresponding integer percentage and requires that exact value in every hour assigned to the program.\n",
+    ),
+  forceRegenerate: zod
+    .boolean()
+    .default(createNoteGenerationJobBodyForceRegenerateDefault)
+    .describe(
+      "Bypass a matching note-response cache entry and generate fresh model prose.",
     ),
 });
 

@@ -124,7 +124,7 @@ export async function writeAiCache(params: {
     cacheKey: params.cacheKey,
     model: params.model,
     response: params.response,
-    // Zero means no expiry. This is the assessment default so identical PDF bytes never cost twice.
+    // Zero remains available for an explicitly configured non-expiring cache.
     expiresAt:
       ttlSeconds === 0 ? null : new Date(now.getTime() + ttlSeconds * 1000),
   });

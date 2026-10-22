@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   numeric,
@@ -18,6 +19,9 @@ export const aiUsageTable = abanote.table(
   {
     id: serial("id").primaryKey(),
     feature: text("feature").notNull(),
+    operationId: text("operation_id").notNull(),
+    status: text("status").notNull().default("reserved"),
+    providerCalled: boolean("provider_called").notNull().default(false),
     userId: integer("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
@@ -47,6 +51,10 @@ export const aiUsageTable = abanote.table(
     featureCompanyCreatedIdx: index("ai_usage_feature_company_created_idx").on(
       t.feature,
       t.companyId,
+      t.createdAt,
+    ),
+    operationCreatedIdx: index("ai_usage_operation_created_idx").on(
+      t.operationId,
       t.createdAt,
     ),
   }),

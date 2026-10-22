@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { assembleClinicalBodyFromNotePlan } from "./note-plan-assembly";
@@ -15,8 +15,12 @@ import {
   type NotePlanIssue,
 } from "./note-plan-validation";
 import {
-  assertAiUsageAllowed,
-  recordAiUsage,
+  completeAiUsageBestEffort,
+  estimateTextReservationCostUsd,
+  estimateTokenCostUsd,
+  failAiUsageBestEffort,
+  releaseAiUsageBestEffort,
+  reserveAiUsage,
   type AiUsageIdentity,
   type AiUsageStore,
 } from "./ai-usage";
@@ -322,50 +326,75 @@ async function defaultModelCall(params: {
   usageIdentity: AiUsageIdentity;
   usageStore?: AiUsageStore;
   maxCompletionTokens: number;
+  operationId: string;
 }): Promise<NotePlanModelCallOutput> {
-  await assertAiUsageAllowed("note", params.usageIdentity, params.usageStore);
-  const client = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-    timeout: params.requestTimeoutMs ?? 90_000,
-  });
+  const reservation = await reserveAiUsage(
+    {
+      feature: "note",
+      ...params.usageIdentity,
+      operationId: params.operationId,
+      model: params.model,
+      reservedCostUsd: estimateTextReservationCostUsd(
+        params.model,
+        JSON.stringify(params.messages).length,
+        params.maxCompletionTokens,
+      ),
+    },
+    params.usageStore,
+  );
   let promptTokens = 0;
   let completionTokens = 0;
+  let providerCalled = false;
   try {
-  const completion = await client.chat.completions.create({
-    model: params.model,
-    messages: params.messages,
-    response_format: {
-      type: "json_schema",
-      json_schema: params.jsonSchema,
-    },
+    const client = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+      timeout: params.requestTimeoutMs ?? 90_000,
+    });
+    providerCalled = true;
+    const completion = await client.chat.completions.create({
+      model: params.model,
+      messages: params.messages,
+      response_format: {
+        type: "json_schema",
+        json_schema: params.jsonSchema,
+      },
       max_completion_tokens: params.maxCompletionTokens,
-  });
+    });
     promptTokens = completion.usage?.prompt_tokens ?? 0;
     completionTokens = completion.usage?.completion_tokens ?? 0;
-  return {
-    output: completion.choices[0]?.message?.content ?? "",
-    completionId: completion.id,
-    model: completion.model,
-      finishReason: completion.choices[0]?.finish_reason ?? null,
-    usage: completion.usage
-      ? {
-            promptTokens,
-            completionTokens,
-          totalTokens: completion.usage.total_tokens,
-        }
-      : undefined,
-  };
-  } finally {
-    await recordAiUsage(
+    await completeAiUsageBestEffort(
+      reservation,
       {
-        feature: "note",
-        ...params.usageIdentity,
-        model: params.model,
         promptTokens,
         completionTokens,
+        estimatedCostUsd: estimateTokenCostUsd(
+          params.model,
+          promptTokens,
+          completionTokens,
+        ),
       },
       params.usageStore,
     );
+    return {
+      output: completion.choices[0]?.message?.content ?? "",
+      completionId: completion.id,
+      model: completion.model,
+      finishReason: completion.choices[0]?.finish_reason ?? null,
+      usage: completion.usage
+        ? {
+            promptTokens,
+            completionTokens,
+            totalTokens: completion.usage.total_tokens,
+          }
+        : undefined,
+    };
+  } catch (error) {
+    if (providerCalled) {
+      await failAiUsageBestEffort(reservation, params.usageStore);
+    } else {
+      await releaseAiUsageBestEffort(reservation, params.usageStore);
+    }
+    throw error;
   }
 }
 
@@ -404,6 +433,7 @@ export async function generateClinicalBodyOpenAI(
   let modelUsed = primaryModel;
   let nextModel = primaryModel;
   let repairAttempts = 0;
+  const operationId = randomUUID();
 
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (Date.now() - startedAt >= timeBudgetMs) break;
@@ -427,6 +457,7 @@ export async function generateClinicalBodyOpenAI(
               usageIdentity: options.usageIdentity,
               usageStore: options.usageStore,
               maxCompletionTokens,
+              operationId,
             })
           : (() => {
               throw new Error("AI usage identity is required");
@@ -516,6 +547,8 @@ export async function generateClinicalBodyOpenAI(
     });
 
     if (priorPlan && blockingIssues.length === 0) {
+      // Advisory-only issues are intentionally fail-open: the backend contract permits them,
+      // and another paid call would add spend without repairing a locked program/percentage error.
       const finalAdvisories = lastIssues.filter(
         (issue) => issue.severity === "advisory",
       );

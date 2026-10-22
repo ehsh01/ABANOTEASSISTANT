@@ -18,8 +18,9 @@ import {
   type NoteGenerationAttemptTelemetry,
   type NoteGenerationContext,
 } from "./openai-notes";
-import { readAiCache, sha256CacheKey, writeAiCache } from "./ai-cache";
+import { sha256CacheKey, writeAiCache } from "./ai-cache";
 import { aiHttpError, assertAiProviderConfigured } from "./ai-config";
+import { readCachedNoteGeneration } from "./note-ai-cache";
 import {
   buildLockedClosingParagraph,
   buildLockedOpening,
@@ -89,31 +90,6 @@ function assembleSessionNote(params: {
 
 function modelFailureMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Unknown OpenAI error";
-}
-
-function parseCachedNoteGeneration(value: unknown): GenerateClinicalBodyResult | null {
-  if (!value || typeof value !== "object") return null;
-  const candidate = value as Partial<GenerateClinicalBodyResult>;
-  if (
-    typeof candidate.body !== "string" ||
-    !candidate.notePlan ||
-    !Array.isArray(candidate.notePlan.segments) ||
-    typeof candidate.modelUsed !== "string"
-  ) {
-    return null;
-  }
-  return {
-    ...candidate,
-    warnings: Array.isArray(candidate.warnings) ? candidate.warnings : [],
-    repairAttempts: candidate.repairAttempts ?? 0,
-    finalIssues: Array.isArray(candidate.finalIssues) ? candidate.finalIssues : [],
-    finalPlanIssues: Array.isArray(candidate.finalPlanIssues)
-      ? candidate.finalPlanIssues
-      : [],
-    attemptHistory: [],
-    rawModelOutputs: [],
-    repairActions: ["Loaded an identical request from the AI response cache."],
-  } as GenerateClinicalBodyResult;
 }
 
 export async function generateSessionNoteForClient(params: {
@@ -279,17 +255,16 @@ export async function generateSessionNoteForClient(params: {
   );
   let modelGeneration: GenerateClinicalBodyResult;
   try {
-    assertAiProviderConfigured("note");
-    const cached = await readAiCache({
-      feature: "note",
+    const cached = await readCachedNoteGeneration({
+      forceRegenerate: body.forceRegenerate === true,
       companyId,
       cacheKey: noteCacheKey,
       model: resolvedOpenAIModel(),
-      parse: parseCachedNoteGeneration,
     });
     if (cached) {
       modelGeneration = cached;
     } else {
+      assertAiProviderConfigured("note");
       modelGeneration = await generateClinicalBodyOpenAI(context, {
         requestTimeoutMs: tuning?.requestTimeoutMs,
         timeBudgetMs: tuning?.timeBudgetMs,

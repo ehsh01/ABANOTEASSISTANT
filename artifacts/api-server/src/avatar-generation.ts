@@ -18,10 +18,13 @@
 import OpenAI from "openai";
 import type { ImagesResponse } from "openai/resources/images";
 import crypto from "crypto";
+import { randomUUID } from "node:crypto";
 import {
-  assertAiUsageAllowed,
+  completeAiUsageBestEffort,
   estimateImageCostUsd,
-  recordAiUsage,
+  failAiUsageBestEffort,
+  releaseAiUsageBestEffort,
+  reserveAiUsage,
   type AiUsageIdentity,
   type AiUsageStore,
 } from "./ai-usage";
@@ -185,51 +188,64 @@ export async function generateClientAvatar(
   usageIdentity: AiUsageIdentity,
   options?: { usageStore?: AiUsageStore },
 ): Promise<GeneratedAvatar> {
-  assertAiProviderConfigured("avatar");
   if (!input.firstName?.trim()) {
     throw new Error("firstName is required to generate an avatar");
   }
 
-  await assertAiUsageAllowed("avatar", usageIdentity, options?.usageStore);
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  assertAiProviderConfigured("avatar");
   const model = resolveAvatarModel();
   const prompt = buildAvatarPrompt(input);
   const quality = resolveAvatarQuality();
-
-  const params: Parameters<typeof client.images.generate>[0] = {
-    model,
-    prompt,
-    size: DEFAULT_AVATAR_SIZE,
-    n: 1,
-  };
-  // gpt-image-1 supports a `quality` knob; older `dall-e-*` models silently reject it. We keep it
-  // optional so an env-pinned `dall-e-3` fallback continues to work without extra branching here.
-  if (model === DEFAULT_AVATAR_MODEL) {
-    (params as unknown as Record<string, unknown>)["quality"] = quality;
-  }
-
-  let result: ImagesResponse;
+  const reservedCostUsd = estimateImageCostUsd(quality);
+  const reservation = await reserveAiUsage(
+    {
+      feature: "avatar",
+      ...usageIdentity,
+      operationId: randomUUID(),
+      model,
+      reservedCostUsd,
+    },
+    options?.usageStore,
+  );
+  let providerCalled = false;
   try {
-    result = await client.images.generate(params);
-  } finally {
-    await recordAiUsage(
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const params: Parameters<typeof client.images.generate>[0] = {
+      model,
+      prompt,
+      size: DEFAULT_AVATAR_SIZE,
+      n: 1,
+    };
+    // gpt-image-1 supports a `quality` knob; older `dall-e-*` models silently reject it.
+    if (model === DEFAULT_AVATAR_MODEL) {
+      (params as unknown as Record<string, unknown>)["quality"] = quality;
+    }
+    providerCalled = true;
+    const result: ImagesResponse = await client.images.generate(params);
+    const first = result.data?.[0];
+    const b64 = first?.b64_json;
+    if (!b64) {
+      throw new Error("Image model returned no b64_json payload");
+    }
+    const png = Buffer.from(b64, "base64");
+    await completeAiUsageBestEffort(
+      reservation,
       {
-        feature: "avatar",
-        ...usageIdentity,
-        model,
-        estimatedCostUsd: estimateImageCostUsd(quality),
+        promptTokens: 0,
+        completionTokens: 0,
+        estimatedCostUsd: reservedCostUsd,
       },
       options?.usageStore,
     );
+    return { png, pngBase64: b64, prompt, model };
+  } catch (error) {
+    if (providerCalled) {
+      await failAiUsageBestEffort(reservation, options?.usageStore);
+    } else {
+      await releaseAiUsageBestEffort(reservation, options?.usageStore);
+    }
+    throw error;
   }
-
-  const first = result.data?.[0];
-  const b64 = first?.b64_json;
-  if (!b64) {
-    throw new Error("Image model returned no b64_json payload");
-  }
-  const png = Buffer.from(b64, "base64");
-  return { png, pngBase64: b64, prompt, model };
 }
 
 /**

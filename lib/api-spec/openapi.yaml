@@ -439,6 +439,10 @@ paths:
                   type: string
                   format: binary
                   description: Assessment PDF (field name must be `file`)
+                force:
+                  type: boolean
+                  default: false
+                  description: Bypass a matching cached extraction and call the provider again.
       responses:
         "200":
           description: Structured assessment fields extracted or returned from cache
@@ -2674,6 +2678,10 @@ components:
             Required. Maps every hourly replacement program id to the percentage manually selected
             in the app, encoded as count + effectiveTrials. The server freezes the corresponding
             integer percentage and requires that exact value in every hour assigned to the program.
+        forceRegenerate:
+          type: boolean
+          default: false
+          description: Bypass a matching note-response cache entry and generate fresh model prose.
       required:
         - clientId
         - sessionHours

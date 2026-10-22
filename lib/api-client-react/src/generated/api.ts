@@ -1179,6 +1179,12 @@ export const extractAssessmentFromPdfWithAi = async (
 ): Promise<ExtractAssessmentFromPdfWithAi200> => {
   const formData = new FormData();
   formData.append(`file`, extractAssessmentFromPdfWithAiBody.file);
+  if (extractAssessmentFromPdfWithAiBody.force !== undefined) {
+    formData.append(
+      `force`,
+      extractAssessmentFromPdfWithAiBody.force.toString(),
+    );
+  }
 
   return customFetch<ExtractAssessmentFromPdfWithAi200>(
     getExtractAssessmentFromPdfWithAiUrl(),

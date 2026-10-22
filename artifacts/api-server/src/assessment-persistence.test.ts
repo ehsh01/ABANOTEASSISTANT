@@ -101,4 +101,45 @@ describe("assessment upload persistence", () => {
       "Task Refusal": ["DRA"],
     });
   });
+
+  test("re-upload without AI enrichment preserves the prior summary, topography, and functions", () => {
+    const priorSummary = {
+      summary: "Previously extracted clinical summary.",
+      diagnoses: ["F84.0"],
+      recommendations: [],
+      behaviorProfiles: [],
+      reinforcementPreferences: [],
+      precursorBehaviors: [],
+      parentTrainingGoals: [],
+    };
+    const refreshed = refreshProfileFromAssessmentUpload({
+      profile: {
+        ...baseProfile,
+        assessmentSummary: priorSummary,
+      },
+      fileName: "re-uploaded.pdf",
+      assessmentTextSnapshot: "Replacement assessment text ".repeat(8),
+      // The upload route is deterministic; full AI enrichment is available from Re-extract.
+      extracted: null,
+    });
+
+    expect(refreshed.assessmentSummary).toEqual(priorSummary);
+    expect(refreshed.maladaptiveBehaviorTargets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Elopement",
+          topography: "Old extracted definition.",
+          functions: ["attention"],
+        }),
+      ]),
+    );
+    expect(refreshed.assessmentStructured?.behavior_to_replacements_map.Elopement).toEqual([
+      "Walk with adult",
+    ]);
+    expect(refreshed.assessmentExtractionProvenance).toMatchObject({
+      topographyBehaviors: ["Elopement"],
+      functionBehaviors: ["Elopement"],
+      assessmentSummaryExtracted: true,
+    });
+  });
 });

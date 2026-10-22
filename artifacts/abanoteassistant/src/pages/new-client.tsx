@@ -970,7 +970,9 @@ function Step2({
                 ) : (
                   <>
                     <Zap className="w-4 h-4 shrink-0 pop-icon" />
-                    Fill name, age, behaviors &amp; programs from this PDF
+                    {extractSuccess
+                      ? "Re-extract fields from this PDF"
+                      : "Fill name, age, behaviors & programs from this PDF"}
                   </>
                 )}
               </button>
@@ -1644,7 +1646,10 @@ function NewClientForm({
     setExtractError(null);
     setExtractSuccess(null);
     try {
-      const res = await extractMutation.mutateAsync(step2.file);
+      const res = await extractMutation.mutateAsync({
+        file: step2.file,
+        force: Boolean(extractSuccess),
+      });
       applyAssessmentExtract(res.data);
       const e = res.data.extracted;
       const topographyCount = (e.maladaptiveBehaviorTopographies ?? []).filter(

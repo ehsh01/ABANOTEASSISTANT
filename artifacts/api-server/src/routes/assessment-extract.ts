@@ -58,8 +58,14 @@ router.post(
     }
 
     try {
+      const forceRaw = req.body?.force;
+      const force =
+        typeof forceRaw === "string"
+          ? /^(?:true|1|yes|on)$/i.test(forceRaw.trim())
+          : forceRaw === true;
       const result = await extractAssessmentFromPdfBuffer(file.buffer, {
         usageIdentity: { companyId, userId },
+        force,
       });
       res.json({
         success: true,

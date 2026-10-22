@@ -5,6 +5,7 @@
 
 import OpenAI from "openai";
 import type { ChatCompletion } from "openai/resources/chat/completions";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 import { DEFAULT_OPENAI_NOTE_MODEL } from "./openai-notes";
@@ -30,8 +31,12 @@ import {
   readPositiveIntEnv,
 } from "./ai-config";
 import {
-  assertAiUsageAllowed,
-  recordAiUsage,
+  completeAiUsageBestEffort,
+  estimateTextReservationCostUsd,
+  estimateTokenCostUsd,
+  failAiUsageBestEffort,
+  releaseAiUsageBestEffort,
+  reserveAiUsage,
   type AiUsageIdentity,
   type AiUsageStore,
 } from "./ai-usage";
@@ -116,6 +121,16 @@ const AssessmentExtractResultSchema = z.object({
   pdfPageCount: z.number().int().nonnegative(),
   pdfCharCount: z.number().int().nonnegative(),
 });
+
+function hasClinicalListContent(extracted: AssessmentExtracted): boolean {
+  return [
+    extracted.maladaptiveBehaviors,
+    extracted.maladaptiveBehaviorTopographies,
+    extracted.replacementPrograms,
+    extracted.skillAcquisitionPrograms,
+    extracted.interventions,
+  ].some((items) => items.length > 0);
+}
 
 /** Max characters stored in `profile.assessmentTextSnapshot` for later note grounding. */
 export const MAX_ASSESSMENT_TEXT_STORAGE_CHARS = 120_000;
@@ -407,16 +422,10 @@ export async function extractAssessmentFromPdfText(
     );
   }
 
-  await assertAiUsageAllowed(
-    "assessment",
-    options.usageIdentity,
-    options.usageStore,
-  );
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const model = resolveExtractModel();
   const maxCompletionTokens = readPositiveIntEnv(
     "ASSESSMENT_AI_MAX_COMPLETION_TOKENS",
-    3_000,
+    6_000,
   );
 
   const userContent = `PDF page count (from parser): ${pdfPageCount}
@@ -428,13 +437,31 @@ ${text}
 
 Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBehaviors, maladaptiveBehaviorTopographies, replacementPrograms, skillAcquisitionPrograms, interventions, behaviorReplacementMap, behaviorInterventionMap, assessmentAuthorizationExpiresOn, assessmentSummary, confidenceNotes (all optional except arrays default to []).`;
 
+  const reservation = await reserveAiUsage(
+    {
+      feature: "assessment",
+      ...options.usageIdentity,
+      operationId: randomUUID(),
+      model,
+      reservedCostUsd: estimateTextReservationCostUsd(
+        model,
+        SYSTEM.length + userContent.length,
+        maxCompletionTokens,
+      ),
+    },
+    options.usageStore,
+  );
+
   // GPT-5.x chat models only accept the default temperature; older models still benefit from a low value
   // (0.2) for deterministic JSON extraction. Branch the request shape so we don't trigger
   // `Unsupported value: 'temperature' does not support 0.2 with this model` on the new family.
   let promptTokens = 0;
   let completionTokens = 0;
   let completion: ChatCompletion;
+  let providerCalled = false;
   try {
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    providerCalled = true;
     completion = isGpt5FamilyExtractModel(model)
       ? await client.chat.completions.create({
           model,
@@ -457,17 +484,26 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
         });
     promptTokens = completion.usage?.prompt_tokens ?? 0;
     completionTokens = completion.usage?.completion_tokens ?? 0;
-  } finally {
-    await recordAiUsage(
+    await completeAiUsageBestEffort(
+      reservation,
       {
-        feature: "assessment",
-        ...options.usageIdentity,
-        model,
         promptTokens,
         completionTokens,
+        estimatedCostUsd: estimateTokenCostUsd(
+          model,
+          promptTokens,
+          completionTokens,
+        ),
       },
       options.usageStore,
     );
+  } catch (error) {
+    if (providerCalled) {
+      await failAiUsageBestEffort(reservation, options.usageStore);
+    } else {
+      await releaseAiUsageBestEffort(reservation, options.usageStore);
+    }
+    throw error;
   }
 
   if (completion.choices[0]?.finish_reason === "length") {
@@ -488,6 +524,11 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
   }
 
   const extracted = ExtractedSchema.parse(parsed);
+  if (!hasClinicalListContent(extracted)) {
+    throw new Error(
+      "AI assessment extraction returned no behaviors, programs, topographies, or interventions.",
+    );
+  }
 
   const dedupedBehaviors = [
     ...new Set(extracted.maladaptiveBehaviors.map((s) => s.trim()).filter(Boolean)),
@@ -726,25 +767,30 @@ export async function extractAssessmentFromPdfBuffer(
     usageIdentity: AiUsageIdentity;
     cacheStore?: AiCacheStore;
     usageStore?: AiUsageStore;
+    force?: boolean;
   },
 ): Promise<AssessmentExtractResult> {
-  assertAiProviderConfigured("assessment");
   const cacheKey = sha256CacheKey(buffer);
   const model = resolveExtractModel();
-  const cached = await readAiCache({
-    feature: "assessment",
-    companyId: options.usageIdentity.companyId,
-    cacheKey,
-    model,
-    matchModel: false,
-    store: options.cacheStore,
-    parse: (value) => {
-      const parsed = AssessmentExtractResultSchema.safeParse(value);
-      return parsed.success ? parsed.data : null;
-    },
-  });
-  if (cached) return cached;
+  if (!options.force) {
+    const cached = await readAiCache({
+      feature: "assessment",
+      companyId: options.usageIdentity.companyId,
+      cacheKey,
+      model,
+      matchModel: false,
+      store: options.cacheStore,
+      parse: (value) => {
+        const parsed = AssessmentExtractResultSchema.safeParse(value);
+        return parsed.success && hasClinicalListContent(parsed.data.extracted)
+          ? parsed.data
+          : null;
+      },
+    });
+    if (cached) return cached;
+  }
 
+  assertAiProviderConfigured("assessment");
   const { text, numpages } = await extractTextFromPdfBuffer(buffer);
   const result = await extractAssessmentFromPdfText(text, numpages, {
     usageIdentity: options.usageIdentity,
@@ -757,7 +803,7 @@ export async function extractAssessmentFromPdfBuffer(
     model,
     response: result,
     ttlSecondsEnv: "ASSESSMENT_AI_CACHE_TTL_SECONDS",
-    defaultTtlSeconds: 0,
+    defaultTtlSeconds: 2_592_000,
     store: options.cacheStore,
   });
   return result;
