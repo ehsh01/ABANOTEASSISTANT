@@ -38,6 +38,7 @@ import { ApiError, type AssessmentExtractResultPayload } from "@workspace/api-cl
 import { ClientAvatar } from "@/components/client-avatar";
 import { cn } from "@/lib/utils";
 import { formatAiFeatureFailure } from "@/lib/ai-errors";
+import { assessmentSummaryUpdate } from "@/lib/assessment-summary-update";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -1434,6 +1435,7 @@ function NewClientForm({
   const [assessmentSummaryForm, setAssessmentSummaryForm] = useState<AssessmentSummaryFormState>(
     emptyAssessmentSummaryForm(),
   );
+  const [assessmentSummaryTouched, setAssessmentSummaryTouched] = useState(false);
 
   const extractMutation = useExtractAssessmentFromPdf();
   const [extractError, setExtractError] = useState<string | null>(null);
@@ -1560,13 +1562,7 @@ function NewClientForm({
       setExtractSuccess(null);
       return;
     }
-    if (isEdit) {
-      // Until the user explicitly re-extracts, do not save a summary from the
-      // previously stored document onto a newly selected PDF.
-      setAssessmentSummaryForm(emptyAssessmentSummaryForm());
-      setExtractSuccess(null);
-    }
-  }, [isEdit, step2.file]);
+  }, [step2.file]);
 
   function applyAssessmentExtract(payload: AssessmentExtractResultPayload) {
     const e = payload.extracted;
@@ -1616,9 +1612,12 @@ function NewClientForm({
       // Only auto-fill when nothing has been entered yet; never overwrite an explicitly-set value.
       setAuthorizationExpiresOn((prev) => prev ?? e.assessmentAuthorizationExpiresOn ?? null);
     }
-    if (e.assessmentSummary) {
-      setAssessmentSummaryForm(assessmentSummaryFormFromExtract(e.assessmentSummary));
-    }
+    setAssessmentSummaryForm(
+      e.assessmentSummary
+        ? assessmentSummaryFormFromExtract(e.assessmentSummary)
+        : emptyAssessmentSummaryForm(),
+    );
+    setAssessmentSummaryTouched(true);
   }
 
   async function handleClearStoredAssessment() {
@@ -1639,6 +1638,7 @@ function NewClientForm({
       setStep2({ file: null });
       setAuthorizationExpiresOn(null);
       setAssessmentSummaryForm(emptyAssessmentSummaryForm());
+      setAssessmentSummaryTouched(false);
       setExtractError(null);
       setExtractSuccess(null);
     } catch (e) {
@@ -1729,6 +1729,7 @@ function NewClientForm({
     });
     setAuthorizationExpiresOn(p?.assessmentAuthorizationExpiresOn ?? null);
     setAssessmentSummaryForm(assessmentSummaryFormFromProfile(p?.assessmentSummary));
+    setAssessmentSummaryTouched(false);
     // Preserve step parameter from URL if provided, otherwise default to 1
     const urlStep = searchParams.get("step");
     if (!urlStep) {
@@ -1888,9 +1889,10 @@ function NewClientForm({
           skillAcquisitionPrograms: step3.skillAcquisitionPrograms,
           interventions: step3.interventions,
           assessmentAuthorizationExpiresOn: authorizationExpiresOn,
-          assessmentSummary: assessmentSummaryHasContent(assessmentSummaryForm)
-            ? assessmentSummaryToApiPayload(assessmentSummaryForm)
-            : null,
+          ...assessmentSummaryUpdate(
+            assessmentSummaryForm,
+            assessmentSummaryTouched,
+          ),
         };
         if (step2.file) {
           payload.hasAssessment = true;
@@ -2017,7 +2019,10 @@ function NewClientForm({
               {editSection === "summary" && (
                 <AssessmentSummaryFields
                   value={assessmentSummaryForm}
-                  onChange={setAssessmentSummaryForm}
+                  onChange={(next) => {
+                    setAssessmentSummaryForm(next);
+                    setAssessmentSummaryTouched(true);
+                  }}
                   compact
                   maladaptiveBehaviorTargets={maladaptiveBehaviorTargetsPayload(
                     step3.maladaptiveBehaviors,
@@ -2202,7 +2207,10 @@ function NewClientForm({
                 {(extractSuccess || assessmentSummaryHasContent(assessmentSummaryForm)) && (
                   <AssessmentSummaryFields
                     value={assessmentSummaryForm}
-                    onChange={setAssessmentSummaryForm}
+                    onChange={(next) => {
+                      setAssessmentSummaryForm(next);
+                      setAssessmentSummaryTouched(true);
+                    }}
                     maladaptiveBehaviorTargets={maladaptiveBehaviorTargetsPayload(
                       step3.maladaptiveBehaviors,
                       step3.maladaptiveBehaviorTargets,
