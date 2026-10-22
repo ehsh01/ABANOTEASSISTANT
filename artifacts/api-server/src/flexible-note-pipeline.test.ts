@@ -138,6 +138,11 @@ describe("flexible note contract", () => {
     expect(result.repairAttempts).toBe(1);
     expect(result.notePlan).toEqual(validPlan());
     expect(modelCall).toHaveBeenCalledTimes(2);
+    const repairMessages = JSON.stringify(modelCall.mock.calls[1]?.[0].messages);
+    expect(repairMessages).toContain("MINIMAL LOCKED FIELDS");
+    expect(repairMessages).toContain("FAILING PRIOR SEGMENTS");
+    expect(repairMessages).not.toContain("PRIOR OUTPUT");
+    expect(repairMessages).not.toContain(context().assessmentExcerpt);
   });
 
   it("reports Austin-style unapproved, renamed, and mentalistic prose as advisories", () => {
@@ -504,7 +509,7 @@ describe("flexible note contract", () => {
     expect(codes).toContain("MEDICATION_CONTENT");
   });
 
-  it("uses a final constrained-AI fallback after bounded repairs", async () => {
+  it("never exceeds the two-call note-attempt cap", async () => {
     const invalid = JSON.stringify({
       segments: [
         {
@@ -515,16 +520,11 @@ describe("flexible note contract", () => {
         },
       ],
     });
-    const modelCall = vi
-      .fn()
-      .mockResolvedValueOnce(invalid)
-      .mockResolvedValueOnce(invalid)
-      .mockResolvedValueOnce(invalid)
-      .mockResolvedValueOnce(JSON.stringify(validPlan()));
-    const result = await generateClinicalBodyOpenAI(context(), { modelCall });
-    expect(result.repairAttempts).toBe(3);
-    expect(result.repairActions).toContain("Started final constrained-AI fallback.");
-    expect(modelCall).toHaveBeenCalledTimes(4);
+    const modelCall = vi.fn().mockResolvedValue(invalid);
+    await expect(
+      generateClinicalBodyOpenAI(context(), { modelCall }),
+    ).rejects.toThrow(/did not satisfy the hourly contract/i);
+    expect(modelCall).toHaveBeenCalledTimes(2);
   });
 
   it("saves structurally valid output with residual advisories after bounded repair", async () => {
@@ -544,7 +544,7 @@ describe("flexible note contract", () => {
 
     const result = await generateClinicalBodyOpenAI(context(), { modelCall });
 
-    expect(modelCall).toHaveBeenCalledTimes(4);
+    expect(modelCall).toHaveBeenCalledTimes(1);
     expect(result.body).toContain("appearing frustrated");
     expect(result.notePlan.segments[0]!.paragraph).toBe(originalFirstHour);
     expect(result.finalPlanIssues.map((issue) => issue.code)).toEqual(

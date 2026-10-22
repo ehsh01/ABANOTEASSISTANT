@@ -21,7 +21,7 @@ export interface HealthStatus {
   /** Session note clinical body is generated only via OpenAI; there is no server-side template fallback. If your deployed API omits this field, the server is running an older build — redeploy api-server dist and restart the process.
    */
   notesClinicalBodyPolicy: HealthStatusNotesClinicalBodyPolicy;
-  /** True when OPENAI_API_KEY is non-empty (required for POST /notes/generate). */
+  /** True only when note AI switches are enabled and OPENAI_API_KEY is non-empty. */
   openaiConfigured: boolean;
   /** Optional deploy stamp; set API_BUILD_ID (or CI commit SHA) on the host to verify which build is running. */
   buildId?: string;

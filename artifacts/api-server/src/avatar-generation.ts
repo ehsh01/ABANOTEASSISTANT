@@ -16,21 +16,29 @@
  */
 
 import OpenAI from "openai";
+import type { ImagesResponse } from "openai/resources/images";
 import crypto from "crypto";
+import {
+  assertAiUsageAllowed,
+  estimateImageCostUsd,
+  recordAiUsage,
+  type AiUsageIdentity,
+  type AiUsageStore,
+} from "./ai-usage";
+import { assertAiProviderConfigured } from "./ai-config";
 
 /** Default model. Override with `OPENAI_AVATAR_MODEL` (e.g. `dall-e-3`) when an org isn't verified. */
 const DEFAULT_AVATAR_MODEL = "gpt-image-1";
 
 /**
- * Quality knob for `gpt-image-1`. Default is `medium` — the stylized 3D character look the product
- * targets needs more pixel budget than `low` provides (faces look mushy at low quality). Override with
- * `OPENAI_AVATAR_QUALITY` (`low` | `medium` | `high`) when cost matters more than crispness.
+ * Quality knob for `gpt-image-1`. Default is `low` to keep explicit avatar requests inexpensive.
+ * Override with `OPENAI_AVATAR_QUALITY` (`low` | `medium` | `high`) when approved.
  *
  * Approximate per-image cost at 1024x1024 (gpt-image-1, subject to OpenAI pricing):
  *   low ≈ $0.011 · medium ≈ $0.042 · high ≈ $0.167
  */
 type AvatarQuality = "low" | "medium" | "high";
-const DEFAULT_AVATAR_QUALITY: AvatarQuality = "medium";
+const DEFAULT_AVATAR_QUALITY: AvatarQuality = "low";
 
 /** Smallest gpt-image-1 size; PNG output. */
 const DEFAULT_AVATAR_SIZE = "1024x1024" as const;
@@ -174,18 +182,19 @@ function resolveAvatarModel(): string {
  */
 export async function generateClientAvatar(
   input: GenerateClientAvatarInput,
+  usageIdentity: AiUsageIdentity,
+  options?: { usageStore?: AiUsageStore },
 ): Promise<GeneratedAvatar> {
-  const apiKey = process.env["OPENAI_API_KEY"]?.trim();
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
-  }
+  assertAiProviderConfigured("avatar");
   if (!input.firstName?.trim()) {
     throw new Error("firstName is required to generate an avatar");
   }
 
-  const client = new OpenAI({ apiKey });
+  await assertAiUsageAllowed("avatar", usageIdentity, options?.usageStore);
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const model = resolveAvatarModel();
   const prompt = buildAvatarPrompt(input);
+  const quality = resolveAvatarQuality();
 
   const params: Parameters<typeof client.images.generate>[0] = {
     model,
@@ -196,10 +205,23 @@ export async function generateClientAvatar(
   // gpt-image-1 supports a `quality` knob; older `dall-e-*` models silently reject it. We keep it
   // optional so an env-pinned `dall-e-3` fallback continues to work without extra branching here.
   if (model === DEFAULT_AVATAR_MODEL) {
-    (params as unknown as Record<string, unknown>)["quality"] = resolveAvatarQuality();
+    (params as unknown as Record<string, unknown>)["quality"] = quality;
   }
 
-  const result = await client.images.generate(params);
+  let result: ImagesResponse;
+  try {
+    result = await client.images.generate(params);
+  } finally {
+    await recordAiUsage(
+      {
+        feature: "avatar",
+        ...usageIdentity,
+        model,
+        estimatedCostUsd: estimateImageCostUsd(quality),
+      },
+      options?.usageStore,
+    );
+  }
 
   const first = result.data?.[0];
   const b64 = first?.b64_json;

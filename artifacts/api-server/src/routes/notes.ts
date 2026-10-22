@@ -30,8 +30,10 @@ import {
 } from "../note-generation-jobs";
 import { isTransientDbConnectionError, withTransientDbRetry } from "../db-transient-retry";
 import { ABC_ACTIVITY_ANTECEDENT_CATALOG } from "../abc-activity-antecedent-catalog";
+import { aiRateLimit } from "../ai-rate-limit";
 
 const router: IRouter = Router();
+const noteAiRateLimiter = aiRateLimit("note");
 
 function toIso(d: Date | string): string {
   return d instanceof Date ? d.toISOString() : String(d);
@@ -224,7 +226,7 @@ router.delete("/notes/:noteId", async (req, res) => {
   res.json(data);
 });
 
-router.post("/notes/generate/jobs", async (req, res) => {
+router.post("/notes/generate/jobs", noteAiRateLimiter, async (req, res) => {
   const companyId = req.companyId;
   const userId = req.userId;
   if (companyId === undefined || userId === undefined) {
@@ -358,7 +360,7 @@ router.get("/notes/generate/jobs/:jobId", async (req, res) => {
   res.json(payload);
 });
 
-router.post("/notes/generate", async (req, res) => {
+router.post("/notes/generate", noteAiRateLimiter, async (req, res) => {
   const companyId = req.companyId;
   const userId = req.userId;
   if (companyId === undefined || userId === undefined) {
@@ -383,7 +385,12 @@ router.post("/notes/generate", async (req, res) => {
 
   const { client, body, draftQuota: slot } = prepared;
 
-  const result = await generateSessionNoteForClient({ companyId, client, body });
+  const result = await generateSessionNoteForClient({
+    companyId,
+    userId,
+    client,
+    body,
+  });
   if (!result.ok) {
     res.status(result.status).json({
       success: false,

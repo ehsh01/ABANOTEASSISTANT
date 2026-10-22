@@ -5,7 +5,6 @@ import { GetClientParams, GetClientResponse } from "@workspace/api-zod";
 import { db } from "@workspace/db";
 import { clientsTable, type ClientProfileRow } from "@workspace/db/schema";
 import {
-  extractAssessmentFromPdfText,
   extractBehaviorMapsFromBipText,
   extractTextFromPdfBuffer,
   enrichMaladaptiveTargetsWithAssessmentTopography,
@@ -92,11 +91,9 @@ router.post(
     }
 
     let rawText: string;
-    let pdfPageCount = 0;
     try {
-      const { text, numpages } = await extractTextFromPdfBuffer(file.buffer);
+      const { text } = await extractTextFromPdfBuffer(file.buffer);
       rawText = text ?? "";
-      pdfPageCount = numpages;
     } catch (e) {
       const message = e instanceof Error ? e.message : "Failed to read PDF";
       res.status(400).json({ success: false, error: message, messages: [] });
@@ -152,47 +149,13 @@ router.post(
       rawText,
     );
 
-    // The upload endpoint owns persistence. LLM extraction is best-effort enrichment; a temporary
-    // extraction failure never discards the usable authoritative text or deterministic fields.
-    let llmExtracted: Awaited<ReturnType<typeof extractAssessmentFromPdfText>>["extracted"] | null =
-      null;
-    try {
-      llmExtracted = (await extractAssessmentFromPdfText(rawText, pdfPageCount)).extracted;
-    } catch (error) {
-      console.warn(
-        `[clients/${params.data.clientId}/assessment/document] optional LLM extraction failed; ` +
-          `persisting deterministic assessment fields: ${error instanceof Error ? error.message : String(error)}`,
-      );
-    }
-
-    const mergeMapValues = (
-      primary: Record<string, string[]> | undefined,
-      fallback: Record<string, string[]>,
-    ): Record<string, string[]> => {
-      const merged = { ...(primary ?? {}) };
-      for (const [behavior, values] of Object.entries(fallback)) {
-        merged[behavior] = [...new Set([...(merged[behavior] ?? []), ...values])];
-      }
-      return merged;
-    };
-    const llmTargetsByLower = new Map(
-      (llmExtracted?.maladaptiveBehaviorTopographies ?? []).map((target) => [
-        target.name.trim().toLowerCase(),
-        target,
-      ]),
-    );
-    const extractedTargets = deterministicTargets.map((target) => {
-      const llm = llmTargetsByLower.get(target.name.trim().toLowerCase());
-      return {
-        name: target.name,
-        topography: llm?.topography?.trim() || target.topography,
-        ...(llm?.functions !== undefined
-          ? { functions: llm.functions }
-          : target.functions != null
-            ? { functions: target.functions }
-            : {}),
-      };
-    });
+    // Persistence stays deterministic and never spends AI tokens. The separate
+    // /clients/assessment/extract action remains available from the explicit UI button.
+    const extractedTargets = deterministicTargets.map((target) => ({
+      name: target.name,
+      topography: target.topography,
+      ...(target.functions != null ? { functions: target.functions } : {}),
+    }));
     const nextProfile = refreshProfileFromAssessmentUpload({
       profile: base,
       fileName:
@@ -202,15 +165,8 @@ router.post(
       assessmentTextSnapshot: snapshot,
       extracted: {
         maladaptiveBehaviorTopographies: extractedTargets,
-        behaviorReplacementMap: mergeMapValues(
-          llmExtracted?.behaviorReplacementMap,
-          deterministicMaps.behaviorToReplacements,
-        ),
-        behaviorInterventionMap: mergeMapValues(
-          llmExtracted?.behaviorInterventionMap,
-          deterministicMaps.behaviorToInterventions,
-        ),
-        assessmentSummary: llmExtracted?.assessmentSummary,
+        behaviorReplacementMap: deterministicMaps.behaviorToReplacements,
+        behaviorInterventionMap: deterministicMaps.behaviorToInterventions,
       },
     });
 

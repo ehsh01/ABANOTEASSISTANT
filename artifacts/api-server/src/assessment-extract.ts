@@ -4,6 +4,7 @@
  */
 
 import OpenAI from "openai";
+import type { ChatCompletion } from "openai/resources/chat/completions";
 import { z } from "zod";
 
 import { DEFAULT_OPENAI_NOTE_MODEL } from "./openai-notes";
@@ -18,6 +19,22 @@ import {
 import { isUnusableStoredTopography } from "./maladaptive-behavior-topography";
 import { dedupeImportedProgramLists } from "./program-name-dedup";
 import type { ClinicalFunction } from "@workspace/db/schema";
+import {
+  readAiCache,
+  sha256CacheKey,
+  writeAiCache,
+  type AiCacheStore,
+} from "./ai-cache";
+import {
+  assertAiProviderConfigured,
+  readPositiveIntEnv,
+} from "./ai-config";
+import {
+  assertAiUsageAllowed,
+  recordAiUsage,
+  type AiUsageIdentity,
+  type AiUsageStore,
+} from "./ai-usage";
 
 const ClinicalFunctionExtractEnum = z.enum(["escape", "attention", "tangible", "automatic"]);
 
@@ -93,10 +110,15 @@ export type AssessmentExtractResult = {
   pdfCharCount: number;
 };
 
-const MAX_PDF_CHARS = 120_000;
+const AssessmentExtractResultSchema = z.object({
+  extracted: ExtractedSchema,
+  warnings: z.array(z.string()),
+  pdfPageCount: z.number().int().nonnegative(),
+  pdfCharCount: z.number().int().nonnegative(),
+});
 
-/** Max characters stored in `profile.assessmentTextSnapshot` (aligns with extract truncation). */
-export const MAX_ASSESSMENT_TEXT_STORAGE_CHARS = MAX_PDF_CHARS;
+/** Max characters stored in `profile.assessmentTextSnapshot` for later note grounding. */
+export const MAX_ASSESSMENT_TEXT_STORAGE_CHARS = 120_000;
 
 /** Max characters injected into the note-generation prompt (leave room for instructions + JSON). */
 export const MAX_ASSESSMENT_TEXT_NOTE_CONTEXT_CHARS = 28_000;
@@ -269,10 +291,58 @@ export async function extractTextFromPdfBuffer(buffer: Buffer): Promise<{
   return { text: data.text ?? "", numpages: data.numpages ?? 0 };
 }
 
-function truncateForModel(text: string): { text: string; truncated: boolean } {
+export function buildAssessmentModelText(text: string): {
+  text: string;
+  truncated: boolean;
+  maxChars: number;
+} {
   const t = text.trim();
-  if (t.length <= MAX_PDF_CHARS) return { text: t, truncated: false };
-  return { text: t.slice(0, MAX_PDF_CHARS), truncated: true };
+  const maxChars = readPositiveIntEnv("ASSESSMENT_AI_MAX_CHARS", 30_000);
+  const sections = splitIntoExcerptSections(t);
+  if (sections.length <= 1) {
+    return {
+      text: t.slice(0, maxChars),
+      truncated: t.length > maxChars,
+      maxChars,
+    };
+  }
+
+  const selected: ExcerptSection[] = [];
+  let used = 0;
+  const separatorLength = 2;
+  const highPriorityCount = sections.filter((section) => section.priority === 2).length;
+  const highPriorityCap =
+    highPriorityCount > 0
+      ? Math.max(2_000, Math.floor(maxChars / highPriorityCount))
+      : maxChars;
+  for (const priority of [2, 1] as const) {
+    for (const section of sections) {
+      if (section.priority !== priority) continue;
+      const separatorCost = selected.length > 0 ? separatorLength : 0;
+      const remaining = maxChars - used - separatorCost;
+      if (remaining <= 0) break;
+      const sectionCap =
+        priority === 2 ? Math.min(remaining, highPriorityCap) : remaining;
+      const excerpt = section.text.slice(0, sectionCap).trim();
+      if (!excerpt) continue;
+      selected.push({ ...section, text: excerpt });
+      used += excerpt.length + separatorCost;
+    }
+  }
+  if (selected.length === 0) {
+    return {
+      text: t.slice(0, maxChars),
+      truncated: t.length > maxChars,
+      maxChars,
+    };
+  }
+  selected.sort((a, b) => a.index - b.index);
+  const excerpt = selected.map((section) => section.text).join("\n\n");
+  return {
+    text: excerpt.slice(0, maxChars),
+    truncated: excerpt.length < t.length,
+    maxChars,
+  };
 }
 
 const SYSTEM = `You extract structured intake data from text pasted from an ABA / FBA / BIP or similar client assessment PDF.
@@ -315,16 +385,20 @@ Respond with a single JSON object only (no markdown).`;
 export async function extractAssessmentFromPdfText(
   rawText: string,
   pdfPageCount: number,
+  options?: {
+    usageIdentity?: AiUsageIdentity;
+    usageStore?: AiUsageStore;
+  },
 ): Promise<AssessmentExtractResult> {
-  const apiKey = process.env["OPENAI_API_KEY"]?.trim();
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
-  }
+  assertAiProviderConfigured("assessment");
+  if (!options?.usageIdentity) throw new Error("AI usage identity is required");
 
-  const { text, truncated } = truncateForModel(rawText);
+  const { text, truncated, maxChars } = buildAssessmentModelText(rawText);
   const warnings: string[] = [];
   if (truncated) {
-    warnings.push(`PDF text was truncated to ${MAX_PDF_CHARS} characters for processing.`);
+    warnings.push(
+      `PDF text was reduced to relevant sections with a ${maxChars}-character AI input cap.`,
+    );
   }
 
   if (text.length < 80) {
@@ -333,8 +407,17 @@ export async function extractAssessmentFromPdfText(
     );
   }
 
-  const client = new OpenAI({ apiKey });
+  await assertAiUsageAllowed(
+    "assessment",
+    options.usageIdentity,
+    options.usageStore,
+  );
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   const model = resolveExtractModel();
+  const maxCompletionTokens = readPositiveIntEnv(
+    "ASSESSMENT_AI_MAX_COMPLETION_TOKENS",
+    3_000,
+  );
 
   const userContent = `PDF page count (from parser): ${pdfPageCount}
 
@@ -348,24 +431,44 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
   // GPT-5.x chat models only accept the default temperature; older models still benefit from a low value
   // (0.2) for deterministic JSON extraction. Branch the request shape so we don't trigger
   // `Unsupported value: 'temperature' does not support 0.2 with this model` on the new family.
-  const completion = isGpt5FamilyExtractModel(model)
-    ? await client.chat.completions.create({
+  let promptTokens = 0;
+  let completionTokens = 0;
+  let completion: ChatCompletion;
+  try {
+    completion = isGpt5FamilyExtractModel(model)
+      ? await client.chat.completions.create({
+          model,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: SYSTEM },
+            { role: "user", content: userContent },
+          ],
+          max_completion_tokens: maxCompletionTokens,
+        })
+      : await client.chat.completions.create({
+          model,
+          temperature: 0.2,
+          response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: SYSTEM },
+            { role: "user", content: userContent },
+          ],
+          max_completion_tokens: maxCompletionTokens,
+        });
+    promptTokens = completion.usage?.prompt_tokens ?? 0;
+    completionTokens = completion.usage?.completion_tokens ?? 0;
+  } finally {
+    await recordAiUsage(
+      {
+        feature: "assessment",
+        ...options.usageIdentity,
         model,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM },
-          { role: "user", content: userContent },
-        ],
-      })
-    : await client.chat.completions.create({
-        model,
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM },
-          { role: "user", content: userContent },
-        ],
-      });
+        promptTokens,
+        completionTokens,
+      },
+      options.usageStore,
+    );
+  }
 
   const raw = completion.choices[0]?.message?.content?.trim();
   if (!raw) {
@@ -612,9 +715,47 @@ function formatIsoDateParts(y: number, mo: number, d: number): string | undefine
   return `${y}-${mmStr}-${ddStr}`;
 }
 
-export async function extractAssessmentFromPdfBuffer(buffer: Buffer): Promise<AssessmentExtractResult> {
+export async function extractAssessmentFromPdfBuffer(
+  buffer: Buffer,
+  options: {
+    usageIdentity: AiUsageIdentity;
+    cacheStore?: AiCacheStore;
+    usageStore?: AiUsageStore;
+  },
+): Promise<AssessmentExtractResult> {
+  assertAiProviderConfigured("assessment");
+  const cacheKey = sha256CacheKey(buffer);
+  const model = resolveExtractModel();
+  const cached = await readAiCache({
+    feature: "assessment",
+    companyId: options.usageIdentity.companyId,
+    cacheKey,
+    model,
+    matchModel: false,
+    store: options.cacheStore,
+    parse: (value) => {
+      const parsed = AssessmentExtractResultSchema.safeParse(value);
+      return parsed.success ? parsed.data : null;
+    },
+  });
+  if (cached) return cached;
+
   const { text, numpages } = await extractTextFromPdfBuffer(buffer);
-  return extractAssessmentFromPdfText(text, numpages);
+  const result = await extractAssessmentFromPdfText(text, numpages, {
+    usageIdentity: options.usageIdentity,
+    usageStore: options.usageStore,
+  });
+  await writeAiCache({
+    feature: "assessment",
+    companyId: options.usageIdentity.companyId,
+    cacheKey,
+    model,
+    response: result,
+    ttlSecondsEnv: "ASSESSMENT_AI_CACHE_TTL_SECONDS",
+    defaultTtlSeconds: 0,
+    store: options.cacheStore,
+  });
+  return result;
 }
 
 /**

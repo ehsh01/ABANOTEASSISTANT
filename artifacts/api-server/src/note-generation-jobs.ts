@@ -17,10 +17,11 @@ import {
   tryConsumeDraftSlot,
 } from "./draft-quota";
 import {
-  isOpenAINoteGenerationConfigured,
   resolveBackgroundNoteGenerationTimeBudgetMs,
   resolveBackgroundOpenAIRequestTimeoutMs,
 } from "./openai-notes";
+import { aiHttpError, assertAiProviderConfigured } from "./ai-config";
+import { assertAiUsageAllowed } from "./ai-usage";
 import { generateSessionNoteForClient } from "./notes-service";
 import { assessmentGenerationGate } from "./note-readiness";
 import {
@@ -93,15 +94,15 @@ export async function prepareNoteGeneration(params: {
     };
   }
 
-  if (!isOpenAINoteGenerationConfigured()) {
+  try {
+    assertAiProviderConfigured("note");
+  } catch (error) {
+    const aiError = aiHttpError(error);
     return {
       ok: false,
-      status: 503,
-      error: "AI note generation is not configured on the server.",
-      messages: [
-        "OPENAI_API_KEY is missing or empty. Set it in artifacts/api-server/.env (or your host environment) and restart the API (e.g. pm2 restart abanoteassistant-api). " +
-          "Session notes are generated only with OpenAI; there is no template fallback.",
-      ],
+      status: aiError.status ?? 503,
+      error: aiError.error,
+      messages: [],
     };
   }
 
@@ -125,6 +126,18 @@ export async function prepareNoteGeneration(params: {
     profile: client.profile as ClientProfileRow | null | undefined,
   });
   if (!assessmentGate.ok) return assessmentGate;
+
+  try {
+    await assertAiUsageAllowed("note", { userId, companyId });
+  } catch (error) {
+    const aiError = aiHttpError(error);
+    return {
+      ok: false,
+      status: aiError.status ?? 503,
+      error: aiError.error,
+      messages: [],
+    };
+  }
 
   const [companyForCap] = await withTransientDbRetry(
     () =>
@@ -246,6 +259,7 @@ export async function runNoteGenerationJob(jobId: string): Promise<void> {
 
   const result = await generateSessionNoteForClient({
     companyId: job.companyId,
+    userId: job.userId,
     client,
     body,
     // Background jobs are polled (not behind Cloudflare), so give the generate+repair loop a larger

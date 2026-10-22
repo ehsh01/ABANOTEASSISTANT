@@ -1163,7 +1163,7 @@ export const useDeleteClient = <
 };
 
 /**
- * Parses PDF text server-side and rejects scanned/image-only files without enough selectable text. On success, stores the authoritative truncated snapshot (not returned in API JSON), refreshes assessment-derived clinical enrichment while preserving therapist-curated values, prunes maps to app-profile catalogs, and sets assessment status to ready. Call after creating or updating a client when the RBT selects an assessment file.
+ * Parses PDF text server-side and rejects scanned/image-only files without enough selectable text. On success, stores the authoritative truncated snapshot (not returned in API JSON), refreshes deterministic assessment-derived clinical enrichment while preserving therapist-curated values, prunes maps to app-profile catalogs, and sets assessment status to ready. This upload never calls an AI provider.
 
  * @summary Upload assessment PDF and store text for AI note grounding
  */
@@ -1259,7 +1259,7 @@ export const useUploadClientAssessmentDocument = <
 };
 
 /**
- * Uses the client's first name (cultural / ethnic cue), approximate age (from DOB), and gender to produce a stylized cartoon-style portrait via OpenAI's image API and stores it on the client row. Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
+ * Uses the client's first name (cultural / ethnic cue), approximate age (from DOB), and gender to produce a stylized cartoon-style portrait via OpenAI's image API and stores it on the client row. It runs only after the user explicitly clicks Generate or Regenerate. The stored image is reused until then. Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
 
  * @summary Generate an AI cartoon avatar for the client
  */

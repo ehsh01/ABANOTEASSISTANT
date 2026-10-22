@@ -36,6 +36,7 @@ import {
   type ClinicalTabSection,
 } from "@/components/client-detail-clinical-tab-edit";
 import { formatClinicalFunctionsDisplay } from "@/lib/clinical-behavior-function-display";
+import { formatAiFeatureFailure } from "@/lib/ai-errors";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClient, useClientPrograms, useNotesList } from "@/hooks/use-aba-api";
 import { useT } from "@/hooks/use-translation";
@@ -286,11 +287,7 @@ export default function ClientDetail() {
                 if (!id || generateAvatarMutation.isPending) return;
                 generateAvatarMutation.mutate(id, {
                   onError: (err) => {
-                    window.alert(
-                      err instanceof Error
-                        ? `Could not generate avatar: ${err.message}`
-                        : "Could not generate avatar.",
-                    );
+                    window.alert(formatAiFeatureFailure(err, "Could not generate avatar."));
                   },
                 });
               }}

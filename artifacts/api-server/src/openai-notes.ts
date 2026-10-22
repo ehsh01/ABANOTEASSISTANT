@@ -2,7 +2,11 @@ import { createHash } from "node:crypto";
 import OpenAI from "openai";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { assembleClinicalBodyFromNotePlan } from "./note-plan-assembly";
-import type { NotePlan, SessionContext } from "./note-plan-schema";
+import {
+  NotePlanSchema,
+  type NotePlan,
+  type SessionContext,
+} from "./note-plan-schema";
 import {
   blockingNotePlanIssues,
   buildFrozenSessionContext,
@@ -10,8 +14,15 @@ import {
   validateNotePlan,
   type NotePlanIssue,
 } from "./note-plan-validation";
+import {
+  assertAiUsageAllowed,
+  recordAiUsage,
+  type AiUsageIdentity,
+  type AiUsageStore,
+} from "./ai-usage";
+import { assertAiProviderConfigured, readPositiveIntEnv } from "./ai-config";
 
-export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-5.5";
+export const DEFAULT_OPENAI_NOTE_MODEL = "gpt-4.1-mini";
 export type NoteGenerationContext = SessionContext;
 
 const SYSTEM_PROMPT = `You write flexible ABA session-note ABC paragraphs. Return JSON only.
@@ -77,7 +88,12 @@ const NOTE_PLAN_JSON_SCHEMA = {
         items: {
           type: "object",
           additionalProperties: false,
-          required: ["segmentIndex", "behaviorLabel", "interventionLabels", "paragraph"],
+          required: [
+            "segmentIndex",
+            "behaviorLabel",
+            "interventionLabels",
+            "paragraph",
+          ],
           properties: {
             segmentIndex: { type: "integer", minimum: 0 },
             behaviorLabel: { type: "string", minLength: 1 },
@@ -137,6 +153,8 @@ export type NotePlanModelCallOutput = {
 export type NotePlanModelCall = (params: {
   messages: ChatCompletionMessageParam[];
   attempt: number;
+  model: string;
+  maxCompletionTokens: number;
 }) => Promise<string | NotePlanModelCallOutput>;
 
 export type GenerateClinicalBodyResult = {
@@ -158,13 +176,17 @@ export function resolvedOpenAIModel(): string {
 
 export function resolvedFallbackOpenAIModel(): string | null {
   const raw = process.env.OPENAI_FALLBACK_MODEL?.trim();
-  if (raw === undefined) return "gpt-4.1";
-  if (raw === "" || /^(?:none|off|disabled)$/i.test(raw)) return null;
+  if (!raw || /^(?:none|off|disabled)$/i.test(raw)) return null;
   return raw;
 }
 
 export function isOpenAINoteGenerationConfigured(): boolean {
-  return Boolean(process.env.OPENAI_API_KEY?.trim());
+  try {
+    assertAiProviderConfigured("note");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function openaiNoteGenerationLabel(): string {
@@ -177,15 +199,27 @@ export function resolveBackgroundOpenAIRequestTimeoutMs(): number {
 }
 
 export function resolveBackgroundNoteGenerationTimeBudgetMs(): number {
-  const raw = Number(process.env.NOTE_GENERATION_BACKGROUND_TIME_BUDGET_MS ?? "");
+  const raw = Number(
+    process.env.NOTE_GENERATION_BACKGROUND_TIME_BUDGET_MS ?? "",
+  );
   return Number.isFinite(raw) && raw >= 15_000 ? Math.floor(raw) : 240_000;
+}
+
+export function resolveNoteAiMaxAttempts(): number {
+  return Math.min(2, readPositiveIntEnv("NOTE_AI_MAX_ATTEMPTS", 2));
+}
+
+export function resolveNoteMaxCompletionTokens(): number {
+  return readPositiveIntEnv("NOTE_AI_MAX_COMPLETION_TOKENS", 3_000);
 }
 
 function contextMessage(ctx: SessionContext): string {
   return `Write the hourly ABC paragraphs from this frozen context:\n${JSON.stringify(ctx)}`;
 }
 
-function constrainedNotePlanJsonSchema(ctx: SessionContext): typeof NOTE_PLAN_JSON_SCHEMA {
+function constrainedNotePlanJsonSchema(
+  ctx: SessionContext,
+): typeof NOTE_PLAN_JSON_SCHEMA {
   const schema = structuredClone(NOTE_PLAN_JSON_SCHEMA) as unknown as {
     name: string;
     strict: true;
@@ -194,7 +228,11 @@ function constrainedNotePlanJsonSchema(ctx: SessionContext): typeof NOTE_PLAN_JS
         segments: {
           items: {
             properties: {
-              behaviorLabel: { type: string; minLength: number; enum?: string[] };
+              behaviorLabel: {
+                type: string;
+                minLength: number;
+                enum?: string[];
+              };
               interventionLabels: {
                 type: string;
                 minItems: number;
@@ -219,15 +257,37 @@ export function buildScopedRepairUserMessage(params: {
   priorRaw: string;
   priorPlan: NotePlan | null;
 }): string {
-  const failingIndexes = [
+  let failingIndexes = [
     ...new Set(
       params.planIssues.flatMap((issue) =>
         issue.segmentIndex === undefined ? [] : [issue.segmentIndex],
       ),
     ),
   ];
-  return `Repair only the contract failures listed below. Return the complete JSON object.
-Only rewrite segment indexes ${JSON.stringify(failingIndexes)}. Do not change any other hourly paragraph.
+  if (failingIndexes.length === 0) {
+    failingIndexes = params.frozen.hourlyAssignments.map(
+      (assignment) => assignment.segmentIndex,
+    );
+  }
+  const failingIndexSet = new Set(failingIndexes);
+  const minimalContext = {
+    sessionHours: failingIndexes.length,
+    therapySetting: params.frozen.therapySetting,
+    clientAgeYears: params.frozen.clientAgeYears,
+    profileBehaviors: params.frozen.profileBehaviors,
+    profileBehaviorTargets: params.frozen.profileBehaviorTargets,
+    profileInterventions: params.frozen.profileInterventions,
+    reinforcementPreferences: params.frozen.reinforcementPreferences,
+    hourlyAssignments: params.frozen.hourlyAssignments.filter((assignment) =>
+      failingIndexSet.has(assignment.segmentIndex),
+    ),
+  };
+  const failingPriorSegments =
+    params.priorPlan?.segments.filter((segment) =>
+      failingIndexSet.has(segment.segmentIndex),
+    ) ?? [];
+  return `Repair only the contract failures listed below.
+Return {"segments":[...]} containing only segment indexes ${JSON.stringify(failingIndexes)}.
 Every hour must include its exact programName and criterionPercentage.
 behaviorLabel must be copied from profileBehaviors. interventionLabels must contain exactly one label copied exactly from profileInterventions.
 Name each intervention with its exact catalog string; surrounding wording may vary.
@@ -245,11 +305,11 @@ Keep all activities inside the client's home with a specific indoor place named,
 FAILURES:
 ${JSON.stringify(params.planIssues)}
 
-FROZEN CONTEXT:
-${JSON.stringify(params.frozen)}
+MINIMAL LOCKED FIELDS:
+${JSON.stringify(minimalContext)}
 
-PRIOR OUTPUT:
-${params.priorRaw}`;
+FAILING PRIOR SEGMENTS:
+${JSON.stringify(failingPriorSegments)}`;
 }
 
 async function defaultModelCall(params: {
@@ -258,11 +318,18 @@ async function defaultModelCall(params: {
   requestTimeoutMs?: number;
   model: string;
   jsonSchema: typeof NOTE_PLAN_JSON_SCHEMA;
+  usageIdentity: AiUsageIdentity;
+  usageStore?: AiUsageStore;
+  maxCompletionTokens: number;
 }): Promise<NotePlanModelCallOutput> {
+  await assertAiUsageAllowed("note", params.usageIdentity, params.usageStore);
   const client = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
     timeout: params.requestTimeoutMs ?? 90_000,
   });
+  let promptTokens = 0;
+  let completionTokens = 0;
+  try {
   const completion = await client.chat.completions.create({
     model: params.model,
     messages: params.messages,
@@ -270,20 +337,34 @@ async function defaultModelCall(params: {
       type: "json_schema",
       json_schema: params.jsonSchema,
     },
-    max_completion_tokens: 6_000,
+      max_completion_tokens: params.maxCompletionTokens,
   });
+    promptTokens = completion.usage?.prompt_tokens ?? 0;
+    completionTokens = completion.usage?.completion_tokens ?? 0;
   return {
     output: completion.choices[0]?.message?.content ?? "",
     completionId: completion.id,
     model: completion.model,
     usage: completion.usage
       ? {
-          promptTokens: completion.usage.prompt_tokens,
-          completionTokens: completion.usage.completion_tokens,
+            promptTokens,
+            completionTokens,
           totalTokens: completion.usage.total_tokens,
         }
       : undefined,
   };
+  } finally {
+    await recordAiUsage(
+      {
+        feature: "note",
+        ...params.usageIdentity,
+        model: params.model,
+        promptTokens,
+        completionTokens,
+      },
+      params.usageStore,
+    );
+  }
 }
 
 export async function generateClinicalBodyOpenAI(
@@ -294,6 +375,8 @@ export async function generateClinicalBodyOpenAI(
     requestTimeoutMs?: number;
     timeBudgetMs?: number;
     fallbackModel?: string | null;
+    usageIdentity?: AiUsageIdentity;
+    usageStore?: AiUsageStore;
   },
 ): Promise<GenerateClinicalBodyResult> {
   const frozen = buildFrozenSessionContext(ctx);
@@ -301,8 +384,12 @@ export async function generateClinicalBodyOpenAI(
   const timeBudgetMs = options?.timeBudgetMs ?? 120_000;
   const primaryModel = resolvedOpenAIModel();
   const fallbackModel =
-    options?.fallbackModel === undefined ? resolvedFallbackOpenAIModel() : options.fallbackModel;
-  const messages: ChatCompletionMessageParam[] = [
+    options?.fallbackModel === undefined
+      ? resolvedFallbackOpenAIModel()
+      : options.fallbackModel;
+  const maxAttempts = resolveNoteAiMaxAttempts();
+  const maxCompletionTokens = resolveNoteMaxCompletionTokens();
+  let messages: ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: contextMessage(frozen) },
   ];
@@ -312,38 +399,45 @@ export async function generateClinicalBodyOpenAI(
   let priorPlan: NotePlan | null = null;
   let priorRaw = "";
   let lastIssues: NotePlanIssue[] = [];
-  const preservedSegments = new Map<number, NotePlan["segments"][number]>();
   let modelUsed = primaryModel;
+  let nextModel = primaryModel;
+  let repairAttempts = 0;
 
-  for (let attempt = 0; attempt < 4; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (Date.now() - startedAt >= timeBudgetMs) break;
-    if (attempt === 3) {
-      messages.push({
-        role: "user",
-        content: `FINAL CONSTRAINED FALLBACK:
-Regenerate the complete JSON plan. Copy behaviorLabel only from profileBehaviors and interventionLabels only from profileInterventions.
-Copy each intervention's exact catalog string into the paragraph; surrounding wording may vary from hour to hour.
-Use one complete action from registered profileBehaviorTargets, including measurable qualifiers. Do not use internal-state or opinion language (including "calm", "calmly", and "wanted"), "supervised"/"supervision", dash punctuation, or historical trend claims.
-Keep all activities inside the client's home with a specific indoor place named. Do not mention medicine or medication.
-All program names and percentages remain locked by hourlyAssignments.`,
-      });
-      repairActions.push("Started final constrained-AI fallback.");
-    }
     const attemptStarted = Date.now();
     let result: string | NotePlanModelCallOutput;
     try {
       result = options?.modelCall
-        ? await options.modelCall({ messages, attempt })
-        : await defaultModelCall({
+        ? await options.modelCall({
+            messages,
+            attempt,
+            model: nextModel,
+            maxCompletionTokens,
+          })
+        : options?.usageIdentity
+          ? await defaultModelCall({
             messages,
             attempt,
             requestTimeoutMs: options?.requestTimeoutMs,
-            model: attempt > 0 && fallbackModel ? fallbackModel : primaryModel,
+              model: nextModel,
             jsonSchema: constrainedNotePlanJsonSchema(frozen),
-          });
+              usageIdentity: options.usageIdentity,
+              usageStore: options.usageStore,
+              maxCompletionTokens,
+            })
+          : (() => {
+              throw new Error("AI usage identity is required");
+            })();
     } catch (error) {
-      if (attempt === 0 && fallbackModel && !options?.modelCall) {
-        repairActions.push(`Primary model failed; retried with ${fallbackModel}.`);
+      if (attempt + 1 < maxAttempts && isRetryableProviderError(error)) {
+        const delayMs =
+          readPositiveIntEnv("NOTE_AI_RETRY_BASE_DELAY_MS", 500) * 2 ** attempt;
+        nextModel = fallbackModel ?? nextModel;
+        repairActions.push(
+          `Transient provider failure; retrying after ${delayMs}ms with ${nextModel}.`,
+        );
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
         continue;
       }
       throw error;
@@ -351,25 +445,54 @@ All program names and percentages remain locked by hourlyAssignments.`,
 
     const normalized =
       typeof result === "string"
-        ? { output: result, completionId: undefined, usage: undefined, model: primaryModel }
+        ? {
+            output: result,
+            completionId: undefined,
+            usage: undefined,
+            model: nextModel,
+          }
         : result;
     priorRaw = normalized.output;
     rawModelOutputs.push(priorRaw);
     modelUsed = normalized.model ?? modelUsed;
+    if (attempt === 0 || !priorPlan) {
     const validated = parseAndValidateNotePlan(priorRaw, frozen);
-    priorPlan = validated.plan
-      ? {
-          segments: validated.plan.segments.map(
-            (segment) => preservedSegments.get(segment.segmentIndex) ?? segment,
+      priorPlan = validated.plan;
+      lastIssues = validated.issues;
+    } else {
+      const repair = parsePartialNotePlan(priorRaw);
+      if (!repair.plan) {
+        lastIssues = repair.issues;
+      } else {
+        const repairedByIndex = new Map(
+          repair.plan.segments.map((segment) => [
+            segment.segmentIndex,
+            segment,
+          ]),
+        );
+        const repairsEveryExpectedSegment = frozen.hourlyAssignments.every(
+          (assignment) => repairedByIndex.has(assignment.segmentIndex),
+        );
+        if (repairsEveryExpectedSegment) {
+          priorPlan = repair.plan;
+        } else {
+          priorPlan = {
+            segments: priorPlan.segments.map(
+              (segment) => repairedByIndex.get(segment.segmentIndex) ?? segment,
           ),
+          };
+          for (const segment of repair.plan.segments) {
+            if (
+              !priorPlan.segments.some(
+                (candidate) => candidate.segmentIndex === segment.segmentIndex,
+              )
+            ) {
+              priorPlan.segments.push(segment);
+            }
         }
-      : null;
-    lastIssues = priorPlan ? validateNotePlan(priorPlan, frozen) : validated.issues;
-    if (priorPlan && !lastIssues.some((issue) => issue.segmentIndex === undefined)) {
-      for (const segment of priorPlan.segments) {
-        if (!lastIssues.some((issue) => issue.segmentIndex === segment.segmentIndex)) {
-          preservedSegments.set(segment.segmentIndex, segment);
         }
+        priorPlan.segments.sort((a, b) => a.segmentIndex - b.segmentIndex);
+        lastIssues = validateNotePlan(priorPlan, frozen);
       }
     }
     const blockingIssues = blockingNotePlanIssues(lastIssues);
@@ -384,16 +507,15 @@ All program names and percentages remain locked by hourlyAssignments.`,
       passed: blockingIssues.length === 0,
     });
 
-    if (
-      priorPlan &&
-      (lastIssues.length === 0 || (blockingIssues.length === 0 && attempt === 3))
-    ) {
-      const finalAdvisories = lastIssues.filter((issue) => issue.severity === "advisory");
+    if (priorPlan && blockingIssues.length === 0) {
+      const finalAdvisories = lastIssues.filter(
+        (issue) => issue.severity === "advisory",
+      );
       return {
         body: assembleClinicalBodyFromNotePlan(priorPlan, frozen),
         notePlan: priorPlan,
         warnings: [],
-        repairAttempts: attempt,
+        repairAttempts,
         finalIssues: [],
         finalPlanIssues: finalAdvisories,
         attemptHistory,
@@ -403,11 +525,14 @@ All program names and percentages remain locked by hourlyAssignments.`,
       };
     }
 
+    if (attempt + 1 < maxAttempts) {
+      repairAttempts += 1;
     repairActions.push(
-      `Repair attempt ${attempt + 1}: ${lastIssues.map((issue) => issue.code).join(", ")}.`,
+        `Repair attempt ${repairAttempts}: ${lastIssues.map((issue) => issue.code).join(", ")}.`,
     );
-    messages.push({ role: "assistant", content: priorRaw });
-    messages.push({
+      messages = [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
       role: "user",
       content: buildScopedRepairUserMessage({
         frozen,
@@ -415,16 +540,20 @@ All program names and percentages remain locked by hourlyAssignments.`,
         priorRaw,
         priorPlan,
       }),
-    });
+        },
+      ];
+    }
   }
 
   if (priorPlan && blockingNotePlanIssues(lastIssues).length === 0) {
-    const finalAdvisories = lastIssues.filter((issue) => issue.severity === "advisory");
+    const finalAdvisories = lastIssues.filter(
+      (issue) => issue.severity === "advisory",
+    );
     return {
       body: assembleClinicalBodyFromNotePlan(priorPlan, frozen),
       notePlan: priorPlan,
       warnings: [],
-      repairAttempts: Math.max(0, attemptHistory.length - 1),
+      repairAttempts,
       finalIssues: [],
       finalPlanIssues: finalAdvisories,
       attemptHistory,
@@ -435,7 +564,11 @@ All program names and percentages remain locked by hourlyAssignments.`,
   }
 
   const error = new Error(
-    `AI note generation did not satisfy the hourly contract: ${blockingNotePlanIssues(lastIssues).map((issue) => issue.message).join(" ")}`,
+    `AI note generation did not satisfy the hourly contract: ${blockingNotePlanIssues(
+      lastIssues,
+    )
+      .map((issue) => issue.message)
+      .join(" ")}`,
   ) as Error & {
     noteGenerationAttemptHistory?: NoteGenerationAttemptTelemetry[];
     noteGenerationRawModelOutputs?: string[];
@@ -445,4 +578,49 @@ All program names and percentages remain locked by hourlyAssignments.`,
   error.noteGenerationRawModelOutputs = rawModelOutputs;
   error.noteGenerationRepairActions = repairActions;
   throw error;
+}
+
+function parsePartialNotePlan(raw: string): {
+  plan: NotePlan | null;
+  issues: NotePlanIssue[];
+} {
+  try {
+    const parsed = NotePlanSchema.safeParse(JSON.parse(raw));
+    if (parsed.success) return { plan: parsed.data, issues: [] };
+    return {
+      plan: null,
+      issues: [
+        {
+          code: "INVALID_JSON",
+          severity: "blocking",
+          message: parsed.error.message,
+        },
+      ],
+    };
+  } catch {
+    return {
+      plan: null,
+      issues: [
+        {
+          code: "INVALID_JSON",
+          severity: "blocking",
+          message: "Model output was not valid JSON.",
+        },
+      ],
+    };
+  }
+}
+
+function isRetryableProviderError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const candidate = error as Error & { status?: number; code?: string };
+  if (candidate.status !== undefined) {
+    return candidate.status >= 500 && candidate.status <= 599;
+  }
+  return (
+    candidate.name === "AbortError" ||
+    candidate.code === "ETIMEDOUT" ||
+    candidate.code === "ECONNRESET" ||
+    /timed?\s*out|timeout/i.test(candidate.message)
+  );
 }

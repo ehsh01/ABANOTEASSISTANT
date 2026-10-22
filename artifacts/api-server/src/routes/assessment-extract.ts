@@ -2,8 +2,11 @@ import { Router, type IRouter } from "express";
 import multer from "multer";
 
 import { extractAssessmentFromPdfBuffer } from "../assessment-extract";
+import { aiHttpError } from "../ai-config";
+import { aiRateLimit } from "../ai-rate-limit";
 
 const router: IRouter = Router();
+const assessmentAiRateLimiter = aiRateLimit("assessment");
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -22,6 +25,7 @@ const upload = multer({
 
 router.post(
   "/clients/assessment/extract",
+  assessmentAiRateLimiter,
   (req, res, next) => {
     upload.single("file")(req, res, (err: unknown) => {
       if (err) {
@@ -37,6 +41,12 @@ router.post(
     });
   },
   async (req, res) => {
+    const companyId = req.companyId;
+    const userId = req.userId;
+    if (companyId === undefined || userId === undefined) {
+      res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
+      return;
+    }
     const file = req.file;
     if (!file?.buffer?.length) {
       res.status(400).json({
@@ -48,22 +58,25 @@ router.post(
     }
 
     try {
-      const result = await extractAssessmentFromPdfBuffer(file.buffer);
+      const result = await extractAssessmentFromPdfBuffer(file.buffer, {
+        usageIdentity: { companyId, userId },
+      });
       res.json({
         success: true,
         data: result,
         error: null,
       });
     } catch (e) {
-      const message = e instanceof Error ? e.message : "Extraction failed";
-      if (message.includes("OPENAI_API_KEY")) {
-        res.status(503).json({
+      const aiError = aiHttpError(e);
+      if (aiError.status) {
+        res.status(aiError.status).json({
           success: false,
-          error: "AI extraction is not configured on the server",
+          error: aiError.error,
           messages: [],
         });
         return;
       }
+      const message = e instanceof Error ? e.message : "Extraction failed";
       res.status(500).json({
         success: false,
         error: message,

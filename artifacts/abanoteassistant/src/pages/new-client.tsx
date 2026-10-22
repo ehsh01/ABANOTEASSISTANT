@@ -37,6 +37,7 @@ import {
 import { ApiError, type AssessmentExtractResultPayload } from "@workspace/api-client-react";
 import { ClientAvatar } from "@/components/client-avatar";
 import { cn } from "@/lib/utils";
+import { formatAiFeatureFailure } from "@/lib/ai-errors";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -1436,9 +1437,6 @@ function NewClientForm({
   const [extractError, setExtractError] = useState<string | null>(null);
   const [extractSuccess, setExtractSuccess] = useState<string | null>(null);
   const [clearingStoredAssessment, setClearingStoredAssessment] = useState(false);
-  // Identity of the most recently auto-extracted file (name + size) so we don't re-run extraction repeatedly
-  // for the same PDF the user picked. Switching to a different file re-arms the auto-extract effect.
-  const lastAutoExtractedFileKeyRef = useRef<string | null>(null);
   const deleteClientMutation = useDeleteClient();
   const generateAvatarMutation = useGenerateClientAvatar();
 
@@ -1448,9 +1446,9 @@ function NewClientForm({
     if (generateAvatarMutation.isPending) return;
     generateAvatarMutation.mutate(numericId, {
       onError: (err) => {
-        const msg =
-          err instanceof Error ? `Could not generate avatar: ${err.message}` : "Could not generate avatar.";
-        setSaveError(msg);
+        setSaveError(
+          formatAiFeatureFailure(err, "Could not generate avatar."),
+        );
       },
       onSuccess: () => {
         setSaveError(null);
@@ -1677,35 +1675,11 @@ function NewClientForm({
           : `No structured fields were found in the PDF text.${warn}`,
       );
     } catch (err) {
-      let msg = "Could not extract from PDF.";
-      if (err instanceof ApiError) {
-        const data = err.data as { error?: string } | null;
-        msg = (data && typeof data.error === "string" && data.error) || err.message || msg;
-      } else if (err instanceof Error) {
-        msg = err.message;
-      }
-      setExtractError(msg);
+      setExtractError(
+        formatAiFeatureFailure(err, "Could not extract from PDF."),
+      );
     }
   }
-
-  // Auto-trigger extraction the moment the RBT picks (or drops) a PDF, so name / behaviors / programs /
-  // interventions / topographies / authorization expiration date are auto-filled without an extra click.
-  // Re-arms only when a different file is selected (different name+size).
-  useEffect(() => {
-    const file = step2.file;
-    if (!file) {
-      lastAutoExtractedFileKeyRef.current = null;
-      return;
-    }
-    const key = `${file.name}|${file.size}`;
-    if (lastAutoExtractedFileKeyRef.current === key) return;
-    if (extractMutation.isPending) return;
-    lastAutoExtractedFileKeyRef.current = key;
-    void handleExtractFromPdf();
-    // We intentionally depend only on the file identity; handleExtractFromPdf is recreated each render
-    // but reads the latest file via closure on `step2.file` inside.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step2.file]);
 
   useEffect(() => {
     if (!isEdit) {
@@ -1958,18 +1932,6 @@ function NewClientForm({
         if (step2.file) {
           await uploadClientAssessmentDocument(created.data.id, { file: step2.file });
         }
-        // Fire-and-forget avatar generation. We don't await: the request can take ~5–15s and we want
-        // the user back on the clients page immediately. The clients-list query is invalidated by the
-        // hook on success, so the avatar swaps in for the new card the next time it renders.
-        const newClientId = created.data.id;
-        generateAvatarMutation.mutate(newClientId, {
-          onError: (err) => {
-            // Log only — never block the create flow on avatar generation. The user can retry later
-            // from the edit screen.
-            const msg = err instanceof Error ? err.message : "Avatar generation failed";
-            console.warn(`Avatar generation failed for new client ${newClientId}:`, msg);
-          },
-        });
       }
       await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       if (isEdit && !isSectionEdit) {

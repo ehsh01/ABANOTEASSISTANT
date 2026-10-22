@@ -11,10 +11,10 @@
  *
  * Usage (from artifacts/api-server):
  *   OPENAI_API_KEY=sk-... npx tsx scripts/model-eval.mts
- *   OPENAI_API_KEY=sk-... npx tsx scripts/model-eval.mts --models=gpt-5.5,gpt-5,gpt-4.1 --reps=3 --out=./model-eval-out
+ *   NOTE_EVAL_LIVE=true AI_ENABLED=true NOTE_AI_ENABLED=true OPENAI_API_KEY=sk-... AI_EVAL_USER_ID=1 AI_EVAL_COMPANY_ID=1 npx tsx scripts/model-eval.mts --models=gpt-4.1-mini,gpt-5.5 --reps=3 --out=./model-eval-out
  *
  * Flags:
- *   --models=a,b,c   Comma-separated model ids to compare (default: gpt-5.5,gpt-5,gpt-4.1)
+ *   --models=a,b,c   Comma-separated model ids to compare (default: gpt-4.1-mini,gpt-5.5)
  *   --reps=N         Repetitions per (model, case) to average out model randomness (default: 3)
  *   --out=DIR        If set, also write each generated note to DIR/<model>/<case>-<rep>.txt
  */
@@ -224,7 +224,7 @@ type ModelAggregate = {
 function parseArgs(argv: string[]): { models: string[]; reps: number; out: string | null } {
   const get = (name: string): string | undefined =>
     argv.find((a) => a.startsWith(`--${name}=`))?.split("=").slice(1).join("=");
-  const models = (get("models") ?? "gpt-5.5,gpt-5,gpt-4.1")
+  const models = (get("models") ?? "gpt-4.1-mini,gpt-5.5")
     .split(",")
     .map((m) => m.trim())
     .filter(Boolean);
@@ -249,9 +249,12 @@ async function preflightAccessibleModels(client: OpenAI): Promise<Set<string> | 
   }
 }
 
-async function runOnce(context: NoteGenerationContext): Promise<CaseResult> {
+async function runOnce(
+  context: NoteGenerationContext,
+  usageIdentity: { userId: number; companyId: number },
+): Promise<CaseResult> {
   try {
-    const result = await generateClinicalBodyOpenAI(context);
+    const result = await generateClinicalBodyOpenAI(context, { usageIdentity });
     const segments = result.notePlan?.segments ?? [];
     const programNames = segments
       .map((s) => s.replacementLabel?.trim().toLowerCase())
@@ -343,11 +346,29 @@ function avg(total: number, runs: number, decimals = 2): string {
 }
 
 async function main(): Promise<void> {
+  if (process.env.NOTE_EVAL_LIVE?.trim().toLowerCase() !== "true") {
+    console.error("NOTE_EVAL_LIVE must be exactly true for live model evaluation.");
+    process.exit(1);
+  }
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) {
     console.error("OPENAI_API_KEY is not set. Export it and re-run.");
     process.exit(1);
   }
+  const userId = Number(process.env.AI_EVAL_USER_ID);
+  const companyId = Number(process.env.AI_EVAL_COMPANY_ID);
+  if (
+    !Number.isInteger(userId) ||
+    userId <= 0 ||
+    !Number.isInteger(companyId) ||
+    companyId <= 0
+  ) {
+    console.error(
+      "AI_EVAL_USER_ID and AI_EVAL_COMPANY_ID must be valid existing positive IDs.",
+    );
+    process.exit(1);
+  }
+  const usageIdentity = { userId, companyId };
   const { models, reps, out } = parseArgs(process.argv.slice(2));
   const client = new OpenAI({ apiKey });
 
@@ -383,7 +404,7 @@ async function main(): Promise<void> {
     for (const evalCase of EVAL_CASES) {
       for (let rep = 1; rep <= reps; rep++) {
         process.stdout.write(`\r[${model}] ${evalCase.id} rep ${rep}/${reps}            `);
-        const r = await runOnce(evalCase.context);
+        const r = await runOnce(evalCase.context, usageIdentity);
         agg.runs++;
         if (!r.ok) {
           agg.failures++;

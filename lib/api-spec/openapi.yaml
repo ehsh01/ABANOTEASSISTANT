@@ -423,9 +423,9 @@ paths:
       summary: Upload assessment PDF and store text for AI note grounding
       description: >
         Parses PDF text server-side and rejects scanned/image-only files without enough selectable text. On success,
-        stores the authoritative truncated snapshot (not returned in API JSON), refreshes assessment-derived clinical
-        enrichment while preserving therapist-curated values, prunes maps to app-profile catalogs, and sets assessment
-        status to ready. Call after creating or updating a client when the RBT selects an assessment file.
+        stores the authoritative truncated snapshot (not returned in API JSON), refreshes deterministic
+        assessment-derived clinical enrichment while preserving therapist-curated values, prunes maps to
+        app-profile catalogs, and sets assessment status to ready. This upload never calls an AI provider.
       security:
         - bearerAuth: []
       parameters:
@@ -487,7 +487,8 @@ paths:
       description: >
         Uses the client's first name (cultural / ethnic cue), approximate age (from DOB), and gender to
         produce a stylized cartoon-style portrait via OpenAI's image API and stores it on the client row.
-        Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
+        It runs only after the user explicitly clicks Generate or Regenerate. The stored image is reused
+        until then. Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
       security:
         - bearerAuth: []
       parameters:
@@ -517,6 +518,18 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Daily avatar cap or per-user request rate limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: AI is disabled or the provider is not configured
           content:
             application/json:
               schema:
@@ -1026,10 +1039,8 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
           description: >
-            Too many unsaved drafts. The user already has `MAX_UNSAVED_DRAFTS` (default 3)
-            generated drafts that have not been saved or discarded; they must save one or
-            POST `/notes/drafts/discard` before generating another. The body's `error` field
-            carries the calm SaaS copy the UI should surface verbatim.
+            Too many unsaved drafts, the note AI daily limit was reached, or the per-user
+            request rate limit was reached. The body's `error` field identifies the active cap.
           content:
             application/json:
               schema:
@@ -1041,7 +1052,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          description: AI not configured — OPENAI_API_KEY missing or empty (note generation requires OpenAI)
+          description: AI disabled by a fail-closed switch or OPENAI_API_KEY missing
           content:
             application/json:
               schema:
@@ -1103,13 +1114,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
-          description: Too many unsaved drafts
+          description: Draft, daily AI, or per-user request rate limit reached
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          description: AI not configured
+          description: AI disabled by a fail-closed switch or provider not configured
           content:
             application/json:
               schema:
@@ -1431,7 +1442,7 @@ components:
             If your deployed API omits this field, the server is running an older build — redeploy api-server dist and restart the process.
         openaiConfigured:
           type: boolean
-          description: True when OPENAI_API_KEY is non-empty (required for POST /notes/generate).
+          description: True only when note AI switches are enabled and OPENAI_API_KEY is non-empty.
         buildId:
           type: string
           description: Optional deploy stamp; set API_BUILD_ID (or CI commit SHA) on the host to verify which build is running.
