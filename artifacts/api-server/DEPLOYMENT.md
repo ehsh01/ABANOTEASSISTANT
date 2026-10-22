@@ -104,6 +104,24 @@ pnpm exec drizzle-kit push --config ./drizzle.config.ts --force
 
 **DigitalOcean / managed Postgres + Node `pg`:** URLs often use `?sslmode=require`. Older API builds passed that string straight into `pg.Pool`, which can fail TLS verification and surface as a generic “Failed query” on registration. Prefer deploying the current `@workspace/db` pool (parses `DATABASE_URL` like Drizzle Kit), or use `sslmode=no-verify` in the URL until then. After a `.env` change, reload PM2 from `ecosystem.config.cjs` so the app picks up the new URL (`pm2 delete …` + `pm2 start …`, or equivalent).
 
+#### AI spend-control migration order
+
+The AI spend-control release adds `abanote.ai_usage` and
+`abanote.ai_response_cache`. Apply the additive migration to staging and production
+**before** restarting either environment on the new application commit:
+
+```bash
+# Run from the repository root against each intended database URL.
+psql "$DIGITALOCEAN_DATABASE_URL" -v ON_ERROR_STOP=1 \
+  -f lib/db/migrations/2026-10-22-ai-spend-controls.sql
+```
+
+Then deploy the tested application commit and run the health check. The AI switches
+default **on** when unset so existing live AI does not silently stop during deploy.
+Only an explicit `false`, `0`, `off`, or `no` value (trimmed, any case) disables
+`AI_ENABLED`, `NOTE_AI_ENABLED`, `ASSESSMENT_AI_ENABLED`, or
+`AVATAR_AI_ENABLED`. Set one of those values only when intentionally disabling AI.
+
 ### 8. Start with PM2
 
 Use **`artifacts/api-server/ecosystem.config.cjs`** (it loads `artifacts/api-server/.env` and passes those variables into the process, including `RESEND_API_KEY`, `EMAIL_FROM`, and `APP_ORIGIN`).

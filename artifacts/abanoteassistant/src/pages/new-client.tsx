@@ -37,6 +37,8 @@ import {
 import { ApiError, type AssessmentExtractResultPayload } from "@workspace/api-client-react";
 import { ClientAvatar } from "@/components/client-avatar";
 import { cn } from "@/lib/utils";
+import { formatAiFeatureFailure } from "@/lib/ai-errors";
+import { assessmentSummaryUpdate } from "@/lib/assessment-summary-update";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -969,7 +971,9 @@ function Step2({
                 ) : (
                   <>
                     <Zap className="w-4 h-4 shrink-0 pop-icon" />
-                    Fill name, age, behaviors &amp; programs from this PDF
+                    {extractSuccess
+                      ? "Re-extract fields from this PDF"
+                      : "Fill name, age, behaviors & programs from this PDF"}
                   </>
                 )}
               </button>
@@ -1385,7 +1389,7 @@ function NewClientForm({
 
   // `?intent=assessment` (set by the "From Assessment PDF" picker on the clients page) reorders the create
   // wizard so the assessment upload comes FIRST. The wizard then walks the user through Step 2 → Step 1 →
-  // Step 3 so they can review the auto-extracted name/DOB/gender before reviewing programs and saving.
+  // Step 3 so they can explicitly extract, then review name/DOB/gender, programs, and save.
   // Edit flows always use the canonical 1→2→3 order.
   const intentRaw = (searchParams.get("intent") ?? "").toLowerCase();
   const STEP_ORDER: readonly number[] =
@@ -1431,14 +1435,12 @@ function NewClientForm({
   const [assessmentSummaryForm, setAssessmentSummaryForm] = useState<AssessmentSummaryFormState>(
     emptyAssessmentSummaryForm(),
   );
+  const [assessmentSummaryTouched, setAssessmentSummaryTouched] = useState(false);
 
   const extractMutation = useExtractAssessmentFromPdf();
   const [extractError, setExtractError] = useState<string | null>(null);
   const [extractSuccess, setExtractSuccess] = useState<string | null>(null);
   const [clearingStoredAssessment, setClearingStoredAssessment] = useState(false);
-  // Identity of the most recently auto-extracted file (name + size) so we don't re-run extraction repeatedly
-  // for the same PDF the user picked. Switching to a different file re-arms the auto-extract effect.
-  const lastAutoExtractedFileKeyRef = useRef<string | null>(null);
   const deleteClientMutation = useDeleteClient();
   const generateAvatarMutation = useGenerateClientAvatar();
 
@@ -1448,9 +1450,9 @@ function NewClientForm({
     if (generateAvatarMutation.isPending) return;
     generateAvatarMutation.mutate(numericId, {
       onError: (err) => {
-        const msg =
-          err instanceof Error ? `Could not generate avatar: ${err.message}` : "Could not generate avatar.";
-        setSaveError(msg);
+        setSaveError(
+          formatAiFeatureFailure(err, "Could not generate avatar."),
+        );
       },
       onSuccess: () => {
         setSaveError(null);
@@ -1558,6 +1560,7 @@ function NewClientForm({
     if (!step2.file) {
       setExtractError(null);
       setExtractSuccess(null);
+      return;
     }
   }, [step2.file]);
 
@@ -1609,9 +1612,12 @@ function NewClientForm({
       // Only auto-fill when nothing has been entered yet; never overwrite an explicitly-set value.
       setAuthorizationExpiresOn((prev) => prev ?? e.assessmentAuthorizationExpiresOn ?? null);
     }
-    if (e.assessmentSummary) {
-      setAssessmentSummaryForm(assessmentSummaryFormFromExtract(e.assessmentSummary));
-    }
+    setAssessmentSummaryForm(
+      e.assessmentSummary
+        ? assessmentSummaryFormFromExtract(e.assessmentSummary)
+        : emptyAssessmentSummaryForm(),
+    );
+    setAssessmentSummaryTouched(true);
   }
 
   async function handleClearStoredAssessment() {
@@ -1632,6 +1638,7 @@ function NewClientForm({
       setStep2({ file: null });
       setAuthorizationExpiresOn(null);
       setAssessmentSummaryForm(emptyAssessmentSummaryForm());
+      setAssessmentSummaryTouched(false);
       setExtractError(null);
       setExtractSuccess(null);
     } catch (e) {
@@ -1646,7 +1653,10 @@ function NewClientForm({
     setExtractError(null);
     setExtractSuccess(null);
     try {
-      const res = await extractMutation.mutateAsync(step2.file);
+      const res = await extractMutation.mutateAsync({
+        file: step2.file,
+        force: Boolean(extractSuccess),
+      });
       applyAssessmentExtract(res.data);
       const e = res.data.extracted;
       const topographyCount = (e.maladaptiveBehaviorTopographies ?? []).filter(
@@ -1677,35 +1687,11 @@ function NewClientForm({
           : `No structured fields were found in the PDF text.${warn}`,
       );
     } catch (err) {
-      let msg = "Could not extract from PDF.";
-      if (err instanceof ApiError) {
-        const data = err.data as { error?: string } | null;
-        msg = (data && typeof data.error === "string" && data.error) || err.message || msg;
-      } else if (err instanceof Error) {
-        msg = err.message;
-      }
-      setExtractError(msg);
+      setExtractError(
+        formatAiFeatureFailure(err, "Could not extract from PDF."),
+      );
     }
   }
-
-  // Auto-trigger extraction the moment the RBT picks (or drops) a PDF, so name / behaviors / programs /
-  // interventions / topographies / authorization expiration date are auto-filled without an extra click.
-  // Re-arms only when a different file is selected (different name+size).
-  useEffect(() => {
-    const file = step2.file;
-    if (!file) {
-      lastAutoExtractedFileKeyRef.current = null;
-      return;
-    }
-    const key = `${file.name}|${file.size}`;
-    if (lastAutoExtractedFileKeyRef.current === key) return;
-    if (extractMutation.isPending) return;
-    lastAutoExtractedFileKeyRef.current = key;
-    void handleExtractFromPdf();
-    // We intentionally depend only on the file identity; handleExtractFromPdf is recreated each render
-    // but reads the latest file via closure on `step2.file` inside.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step2.file]);
 
   useEffect(() => {
     if (!isEdit) {
@@ -1743,6 +1729,7 @@ function NewClientForm({
     });
     setAuthorizationExpiresOn(p?.assessmentAuthorizationExpiresOn ?? null);
     setAssessmentSummaryForm(assessmentSummaryFormFromProfile(p?.assessmentSummary));
+    setAssessmentSummaryTouched(false);
     // Preserve step parameter from URL if provided, otherwise default to 1
     const urlStep = searchParams.get("step");
     if (!urlStep) {
@@ -1902,9 +1889,10 @@ function NewClientForm({
           skillAcquisitionPrograms: step3.skillAcquisitionPrograms,
           interventions: step3.interventions,
           assessmentAuthorizationExpiresOn: authorizationExpiresOn,
-          assessmentSummary: assessmentSummaryHasContent(assessmentSummaryForm)
-            ? assessmentSummaryToApiPayload(assessmentSummaryForm)
-            : null,
+          ...assessmentSummaryUpdate(
+            assessmentSummaryForm,
+            assessmentSummaryTouched,
+          ),
         };
         if (step2.file) {
           payload.hasAssessment = true;
@@ -1958,18 +1946,6 @@ function NewClientForm({
         if (step2.file) {
           await uploadClientAssessmentDocument(created.data.id, { file: step2.file });
         }
-        // Fire-and-forget avatar generation. We don't await: the request can take ~5–15s and we want
-        // the user back on the clients page immediately. The clients-list query is invalidated by the
-        // hook on success, so the avatar swaps in for the new card the next time it renders.
-        const newClientId = created.data.id;
-        generateAvatarMutation.mutate(newClientId, {
-          onError: (err) => {
-            // Log only — never block the create flow on avatar generation. The user can retry later
-            // from the edit screen.
-            const msg = err instanceof Error ? err.message : "Avatar generation failed";
-            console.warn(`Avatar generation failed for new client ${newClientId}:`, msg);
-          },
-        });
       }
       await queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       if (isEdit && !isSectionEdit) {
@@ -2043,7 +2019,10 @@ function NewClientForm({
               {editSection === "summary" && (
                 <AssessmentSummaryFields
                   value={assessmentSummaryForm}
-                  onChange={setAssessmentSummaryForm}
+                  onChange={(next) => {
+                    setAssessmentSummaryForm(next);
+                    setAssessmentSummaryTouched(true);
+                  }}
                   compact
                   maladaptiveBehaviorTargets={maladaptiveBehaviorTargetsPayload(
                     step3.maladaptiveBehaviors,
@@ -2228,7 +2207,10 @@ function NewClientForm({
                 {(extractSuccess || assessmentSummaryHasContent(assessmentSummaryForm)) && (
                   <AssessmentSummaryFields
                     value={assessmentSummaryForm}
-                    onChange={setAssessmentSummaryForm}
+                    onChange={(next) => {
+                      setAssessmentSummaryForm(next);
+                      setAssessmentSummaryTouched(true);
+                    }}
                     maladaptiveBehaviorTargets={maladaptiveBehaviorTargetsPayload(
                       step3.maladaptiveBehaviors,
                       step3.maladaptiveBehaviorTargets,

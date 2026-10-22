@@ -21,7 +21,7 @@ export const HealthCheckResponse = zod.object({
   openaiConfigured: zod
     .boolean()
     .describe(
-      "True when OPENAI_API_KEY is non-empty (required for POST \/notes\/generate).",
+      "True only when note AI switches are enabled and OPENAI_API_KEY is non-empty.",
     ),
   buildId: zod
     .string()
@@ -1172,7 +1172,31 @@ export const DeleteClientResponse = zod.object({
 });
 
 /**
- * Parses PDF text server-side and rejects scanned/image-only files without enough selectable text. On success, stores the authoritative truncated snapshot (not returned in API JSON), refreshes assessment-derived clinical enrichment while preserving therapist-curated values, prunes maps to app-profile catalogs, and sets assessment status to ready. Call after creating or updating a client when the RBT selects an assessment file.
+ * Runs only after the user explicitly clicks the assessment extraction action. Results are cached per company by SHA-256 of the PDF bytes. AI kill switches, daily caps, and per-user rate limits are enforced before any provider call.
+
+ * @summary Extract structured assessment fields with AI
+ */
+export const extractAssessmentFromPdfWithAiBodyForceDefault = false;
+
+export const ExtractAssessmentFromPdfWithAiBody = zod.object({
+  file: zod.unknown()
+    .describe("Assessment PDF (field name must be `file`)"),
+  force: zod
+    .boolean()
+    .default(extractAssessmentFromPdfWithAiBodyForceDefault)
+    .describe(
+      "Bypass a matching cached extraction and call the provider again.",
+    ),
+});
+
+export const ExtractAssessmentFromPdfWithAiResponse = zod.object({
+  success: zod.literal(true),
+  data: zod.record(zod.string(), zod.unknown()),
+  error: zod.string().nullable(),
+});
+
+/**
+ * Parses PDF text server-side and rejects scanned/image-only files without enough selectable text. On success, stores the authoritative truncated snapshot (not returned in API JSON), refreshes deterministic assessment-derived clinical enrichment while preserving therapist-curated values, prunes maps to app-profile catalogs, and sets assessment status to ready. This upload never calls an AI provider.
 
  * @summary Upload assessment PDF and store text for AI note grounding
  */
@@ -1181,9 +1205,8 @@ export const UploadClientAssessmentDocumentParams = zod.object({
 });
 
 export const UploadClientAssessmentDocumentBody = zod.object({
-  file: zod
-    .unknown()
-    .describe("Assessment PDF multipart field file (validated at HTTP layer)"),
+  file: zod.unknown()
+    .describe("Assessment PDF (field name must be `file`)"),
 });
 
 export const UploadClientAssessmentDocumentResponse = zod.object({
@@ -1352,7 +1375,7 @@ export const UploadClientAssessmentDocumentResponse = zod.object({
 });
 
 /**
- * Uses the client's first name (cultural / ethnic cue), approximate age (from DOB), and gender to produce a stylized cartoon-style portrait via OpenAI's image API and stores it on the client row. Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
+ * Uses the client's first name (cultural / ethnic cue), approximate age (from DOB), and gender to produce a stylized cartoon-style portrait via OpenAI's image API and stores it on the client row. It runs only after the user explicitly clicks Generate or Regenerate. The stored image is reused until then. Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
 
  * @summary Generate an AI cartoon avatar for the client
  */
@@ -2014,6 +2037,8 @@ export const generateNoteBodyAbcHintsMax = 8;
 
 export const generateNoteBodyProgramTrialDataCountMax = 10;
 
+export const generateNoteBodyForceRegenerateDefault = false;
+
 export const GenerateNoteBody = zod.object({
   clientId: zod.number(),
   sessionHours: zod.number().min(1).max(generateNoteBodySessionHoursMax),
@@ -2110,6 +2135,12 @@ export const GenerateNoteBody = zod.object({
     )
     .describe(
       "Required. Maps every hourly replacement program id to the percentage manually selected in the app, encoded as count + effectiveTrials. The server freezes the corresponding integer percentage and requires that exact value in every hour assigned to the program.\n",
+    ),
+  forceRegenerate: zod
+    .boolean()
+    .default(generateNoteBodyForceRegenerateDefault)
+    .describe(
+      "Bypass a matching note-response cache entry and generate fresh model prose.",
     ),
 });
 
@@ -2285,6 +2316,8 @@ export const createNoteGenerationJobBodyAbcHintsMax = 8;
 
 export const createNoteGenerationJobBodyProgramTrialDataCountMax = 10;
 
+export const createNoteGenerationJobBodyForceRegenerateDefault = false;
+
 export const CreateNoteGenerationJobBody = zod.object({
   clientId: zod.number(),
   sessionHours: zod
@@ -2384,6 +2417,12 @@ export const CreateNoteGenerationJobBody = zod.object({
     )
     .describe(
       "Required. Maps every hourly replacement program id to the percentage manually selected in the app, encoded as count + effectiveTrials. The server freezes the corresponding integer percentage and requires that exact value in every hour assigned to the program.\n",
+    ),
+  forceRegenerate: zod
+    .boolean()
+    .default(createNoteGenerationJobBodyForceRegenerateDefault)
+    .describe(
+      "Bypass a matching note-response cache entry and generate fresh model prose.",
     ),
 });
 

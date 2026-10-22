@@ -14,10 +14,11 @@ import { evaluateBilling } from "./billing/service";
 import {
   draftCapMessage,
   getMaxUnsavedDraftsForCompany,
+  releaseDraftSlotBestEffort,
   tryConsumeDraftSlot,
 } from "./draft-quota";
+import { shouldReleaseDraftSlotForAiFailure } from "./ai-config";
 import {
-  isOpenAINoteGenerationConfigured,
   resolveBackgroundNoteGenerationTimeBudgetMs,
   resolveBackgroundOpenAIRequestTimeoutMs,
 } from "./openai-notes";
@@ -90,18 +91,6 @@ export async function prepareNoteGeneration(params: {
       status: 402,
       error: billing.blockedReason ?? "Subscription required to generate new notes.",
       messages: [],
-    };
-  }
-
-  if (!isOpenAINoteGenerationConfigured()) {
-    return {
-      ok: false,
-      status: 503,
-      error: "AI note generation is not configured on the server.",
-      messages: [
-        "OPENAI_API_KEY is missing or empty. Set it in artifacts/api-server/.env (or your host environment) and restart the API (e.g. pm2 restart abanoteassistant-api). " +
-          "Session notes are generated only with OpenAI; there is no template fallback.",
-      ],
     };
   }
 
@@ -246,6 +235,7 @@ export async function runNoteGenerationJob(jobId: string): Promise<void> {
 
   const result = await generateSessionNoteForClient({
     companyId: job.companyId,
+    userId: job.userId,
     client,
     body,
     // Background jobs are polled (not behind Cloudflare), so give the generate+repair loop a larger
@@ -257,6 +247,9 @@ export async function runNoteGenerationJob(jobId: string): Promise<void> {
   });
 
   if (!result.ok) {
+    if (shouldReleaseDraftSlotForAiFailure(result.status)) {
+      await releaseDraftSlotBestEffort(job.userId, job.draftSlotMax);
+    }
     await markJobFailed(jobId, result.status, result.error, result.messages);
     return;
   }

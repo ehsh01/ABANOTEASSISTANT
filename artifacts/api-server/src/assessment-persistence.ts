@@ -81,6 +81,11 @@ function refreshMap(params: {
       if (newValues.length > 0) {
         map[behavior] = newValues;
         extractedBehaviors.push(behavior);
+      } else if (oldValues.length > 0) {
+        // A deterministic upload may not include optional AI enrichment. Preserve the
+        // last extracted value until the user explicitly runs Re-extract.
+        map[behavior] = oldValues;
+        extractedBehaviors.push(behavior);
       }
       continue;
     }
@@ -150,7 +155,7 @@ export function refreshProfileFromAssessmentUpload(params: {
     let functions = current.functions ?? null;
 
     if (previousTopography.has(key)) {
-      topography = next?.topography ?? null;
+      topography = next?.topography ?? topography;
       if (topography) topographyBehaviors.push(current.name);
     } else if (!topography && next?.topography) {
       topography = next.topography;
@@ -160,8 +165,8 @@ export function refreshProfileFromAssessmentUpload(params: {
     }
 
     if (previousFunctions.has(key)) {
-      functions = next?.functions ?? null;
-      if (next?.functions !== undefined) functionBehaviors.push(current.name);
+      functions = next?.functions ?? functions;
+      if (functions && functions.length > 0) functionBehaviors.push(current.name);
     } else if ((!functions || functions.length === 0) && next?.functions !== undefined) {
       functions = next.functions;
       functionBehaviors.push(current.name);
@@ -212,11 +217,15 @@ export function refreshProfileFromAssessmentUpload(params: {
   };
 
   const extractedSummary = sanitizeClientAssessmentSummary(extracted?.assessmentSummary ?? null);
+  const assessmentChanged =
+    (profile.assessmentTextSnapshot?.trim() ?? "") !==
+    params.assessmentTextSnapshot.trim();
   let assessmentSummary = profile.assessmentSummary ?? null;
   let assessmentSummaryExtracted = false;
   if (previousProvenance?.assessmentSummaryExtracted) {
-    assessmentSummary = extractedSummary;
-    assessmentSummaryExtracted = extractedSummary !== null;
+    assessmentSummary =
+      extractedSummary ?? (assessmentChanged ? null : assessmentSummary);
+    assessmentSummaryExtracted = assessmentSummary !== null;
   } else if (!assessmentSummary && extractedSummary) {
     assessmentSummary = extractedSummary;
     assessmentSummaryExtracted = true;

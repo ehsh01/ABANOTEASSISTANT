@@ -24,9 +24,12 @@ import {
   verifyAvatarToken,
 } from "../avatar-generation";
 import { clientRowToApiData } from "../client-profile-api";
+import { aiHttpError } from "../ai-config";
+import { aiRateLimit } from "../ai-rate-limit";
 
 export const clientAvatarPublicRouter: IRouter = Router();
 export const clientAvatarTenantRouter: IRouter = Router();
+const avatarAiRateLimiter = aiRateLimit("avatar");
 
 /**
  * GET /api/clients/:clientId/avatar
@@ -105,10 +108,12 @@ clientAvatarPublicRouter.get(
  */
 clientAvatarTenantRouter.post(
   "/clients/:clientId/avatar/generate",
+  avatarAiRateLimiter,
   async (req, res, next) => {
     try {
       const companyId = req.companyId;
-      if (companyId === undefined) {
+      const userId = req.userId;
+      if (companyId === undefined || userId === undefined) {
         res.status(401).json({ success: false, error: "Unauthorized", messages: [] });
         return;
       }
@@ -146,11 +151,14 @@ clientAvatarTenantRouter.post(
         return;
       }
 
-      const generated = await generateClientAvatar({
-        firstName,
-        dateOfBirth: profile?.dateOfBirth ?? null,
-        gender: profile?.gender ?? null,
-      });
+      const generated = await generateClientAvatar(
+        {
+          firstName,
+          dateOfBirth: profile?.dateOfBirth ?? null,
+          gender: profile?.gender ?? null,
+        },
+        { companyId, userId },
+      );
 
       const now = new Date();
       await db
@@ -175,6 +183,15 @@ clientAvatarTenantRouter.post(
         messages: [],
       });
     } catch (err) {
+      const aiError = aiHttpError(err);
+      if (aiError.status) {
+        res.status(aiError.status).json({
+          success: false,
+          error: aiError.error,
+          messages: [],
+        });
+        return;
+      }
       const message = err instanceof Error ? err.message : "Avatar generation failed";
       // Avatar generation can fail for many reasons (model not enabled on the org, content policy
       // refusal, OpenAI quota). Return a structured 502 so the UI can show a useful message.

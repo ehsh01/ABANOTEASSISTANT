@@ -3,6 +3,10 @@ if (process.env.NOTE_SMOKE_STAGING !== "true") {
 }
 
 await import("../../artifacts/api-server/src/load-local-env");
+const { assertAiFeatureEnabled } = await import(
+  "../../artifacts/api-server/src/ai-config"
+);
+assertAiFeatureEnabled("note");
 if (
   !process.env.DATABASE_URL_STAGING ||
   process.env.DATABASE_URL_STAGING === process.env.DATABASE_URL
@@ -19,6 +23,7 @@ const {
   companiesTable,
   notesTable,
   programsTable,
+  usersTable,
 } = await import("@workspace/db/schema");
 const { eq, sql } = await import("drizzle-orm");
 const { GenerateNoteBody } = await import("@workspace/api-zod");
@@ -29,12 +34,23 @@ const { generateSessionNoteForClient } = await import(
 let chosenClient: typeof clientsTable.$inferSelect | null = null;
 let linkedPrograms: { id: number; name: string }[] = [];
 let temporaryCompanyId: number | null = null;
+let temporaryUserId: number | null = null;
 const companyInsert = await db.execute<{ id: number }>(
   sql`insert into ${companiesTable} (name, free_usage)
       values (${`Approved language staging smoke ${Date.now()}`}, true)
       returning id`,
 );
 temporaryCompanyId = companyInsert.rows[0]!.id;
+const [smokeUser] = await db
+  .insert(usersTable)
+  .values({
+    companyId: temporaryCompanyId,
+    email: `ai-smoke-${Date.now()}@example.invalid`,
+    passwordHash: "staging-smoke-not-a-login",
+    emailVerified: true,
+  })
+  .returning({ id: usersTable.id });
+temporaryUserId = smokeUser!.id;
 const programNames = [
   "Compliance Training",
   "Request for Break",
@@ -141,6 +157,7 @@ let generatedNoteId: number | null = null;
 try {
   const result = await generateSessionNoteForClient({
     companyId: chosenClient.companyId,
+    userId: temporaryUserId!,
     client: { ...chosenClient, avatarPngBase64: null, avatarUpdatedAt: null },
     body: request,
     generation: { requestTimeoutMs: 180_000, timeBudgetMs: 240_000 },
@@ -178,6 +195,7 @@ try {
   });
   const missingResult = await generateSessionNoteForClient({
     companyId: chosenClient.companyId,
+    userId: temporaryUserId!,
     client: { ...chosenClient, avatarPngBase64: null, avatarUpdatedAt: null },
     body: missingRequest,
   });

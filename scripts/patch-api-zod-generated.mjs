@@ -11,18 +11,15 @@ const root = path.resolve(__dirname, "..");
 const apiPath = path.join(root, "lib", "api-zod", "src", "generated", "api.ts");
 let text = fs.readFileSync(apiPath, "utf8");
 
-const re = /export const UploadClientAssessmentDocumentBody = zod\.object\(\{\s*file: zod\s*\.instanceof\((?:File|Blob)\)\s*\.describe\("[^"]*"\),\s*\}\);/s;
+const re = /zod\s*\.instanceof\((?:File|Blob)\)/g;
+const matches = text.match(re);
 
-const replacement = `export const UploadClientAssessmentDocumentBody = zod.object({
-  file: zod
-    .unknown()
-    .describe("Assessment PDF multipart field file (validated at HTTP layer)"),
-});`;
-
-if (!re.test(text)) {
-  console.warn("patch-api-zod-generated: UploadClientAssessmentDocumentBody pattern not found; skip");
+if (!matches) {
+  console.warn("patch-api-zod-generated: multipart File/Blob patterns not found; skip");
 } else {
-  text = text.replace(re, replacement);
+  text = text.replace(re, "zod.unknown()");
   fs.writeFileSync(apiPath, text, "utf8");
-  console.log("patched lib/api-zod/src/generated/api.ts (multipart body -> z.unknown())");
+  console.log(
+    `patched lib/api-zod/src/generated/api.ts (${matches.length} multipart File/Blob fields -> z.unknown())`,
+  );
 }

@@ -104,7 +104,7 @@ export default function Result() {
       setRegenerateError(t.result.regenerateSettingsLost);
       return;
     }
-    generateMutation.mutate(payload, {
+    generateMutation.mutate({ ...payload, forceRegenerate: true }, {
       onSuccess: (res) => {
         setGeneratedNote(res.data, res.warnings);
         setContent(res.data.content);

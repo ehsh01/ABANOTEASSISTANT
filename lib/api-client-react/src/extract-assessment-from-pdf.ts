@@ -51,9 +51,11 @@ export type AssessmentExtractSuccessResponse = {
  */
 export async function extractAssessmentFromPdf(
   file: File,
+  options?: { force?: boolean },
 ): Promise<AssessmentExtractSuccessResponse> {
   const form = new FormData();
   form.append("file", file);
+  if (options?.force) form.append("force", "true");
   return customFetch<AssessmentExtractSuccessResponse>("/api/clients/assessment/extract", {
     method: "POST",
     body: form,

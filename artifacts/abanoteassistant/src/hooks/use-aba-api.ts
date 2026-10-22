@@ -300,8 +300,14 @@ export function useDeleteClientProgram() {
 
 export function useExtractAssessmentFromPdf() {
   return useMutation({
-    mutationFn: async (file: File): Promise<AssessmentExtractSuccessResponse> =>
-      extractAssessmentFromPdf(file),
+    mutationFn: async ({
+      file,
+      force,
+    }: {
+      file: File;
+      force?: boolean;
+    }): Promise<AssessmentExtractSuccessResponse> =>
+      extractAssessmentFromPdf(file, { force }),
   });
 }
 

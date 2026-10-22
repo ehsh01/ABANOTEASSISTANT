@@ -16,21 +16,32 @@
  */
 
 import OpenAI from "openai";
+import type { ImagesResponse } from "openai/resources/images";
 import crypto from "crypto";
+import { randomUUID } from "node:crypto";
+import {
+  completeAiUsageBestEffort,
+  estimateImageCostUsd,
+  failAiUsageBestEffort,
+  releaseAiUsageBestEffort,
+  reserveAiUsage,
+  type AiUsageIdentity,
+  type AiUsageStore,
+} from "./ai-usage";
+import { assertAiProviderConfigured } from "./ai-config";
 
 /** Default model. Override with `OPENAI_AVATAR_MODEL` (e.g. `dall-e-3`) when an org isn't verified. */
 const DEFAULT_AVATAR_MODEL = "gpt-image-1";
 
 /**
- * Quality knob for `gpt-image-1`. Default is `medium` — the stylized 3D character look the product
- * targets needs more pixel budget than `low` provides (faces look mushy at low quality). Override with
- * `OPENAI_AVATAR_QUALITY` (`low` | `medium` | `high`) when cost matters more than crispness.
+ * Quality knob for `gpt-image-1`. Default is `low` to keep explicit avatar requests inexpensive.
+ * Override with `OPENAI_AVATAR_QUALITY` (`low` | `medium` | `high`) when approved.
  *
  * Approximate per-image cost at 1024x1024 (gpt-image-1, subject to OpenAI pricing):
  *   low ≈ $0.011 · medium ≈ $0.042 · high ≈ $0.167
  */
 type AvatarQuality = "low" | "medium" | "high";
-const DEFAULT_AVATAR_QUALITY: AvatarQuality = "medium";
+const DEFAULT_AVATAR_QUALITY: AvatarQuality = "low";
 
 /** Smallest gpt-image-1 size; PNG output. */
 const DEFAULT_AVATAR_SIZE = "1024x1024" as const;
@@ -174,40 +185,71 @@ function resolveAvatarModel(): string {
  */
 export async function generateClientAvatar(
   input: GenerateClientAvatarInput,
+  usageIdentity: AiUsageIdentity,
+  options?: { usageStore?: AiUsageStore },
 ): Promise<GeneratedAvatar> {
-  const apiKey = process.env["OPENAI_API_KEY"]?.trim();
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
-  }
   if (!input.firstName?.trim()) {
     throw new Error("firstName is required to generate an avatar");
   }
 
-  const client = new OpenAI({ apiKey });
+  assertAiProviderConfigured("avatar");
   const model = resolveAvatarModel();
   const prompt = buildAvatarPrompt(input);
-
-  const params: Parameters<typeof client.images.generate>[0] = {
-    model,
-    prompt,
-    size: DEFAULT_AVATAR_SIZE,
-    n: 1,
-  };
-  // gpt-image-1 supports a `quality` knob; older `dall-e-*` models silently reject it. We keep it
-  // optional so an env-pinned `dall-e-3` fallback continues to work without extra branching here.
-  if (model === DEFAULT_AVATAR_MODEL) {
-    (params as unknown as Record<string, unknown>)["quality"] = resolveAvatarQuality();
+  const quality = resolveAvatarQuality();
+  const reservedCostUsd = estimateImageCostUsd(quality);
+  const reservation = await reserveAiUsage(
+    {
+      feature: "avatar",
+      ...usageIdentity,
+      operationId: randomUUID(),
+      model,
+      reservedCostUsd,
+    },
+    options?.usageStore,
+  );
+  let providerCalled = false;
+  try {
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const params: Parameters<typeof client.images.generate>[0] = {
+      model,
+      prompt,
+      size: DEFAULT_AVATAR_SIZE,
+      n: 1,
+    };
+    // gpt-image-1 supports a `quality` knob; older `dall-e-*` models silently reject it.
+    if (model === DEFAULT_AVATAR_MODEL) {
+      (params as unknown as Record<string, unknown>)["quality"] = quality;
+    }
+    providerCalled = true;
+    const result: ImagesResponse = await client.images.generate(params);
+    const first = result.data?.[0];
+    const b64 = first?.b64_json;
+    if (!b64) {
+      throw new Error("Image model returned no b64_json payload");
+    }
+    const png = Buffer.from(b64, "base64");
+    await completeAiUsageBestEffort(
+      reservation,
+      {
+        promptTokens: 0,
+        completionTokens: 0,
+        estimatedCostUsd: reservedCostUsd,
+      },
+      options?.usageStore,
+    );
+    return { png, pngBase64: b64, prompt, model };
+  } catch (error) {
+    if (providerCalled) {
+      await failAiUsageBestEffort(
+        reservation,
+        { preserveReservedCost: false },
+        options?.usageStore,
+      );
+    } else {
+      await releaseAiUsageBestEffort(reservation, options?.usageStore);
+    }
+    throw error;
   }
-
-  const result = await client.images.generate(params);
-
-  const first = result.data?.[0];
-  const b64 = first?.b64_json;
-  if (!b64) {
-    throw new Error("Image model returned no b64_json payload");
-  }
-  const png = Buffer.from(b64, "base64");
-  return { png, pngBase64: b64, prompt, model };
 }
 
 /**

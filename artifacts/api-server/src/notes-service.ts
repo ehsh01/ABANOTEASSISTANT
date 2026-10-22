@@ -14,9 +14,13 @@ import {
   generateClinicalBodyOpenAI,
   openaiNoteGenerationLabel,
   resolvedOpenAIModel,
+  type GenerateClinicalBodyResult,
   type NoteGenerationAttemptTelemetry,
   type NoteGenerationContext,
 } from "./openai-notes";
+import { sha256CacheKey, writeAiCacheBestEffort } from "./ai-cache";
+import { aiHttpError, assertAiProviderConfigured } from "./ai-config";
+import { readCachedNoteGeneration } from "./note-ai-cache";
 import {
   buildLockedClosingParagraph,
   buildLockedOpening,
@@ -44,7 +48,7 @@ type GenerateNoteInput = ReturnType<typeof GenerateNoteBody.parse>;
 
 export type GenerateSessionNoteFailure = {
   ok: false;
-  status: 400 | 422 | 502;
+  status: 400 | 422 | 429 | 502 | 503;
   error: string;
   messages: string[];
 };
@@ -90,6 +94,7 @@ function modelFailureMessage(error: unknown): string {
 
 export async function generateSessionNoteForClient(params: {
   companyId: number;
+  userId: number;
   client: ClientRow;
   body: GenerateNoteInput;
   generation?: {
@@ -98,7 +103,7 @@ export async function generateSessionNoteForClient(params: {
     fallbackModel?: string | null;
   };
 }): Promise<GenerateSessionNoteResult> {
-  const { companyId, client, body, generation: tuning } = params;
+  const { companyId, userId, client, body, generation: tuning } = params;
   const profile = (client.profile as ClientProfileRow | null | undefined) ?? null;
   const assessmentGate = assessmentGenerationGate({
     hasAssessment: client.hasAssessment,
@@ -241,13 +246,41 @@ export async function generateSessionNoteForClient(params: {
     sessionHours: body.sessionHours,
   };
 
-  let modelGeneration;
+  const noteCacheKey = sha256CacheKey(
+    JSON.stringify({
+      promptHash: CLINICAL_BODY_PROMPT_HASH,
+      model: resolvedOpenAIModel(),
+      context,
+    }),
+  );
+  let modelGeneration: GenerateClinicalBodyResult;
   try {
-    modelGeneration = await generateClinicalBodyOpenAI(context, {
-      requestTimeoutMs: tuning?.requestTimeoutMs,
-      timeBudgetMs: tuning?.timeBudgetMs,
-      fallbackModel: tuning?.fallbackModel,
+    const cached = await readCachedNoteGeneration({
+      forceRegenerate: body.forceRegenerate === true,
+      companyId,
+      cacheKey: noteCacheKey,
+      model: resolvedOpenAIModel(),
     });
+    if (cached) {
+      modelGeneration = cached;
+    } else {
+      assertAiProviderConfigured("note");
+      modelGeneration = await generateClinicalBodyOpenAI(context, {
+        requestTimeoutMs: tuning?.requestTimeoutMs,
+        timeBudgetMs: tuning?.timeBudgetMs,
+        fallbackModel: tuning?.fallbackModel,
+        usageIdentity: { userId, companyId },
+      });
+      await writeAiCacheBestEffort({
+        feature: "note",
+        companyId,
+        cacheKey: noteCacheKey,
+        model: resolvedOpenAIModel(),
+        response: modelGeneration,
+        ttlSecondsEnv: "NOTE_AI_CACHE_TTL_SECONDS",
+        defaultTtlSeconds: 86_400,
+      });
+    }
   } catch (error) {
     const attemptHistory =
       error && typeof error === "object" && "noteGenerationAttemptHistory" in error
@@ -280,12 +313,20 @@ export async function generateSessionNoteForClient(params: {
         finalStatus: "model_failed",
       }),
     );
-    return {
-      ok: false,
-      status: 502,
-      error: "AI note generation failed.",
-      messages: [modelFailureMessage(error)],
-    };
+    const aiError = aiHttpError(error);
+    return aiError.status
+      ? {
+          ok: false,
+          status: aiError.status,
+          error: aiError.error,
+          messages: [],
+        }
+      : {
+          ok: false,
+          status: 502,
+          error: "AI note generation failed.",
+          messages: [modelFailureMessage(error)],
+        };
   }
 
   warnings.push(`Clinical narrative generated via ${openaiNoteGenerationLabel()}.`);

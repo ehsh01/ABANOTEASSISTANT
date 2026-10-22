@@ -416,6 +416,76 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /clients/assessment/extract:
+    post:
+      operationId: extractAssessmentFromPdfWithAi
+      tags: [clients]
+      summary: Extract structured assessment fields with AI
+      description: >
+        Runs only after the user explicitly clicks the assessment extraction action. Results are
+        cached per company by SHA-256 of the PDF bytes. AI kill switches, daily caps, and per-user
+        rate limits are enforced before any provider call.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Assessment PDF (field name must be `file`)
+                force:
+                  type: boolean
+                  default: false
+                  description: Bypass a matching cached extraction and call the provider again.
+      responses:
+        "200":
+          description: Structured assessment fields extracted or returned from cache
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [success, data, error]
+                properties:
+                  success:
+                    type: boolean
+                    enum: [true]
+                  data:
+                    type: object
+                    additionalProperties: true
+                  error:
+                    type: string
+                    nullable: true
+        "400":
+          description: Missing file, invalid file type, or extraction failure
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Daily assessment cap or per-user request rate limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: AI is disabled or the provider is not configured
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /clients/{clientId}/assessment/document:
     post:
       operationId: uploadClientAssessmentDocument
@@ -423,9 +493,9 @@ paths:
       summary: Upload assessment PDF and store text for AI note grounding
       description: >
         Parses PDF text server-side and rejects scanned/image-only files without enough selectable text. On success,
-        stores the authoritative truncated snapshot (not returned in API JSON), refreshes assessment-derived clinical
-        enrichment while preserving therapist-curated values, prunes maps to app-profile catalogs, and sets assessment
-        status to ready. Call after creating or updating a client when the RBT selects an assessment file.
+        stores the authoritative truncated snapshot (not returned in API JSON), refreshes deterministic
+        assessment-derived clinical enrichment while preserving therapist-curated values, prunes maps to
+        app-profile catalogs, and sets assessment status to ready. This upload never calls an AI provider.
       security:
         - bearerAuth: []
       parameters:
@@ -487,7 +557,8 @@ paths:
       description: >
         Uses the client's first name (cultural / ethnic cue), approximate age (from DOB), and gender to
         produce a stylized cartoon-style portrait via OpenAI's image API and stores it on the client row.
-        Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
+        It runs only after the user explicitly clicks Generate or Regenerate. The stored image is reused
+        until then. Does not return image bytes; use the signed `avatarUrl` on the returned `Client`.
       security:
         - bearerAuth: []
       parameters:
@@ -517,6 +588,18 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Client not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: Daily avatar cap or per-user request rate limit reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: AI is disabled or the provider is not configured
           content:
             application/json:
               schema:
@@ -1026,10 +1109,8 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
           description: >
-            Too many unsaved drafts. The user already has `MAX_UNSAVED_DRAFTS` (default 3)
-            generated drafts that have not been saved or discarded; they must save one or
-            POST `/notes/drafts/discard` before generating another. The body's `error` field
-            carries the calm SaaS copy the UI should surface verbatim.
+            Too many unsaved drafts, the note AI daily limit was reached, or the per-user
+            request rate limit was reached. The body's `error` field identifies the active cap.
           content:
             application/json:
               schema:
@@ -1041,7 +1122,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          description: AI not configured — OPENAI_API_KEY missing or empty (note generation requires OpenAI)
+          description: AI explicitly disabled by a switch or OPENAI_API_KEY missing
           content:
             application/json:
               schema:
@@ -1103,13 +1184,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
-          description: Too many unsaved drafts
+          description: Draft, daily AI, or per-user request rate limit reached
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          description: AI not configured
+          description: AI explicitly disabled by a switch or provider not configured
           content:
             application/json:
               schema:
@@ -1431,7 +1512,7 @@ components:
             If your deployed API omits this field, the server is running an older build — redeploy api-server dist and restart the process.
         openaiConfigured:
           type: boolean
-          description: True when OPENAI_API_KEY is non-empty (required for POST /notes/generate).
+          description: True only when note AI switches are enabled and OPENAI_API_KEY is non-empty.
         buildId:
           type: string
           description: Optional deploy stamp; set API_BUILD_ID (or CI commit SHA) on the host to verify which build is running.
@@ -2597,6 +2678,10 @@ components:
             Required. Maps every hourly replacement program id to the percentage manually selected
             in the app, encoded as count + effectiveTrials. The server freezes the corresponding
             integer percentage and requires that exact value in every hour assigned to the program.
+        forceRegenerate:
+          type: boolean
+          default: false
+          description: Bypass a matching note-response cache entry and generate fresh model prose.
       required:
         - clientId
         - sessionHours

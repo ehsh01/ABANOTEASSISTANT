@@ -27,6 +27,19 @@ if (!process.env.OPENAI_API_KEY?.trim()) {
   console.error("Live evaluation requires OPENAI_API_KEY.");
   process.exit(2);
 }
+const userId = Number(process.env.AI_EVAL_USER_ID);
+const companyId = Number(process.env.AI_EVAL_COMPANY_ID);
+if (
+  !Number.isInteger(userId) ||
+  userId <= 0 ||
+  !Number.isInteger(companyId) ||
+  companyId <= 0
+) {
+  console.error(
+    "Live evaluation requires existing positive AI_EVAL_USER_ID and AI_EVAL_COMPANY_ID values.",
+  );
+  process.exit(2);
+}
 
 const corpus = loadNoteRegressionCorpus();
 const results = [];
@@ -35,7 +48,10 @@ for (const fixture of corpus.cases) {
     results.push(evaluateNoteRegressionCase(fixture));
     continue;
   }
-  const generated = await generateClinicalBodyOpenAI(fixtureGenerationContext(fixture));
+  const generated = await generateClinicalBodyOpenAI(
+    fixtureGenerationContext(fixture),
+    { usageIdentity: { userId, companyId } },
+  );
   const blocking = generated.finalIssues.filter((issue) => issue.severity === "blocking");
   results.push({
     id: fixture.id,

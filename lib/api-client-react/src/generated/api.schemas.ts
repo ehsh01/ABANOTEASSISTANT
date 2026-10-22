@@ -21,7 +21,7 @@ export interface HealthStatus {
   /** Session note clinical body is generated only via OpenAI; there is no server-side template fallback. If your deployed API omits this field, the server is running an older build — redeploy api-server dist and restart the process.
    */
   notesClinicalBodyPolicy: HealthStatusNotesClinicalBodyPolicy;
-  /** True when OPENAI_API_KEY is non-empty (required for POST /notes/generate). */
+  /** True only when note AI switches are enabled and OPENAI_API_KEY is non-empty. */
   openaiConfigured: boolean;
   /** Optional deploy stamp; set API_BUILD_ID (or CI commit SHA) on the host to verify which build is running. */
   buildId?: string;
@@ -733,6 +733,8 @@ export interface GenerateNoteRequest {
   /** Required. Maps every hourly replacement program id to the percentage manually selected in the app, encoded as count + effectiveTrials. The server freezes the corresponding integer percentage and requires that exact value in every hour assigned to the program.
    */
   programTrialData: GenerateNoteRequestProgramTrialData;
+  /** Bypass a matching note-response cache entry and generate fresh model prose. */
+  forceRegenerate?: boolean;
 }
 
 export type AbcActivityAntecedentListResponseData = {
@@ -1218,6 +1220,21 @@ export interface BillingPortalResponse {
   data: BillingPortalResponseData;
   error?: string | null;
 }
+
+export type ExtractAssessmentFromPdfWithAiBody = {
+  /** Assessment PDF (field name must be `file`) */
+  file: Blob;
+  /** Bypass a matching cached extraction and call the provider again. */
+  force?: boolean;
+};
+
+export type ExtractAssessmentFromPdfWithAi200Data = { [key: string]: unknown };
+
+export type ExtractAssessmentFromPdfWithAi200 = {
+  success: boolean;
+  data: ExtractAssessmentFromPdfWithAi200Data;
+  error: string | null;
+};
 
 export type UploadClientAssessmentDocumentBody = {
   /** Assessment PDF (field name must be `file`) */

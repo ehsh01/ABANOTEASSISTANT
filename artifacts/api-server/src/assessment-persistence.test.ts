@@ -101,4 +101,73 @@ describe("assessment upload persistence", () => {
       "Task Refusal": ["DRA"],
     });
   });
+
+  test("different PDF clears the old summary while preserving on-demand clinical enrichment", () => {
+    const priorSummary = {
+      summary: "Previously extracted clinical summary.",
+      diagnoses: ["F84.0"],
+      recommendations: [],
+      behaviorProfiles: [],
+      reinforcementPreferences: [],
+      precursorBehaviors: [],
+      parentTrainingGoals: [],
+    };
+    const refreshed = refreshProfileFromAssessmentUpload({
+      profile: {
+        ...baseProfile,
+        assessmentSummary: priorSummary,
+      },
+      fileName: "re-uploaded.pdf",
+      assessmentTextSnapshot: "Replacement assessment text ".repeat(8),
+      // The upload route is deterministic; full AI enrichment is available from Re-extract.
+      extracted: null,
+    });
+
+    expect(refreshed.assessmentSummary).toBeNull();
+    expect(refreshed.maladaptiveBehaviorTargets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Elopement",
+          topography: "Old extracted definition.",
+          functions: ["attention"],
+        }),
+      ]),
+    );
+    expect(refreshed.assessmentStructured?.behavior_to_replacements_map.Elopement).toEqual([
+      "Walk with adult",
+    ]);
+    expect(refreshed.assessmentExtractionProvenance).toMatchObject({
+      topographyBehaviors: ["Elopement"],
+      functionBehaviors: ["Elopement"],
+      assessmentSummaryExtracted: false,
+    });
+  });
+
+  test("same PDF re-upload does not clear its extracted summary", () => {
+    const snapshot = "Same assessment text ".repeat(8);
+    const priorSummary = {
+      summary: "Current extracted summary.",
+      diagnoses: [],
+      recommendations: [],
+      behaviorProfiles: [],
+      reinforcementPreferences: [],
+      precursorBehaviors: [],
+      parentTrainingGoals: [],
+    };
+    const refreshed = refreshProfileFromAssessmentUpload({
+      profile: {
+        ...baseProfile,
+        assessmentTextSnapshot: snapshot,
+        assessmentSummary: priorSummary,
+      },
+      fileName: "same.pdf",
+      assessmentTextSnapshot: snapshot,
+      extracted: null,
+    });
+
+    expect(refreshed.assessmentSummary).toEqual(priorSummary);
+    expect(
+      refreshed.assessmentExtractionProvenance?.assessmentSummaryExtracted,
+    ).toBe(true);
+  });
 });
