@@ -240,7 +240,11 @@ export async function generateClientAvatar(
     return { png, pngBase64: b64, prompt, model };
   } catch (error) {
     if (providerCalled) {
-      await failAiUsageBestEffort(reservation, options?.usageStore);
+      await failAiUsageBestEffort(
+        reservation,
+        { preserveReservedCost: false },
+        options?.usageStore,
+      );
     } else {
       await releaseAiUsageBestEffort(reservation, options?.usageStore);
     }

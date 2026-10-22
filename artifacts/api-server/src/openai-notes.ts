@@ -19,6 +19,7 @@ import {
   estimateTextReservationCostUsd,
   estimateTokenCostUsd,
   failAiUsageBestEffort,
+  isProviderTimeoutAfterSend,
   releaseAiUsageBestEffort,
   reserveAiUsage,
   type AiUsageIdentity,
@@ -214,8 +215,14 @@ export function resolveNoteAiMaxAttempts(): number {
   return Math.min(2, readPositiveIntEnv("NOTE_AI_MAX_ATTEMPTS", 2));
 }
 
-export function resolveNoteMaxCompletionTokens(): number {
-  return readPositiveIntEnv("NOTE_AI_MAX_COMPLETION_TOKENS", 3_000);
+export function resolveNoteMaxCompletionTokens(
+  model = resolvedOpenAIModel(),
+): number {
+  const configured = Number(
+    process.env.NOTE_AI_MAX_COMPLETION_TOKENS?.trim() ?? "",
+  );
+  if (Number.isInteger(configured) && configured > 0) return configured;
+  return model.toLowerCase().includes("gpt-5") ? 6_000 : 3_000;
 }
 
 function contextMessage(ctx: SessionContext): string {
@@ -390,7 +397,11 @@ async function defaultModelCall(params: {
     };
   } catch (error) {
     if (providerCalled) {
-      await failAiUsageBestEffort(reservation, params.usageStore);
+      await failAiUsageBestEffort(
+        reservation,
+        { preserveReservedCost: isProviderTimeoutAfterSend(error) },
+        params.usageStore,
+      );
     } else {
       await releaseAiUsageBestEffort(reservation, params.usageStore);
     }
@@ -419,7 +430,7 @@ export async function generateClinicalBodyOpenAI(
       ? resolvedFallbackOpenAIModel()
       : options.fallbackModel;
   const maxAttempts = resolveNoteAiMaxAttempts();
-  const maxCompletionTokens = resolveNoteMaxCompletionTokens();
+  const maxCompletionTokens = resolveNoteMaxCompletionTokens(primaryModel);
   let messages: ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "user", content: contextMessage(frozen) },

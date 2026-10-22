@@ -112,7 +112,7 @@ The AI spend-control release adds `abanote.ai_usage` and
 
 ```bash
 # Run from the repository root against each intended database URL.
-psql "$DATABASE_URL" -v ON_ERROR_STOP=1 \
+psql "$DIGITALOCEAN_DATABASE_URL" -v ON_ERROR_STOP=1 \
   -f lib/db/migrations/2026-10-22-ai-spend-controls.sql
 ```
 

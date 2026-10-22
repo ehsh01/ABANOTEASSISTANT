@@ -217,10 +217,14 @@ export function refreshProfileFromAssessmentUpload(params: {
   };
 
   const extractedSummary = sanitizeClientAssessmentSummary(extracted?.assessmentSummary ?? null);
+  const assessmentChanged =
+    (profile.assessmentTextSnapshot?.trim() ?? "") !==
+    params.assessmentTextSnapshot.trim();
   let assessmentSummary = profile.assessmentSummary ?? null;
   let assessmentSummaryExtracted = false;
   if (previousProvenance?.assessmentSummaryExtracted) {
-    assessmentSummary = extractedSummary ?? assessmentSummary;
+    assessmentSummary =
+      extractedSummary ?? (assessmentChanged ? null : assessmentSummary);
     assessmentSummaryExtracted = assessmentSummary !== null;
   } else if (!assessmentSummary && extractedSummary) {
     assessmentSummary = extractedSummary;

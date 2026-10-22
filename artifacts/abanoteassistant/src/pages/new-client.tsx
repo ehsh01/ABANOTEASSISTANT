@@ -1558,8 +1558,15 @@ function NewClientForm({
     if (!step2.file) {
       setExtractError(null);
       setExtractSuccess(null);
+      return;
     }
-  }, [step2.file]);
+    if (isEdit) {
+      // Until the user explicitly re-extracts, do not save a summary from the
+      // previously stored document onto a newly selected PDF.
+      setAssessmentSummaryForm(emptyAssessmentSummaryForm());
+      setExtractSuccess(null);
+    }
+  }, [isEdit, step2.file]);
 
   function applyAssessmentExtract(payload: AssessmentExtractResultPayload) {
     const e = payload.extracted;

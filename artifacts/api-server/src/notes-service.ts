@@ -18,7 +18,7 @@ import {
   type NoteGenerationAttemptTelemetry,
   type NoteGenerationContext,
 } from "./openai-notes";
-import { sha256CacheKey, writeAiCache } from "./ai-cache";
+import { sha256CacheKey, writeAiCacheBestEffort } from "./ai-cache";
 import { aiHttpError, assertAiProviderConfigured } from "./ai-config";
 import { readCachedNoteGeneration } from "./note-ai-cache";
 import {
@@ -271,7 +271,7 @@ export async function generateSessionNoteForClient(params: {
         fallbackModel: tuning?.fallbackModel,
         usageIdentity: { userId, companyId },
       });
-      await writeAiCache({
+      await writeAiCacheBestEffort({
         feature: "note",
         companyId,
         cacheKey: noteCacheKey,

@@ -23,7 +23,7 @@ import type { ClinicalFunction } from "@workspace/db/schema";
 import {
   readAiCache,
   sha256CacheKey,
-  writeAiCache,
+  writeAiCacheBestEffort,
   type AiCacheStore,
 } from "./ai-cache";
 import {
@@ -35,6 +35,7 @@ import {
   estimateTextReservationCostUsd,
   estimateTokenCostUsd,
   failAiUsageBestEffort,
+  isProviderTimeoutAfterSend,
   releaseAiUsageBestEffort,
   reserveAiUsage,
   type AiUsageIdentity,
@@ -499,7 +500,11 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
     );
   } catch (error) {
     if (providerCalled) {
-      await failAiUsageBestEffort(reservation, options.usageStore);
+      await failAiUsageBestEffort(
+        reservation,
+        { preserveReservedCost: isProviderTimeoutAfterSend(error) },
+        options.usageStore,
+      );
     } else {
       await releaseAiUsageBestEffort(reservation, options.usageStore);
     }
@@ -796,7 +801,7 @@ export async function extractAssessmentFromPdfBuffer(
     usageIdentity: options.usageIdentity,
     usageStore: options.usageStore,
   });
-  await writeAiCache({
+  await writeAiCacheBestEffort({
     feature: "assessment",
     companyId: options.usageIdentity.companyId,
     cacheKey,

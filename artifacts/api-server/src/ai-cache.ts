@@ -129,3 +129,17 @@ export async function writeAiCache(params: {
       ttlSeconds === 0 ? null : new Date(now.getTime() + ttlSeconds * 1000),
   });
 }
+
+export async function writeAiCacheBestEffort(
+  params: Parameters<typeof writeAiCache>[0],
+): Promise<boolean> {
+  try {
+    await writeAiCache(params);
+    return true;
+  } catch (error) {
+    // The provider result is already billable and valid. Cache availability must
+    // never change the API result returned to the user.
+    console.error("[ai-cache] failed to store provider result", error);
+    return false;
+  }
+}

@@ -102,7 +102,7 @@ describe("assessment upload persistence", () => {
     });
   });
 
-  test("re-upload without AI enrichment preserves the prior summary, topography, and functions", () => {
+  test("different PDF clears the old summary while preserving on-demand clinical enrichment", () => {
     const priorSummary = {
       summary: "Previously extracted clinical summary.",
       diagnoses: ["F84.0"],
@@ -123,7 +123,7 @@ describe("assessment upload persistence", () => {
       extracted: null,
     });
 
-    expect(refreshed.assessmentSummary).toEqual(priorSummary);
+    expect(refreshed.assessmentSummary).toBeNull();
     expect(refreshed.maladaptiveBehaviorTargets).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
@@ -139,7 +139,35 @@ describe("assessment upload persistence", () => {
     expect(refreshed.assessmentExtractionProvenance).toMatchObject({
       topographyBehaviors: ["Elopement"],
       functionBehaviors: ["Elopement"],
-      assessmentSummaryExtracted: true,
+      assessmentSummaryExtracted: false,
     });
+  });
+
+  test("same PDF re-upload does not clear its extracted summary", () => {
+    const snapshot = "Same assessment text ".repeat(8);
+    const priorSummary = {
+      summary: "Current extracted summary.",
+      diagnoses: [],
+      recommendations: [],
+      behaviorProfiles: [],
+      reinforcementPreferences: [],
+      precursorBehaviors: [],
+      parentTrainingGoals: [],
+    };
+    const refreshed = refreshProfileFromAssessmentUpload({
+      profile: {
+        ...baseProfile,
+        assessmentTextSnapshot: snapshot,
+        assessmentSummary: priorSummary,
+      },
+      fileName: "same.pdf",
+      assessmentTextSnapshot: snapshot,
+      extracted: null,
+    });
+
+    expect(refreshed.assessmentSummary).toEqual(priorSummary);
+    expect(
+      refreshed.assessmentExtractionProvenance?.assessmentSummaryExtracted,
+    ).toBe(true);
   });
 });

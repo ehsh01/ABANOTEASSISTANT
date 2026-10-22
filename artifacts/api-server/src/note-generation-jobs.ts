@@ -14,8 +14,10 @@ import { evaluateBilling } from "./billing/service";
 import {
   draftCapMessage,
   getMaxUnsavedDraftsForCompany,
+  releaseDraftSlotBestEffort,
   tryConsumeDraftSlot,
 } from "./draft-quota";
+import { shouldReleaseDraftSlotForAiFailure } from "./ai-config";
 import {
   resolveBackgroundNoteGenerationTimeBudgetMs,
   resolveBackgroundOpenAIRequestTimeoutMs,
@@ -245,6 +247,9 @@ export async function runNoteGenerationJob(jobId: string): Promise<void> {
   });
 
   if (!result.ok) {
+    if (shouldReleaseDraftSlotForAiFailure(result.status)) {
+      await releaseDraftSlotBestEffort(job.userId, job.draftSlotMax);
+    }
     await markJobFailed(jobId, result.status, result.error, result.messages);
     return;
   }

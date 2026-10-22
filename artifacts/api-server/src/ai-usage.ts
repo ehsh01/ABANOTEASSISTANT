@@ -48,7 +48,10 @@ export type AiUsageStore = {
       estimatedCostUsd: number;
     },
   ): Promise<void>;
-  fail(reservation: AiUsageReservation): Promise<void>;
+  fail(
+    reservation: AiUsageReservation,
+    options?: { preserveReservedCost?: boolean },
+  ): Promise<void>;
   release(reservation: AiUsageReservation): Promise<void>;
 };
 
@@ -119,7 +122,7 @@ export const databaseAiUsageStore: AiUsageStore = {
       })
       .where(eq(aiUsageTable.id, reservation.id));
   },
-  async fail(reservation) {
+  async fail(reservation, options) {
     const [{ eq }, { db }, { aiUsageTable }] = await Promise.all([
       import("drizzle-orm"),
       import("@workspace/db"),
@@ -132,7 +135,9 @@ export const databaseAiUsageStore: AiUsageStore = {
         providerCalled: true,
         promptTokens: 0,
         completionTokens: 0,
-        estimatedCostUsd: "0",
+        ...(options?.preserveReservedCost
+          ? {}
+          : { estimatedCostUsd: "0" }),
       })
       .where(eq(aiUsageTable.id, reservation.id));
   },
@@ -330,13 +335,26 @@ export async function completeAiUsageBestEffort(
 
 export async function failAiUsageBestEffort(
   reservation: AiUsageReservation,
+  options: { preserveReservedCost?: boolean },
   store: AiUsageStore = databaseAiUsageStore,
 ): Promise<void> {
   try {
-    await store.fail(reservation);
+    await store.fail(reservation, options);
   } catch (error) {
     console.error("[ai-usage] failed to mark provider failure", error);
   }
+}
+
+export function isProviderTimeoutAfterSend(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const candidate = error as Error & { status?: number; code?: string };
+  return (
+    candidate.name === "AbortError" ||
+    candidate.code === "ETIMEDOUT" ||
+    candidate.status === 408 ||
+    candidate.status === 504 ||
+    /timed?\s*out|timeout/i.test(candidate.message)
+  );
 }
 
 export async function releaseAiUsageBestEffort(

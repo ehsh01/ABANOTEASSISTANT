@@ -97,3 +97,7 @@ export function aiHttpError(error: unknown): {
     error: error instanceof Error ? error.message : "AI request failed",
   };
 }
+
+export function shouldReleaseDraftSlotForAiFailure(status: number): boolean {
+  return status === 429 || status === 503;
+}

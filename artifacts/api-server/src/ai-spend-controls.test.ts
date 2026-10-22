@@ -30,8 +30,14 @@ import {
   extractAssessmentFromPdfBuffer,
   extractAssessmentFromPdfText,
 } from "./assessment-extract";
-import { generateClinicalBodyOpenAI } from "./openai-notes";
-import { isAiFeatureEnabled } from "./ai-config";
+import {
+  generateClinicalBodyOpenAI,
+  resolveNoteMaxCompletionTokens,
+} from "./openai-notes";
+import {
+  isAiFeatureEnabled,
+  shouldReleaseDraftSlotForAiFailure,
+} from "./ai-config";
 import { readCachedNoteGeneration } from "./note-ai-cache";
 
 function usageStore(
@@ -88,11 +94,11 @@ function usageStore(
       row.status = "completed";
       row.estimatedCostUsd = String(usage.estimatedCostUsd);
     }),
-    fail: vi.fn(async (reservation) => {
+    fail: vi.fn(async (reservation, options) => {
       const row = rows.find((candidate) => candidate.id === reservation.id);
       if (!row) throw new Error("reservation not found");
       row.status = "failed";
-      row.estimatedCostUsd = "0";
+      if (!options?.preserveReservedCost) row.estimatedCostUsd = "0";
     }),
     release: vi.fn(async (reservation) => {
       const index = rows.findIndex((candidate) => candidate.id === reservation.id);
@@ -208,6 +214,24 @@ describe("AI spend controls", () => {
     expect(openAiMocks.imageGenerate).not.toHaveBeenCalled();
   });
 
+  it("releases draft slots for AI-off and AI-cap failures", () => {
+    expect(shouldReleaseDraftSlotForAiFailure(503)).toBe(true);
+    expect(shouldReleaseDraftSlotForAiFailure(429)).toBe(true);
+    expect(shouldReleaseDraftSlotForAiFailure(502)).toBe(false);
+    const syncRoute = readFileSync(
+      resolve(process.cwd(), "src/routes/notes.ts"),
+      "utf8",
+    );
+    const asyncJobs = readFileSync(
+      resolve(process.cwd(), "src/note-generation-jobs.ts"),
+      "utf8",
+    );
+    expect(syncRoute).toContain("releaseDraftSlotBestEffort(userId, slot.max)");
+    expect(asyncJobs).toContain(
+      "releaseDraftSlotBestEffort(job.userId, job.draftSlotMax)",
+    );
+  });
+
   it("returns the cap error before an avatar provider call", async () => {
     const rows = Array.from({ length: 5 }, () => ({
       feature: "avatar",
@@ -245,7 +269,32 @@ describe("AI spend controls", () => {
 
     expect(openAiMocks.imageGenerate).toHaveBeenCalledTimes(1);
     expect(store.fail).toHaveBeenCalledTimes(1);
+    expect(store.fail).toHaveBeenCalledWith(
+      expect.any(Object),
+      { preserveReservedCost: false },
+    );
     expect(store.complete).not.toHaveBeenCalled();
+  });
+
+  it("keeps the estimated reservation cost for a post-send timeout", async () => {
+    vi.stubEnv("NOTE_AI_MAX_ATTEMPTS", "1");
+    const store = usageStore();
+    const timeout = Object.assign(new Error("request timed out"), {
+      code: "ETIMEDOUT",
+    });
+    openAiMocks.chatCreate.mockRejectedValueOnce(timeout);
+
+    await expect(
+      generateClinicalBodyOpenAI(noteContext(), {
+        usageIdentity: { userId: 1, companyId: 1 },
+        usageStore: store,
+      }),
+    ).rejects.toThrow("timed out");
+
+    expect(store.fail).toHaveBeenCalledWith(
+      expect.any(Object),
+      { preserveReservedCost: true },
+    );
   });
 
   it("does not hide a successful avatar when ledger finalization fails", async () => {
@@ -491,6 +540,15 @@ describe("AI spend controls", () => {
     expect(store.complete).toHaveBeenCalledTimes(2);
   });
 
+  it("uses a larger default completion cap for gpt-5 reasoning models", () => {
+    delete process.env.NOTE_AI_MAX_COMPLETION_TOKENS;
+    expect(resolveNoteMaxCompletionTokens("gpt-5.5")).toBe(6_000);
+    expect(resolveNoteMaxCompletionTokens("gpt-5-mini")).toBe(6_000);
+    expect(resolveNoteMaxCompletionTokens("gpt-4.1-mini")).toBe(3_000);
+    vi.stubEnv("NOTE_AI_MAX_COMPLETION_TOKENS", "4321");
+    expect(resolveNoteMaxCompletionTokens("gpt-5.5")).toBe(4_321);
+  });
+
   it("rejects a truncated note completion after recording billed usage", async () => {
     const store = usageStore();
     openAiMocks.chatCreate.mockResolvedValueOnce({
@@ -634,6 +692,46 @@ describe("AI spend controls", () => {
     expect(cacheStore.get).not.toHaveBeenCalled();
     expect(openAiMocks.chatCreate).toHaveBeenCalledTimes(1);
     expect(cacheStore.put).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns a billed assessment result when the cache write fails", async () => {
+    const cacheStore: AiCacheStore = {
+      get: vi.fn().mockResolvedValue(null),
+      put: vi.fn().mockRejectedValue(new Error("cache unavailable")),
+    };
+    openAiMocks.chatCreate.mockResolvedValueOnce({
+      id: "assessment-cache-failure",
+      model: "gpt-4.1-mini",
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content: JSON.stringify({
+              maladaptiveBehaviors: ["Fresh behavior"],
+            }),
+          },
+        },
+      ],
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await extractAssessmentFromPdfBuffer(
+      Buffer.from("cache-write-failure"),
+      {
+        usageIdentity: { userId: 1, companyId: 1 },
+        cacheStore,
+        usageStore: usageStore(),
+      },
+    );
+
+    expect(result.extracted.maladaptiveBehaviors).toEqual(["Fresh behavior"]);
+    expect(cacheStore.put).toHaveBeenCalledTimes(1);
+    expect(consoleError).toHaveBeenCalledWith(
+      "[ai-cache] failed to store provider result",
+      expect.any(Error),
+    );
+    consoleError.mockRestore();
   });
 
   it.each([

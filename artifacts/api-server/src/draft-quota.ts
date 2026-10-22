@@ -5,9 +5,8 @@
  * Contract (server-side, authoritative):
  *  - POST /notes/generate: call `tryConsumeDraftSlot()` BEFORE the OpenAI call. If it returns
  *    `ok: false`, return 429 with the friendly message in `draftCapMessage()`. If `ok: true`,
- *    the slot is reserved; if the OpenAI call subsequently fails we still hold the slot — that
- *    is acceptable because (a) the user got an error response so we want them to think before
- *    retrying, and (b) discard or save will free it. This is intentionally conservative.
+ *    the slot is reserved. AI-disabled and AI-cap failures release that one slot so those
+ *    operational controls cannot strand the user at the unrelated draft cap.
  *  - POST /notes/:noteId/save: call `resetDraftQuotaForUser()` after a successful save. Saving
  *    *any* draft frees the entire pool.
  *  - POST /notes/drafts/discard: call `resetDraftQuotaForUser()`. Same behaviour.
@@ -24,7 +23,7 @@
  *  - Env override `MAX_UNSAVED_DRAFTS=N` lets ops bump or lower the global cap at runtime
  *    without redeploys.
  */
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { db } from "@workspace/db";
 import { usersTable } from "@workspace/db/schema";
 import type { Company } from "@workspace/db/schema";
@@ -110,6 +109,35 @@ export async function resetDraftQuotaForUser(
     .set({ unsavedDraftCount: 0, updatedAt: new Date() })
     .where(eq(usersTable.id, userId));
   return { used: 0, max };
+}
+
+/** Release exactly one slot after an AI precondition/cap failure. */
+export async function releaseDraftSlotForUser(
+  userId: number,
+  max: number,
+): Promise<DraftQuota> {
+  const [updated] = await db
+    .update(usersTable)
+    .set({
+      unsavedDraftCount: sql`${usersTable.unsavedDraftCount} - 1`,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(usersTable.id, userId), gt(usersTable.unsavedDraftCount, 0)))
+    .returning({ used: usersTable.unsavedDraftCount });
+  if (updated) return { used: Math.min(updated.used, max), max };
+  return readDraftQuotaForUser(userId, max);
+}
+
+export async function releaseDraftSlotBestEffort(
+  userId: number,
+  max: number,
+): Promise<void> {
+  try {
+    await releaseDraftSlotForUser(userId, max);
+  } catch (error) {
+    // Preserve the original AI-off/cap response even if quota cleanup is temporarily unavailable.
+    console.error("[draft-quota] failed to release AI failure slot", error);
+  }
 }
 
 /**

@@ -21,8 +21,10 @@ import { evaluateBilling, recordSavedNote } from "../billing/service";
 import {
   getMaxUnsavedDraftsForCompany,
   readDraftQuotaForUser,
+  releaseDraftSlotBestEffort,
   resetDraftQuotaForUser,
 } from "../draft-quota";
+import { shouldReleaseDraftSlotForAiFailure } from "../ai-config";
 import {
   createNoteGenerationJobRecord,
   enqueueNoteGenerationJob,
@@ -392,6 +394,9 @@ router.post("/notes/generate", noteAiRateLimiter, async (req, res) => {
     body,
   });
   if (!result.ok) {
+    if (shouldReleaseDraftSlotForAiFailure(result.status)) {
+      await releaseDraftSlotBestEffort(userId, slot.max);
+    }
     res.status(result.status).json({
       success: false,
       error: result.error,
