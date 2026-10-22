@@ -1,16 +1,12 @@
 if (process.env.NOTE_SMOKE_STAGING !== "true") {
   throw new Error("Set NOTE_SMOKE_STAGING=true to run the isolated staging smoke test.");
 }
-if (
-  process.env.AI_ENABLED?.trim().toLowerCase() !== "true" ||
-  process.env.NOTE_AI_ENABLED?.trim().toLowerCase() !== "true"
-) {
-  throw new Error(
-    "Set AI_ENABLED=true and NOTE_AI_ENABLED=true to run the staging smoke test.",
-  );
-}
 
 await import("../../artifacts/api-server/src/load-local-env");
+const { assertAiFeatureEnabled } = await import(
+  "../../artifacts/api-server/src/ai-config"
+);
+assertAiFeatureEnabled("note");
 if (
   !process.env.DATABASE_URL_STAGING ||
   process.env.DATABASE_URL_STAGING === process.env.DATABASE_URL

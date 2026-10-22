@@ -39,7 +39,7 @@ app.listen(port, () => {
     console.log("[notes] OpenAI clinical narrative: enabled (OPENAI_API_KEY is set)");
   } else {
     console.warn(
-      "[notes] AI is disabled or OPENAI_API_KEY is missing — POST /notes/generate will return 503 until AI_ENABLED=true, NOTE_AI_ENABLED=true, and a key are configured.",
+      "[notes] AI is explicitly disabled or OPENAI_API_KEY is missing — POST /notes/generate will return 503. Switches default on; remove false/0/off/no values or configure a key.",
     );
   }
 });

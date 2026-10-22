@@ -275,8 +275,8 @@ function CreateClientPickerModal({
             <div className="space-y-1.5">
               <h3 className="text-base font-bold text-[#2D2523]">From Assessment PDF</h3>
               <p className="text-sm text-[#877870] leading-relaxed">
-                Upload a BIP or assessment and we'll automatically extract client info, behaviors,
-                replacements, and interventions.
+                Upload a BIP or assessment, then use the visible extraction button to fill client
+                info, behaviors, replacements, and interventions.
               </p>
             </div>
             <span className="mt-auto inline-flex items-center gap-1 text-sm font-semibold text-[#7C4DB1] group-hover:gap-1.5 transition-all">

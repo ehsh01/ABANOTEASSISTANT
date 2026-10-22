@@ -1118,7 +1118,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          description: AI disabled by a fail-closed switch or OPENAI_API_KEY missing
+          description: AI explicitly disabled by a switch or OPENAI_API_KEY missing
           content:
             application/json:
               schema:
@@ -1186,7 +1186,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "503":
-          description: AI disabled by a fail-closed switch or provider not configured
+          description: AI explicitly disabled by a switch or provider not configured
           content:
             application/json:
               schema:

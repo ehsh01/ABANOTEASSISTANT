@@ -158,6 +158,15 @@ export default function ClientDetail() {
     deleteMutation.mutate(noteId);
   };
 
+  const handleGenerateAvatar = () => {
+    if (!id || generateAvatarMutation.isPending) return;
+    generateAvatarMutation.mutate(id, {
+      onError: (err) => {
+        window.alert(formatAiFeatureFailure(err, "Could not generate avatar."));
+      },
+    });
+  };
+
   const handleStartEdit = (program: Program) => {
     setEditingProgramId(program.id);
     setEditName(program.name);
@@ -283,14 +292,7 @@ export default function ClientDetail() {
                 name: client.name,
               }}
               size="lg"
-              onRegenerate={() => {
-                if (!id || generateAvatarMutation.isPending) return;
-                generateAvatarMutation.mutate(id, {
-                  onError: (err) => {
-                    window.alert(formatAiFeatureFailure(err, "Could not generate avatar."));
-                  },
-                });
-              }}
+              onRegenerate={handleGenerateAvatar}
               isRegenerating={generateAvatarMutation.isPending}
               hoverLabel={
                 client.avatarUrl
@@ -356,6 +358,23 @@ export default function ClientDetail() {
                   {t.clientDetail.generateNote}
                 </button>
               </Link>
+              <button
+                type="button"
+                onClick={handleGenerateAvatar}
+                disabled={generateAvatarMutation.isPending}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-[#FDFAF7] border border-[#F0E4E1] text-xs font-semibold text-[#877870] hover:border-[#C27A8A] hover:text-[#C27A8A] transition-all w-full justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {generateAvatarMutation.isPending ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Zap className="w-3.5 h-3.5" />
+                )}
+                {generateAvatarMutation.isPending
+                  ? "Generating avatar…"
+                  : client.avatarUrl
+                    ? "Regenerate avatar"
+                    : "Generate avatar"}
+              </button>
               <Link href={`/clients/edit/${client.id}?section=personal`}>
                 <button
                   type="button"

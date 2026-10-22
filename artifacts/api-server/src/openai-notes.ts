@@ -148,6 +148,7 @@ export type NotePlanModelCallOutput = {
   completionId?: string;
   usage?: NoteModelUsage;
   model?: string;
+  finishReason?: string | null;
 };
 
 export type NotePlanModelCall = (params: {
@@ -345,6 +346,7 @@ async function defaultModelCall(params: {
     output: completion.choices[0]?.message?.content ?? "",
     completionId: completion.id,
     model: completion.model,
+      finishReason: completion.choices[0]?.finish_reason ?? null,
     usage: completion.usage
       ? {
             promptTokens,
@@ -450,8 +452,14 @@ export async function generateClinicalBodyOpenAI(
             completionId: undefined,
             usage: undefined,
             model: nextModel,
+            finishReason: undefined,
           }
         : result;
+    if (normalized.finishReason === "length") {
+      throw new Error(
+        "AI note generation was truncated at the completion-token limit.",
+      );
+    }
     priorRaw = normalized.output;
     rawModelOutputs.push(priorRaw);
     modelUsed = normalized.model ?? modelUsed;

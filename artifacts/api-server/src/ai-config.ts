@@ -35,11 +35,22 @@ export class AiProviderNotConfiguredError extends Error {
   }
 }
 
-/** Only the exact, case-insensitive value `true` enables a switch. */
+const EXPLICITLY_DISABLED = new Set(["false", "0", "off", "no"]);
+
+/**
+ * AI defaults on so deploys preserve existing behavior. Only an explicit false-like
+ * value disables the master or feature switch; missing and unrecognized values stay on.
+ */
+export function isAiSwitchEnabled(name: string): boolean {
+  const raw = process.env[name];
+  if (raw === undefined) return true;
+  return !EXPLICITLY_DISABLED.has(raw.trim().toLowerCase());
+}
+
 export function isAiFeatureEnabled(feature: AiFeature): boolean {
   return (
-    process.env.AI_ENABLED?.trim().toLowerCase() === "true" &&
-    process.env[FEATURE_SWITCH[feature]]?.trim().toLowerCase() === "true"
+    isAiSwitchEnabled("AI_ENABLED") &&
+    isAiSwitchEnabled(FEATURE_SWITCH[feature])
   );
 }
 

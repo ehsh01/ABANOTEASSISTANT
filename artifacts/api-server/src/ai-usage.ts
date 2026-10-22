@@ -121,6 +121,24 @@ export async function assertAiUsageAllowed(
       "The daily AI budget has been reached. Please try again tomorrow.",
     );
   }
+  const configuredUserBudget = readPositiveNumberEnv(
+    "AI_DAILY_BUDGET_USD_PER_USER",
+    2,
+  );
+  // Keep at least half of the global budget available to other users, even if the
+  // per-user env value is accidentally configured above the shared ceiling.
+  const userBudget = Math.min(configuredUserBudget, budget / 2);
+  const userSpent = rows
+    .filter((row) => row.userId === identity.userId)
+    .reduce(
+      (sum, row) => sum + (Number(row.estimatedCostUsd) || 0),
+      0,
+    );
+  if (userSpent >= userBudget) {
+    throw new AiLimitExceededError(
+      "Your daily AI budget has been reached. Please try again tomorrow.",
+    );
+  }
 
   const limitConfig = featureLimit(feature);
   const limit = readPositiveIntEnv(limitConfig.env, limitConfig.fallback);

@@ -470,6 +470,11 @@ Return JSON with keys: firstName, lastName, dateOfBirth, gender, maladaptiveBeha
     );
   }
 
+  if (completion.choices[0]?.finish_reason === "length") {
+    throw new Error(
+      "AI assessment extraction was truncated at the completion-token limit.",
+    );
+  }
   const raw = completion.choices[0]?.message?.content?.trim();
   if (!raw) {
     throw new Error("Empty model response");

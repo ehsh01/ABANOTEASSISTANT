@@ -1386,7 +1386,7 @@ function NewClientForm({
 
   // `?intent=assessment` (set by the "From Assessment PDF" picker on the clients page) reorders the create
   // wizard so the assessment upload comes FIRST. The wizard then walks the user through Step 2 → Step 1 →
-  // Step 3 so they can review the auto-extracted name/DOB/gender before reviewing programs and saving.
+  // Step 3 so they can explicitly extract, then review name/DOB/gender, programs, and save.
   // Edit flows always use the canonical 1→2→3 order.
   const intentRaw = (searchParams.get("intent") ?? "").toLowerCase();
   const STEP_ORDER: readonly number[] =
