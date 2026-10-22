@@ -1172,6 +1172,22 @@ export const DeleteClientResponse = zod.object({
 });
 
 /**
+ * Runs only after the user explicitly clicks the assessment extraction action. Results are cached per company by SHA-256 of the PDF bytes. AI kill switches, daily caps, and per-user rate limits are enforced before any provider call.
+
+ * @summary Extract structured assessment fields with AI
+ */
+export const ExtractAssessmentFromPdfWithAiBody = zod.object({
+  file: zod.unknown()
+    .describe("Assessment PDF (field name must be `file`)"),
+});
+
+export const ExtractAssessmentFromPdfWithAiResponse = zod.object({
+  success: zod.literal(true),
+  data: zod.record(zod.string(), zod.unknown()),
+  error: zod.string().nullable(),
+});
+
+/**
  * Parses PDF text server-side and rejects scanned/image-only files without enough selectable text. On success, stores the authoritative truncated snapshot (not returned in API JSON), refreshes deterministic assessment-derived clinical enrichment while preserving therapist-curated values, prunes maps to app-profile catalogs, and sets assessment status to ready. This upload never calls an AI provider.
 
  * @summary Upload assessment PDF and store text for AI note grounding
@@ -1181,9 +1197,8 @@ export const UploadClientAssessmentDocumentParams = zod.object({
 });
 
 export const UploadClientAssessmentDocumentBody = zod.object({
-  file: zod
-    .unknown()
-    .describe("Assessment PDF multipart field file (validated at HTTP layer)"),
+  file: zod.unknown()
+    .describe("Assessment PDF (field name must be `file`)"),
 });
 
 export const UploadClientAssessmentDocumentResponse = zod.object({

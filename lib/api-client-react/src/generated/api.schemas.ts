@@ -1219,6 +1219,19 @@ export interface BillingPortalResponse {
   error?: string | null;
 }
 
+export type ExtractAssessmentFromPdfWithAiBody = {
+  /** Assessment PDF (field name must be `file`) */
+  file: Blob;
+};
+
+export type ExtractAssessmentFromPdfWithAi200Data = { [key: string]: unknown };
+
+export type ExtractAssessmentFromPdfWithAi200 = {
+  success: boolean;
+  data: ExtractAssessmentFromPdfWithAi200Data;
+  error: string | null;
+};
+
 export type UploadClientAssessmentDocumentBody = {
   /** Assessment PDF (field name must be `file`) */
   file: Blob;

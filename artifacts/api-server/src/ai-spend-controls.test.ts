@@ -220,4 +220,15 @@ describe("AI spend controls", () => {
     expect(source).toContain("onExtractFromPdf={handleExtractFromPdf}");
     expect(source).toContain("regenerateAvatarForCurrentClient");
   });
+
+  it("keeps the staging smoke call explicitly gated and ledger-scoped", () => {
+    const source = readFileSync(
+      resolve(process.cwd(), "../../scripts/note-eval/live-staging-smoke.ts"),
+      "utf8",
+    );
+    expect(source).toContain('process.env.NOTE_SMOKE_STAGING !== "true"');
+    expect(source).toContain("process.env.AI_ENABLED");
+    expect(source).toContain("process.env.NOTE_AI_ENABLED");
+    expect(source).toContain("userId: temporaryUserId!");
+  });
 });

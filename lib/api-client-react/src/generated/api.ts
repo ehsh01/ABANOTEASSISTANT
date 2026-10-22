@@ -38,6 +38,8 @@ import type {
   DeleteNoteResponse,
   DiscardDraftsResponse,
   ErrorResponse,
+  ExtractAssessmentFromPdfWithAi200,
+  ExtractAssessmentFromPdfWithAiBody,
   GenerateClientAvatarResponse,
   GenerateNoteRequest,
   GenerateNoteResponse,
@@ -1160,6 +1162,101 @@ export const useDeleteClient = <
   TContext
 > => {
   return useMutation(getDeleteClientMutationOptions(options));
+};
+
+/**
+ * Runs only after the user explicitly clicks the assessment extraction action. Results are cached per company by SHA-256 of the PDF bytes. AI kill switches, daily caps, and per-user rate limits are enforced before any provider call.
+
+ * @summary Extract structured assessment fields with AI
+ */
+export const getExtractAssessmentFromPdfWithAiUrl = () => {
+  return `/api/clients/assessment/extract`;
+};
+
+export const extractAssessmentFromPdfWithAi = async (
+  extractAssessmentFromPdfWithAiBody: ExtractAssessmentFromPdfWithAiBody,
+  options?: RequestInit,
+): Promise<ExtractAssessmentFromPdfWithAi200> => {
+  const formData = new FormData();
+  formData.append(`file`, extractAssessmentFromPdfWithAiBody.file);
+
+  return customFetch<ExtractAssessmentFromPdfWithAi200>(
+    getExtractAssessmentFromPdfWithAiUrl(),
+    {
+      ...options,
+      method: "POST",
+      body: formData,
+    },
+  );
+};
+
+export const getExtractAssessmentFromPdfWithAiMutationOptions = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof extractAssessmentFromPdfWithAi>>,
+    TError,
+    { data: BodyType<ExtractAssessmentFromPdfWithAiBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationOptions<
+  Awaited<ReturnType<typeof extractAssessmentFromPdfWithAi>>,
+  TError,
+  { data: BodyType<ExtractAssessmentFromPdfWithAiBody> },
+  TContext
+> => {
+  const mutationKey = ["extractAssessmentFromPdfWithAi"];
+  const { mutation: mutationOptions, request: requestOptions } = options
+    ? options.mutation &&
+      "mutationKey" in options.mutation &&
+      options.mutation.mutationKey
+      ? options
+      : { ...options, mutation: { ...options.mutation, mutationKey } }
+    : { mutation: { mutationKey }, request: undefined };
+
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof extractAssessmentFromPdfWithAi>>,
+    { data: BodyType<ExtractAssessmentFromPdfWithAiBody> }
+  > = (props) => {
+    const { data } = props ?? {};
+
+    return extractAssessmentFromPdfWithAi(data, requestOptions);
+  };
+
+  return { mutationFn, ...mutationOptions };
+};
+
+export type ExtractAssessmentFromPdfWithAiMutationResult = NonNullable<
+  Awaited<ReturnType<typeof extractAssessmentFromPdfWithAi>>
+>;
+export type ExtractAssessmentFromPdfWithAiMutationBody =
+  BodyType<ExtractAssessmentFromPdfWithAiBody>;
+export type ExtractAssessmentFromPdfWithAiMutationError =
+  ErrorType<ErrorResponse>;
+
+/**
+ * @summary Extract structured assessment fields with AI
+ */
+export const useExtractAssessmentFromPdfWithAi = <
+  TError = ErrorType<ErrorResponse>,
+  TContext = unknown,
+>(options?: {
+  mutation?: UseMutationOptions<
+    Awaited<ReturnType<typeof extractAssessmentFromPdfWithAi>>,
+    TError,
+    { data: BodyType<ExtractAssessmentFromPdfWithAiBody> },
+    TContext
+  >;
+  request?: SecondParameter<typeof customFetch>;
+}): UseMutationResult<
+  Awaited<ReturnType<typeof extractAssessmentFromPdfWithAi>>,
+  TError,
+  { data: BodyType<ExtractAssessmentFromPdfWithAiBody> },
+  TContext
+> => {
+  return useMutation(getExtractAssessmentFromPdfWithAiMutationOptions(options));
 };
 
 /**
